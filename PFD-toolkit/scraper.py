@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-import fitz  # pymupdf
+import pymupdf
 import os
 import pandas as pd
 
@@ -9,7 +9,7 @@ class PFDScraper:
     
     def __init__(self, base_url="https://www.judiciary.uk/prevention-of-future-death-reports/page/", start_page=1, end_page=559):
         """
-        Initializes the scraper.
+        Initialises the scraper.
         
         :param base_url: Base URL of the PFD reports page.
         :param start_page: The first page to scrape.
@@ -61,7 +61,7 @@ class PFDScraper:
             pdf_file.write(response.content)
         text = ""
         try:
-            pdf_document = fitz.open(temp_file)
+            pdf_document = pymupdf.open(temp_file)
             for page in pdf_document:
                 text += page.get_text()
             pdf_document.close()
@@ -77,43 +77,51 @@ class PFDScraper:
         if response.status_code != 200:
             print(f"Failed to fetch {url}")
             return None
+
         soup = BeautifulSoup(response.content, 'html.parser')
         pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button')]
         if not pdf_links:
             print(f"No PDF links found on {url}")
             return None
+
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
+
         # Extract metadata
         date_element = soup.find(lambda tag: tag.name == 'p' and 'Date of report:' in tag.get_text(), recursive=True)
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
+
         report_date = date_element.get_text() if date_element else 'N/A'
         report_id = ref_element.get_text() if ref_element else 'N/A'
-        # Extract sections from PDF text
+
+        # Clean up the date text by removing "Date of report:" and extra whitespace
+        report_date = report_date.replace("Date of report:", "").strip()
+
+        # Extract sections from the PDF text
         try:
             receiver_section = pdf_text.split(" SENT ")[1].split("CORONER")[0]
         except IndexError:
             receiver_section = "N/A"
+
         try:
             content_section = pdf_text.split(" CONCERNS ")[1].split(" 6 ACTION SHOULD BE TAKEN ")[0]
         except IndexError:
             content_section = "N/A"
+
         receiver = self.clean_text(receiver_section)
         content = self.clean_text(content_section)
-        return {"url": url, "id": report_id, "date": report_date, "receiver": receiver, "content": content}
-    
-    def scrape_report(self, url):
-        """
-        Scrapes a single report given its URL.
-        
-        :param url: The URL of the report to scrape.
-        :return: A pandas DataFrame with one row containing the report data.
-        """
-        report_data = self.extract_report_info(url)
-        if report_data:
-            return pd.DataFrame([report_data])
-        else:
-            return pd.DataFrame()
+
+        # Remove "TO:" from the receiver text
+        receiver = receiver.replace("TO:", "").strip()
+
+        return {
+            "url": url,
+            "id": report_id,
+            "date": report_date,
+            "receiver": receiver,
+            "content": content
+        }
+
     
     def scrape_all_reports(self):
         """
@@ -130,3 +138,12 @@ class PFDScraper:
             if report_data:
                 records.append(report_data)
         return pd.DataFrame(records)
+
+
+
+scraper = PFDScraper(start_page=1, end_page=2)
+
+reports = scraper.scrape_all_reports()
+reports
+
+reports.to_csv('../data/reports')
