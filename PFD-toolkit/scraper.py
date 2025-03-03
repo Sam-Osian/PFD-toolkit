@@ -47,15 +47,47 @@ class PFDScraper:
             self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/"
         elif self.category == "suicide":
             self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015"
-        elif self.category == "accident":
+        elif self.category == "accident_work_safety":
             self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths"
-        elif self.category == "alcohol drug":
+        elif self.category == "alcohol_drug_medication":
             self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths"
-        elif self.category == "care home":
+        elif self.category == "care_home":
             self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths"
+        elif self.category == "child_death":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015"
+        elif self.category == "community_health_emergency":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths"
+        elif self.category == "emergency_services":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards"
+        elif self.category == "hospital_deaths":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths"
+        elif self.category == "mental_health":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths"
+        elif self.category == "police":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths"
+        elif self.category == "product":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths"
+        elif self.category == "railway":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths"
+        elif self.category == "road":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths"
+        elif self.category == "service_personnel":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths"
+        elif self.category == "custody":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths"
+        elif self.category == "wales":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards"
+        elif self.category == "other":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths"
         else:
-            raise ValueError(f"Unknown category '{self.category}'. Valid options are: 'all', 'accident', 'alcohol drug', 'care home'")
-    
+            valid_options = (
+                "'all', 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', "
+                "'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', "
+                "'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', "
+                "'wales', 'other'"
+            )
+            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
+        
     def get_href_values(self, url: str) -> list:
         """
         Extracts href values from <a> elements with class 'card__link'.
@@ -297,8 +329,8 @@ class PFDScraper:
 
 
 
-scraper = PFDScraper(category='alcohol drug', start_page=2, end_page=2, max_workers=10)
+scraper = PFDScraper(category='road', start_page=2, end_page=2, max_workers=10)
 reports = scraper.scrape_all_reports()
 reports
 
-reports.to_csv('../data/testreports.csv')
+#reports.to_csv('../data/testreports.csv')
