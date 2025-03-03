@@ -7,19 +7,36 @@ import pandas as pd
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
-    def __init__(self, base_url="https://www.judiciary.uk/prevention-of-future-death-reports/page/", start_page=1, end_page=559):
+    def __init__(self, category='all', start_page=1, end_page=559):
         """
         Initialises the scraper.
         
+        :param category: Category of reports as categorised on the judiciary.uk website.
         :param base_url: Base URL of the PFD reports page.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
         """
-        self.base_url = base_url
+        self.category = category.lower()
         self.start_page = start_page
         self.end_page = end_page
         self.report_links = []
         
+        # Set up URL templates based on the category
+       # Define URL templates for different categories.
+        if self.category == "all":
+            self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/"
+        elif self.category == "suicide":
+            self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015"
+        elif self.category == "accident":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths"
+        elif self.category == "alcohol drug":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths"
+        elif self.category == "care home":
+            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths"
+        else:
+            raise ValueError(f"Unknown category '{self.category}'. Valid options are: 'all', 'accident', 'alcohol drug', 'care home'")
+            
+            
     def get_href_values(self, url):
         """Extracts href values from <a> elements with class 'card__link'."""
         response = requests.get(url)
@@ -39,7 +56,7 @@ class PFDScraper:
         """
         self.report_links = []
         for page_number in range(self.start_page, self.end_page + 1):
-            page_url = f"{self.base_url}{page_number}/"
+            page_url = self.page_template.format(page=page_number)
             href_values = self.get_href_values(page_url)
             self.report_links.extend(href_values)
             print(f"Scraped {len(href_values)} links from {page_url}")
@@ -87,27 +104,42 @@ class PFDScraper:
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
 
-        # Extract HTML report data
+        ## Extract HTML report data
         
-        # ...Report ID
+        # Report ID
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
         report_id = ref_element.get_text() if ref_element else 'N/A - Not found'
         report_id = report_id.replace("Ref:", "").strip()
         
-        # ...Date of report
+        # Date of report
         date_element = soup.find(lambda tag: tag.name == 'p' and 'Date of report:' in tag.get_text(), recursive=True)
         report_date = date_element.get_text() if date_element else 'N/A - Not found'
         report_date = report_date.replace("Date of report:", "").strip()
         
         
-        # ...Name of coroner
-        coroner_element = soup.find(lambda tag: tag.name == 'p' and 'Coroners name:' in tag.get_text(), recursive=True)
+        # Name of coroner
+        coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroners name:" in tag.get_text(), recursive=True)
         report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
-        report_coroner = report_coroner.replace("Coroners name:", "").strip()
         
-        # ...Area
+        # ...Sometimes the name of the coroner is listed under 'Coroner name:' or 'Coroner's name'.
+        
+        if report_coroner == 'N/A - Not found':
+            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner name:" in tag.get_text(), recursive=True)
+            report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
+        
+        if report_coroner == 'N/A - Not found':
+            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner's name:" in tag.get_text(), recursive=True)
+            report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
+        
+        report_coroner = report_coroner.replace("Coroners name:", "").strip()
+        report_coroner = report_coroner.replace("Coroner name:", "").strip()
+        
+        # Area
         area_element = soup.find(lambda tag: tag.name == 'p' and 'Coroners Area:' in tag.get_text(), recursive=True)
         report_area = area_element.get_text() if area_element else 'N/A - Not found'
+        
+        # ...Sometimes the area of the coroner is listed under 'Coroner Area' or 'Coroner's area'
+        
         report_area = report_area.replace("Coroners Area:", "").strip()
 
         
@@ -125,23 +157,26 @@ class PFDScraper:
         
         # ...Investigation & Inquest
         try:
-            investigation_section = pdf_text.split("INVESTIGATION and INQUEST")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
+            investigation_section = pdf_text.split("INVESTIGATION")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
         except IndexError:
             investigation_section = "N/A - Not found"
         
         investigation = self.clean_text(investigation_section)
+        investigation = investigation.replace("and INQUEST", "").strip()
         
         # ...Cirumstances of the Death
         try:
-            circumstances_section = pdf_text.split("CIRCUMSTANCES OF THE DEATH")[1].split("CORONER’S CONCERNS")[0]
+            circumstances_section = pdf_text.split("CIRCUMSTANCES OF")[1].split("CORONER’S CONCERNS")[0]
         except IndexError:
             circumstances_section = "N/A - Not found"
             
-        circumstances = self.clean_text(circumstances_section)
+        circumstances = circumstances_section.replace("THE DEATH", "").strip()
+        circumstances = circumstances.replace("DEATH", "").strip()
+        circumstances = self.clean_text(circumstances)
         
         # ...Concerns
         try:
-            concerns_section = pdf_text.split("CORONER’S CONCERNS")[1].split("ACTION SHOULD BE TAKEN ")[0]
+            concerns_section = pdf_text.split("as follows")[1].split("ACTION SHOULD BE TAKEN")[0]
         except IndexError:
             concerns_section = "N/A - Not found"
 
@@ -180,7 +215,7 @@ class PFDScraper:
 
 
 
-scraper = PFDScraper(start_page=2, end_page=2)
+scraper = PFDScraper(category='accident', start_page=2, end_page=2)
 
 reports = scraper.scrape_all_reports()
 reports
