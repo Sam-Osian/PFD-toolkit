@@ -1,20 +1,27 @@
+import logging
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 import pymupdf
-import os
 import pandas as pd
 import re
 from dateutil import parser
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+
+# Configure logging for the module
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
-    def __init__(self, category='all', start_page=1, end_page=559):
+    def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559) -> None:
         """
         Initialises the scraper.
-        
+
         :param category: Category of reports as categorised on the judiciary.uk website.
-        :param base_url: Base URL of the PFD reports page.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
         """
@@ -23,7 +30,18 @@ class PFDScraper:
         self.end_page = end_page
         self.report_links = []
         
-       # Define URL templates for different PFD categories from judiciary.uk website
+        # Setup a requests session with retry logic
+        # ...This means we don't need to establish a new connection for each scraping request
+        self.session = requests.Session()
+        retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retries)
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        
+        # Compile regex for report ID extraction (e.g. "2025-0296").
+        self._id_pattern = re.compile(r'(\d{4}-\d{4})')
+        
+        # Define URL templates for different PFD categories from the judiciary.uk website.
         if self.category == "all":
             self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/"
         elif self.category == "suicide":
@@ -37,174 +55,179 @@ class PFDScraper:
         else:
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: 'all', 'accident', 'alcohol drug', 'care home'")
             
-            
-    def get_href_values(self, url):
-        """Extracts href values from <a> elements with class 'card__link'."""
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"Failed to fetch page: {url}")
+    def get_href_values(self, url: str) -> list:
+        """
+        Extracts href values from <a> elements with class 'card__link'.
+
+        :param url: URL of the page to scrape.
+        :return: List of href values.
+        """
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            logger.error("Failed to fetch page: %s; Error: %s", url, e)
             return []
+        
         soup = BeautifulSoup(response.text, 'html.parser')
         links = soup.find_all('a', class_='card__link')
-        return [link.get('href') for link in links]
+        return [link.get('href') for link in links if link.get('href')]
     
-    def get_report_links(self):
+    def get_report_links(self) -> list:
         """
         Collects all PFD report links from the paginated pages.
-        
-        Returns:
-            A list of report URLs.
+
+        :return: A list of report URLs.
         """
         self.report_links = []
-        for page_number in range(self.start_page, self.end_page + 1):
+        pages = list(range(self.start_page, self.end_page + 1))
+        
+        def fetch_page_links(page_number: int) -> list:
             page_url = self.page_template.format(page=page_number)
             href_values = self.get_href_values(page_url)
+            logger.info("Scraped %d links from %s", len(href_values), page_url)
+            return href_values
+        
+        # Set up parallelisation
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(fetch_page_links, pages))
+        
+        for href_values in results:
             self.report_links.extend(href_values)
-            print(f"Scraped {len(href_values)} links from {page_url}")
-        print(f"Total collected report links: {len(self.report_links)}")
+        logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
     
-    def clean_text(self, text):
+    @staticmethod
+    def clean_text(text: str) -> str:
         """Cleans text by removing excessive whitespace."""
         return ' '.join(text.split())
     
-    def extract_text_from_pdf(self, pdf_url):
-        """Downloads and extracts text from a PDF report."""
-        response = requests.get(pdf_url)
-        if response.status_code != 200:
-            print(f"Failed to fetch PDF: {pdf_url}")
-            return "N/A"
-        temp_file = "temp.pdf"
-        with open(temp_file, "wb") as pdf_file:
-            pdf_file.write(response.content)
-        text = ""
+    def extract_text_from_pdf(self, pdf_url: str) -> str:
+        """
+        Downloads and extracts text from a PDF report.
+
+        :param pdf_url: URL of the PDF to extract text from.
+        :return: Cleaned text extracted from the PDF.
+        """
         try:
-            pdf_document = pymupdf.open(temp_file)
-            for page in pdf_document:
-                text += page.get_text()
-            pdf_document.close()
+            response = self.session.get(pdf_url)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            logger.error("Failed to fetch PDF: %s; Error: %s", pdf_url, e)
+            return "N/A"
+        
+        # Use tempfile for automatic clean-up of temporary files
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as temp_file:
+                temp_file.write(response.content)
+                temp_file.flush()
+                pdf_document = pymupdf.open(temp_file.name)
+                text = "".join(page.get_text() for page in pdf_document)
+                pdf_document.close()
         except Exception as e:
-            print(f"Error processing PDF {pdf_url}: {e}")
-            text = "N/A"
-        os.remove(temp_file)
+            logger.error("Error processing PDF %s: %s", pdf_url, e)
+            return "N/A"
+        
         return self.clean_text(text)
     
-    def extract_report_info(self, url):
-        """Extracts metadata and text from a PFD report webpage."""
-        response = requests.get(url)
-        if response.status_code != 200:
-            print(f"Failed to fetch {url}")
-            return None
+    def _extract_text_by_keywords(self, soup: BeautifulSoup, keywords: list) -> str:
+        """
+        Helper function to extract text from a <p> element containing any of the given keywords.
 
+        :param soup: BeautifulSoup object of the page.
+        :param keywords: List of keywords to search for.
+        :return: Extracted text or 'N/A - Not found'.
+        """
+        for keyword in keywords:
+            element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
+            if element:
+                return element.get_text().strip()
+        return 'N/A - Not found'
+    
+    def extract_report_info(self, url: str) -> dict:
+        """
+        Extracts metadata and text from a PFD report webpage.
+
+        :param url: URL of the report page.
+        :return: Dictionary containing extracted report information.
+        """
+        try:
+            response = self.session.get(url)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            logger.error("Failed to fetch %s; Error: %s", url, e)
+            return None
+        
         soup = BeautifulSoup(response.content, 'html.parser')
-        pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button')]
+        pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
         if not pdf_links:
-            print(f"No PDF links found on {url}")
+            logger.error("No PDF links found on %s", url)
             return None
-
+        
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
-
+        
         ## Extract HTML report data
-        # Report ID
+        
+        # Report ID extraction using compiled regex.
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
         if ref_element:
-            # Extract a pattern of four digits, a hyphen, and four digits (e.g. 2025-0296)
-            match = re.search(r'(\d{4}-\d{4})', ref_element.get_text())
+            match = self._id_pattern.search(ref_element.get_text())
             report_id = match.group(1) if match else 'N/A - Not found'
         else:
             report_id = 'N/A - Not found'
         
-        # Date of report
-        # ...PFD reports use various formats for dates (e.g. '03/03/2025' and '3rd March 2025')
-        # ...to solve this, use `dateutil` to parse through the text and standardise into YYYY-MM-DD
-        date_element = soup.find(lambda tag: tag.name == 'p' and 'Date of report:' in tag.get_text(), recursive=True)
-        if date_element:
-            text = date_element.get_text().replace("Date of report:", "").strip()
+        # Date of report extraction.
+        date_text = self._extract_text_by_keywords(soup, ["Date of report:"])
+        if date_text != 'N/A - Not found':
+            date_text = date_text.replace("Date of report:", "").strip()
             try:
-                parsed_date = parser.parse(text, fuzzy=True)
+                parsed_date = parser.parse(date_text, fuzzy=True)
                 report_date = parsed_date.strftime("%Y-%m-%d")
             except Exception as e:
-                report_date = text
+                logger.error("Error parsing date '%s': %s", date_text, e)
+                report_date = date_text
         else:
             report_date = 'N/A - Not found'
-                
         
-        # Name of coroner
-        coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroners name: " in tag.get_text(), recursive=True)
-        report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
+        # Name of coroner extraction.
+        coroner_text = self._extract_text_by_keywords(soup, ["Coroners name:", "Coroner name:", "Coroner's name:"])
+        report_coroner = coroner_text.replace("Coroners name:", "").replace("Coroner name:", "").strip()
         
-        # ...Sometimes the name of the coroner is listed under 'Coroner name:' or 'Coroner's name'.
-        if report_coroner == 'N/A - Not found':
-            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner name: " in tag.get_text(), recursive=True)
-            report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
+        # Area extraction.
+        area_text = self._extract_text_by_keywords(soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"])
+        report_area = area_text.replace("Coroners Area:", "").replace("Coroner Area:", "").replace("Coroner's Area:", "").strip()
         
-        if report_coroner == 'N/A - Not found':
-            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner's name: " in tag.get_text(), recursive=True)
-            report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
+        ## Extract PDF report data
         
-        report_coroner = report_coroner.replace("Coroners name:", "").strip()
-        report_coroner = report_coroner.replace("Coroner name:", "").strip()
-        
-        # Area
-        area_element = soup.find(lambda tag: tag.name == 'p' and "Coroners Area:" in tag.get_text(), recursive=True)
-        report_area = area_element.get_text() if area_element else 'N/A - Not found'
-        
-        # ...Sometimes the area of the coroner is listed under 'Coroner Area' or 'Coroner's area'
-        
-        if report_area == 'N/A - Not found':
-            area_element = soup.find(lambda tag: tag.name == 'p' and "Coroner Area:" in tag.get_text(), recursive=True)
-            report_area = area_element.get_text() if area_element else 'N/A - Not found'
-        
-        if report_area == 'N/A - Not found':
-            area_element = soup.find(lambda tag: tag.name == 'p' and "Coroner's Area:" in tag.get_text(), recursive=True)
-            report_area = area_element.get_text() if area_element else 'N/A - Not found'
-        
-        report_area = report_area.replace("Coroners Area:", "").strip()
-        report_area = report_area.replace("Coroner Area:", "").strip()
-        report_area = report_area.replace("Coroner's Area:", "").strip()
-        
-        
-        # Extract PDF report data
-        
-        # ...Receiver
+        # Receiver extraction.
         try:
             receiver_section = pdf_text.split(" SENT ")[1].split("CORONER")[0]
         except IndexError:
             receiver_section = "N/A - Not found"
-
-        receiver = self.clean_text(receiver_section)
-        receiver = receiver.replace("TO:", "").strip()
+        receiver = self.clean_text(receiver_section).replace("TO:", "").strip()
         
-        # ...Investigation & Inquest
+        # Investigation & Inquest extraction.
         try:
             investigation_section = pdf_text.split("INVESTIGATION")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
         except IndexError:
             investigation_section = "N/A - Not found"
+        investigation = self.clean_text(investigation_section).replace("and INQUEST", "").strip()
         
-        investigation = self.clean_text(investigation_section)
-        investigation = investigation.replace("and INQUEST", "").strip()
-        
-        # ...Cirumstances of Death
+        # Circumstances of Death extraction.
         try:
             circumstances_section = pdf_text.split("CIRCUMSTANCES OF")[1].split("CORONER’S CONCERNS")[0]
         except IndexError:
             circumstances_section = "N/A - Not found"
-            
-        circumstances = circumstances_section.replace("THE DEATH", "").strip()
-        circumstances = circumstances.replace("DEATH", "").strip()
-        circumstances = self.clean_text(circumstances)
+        circumstances = self.clean_text(circumstances_section.replace("THE DEATH", "").replace("DEATH", ""))
         
-        # ...Matters of Concern
+        # Matters of Concern extraction.
         try:
             concerns_section = pdf_text.split("as follows")[1].split("ACTION SHOULD BE TAKEN")[0]
         except IndexError:
             concerns_section = "N/A - Not found"
-
         concerns = self.clean_text(concerns_section)
-
-
-        # Create structure of dataframe
+        
         return {
             "URL": url,
             "ID": report_id,
@@ -216,13 +239,12 @@ class PFDScraper:
             "CircumstancesOfDeath": circumstances,
             "MattersOfConcern": concerns
         }
-
     
-    def scrape_all_reports(self):
+    def scrape_all_reports(self) -> pd.DataFrame:
         """
         Scrapes all reports from the collected report links.
         If report links haven't been gathered yet, it runs get_report_links first.
-        
+
         :return: A pandas DataFrame containing one row per scraped report.
         """
         if not self.report_links:
