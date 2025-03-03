@@ -17,17 +17,19 @@ logging.basicConfig(level=logging.INFO)
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
-    def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559) -> None:
+    def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10) -> None:
         """
         Initialises the scraper.
 
         :param category: Category of reports as categorised on the judiciary.uk website.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
+        :param max_workers: Maximum number of workers for parallel fetching.
         """
         self.category = category.lower()
         self.start_page = start_page
         self.end_page = end_page
+        self.max_workers = max_workers
         self.report_links = []
         
         # Setup a requests session with retry logic
@@ -89,7 +91,7 @@ class PFDScraper:
             return href_values
         
         # Set up parallelisation
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(fetch_page_links, pages))
         
         for href_values in results:
