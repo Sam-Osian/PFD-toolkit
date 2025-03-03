@@ -3,6 +3,8 @@ from bs4 import BeautifulSoup
 import pymupdf
 import os
 import pandas as pd
+import re
+from dateutil import parser
 
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
@@ -21,8 +23,7 @@ class PFDScraper:
         self.end_page = end_page
         self.report_links = []
         
-        # Set up URL templates based on the category
-       # Define URL templates for different categories.
+       # Define URL templates for different PFD categories from judiciary.uk website
         if self.category == "all":
             self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/"
         elif self.category == "suicide":
@@ -105,43 +106,63 @@ class PFDScraper:
         pdf_text = self.extract_text_from_pdf(report_link)
 
         ## Extract HTML report data
-        
         # Report ID
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
-        report_id = ref_element.get_text() if ref_element else 'N/A - Not found'
-        report_id = report_id.replace("Ref:", "").strip()
+        if ref_element:
+            # Extract a pattern of four digits, a hyphen, and four digits (e.g. 2025-0296)
+            match = re.search(r'(\d{4}-\d{4})', ref_element.get_text())
+            report_id = match.group(1) if match else 'N/A - Not found'
+        else:
+            report_id = 'N/A - Not found'
         
         # Date of report
+        # ...PFD reports use various formats for dates (e.g. '03/03/2025' and '3rd March 2025')
+        # ...to solve this, use `dateutil` to parse through the text and standardise into YYYY-MM-DD
         date_element = soup.find(lambda tag: tag.name == 'p' and 'Date of report:' in tag.get_text(), recursive=True)
-        report_date = date_element.get_text() if date_element else 'N/A - Not found'
-        report_date = report_date.replace("Date of report:", "").strip()
-        
+        if date_element:
+            text = date_element.get_text().replace("Date of report:", "").strip()
+            try:
+                parsed_date = parser.parse(text, fuzzy=True)
+                report_date = parsed_date.strftime("%Y-%m-%d")
+            except Exception as e:
+                report_date = text
+        else:
+            report_date = 'N/A - Not found'
+                
         
         # Name of coroner
-        coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroners name:" in tag.get_text(), recursive=True)
+        coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroners name: " in tag.get_text(), recursive=True)
         report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
         
         # ...Sometimes the name of the coroner is listed under 'Coroner name:' or 'Coroner's name'.
-        
         if report_coroner == 'N/A - Not found':
-            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner name:" in tag.get_text(), recursive=True)
+            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner name: " in tag.get_text(), recursive=True)
             report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
         
         if report_coroner == 'N/A - Not found':
-            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner's name:" in tag.get_text(), recursive=True)
+            coroner_element = soup.find(lambda tag: tag.name == 'p' and "Coroner's name: " in tag.get_text(), recursive=True)
             report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
         
         report_coroner = report_coroner.replace("Coroners name:", "").strip()
         report_coroner = report_coroner.replace("Coroner name:", "").strip()
         
         # Area
-        area_element = soup.find(lambda tag: tag.name == 'p' and 'Coroners Area:' in tag.get_text(), recursive=True)
+        area_element = soup.find(lambda tag: tag.name == 'p' and "Coroners Area:" in tag.get_text(), recursive=True)
         report_area = area_element.get_text() if area_element else 'N/A - Not found'
         
         # ...Sometimes the area of the coroner is listed under 'Coroner Area' or 'Coroner's area'
         
+        if report_area == 'N/A - Not found':
+            area_element = soup.find(lambda tag: tag.name == 'p' and "Coroner Area:" in tag.get_text(), recursive=True)
+            report_area = area_element.get_text() if area_element else 'N/A - Not found'
+        
+        if report_area == 'N/A - Not found':
+            area_element = soup.find(lambda tag: tag.name == 'p' and "Coroner's Area:" in tag.get_text(), recursive=True)
+            report_area = area_element.get_text() if area_element else 'N/A - Not found'
+        
         report_area = report_area.replace("Coroners Area:", "").strip()
-
+        report_area = report_area.replace("Coroner Area:", "").strip()
+        report_area = report_area.replace("Coroner's Area:", "").strip()
         
         
         # Extract PDF report data
@@ -164,7 +185,7 @@ class PFDScraper:
         investigation = self.clean_text(investigation_section)
         investigation = investigation.replace("and INQUEST", "").strip()
         
-        # ...Cirumstances of the Death
+        # ...Cirumstances of Death
         try:
             circumstances_section = pdf_text.split("CIRCUMSTANCES OF")[1].split("CORONER’S CONCERNS")[0]
         except IndexError:
@@ -174,7 +195,7 @@ class PFDScraper:
         circumstances = circumstances.replace("DEATH", "").strip()
         circumstances = self.clean_text(circumstances)
         
-        # ...Concerns
+        # ...Matters of Concern
         try:
             concerns_section = pdf_text.split("as follows")[1].split("ACTION SHOULD BE TAKEN")[0]
         except IndexError:
@@ -185,15 +206,15 @@ class PFDScraper:
 
         # Create structure of dataframe
         return {
-            "url": url,
-            "id": report_id,
-            "date": report_date,
-            "coroner": report_coroner,
-            "area": report_area,
-            "receiver": receiver,
-            "investigation": investigation,
-            "circumstances": circumstances,
-            "concerns": concerns
+            "URL": url,
+            "ID": report_id,
+            "Date": report_date,
+            "CoronerName": report_coroner,
+            "Area": report_area,
+            "Receiver": receiver,
+            "InvestigationAndInquest": investigation,
+            "CircumstancesOfDeath": circumstances,
+            "MattersOfConcern": concerns
         }
 
     
@@ -215,7 +236,7 @@ class PFDScraper:
 
 
 
-scraper = PFDScraper(category='accident', start_page=2, end_page=2)
+scraper = PFDScraper(category='care home', start_page=2, end_page=2)
 
 reports = scraper.scrape_all_reports()
 reports
