@@ -87,39 +87,78 @@ class PFDScraper:
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
 
-        # Extract metadata
-        date_element = soup.find(lambda tag: tag.name == 'p' and 'Date of report:' in tag.get_text(), recursive=True)
+        # Extract HTML report data
+        
+        # ...Report ID
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
-
-        report_date = date_element.get_text() if date_element else 'N/A'
-        report_id = ref_element.get_text() if ref_element else 'N/A'
-
-        # Clean up the date text by removing "Date of report:" and extra whitespace
+        report_id = ref_element.get_text() if ref_element else 'N/A - Not found'
+        report_id = report_id.replace("Ref:", "").strip()
+        
+        # ...Date of report
+        date_element = soup.find(lambda tag: tag.name == 'p' and 'Date of report:' in tag.get_text(), recursive=True)
+        report_date = date_element.get_text() if date_element else 'N/A - Not found'
         report_date = report_date.replace("Date of report:", "").strip()
+        
+        
+        # ...Name of coroner
+        coroner_element = soup.find(lambda tag: tag.name == 'p' and 'Coroners name:' in tag.get_text(), recursive=True)
+        report_coroner = coroner_element.get_text() if coroner_element else 'N/A - Not found'
+        report_coroner = report_coroner.replace("Coroners name:", "").strip()
+        
+        # ...Area
+        area_element = soup.find(lambda tag: tag.name == 'p' and 'Coroners Area:' in tag.get_text(), recursive=True)
+        report_area = area_element.get_text() if area_element else 'N/A - Not found'
+        report_area = report_area.replace("Coroners Area:", "").strip()
 
-        # Extract sections from the PDF text
+        
+        
+        # Extract PDF report data
+        
+        # ...Receiver
         try:
             receiver_section = pdf_text.split(" SENT ")[1].split("CORONER")[0]
         except IndexError:
-            receiver_section = "N/A"
-
-        try:
-            content_section = pdf_text.split(" CONCERNS ")[1].split(" 6 ACTION SHOULD BE TAKEN ")[0]
-        except IndexError:
-            content_section = "N/A"
+            receiver_section = "N/A - Not found"
 
         receiver = self.clean_text(receiver_section)
-        content = self.clean_text(content_section)
-
-        # Remove "TO:" from the receiver text
         receiver = receiver.replace("TO:", "").strip()
+        
+        # ...Investigation & Inquest
+        try:
+            investigation_section = pdf_text.split("INVESTIGATION and INQUEST")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
+        except IndexError:
+            investigation_section = "N/A - Not found"
+        
+        investigation = self.clean_text(investigation_section)
+        
+        # ...Cirumstances of the Death
+        try:
+            circumstances_section = pdf_text.split("CIRCUMSTANCES OF THE DEATH")[1].split("CORONER’S CONCERNS")[0]
+        except IndexError:
+            circumstances_section = "N/A - Not found"
+            
+        circumstances = self.clean_text(circumstances_section)
+        
+        # ...Concerns
+        try:
+            concerns_section = pdf_text.split("CORONER’S CONCERNS")[1].split("ACTION SHOULD BE TAKEN ")[0]
+        except IndexError:
+            concerns_section = "N/A - Not found"
 
+        concerns = self.clean_text(concerns_section)
+
+
+        # Create structure of dataframe
         return {
             "url": url,
             "id": report_id,
             "date": report_date,
+            "coroner": report_coroner,
+            "area": report_area,
             "receiver": receiver,
-            "content": content
+            "investigation": investigation,
+            "circumstances": circumstances,
+            "concerns": concerns
         }
 
     
@@ -141,9 +180,9 @@ class PFDScraper:
 
 
 
-scraper = PFDScraper(start_page=1, end_page=2)
+scraper = PFDScraper(start_page=2, end_page=2)
 
 reports = scraper.scrape_all_reports()
 reports
 
-reports.to_csv('../data/reports')
+#reports.to_csv('../data/reports')
