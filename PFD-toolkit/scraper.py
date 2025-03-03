@@ -20,11 +20,11 @@ class PFDScraper:
     def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10) -> None:
         """
         Initialises the scraper.
-
+        
         :param category: Category of reports as categorised on the judiciary.uk website.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
-        :param max_workers: Maximum number of workers for parallel fetching.
+        :param max_workers: Maximum number of workers for concurrent fetching.
         """
         self.category = category.lower()
         self.start_page = start_page
@@ -32,8 +32,7 @@ class PFDScraper:
         self.max_workers = max_workers
         self.report_links = []
         
-        # Setup a requests session with retry logic
-        # ...This means we don't need to establish a new connection for each scraping request
+        # Setup a requests session with retry logic.
         self.session = requests.Session()
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
         adapter = HTTPAdapter(max_retries=retries)
@@ -43,7 +42,7 @@ class PFDScraper:
         # Compile regex for report ID extraction (e.g. "2025-0296").
         self._id_pattern = re.compile(r'(\d{4}-\d{4})')
         
-        # Define URL templates for different PFD categories from the judiciary.uk website.
+        # Define URL templates for different PFD categories.
         if self.category == "all":
             self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/"
         elif self.category == "suicide":
@@ -56,7 +55,7 @@ class PFDScraper:
             self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths"
         else:
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: 'all', 'accident', 'alcohol drug', 'care home'")
-            
+    
     def get_href_values(self, url: str) -> list:
         """
         Extracts href values from <a> elements with class 'card__link'.
@@ -78,7 +77,7 @@ class PFDScraper:
     def get_report_links(self) -> list:
         """
         Collects all PFD report links from the paginated pages.
-
+        
         :return: A list of report URLs.
         """
         self.report_links = []
@@ -90,7 +89,6 @@ class PFDScraper:
             logger.info("Scraped %d links from %s", len(href_values), page_url)
             return href_values
         
-        # Set up parallelisation
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(fetch_page_links, pages))
         
@@ -135,7 +133,7 @@ class PFDScraper:
     def _extract_text_by_keywords(self, soup: BeautifulSoup, keywords: list) -> str:
         """
         Helper function to extract text from a <p> element containing any of the given keywords.
-
+        
         :param soup: BeautifulSoup object of the page.
         :param keywords: List of keywords to search for.
         :return: Extracted text or 'N/A - Not found'.
@@ -146,10 +144,41 @@ class PFDScraper:
                 return element.get_text().strip()
         return 'N/A - Not found'
     
+    def _extract_section_from_text(self, text: str, start_keywords: list, end_keywords: list) -> str:
+        """
+        Helper function to extract a section from text using multiple start and end keywords.
+        Uses case-insensitive search to locate the markers.
+
+        :param text: The full text to search in.
+        :param start_keywords: List of possible starting keywords.
+        :param end_keywords: List of possible ending keywords.
+        :return: Extracted section text or "N/A - Not found" if markers are missing.
+        """
+        lower_text = text.lower()
+        for start in start_keywords:
+            start_lower = start.lower()
+            start_index = lower_text.find(start_lower)
+            if start_index != -1:
+                section_start = start_index + len(start_lower)
+                # Find all occurrences of end keywords after section_start
+                end_indices = []
+                for end in end_keywords:
+                    end_lower = end.lower()
+                    end_index = lower_text.find(end_lower, section_start)
+                    if end_index != -1:
+                        end_indices.append(end_index)
+                if end_indices:
+                    section_end = min(end_indices)
+                    return text[section_start:section_end]
+                else:
+                    return text[section_start:]
+        return "N/A - Not found"
+
+    
     def extract_report_info(self, url: str) -> dict:
         """
         Extracts metadata and text from a PFD report webpage.
-
+        
         :param url: URL of the report page.
         :return: Dictionary containing extracted report information.
         """
@@ -171,7 +200,7 @@ class PFDScraper:
         
         ## Extract HTML report data
         
-        # Report ID extraction using compiled regex.
+        # Report ID extraction using compiled regex
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
         if ref_element:
             match = self._id_pattern.search(ref_element.get_text())
@@ -179,7 +208,7 @@ class PFDScraper:
         else:
             report_id = 'N/A - Not found'
         
-        # Date of report extraction.
+        # Date of report extraction
         date_text = self._extract_text_by_keywords(soup, ["Date of report:"])
         if date_text != 'N/A - Not found':
             date_text = date_text.replace("Date of report:", "").strip()
@@ -192,7 +221,7 @@ class PFDScraper:
         else:
             report_date = 'N/A - Not found'
         
-        # Name of coroner extraction.
+        # Name of coroner extraction
         coroner_text = self._extract_text_by_keywords(soup, ["Coroners name:", "Coroner name:", "Coroner's name:"])
         report_coroner = coroner_text.replace("Coroners name:", "").replace("Coroner name:", "").strip()
         
@@ -200,34 +229,43 @@ class PFDScraper:
         area_text = self._extract_text_by_keywords(soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"])
         report_area = area_text.replace("Coroners Area:", "").replace("Coroner Area:", "").replace("Coroner's Area:", "").strip()
         
-        ## Extract PDF report data
         
-        # Receiver extraction.
+        ## Extract PDF report data
+        # Receiver extraction
         try:
             receiver_section = pdf_text.split(" SENT ")[1].split("CORONER")[0]
         except IndexError:
             receiver_section = "N/A - Not found"
         receiver = self.clean_text(receiver_section).replace("TO:", "").strip()
         
-        # Investigation & Inquest extraction.
-        try:
-            investigation_section = pdf_text.split("INVESTIGATION")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
-        except IndexError:
-            investigation_section = "N/A - Not found"
-        investigation = self.clean_text(investigation_section).replace("and INQUEST", "").strip()
+        # Investigation & Inquest extraction
+        investigation_section = self._extract_section_from_text(
+            pdf_text,
+            start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"],
+            end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
+        )
+        investigation = self.clean_text(investigation_section)
         
-        # Circumstances of Death extraction.
-        try:
-            circumstances_section = pdf_text.split("CIRCUMSTANCES OF")[1].split("CORONER’S CONCERNS")[0]
-        except IndexError:
-            circumstances_section = "N/A - Not found"
-        circumstances = self.clean_text(circumstances_section.replace("THE DEATH", "").replace("DEATH", ""))
+       # try:
+        #    investigation_section = pdf_text.split("INVESTIGATION")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
+        #except IndexError:
+         #   investigation_section = "N/A - Not found"
+        #investigation = self.clean_text(investigation_section).replace("and INQUEST", "").strip()
         
-        # Matters of Concern extraction.
-        try:
-            concerns_section = pdf_text.split("as follows")[1].split("ACTION SHOULD BE TAKEN")[0]
-        except IndexError:
-            concerns_section = "N/A - Not found"
+        # Circumstances of Death extraction
+        circumstances_section = self._extract_section_from_text(
+            pdf_text,
+            start_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"],
+            end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"]
+        )
+        circumstances = self.clean_text(circumstances_section)
+        
+        # Matters of Concern extraction
+        concerns_section = self._extract_section_from_text(
+            pdf_text,
+            start_keywords=["CORONER’S CONCERNS", "as follows"],
+            end_keywords=["ACTION SHOULD BE TAKEN"]
+        )
         concerns = self.clean_text(concerns_section)
         
         return {
@@ -245,8 +283,7 @@ class PFDScraper:
     def scrape_all_reports(self) -> pd.DataFrame:
         """
         Scrapes all reports from the collected report links.
-        If report links haven't been gathered yet, it runs get_report_links first.
-
+        
         :return: A pandas DataFrame containing one row per scraped report.
         """
         if not self.report_links:
@@ -260,9 +297,8 @@ class PFDScraper:
 
 
 
-scraper = PFDScraper(category='care home', start_page=2, end_page=2)
-
+scraper = PFDScraper(category='alcohol drug', start_page=2, end_page=2, max_workers=10)
 reports = scraper.scrape_all_reports()
 reports
 
-#reports.to_csv('../data/reports')
+reports.to_csv('../data/testreports.csv')
