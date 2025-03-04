@@ -10,14 +10,13 @@ from dateutil import parser
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO  # For in-memory buffer
-
-# To handle LLM fallback for PFD reading as images
+from urllib.parse import urlparse, unquote
 import base64
 from pdf2image import convert_from_bytes
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
-
+import subprocess
 
 # Configure error logging for the module
 logger = logging.getLogger(__name__)
@@ -26,8 +25,16 @@ logging.basicConfig(level=logging.INFO)
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
-    def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10, 
-                 llm_fallback: bool = False, llm_model: str = "gpt-4o-mini") -> None:
+    def __init__(
+        self,
+        category: str = 'all',
+        start_page: int = 1,
+        end_page: int = 559,
+        max_workers: int = 10,
+        llm_fallback: bool = False,
+        llm_model: str = "gpt-4o-mini",
+        docx_conversion: str = "None"  
+    ) -> None:
         """
         Initialises the scraper.
         
@@ -37,6 +44,7 @@ class PFDScraper:
         :param max_workers: Maximum number of workers for concurrent fetching. 
         :param llm_fallback: If PDF scraping fails, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
+        :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         """
         self.category = category.lower()
         self.start_page = start_page
@@ -44,6 +52,7 @@ class PFDScraper:
         self.max_workers = max_workers
         self.llm_fallback = llm_fallback
         self.llm_model = llm_model
+        self.docx_conversion = docx_conversion
         self.report_links = []
         
         # Setup a requests session with retry logic.
@@ -86,7 +95,7 @@ class PFDScraper:
     def get_href_values(self, url: str) -> list:
         """
         Extracts href values from <a> elements with class 'card__link'.
-
+        
         :param url: URL of the page to scrape.
         :return: List of href values.
         """
@@ -131,20 +140,80 @@ class PFDScraper:
     
     def extract_text_from_pdf(self, pdf_url: str) -> str:
         """
-        Downloads and extracts text from a PDF report using an in-memory bytes buffer.
-
-        :param pdf_url: URL of the PDF to extract text from.
-        :return: Cleaned text extracted from the PDF.
+        Downloads and extracts text from a PDF report. If the file is not in PDF format (.docx or .doc),
+        converts it to PDF using the method specified by self.docx_conversion.
+        
+        :param pdf_url: URL of the file to extract text from.
+        :return: Cleaned text extracted from the PDF, or "N/A" on failure.
         """
+        # Determine file extension from URL
+        parsed_url = urlparse(pdf_url)
+        path = unquote(parsed_url.path)
+        ext = os.path.splitext(path)[1].lower()
+        
+        # Download the file bytes
         try:
             response = self.session.get(pdf_url)
             response.raise_for_status()
+            file_bytes = response.content
         except requests.RequestException as e:
-            logger.error("Failed to fetch PDF: %s; Error: %s", pdf_url, e)
+            logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
             return "N/A"
         
+        pdf_bytes = None
+        if ext != ".pdf":
+            logger.info("File %s is not a PDF (extension %s)", pdf_url, ext)
+            if self.docx_conversion == "MicrosoftWord":
+                logger.info("Attempting conversion using Microsoft Word...")
+                try:
+                    from docx2pdf import convert
+                except ImportError:
+                    logger.error("docx2pdf is not installed. Please install it with 'pip install docx2pdf'.")
+                    return "N/A"
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
+                        tmp_in.write(file_bytes)
+                        tmp_in.flush()
+                        input_path = tmp_in.name
+                    output_path = input_path.rsplit(ext, 1)[0] + ".pdf"
+                    convert(input_path, output_path)
+                    with open(output_path, "rb") as f:
+                        pdf_bytes = f.read()
+                    os.remove(input_path)
+                    os.remove(output_path)
+                    logger.info("Conversion successful using Microsoft Word!")
+                except Exception as e:
+                    logger.error("Conversion using Microsoft Word failed: %s", e)
+                    return "N/A"
+            elif self.docx_conversion == "LibreOffice":
+                logger.info("Attempting conversion using LibreOffice...")
+                try:
+                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
+                        tmp_in.write(file_bytes)
+                        tmp_in.flush()
+                        input_path = tmp_in.name
+                    output_path = input_path.rsplit(ext, 1)[0] + ".pdf"
+                    subprocess.run(
+                        ["soffice", "--headless", "--convert-to", "pdf", input_path, "--outdir", os.path.dirname(input_path)],
+                        check=True
+                    )
+                    with open(output_path, "rb") as f:
+                        pdf_bytes = f.read()
+                    os.remove(input_path)
+                    os.remove(output_path)
+                    logger.info("Conversion successful using LibreOffice!")
+                except Exception as e:
+                    logger.error("Conversion using LibreOffice failed: %s", e)
+                    return "N/A"
+            else:
+                logger.info("docx_conversion is set to 'None'; skipping conversion.")
+                return "N/A"
+        else:
+            pdf_bytes = file_bytes
+        
+        # Process pdf_bytes as PDF
         try:
-            pdf_buffer = BytesIO(response.content)
+            pdf_buffer = BytesIO(pdf_bytes)
             pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
             text = "".join(page.get_text() for page in pdf_document)
             pdf_document.close()
@@ -172,7 +241,7 @@ class PFDScraper:
         """
         Helper function to extract a section from text using multiple start and end keywords.
         Uses case-insensitive search to locate the markers.
-
+        
         :param text: The full text to search in.
         :param start_keywords: List of possible starting keywords.
         :param end_keywords: List of possible ending keywords.
@@ -196,7 +265,7 @@ class PFDScraper:
                 else:
                     return text[section_start:]
         return "N/A: Not found"
-
+    
     def extract_report_info(self, url: str) -> dict:
         """
         Extracts metadata and text from a PFD report webpage.
@@ -220,8 +289,9 @@ class PFDScraper:
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
         
-        ## Extract HTML report data ##
-        
+        # ------------------
+        # HTML Data Extraction
+        # ------------------
         # Report ID extraction using compiled regex
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
         if ref_element:
@@ -243,19 +313,42 @@ class PFDScraper:
         else:
             report_date = 'N/A: Not found'
         
+        # Name of deceased extraction
+        deceased_text = self._extract_text_by_keywords(
+            soup, ["Deceased name:", "Deceased's name:", "Deceaseds name:"]
+        )
+        report_deceased = deceased_text.replace("Deceased name:", "") \
+                                       .replace("Deceased's name:", "") \
+                                       .replace("Deceaseds name:", "") \
+                                       .strip()
+        if len(report_deceased) < 5 or len(report_deceased) > 30:
+            report_deceased = 'N/A: Not found'
+        
         # Name of coroner extraction
-        coroner_text = self._extract_text_by_keywords(soup, ["Coroners name:", "Coroner name:", "Coroner's name:"])
-        report_coroner = coroner_text.replace("Coroners name:", "").replace("Coroner name:", "").replace("Coroner's name:", "").strip()
-        if len(report_coroner) < 5:
+        coroner_text = self._extract_text_by_keywords(
+            soup, ["Coroners name:", "Coroner name:", "Coroner's name:"]
+        )
+        report_coroner = coroner_text.replace("Coroners name:", "") \
+                                     .replace("Coroner name:", "") \
+                                     .replace("Coroner's name:", "") \
+                                     .strip()
+        if len(report_coroner) < 5 or len(report_coroner) > 30:
             report_coroner = 'N/A: Not found'
         
         # Area extraction
-        area_text = self._extract_text_by_keywords(soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"])
-        report_area = area_text.replace("Coroners Area:", "").replace("Coroner Area:", "").replace("Coroner's Area:", "").strip()
-        if len(report_area) < 5:
+        area_text = self._extract_text_by_keywords(
+            soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"]
+        )
+        report_area = area_text.replace("Coroners Area:", "") \
+                               .replace("Coroner Area:", "") \
+                               .replace("Coroner's Area:", "") \
+                               .strip()
+        if len(report_area) < 5 or len(report_area) > 30:
             report_area = 'N/A: Not found'
-
-        ## Extract PDF report data ##
+        
+        # ------------------
+        # PDF Data Extraction
+        # ------------------
         
         # Receiver extraction
         try:
@@ -266,7 +359,7 @@ class PFDScraper:
         if len(receiver) < 5:
             receiver = 'N/A: Not found'
         
-        # Investigation & Inquest extraction
+        # Investigation & inquest extraction
         investigation_section = self._extract_section_from_text(
             pdf_text,
             start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"],
@@ -296,9 +389,21 @@ class PFDScraper:
         if len(concerns) < 30:
             concerns = 'N/A: Not found'
         
-        ## LLM fallback ##
-        # Only trigger fallback if at least one field is "N/A: Not found"
-        if self.llm_fallback and ('N/A: Not found' in [receiver, investigation, circumstances, concerns]):
+        # ------------------
+        # LLM Fallback (Only if any field is "N/A: Not found")
+        # ------------------
+        if self.llm_fallback and (
+            'N/A: Not found' in [
+                report_date,
+                report_deceased,
+                report_coroner,
+                report_area,
+                receiver,
+                investigation,
+                circumstances,
+                concerns
+            ]
+        ):
             logger.info("Attempting LLM fallback for %s", url)
             
             # Load OpenAI API key
@@ -333,17 +438,21 @@ class PFDScraper:
                 {
                     "type": "text",
                     "text": (
-                        "Your goal is to transcribe the text from this report, presented as images. \n\n"
-                        "You must return the text in the exact format given below:\n\n"
-                        "Receiver: [Name of the person or people the report is sent to]\n"
-                        "Investigation and Inquest: [The text from the Investigation and Inquest section of the report]\n"
-                        "Circumstances of Death: [The text from the Circumstances of Death section of the report]\n"
-                        "Coroner's Concerns: [The text from the Coroner's Concerns section of the report. Some reports may refer to this as 'Matters of Concern']\n\n"
+                        "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
+                        "You must return the text in the **exact** format given below:\n\n"
+                        "Date of Report: [Date in YYYY-MM-DD format if it is not already.]\n"
+                        "Deceased's Name: [Name of the deceased. Provide the name only with no additional information.]\n"
+                        "Coroner's Name: [Name of the coroner writing the report. Provide the name only, with no additional information.]\n"
+                        "Area: [Area/location of the Coroner. Provide the location only, with no additional information.]\n"
+                        "Receiver: [Name of the person or people the report is sent to. Provide the name only with no additional information.]\n"
+                        "Investigation and Inquest: [The text from the Investigation and Inquest section. Do not extract from any other section.]\n"
+                        "Circumstances of Death: [The text from the Circumstances of Death section. Do not extract from any other section.]\n"
+                        "Coroner's Concerns: [The text from the Coroner's Concerns or Matters of Concern section. Do not extract from any other section.]\n\n"
                         "*\n\n"
                         "Respond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n\n"
-                        "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" (without quotation marks) for each section.\n\n"
-                        "Sometimes text may be redacted, shown by a black box. In these cases, transcribe the black box as '[REDACTED]', preserving the rest of the section.\n\n"
-                        "Make sure you transcribe the *full* text for each section, not just a snippet. Sometimes, the text you must extract will span many paragraphs."
+                        "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for each section.\n\n"
+                        "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n\n"
+                        "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
                     )
                 }
             ]
@@ -369,13 +478,27 @@ class PFDScraper:
             logger.info("LLM fallback response: %s", llm_text)
             
             # Parse the LLM response to update the fields only if they are still "N/A: Not found".
+            
+            fallback_date = 'N/A: Not found'
+            fallback_deceased = 'N/A: Not found'
+            fallback_coroner = 'N/A: Not found'
+            fallback_area = 'N/A: Not found'
             fallback_receiver = 'N/A: Not found'
             fallback_investigation = 'N/A: Not found'
             fallback_circumstances = 'N/A: Not found'
             fallback_concerns = 'N/A: Not found'
+            
             for line in llm_text.splitlines():
                 line = line.strip()
-                if line.startswith("Receiver:"):
+                if line.startswith("Date of Report:"):
+                    fallback_date = line.split("Date of Report:", 1)[1].strip()
+                elif line.startswith("Deceased's Name:"):
+                    fallback_deceased = line.split("Deceased's Name:", 1)[1].strip()
+                elif line.startswith("Coroner's Name:"):
+                    fallback_coroner = line.split("Coroner's Name:", 1)[1].strip()
+                elif line.startswith("Area:"):
+                    fallback_area = line.split("Area:", 1)[1].strip()
+                elif line.startswith("Receiver:"):
                     fallback_receiver = line.split("Receiver:", 1)[1].strip()
                 elif line.startswith("Investigation and Inquest:"):
                     fallback_investigation = line.split("Investigation and Inquest:", 1)[1].strip()
@@ -385,6 +508,21 @@ class PFDScraper:
                     fallback_concerns = line.split("Coroner's Concerns:", 1)[1].strip()
             
             # Update each field only if it is "N/A: Not found"
+            if fallback_date != 'N/A: Not found':
+                try:
+                    parsed_date = parser.parse(fallback_date, fuzzy=True)
+                    fallback_date = parsed_date.strftime("%Y-%m-%d")
+                except Exception as e:
+                    logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
+            
+            if report_date == 'N/A: Not found':
+                report_date = fallback_date
+            if report_deceased == 'N/A: Not found':
+                report_deceased = fallback_deceased
+            if report_coroner == 'N/A: Not found':
+                report_coroner = fallback_coroner
+            if report_area == 'N/A: Not found':
+                report_area = fallback_area
             if receiver == 'N/A: Not found':
                 receiver = fallback_receiver
             if investigation == 'N/A: Not found':
@@ -398,6 +536,7 @@ class PFDScraper:
             "URL": url,
             "ID": report_id,
             "Date": report_date,
+            "DeceasedName": report_deceased,
             "CoronerName": report_coroner,
             "Area": report_area,
             "Receiver": receiver,
@@ -423,9 +562,16 @@ class PFDScraper:
 
 
 # Example usage:
-scraper = PFDScraper(category='suicide', start_page=2, end_page=2, max_workers=10,
-                     llm_fallback=True)
+scraper = PFDScraper(
+    category='accident_work_safety', 
+    start_page=2, 
+    end_page=2, 
+    max_workers=10,
+    llm_fallback=False,
+    llm_model="gpt-4o-mini",
+    docx_conversion="LibreOffice"  # Options: "MicrosoftWord", "LibreOffice", "None"
+)
 reports = scraper.scrape_all_reports()
 reports
 
-#reports.to_csv('../data/testreports.csv')
+# reports.to_csv('../data/testreports.csv')
