@@ -10,26 +10,29 @@ from dateutil import parser
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-# Configure logging for the module
+# Configure error logging for the module
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
-    def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10) -> None:
+    def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10, 
+                 ocr_fallback: bool = True) -> None:
         """
         Initialises the scraper.
         
-        :param category: Category of reports as categorised on the judiciary.uk website.
+        :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all', 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
-        :param max_workers: Maximum number of workers for concurrent fetching.
+        :param max_workers: Maximum number of workers for concurrent fetching. 
+        :param ocr_fallback: Whether to fallback to Optical Character Recognition (OCR) on entire PDFs if PDF scraping is unsuccessful.
         """
         self.category = category.lower()
         self.start_page = start_page
         self.end_page = end_page
         self.max_workers = max_workers
+        self.ocr_fallback = ocr_fallback
         self.report_links = []
         
         # Setup a requests session with retry logic.
@@ -168,13 +171,13 @@ class PFDScraper:
         
         :param soup: BeautifulSoup object of the page.
         :param keywords: List of keywords to search for.
-        :return: Extracted text or 'N/A - Not found'.
+        :return: Extracted text or 'N/A: Not found'.
         """
         for keyword in keywords:
             element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
             if element:
                 return element.get_text().strip()
-        return 'N/A - Not found'
+        return 'N/A: Not found'
     
     def _extract_section_from_text(self, text: str, start_keywords: list, end_keywords: list) -> str:
         """
@@ -184,7 +187,7 @@ class PFDScraper:
         :param text: The full text to search in.
         :param start_keywords: List of possible starting keywords.
         :param end_keywords: List of possible ending keywords.
-        :return: Extracted section text or "N/A - Not found" if markers are missing.
+        :return: Extracted section text or "N/A: Not found" if markers are missing.
         """
         lower_text = text.lower()
         for start in start_keywords:
@@ -204,7 +207,7 @@ class PFDScraper:
                     return text[section_start:section_end]
                 else:
                     return text[section_start:]
-        return "N/A - Not found"
+        return "N/A: Not found"
 
     
     def extract_report_info(self, url: str) -> dict:
@@ -230,19 +233,19 @@ class PFDScraper:
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
         
-        ## Extract HTML report data
+        ## Extract HTML report data ##
         
         # Report ID extraction using compiled regex
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
         if ref_element:
             match = self._id_pattern.search(ref_element.get_text())
-            report_id = match.group(1) if match else 'N/A - Not found'
+            report_id = match.group(1) if match else 'N/A: Not found'
         else:
-            report_id = 'N/A - Not found'
+            report_id = 'N/A: Not found'
         
-        # Date of report extraction
+        # Date of report extraction with fuzzy date parsing
         date_text = self._extract_text_by_keywords(soup, ["Date of report:"])
-        if date_text != 'N/A - Not found':
+        if date_text != 'N/A: Not found':
             date_text = date_text.replace("Date of report:", "").strip()
             try:
                 parsed_date = parser.parse(date_text, fuzzy=True)
@@ -251,24 +254,34 @@ class PFDScraper:
                 logger.error("Error parsing date '%s': %s", date_text, e)
                 report_date = date_text
         else:
-            report_date = 'N/A - Not found'
+            report_date = 'N/A: Not found'
         
         # Name of coroner extraction
         coroner_text = self._extract_text_by_keywords(soup, ["Coroners name:", "Coroner name:", "Coroner's name:"])
-        report_coroner = coroner_text.replace("Coroners name:", "").replace("Coroner name:", "").strip()
+        report_coroner = coroner_text.replace("Coroners name:", "").replace("Coroner name:", "").replace("Coroner's name:", "").strip()
+
+        if len(report_coroner) < 5:
+            report_coroner = 'N/A: Not found'
         
-        # Area extraction.
+        # Area extraction
         area_text = self._extract_text_by_keywords(soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"])
         report_area = area_text.replace("Coroners Area:", "").replace("Coroner Area:", "").replace("Coroner's Area:", "").strip()
         
+        if len(report_area) < 5:
+            report_area = 'N/A: Not found'
+
+
+        ## Extract PDF report data ##
         
-        ## Extract PDF report data
         # Receiver extraction
         try:
             receiver_section = pdf_text.split(" SENT ")[1].split("CORONER")[0]
         except IndexError:
-            receiver_section = "N/A - Not found"
+            receiver_section = "N/A: Not found"
         receiver = self.clean_text(receiver_section).replace("TO:", "").strip()
+        
+        if len(receiver) < 5:
+            receiver = 'N/A: Not found'
         
         # Investigation & Inquest extraction
         investigation_section = self._extract_section_from_text(
@@ -278,11 +291,8 @@ class PFDScraper:
         )
         investigation = self.clean_text(investigation_section)
         
-       # try:
-        #    investigation_section = pdf_text.split("INVESTIGATION")[1].split("CIRCUMSTANCES OF THE DEATH")[0]
-        #except IndexError:
-         #   investigation_section = "N/A - Not found"
-        #investigation = self.clean_text(investigation_section).replace("and INQUEST", "").strip()
+        if len(investigation) < 30:
+            investigation = 'N/A: Not found'
         
         # Circumstances of Death extraction
         circumstances_section = self._extract_section_from_text(
@@ -292,6 +302,9 @@ class PFDScraper:
         )
         circumstances = self.clean_text(circumstances_section)
         
+        if len(circumstances) < 30:
+            circumstances = 'N/A: Not found'
+        
         # Matters of Concern extraction
         concerns_section = self._extract_section_from_text(
             pdf_text,
@@ -299,6 +312,9 @@ class PFDScraper:
             end_keywords=["ACTION SHOULD BE TAKEN"]
         )
         concerns = self.clean_text(concerns_section)
+        
+        if len(concerns) < 30:
+            concerns = 'N/A: Not found'
         
         return {
             "URL": url,
@@ -329,7 +345,7 @@ class PFDScraper:
 
 
 
-scraper = PFDScraper(category='road', start_page=2, end_page=2, max_workers=10)
+scraper = PFDScraper(category='child_death', start_page=2, end_page=2, max_workers=10)
 reports = scraper.scrape_all_reports()
 reports
 
