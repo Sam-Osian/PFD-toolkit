@@ -1,2 +1,8 @@
+# Environment
 .venv
+
+# In-development testing
 data/testreports.csv
+
+# OpenAI API key
+PFD-toolkit/api.env

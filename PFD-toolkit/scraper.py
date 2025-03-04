@@ -11,6 +11,14 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO  # For in-memory buffer
 
+# To handle LLM fallback for PFD reading as images
+import base64
+from pdf2image import convert_from_bytes
+from openai import OpenAI
+from dotenv import load_dotenv
+import os
+
+
 # Configure error logging for the module
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +27,7 @@ class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
     def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10, 
-                 ocr_fallback: bool = True) -> None:
+                 llm_fallback: bool = False) -> None:
         """
         Initialises the scraper.
         
@@ -27,13 +35,13 @@ class PFDScraper:
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
         :param max_workers: Maximum number of workers for concurrent fetching. 
-        :param ocr_fallback: Whether to fallback to Optical Character Recognition (OCR) on entire PDFs if PDF scraping is unsuccessful.
+        :param llm_fallback: If PDF scraping fails, whether to fallback to OpenAI LLM to process reports as images. API key must be set.
         """
         self.category = category.lower()
         self.start_page = start_page
         self.end_page = end_page
         self.max_workers = max_workers
-        self.ocr_fallback = ocr_fallback
+        self.llm_fallback = llm_fallback
         self.report_links = []
         
         # Setup a requests session with retry logic.
@@ -236,17 +244,14 @@ class PFDScraper:
         # Name of coroner extraction
         coroner_text = self._extract_text_by_keywords(soup, ["Coroners name:", "Coroner name:", "Coroner's name:"])
         report_coroner = coroner_text.replace("Coroners name:", "").replace("Coroner name:", "").replace("Coroner's name:", "").strip()
-
         if len(report_coroner) < 5:
             report_coroner = 'N/A: Not found'
         
         # Area extraction
         area_text = self._extract_text_by_keywords(soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"])
         report_area = area_text.replace("Coroners Area:", "").replace("Coroner Area:", "").replace("Coroner's Area:", "").strip()
-        
         if len(report_area) < 5:
             report_area = 'N/A: Not found'
-
 
         ## Extract PDF report data ##
         
@@ -256,7 +261,6 @@ class PFDScraper:
         except IndexError:
             receiver_section = "N/A: Not found"
         receiver = self.clean_text(receiver_section).replace("TO:", "").strip()
-        
         if len(receiver) < 5:
             receiver = 'N/A: Not found'
         
@@ -267,7 +271,6 @@ class PFDScraper:
             end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
         )
         investigation = self.clean_text(investigation_section)
-        
         if len(investigation) < 30:
             investigation = 'N/A: Not found'
         
@@ -278,7 +281,6 @@ class PFDScraper:
             end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"]
         )
         circumstances = self.clean_text(circumstances_section)
-        
         if len(circumstances) < 30:
             circumstances = 'N/A: Not found'
         
@@ -289,15 +291,106 @@ class PFDScraper:
             end_keywords=["ACTION SHOULD BE TAKEN"]
         )
         concerns = self.clean_text(concerns_section)
-        
         if len(concerns) < 30:
             concerns = 'N/A: Not found'
         
-        # OCR fallback if needed (implementation can be expanded)
-        if self.ocr_fallback and ('N/A: Not found' in [receiver, investigation, circumstances, concerns]):
-            logger.info("Attempting OCR fallback for %s", url)
-            pdf_text_ocr = self.extract_text_from_pdf(report_link)
-            # Additional OCR parsing logic could be added here.
+        ## LLM fallback ##
+        # Only trigger fallback if at least one field is "N/A: Not found"
+        if self.llm_fallback and ('N/A: Not found' in [receiver, investigation, circumstances, concerns]):
+            logger.info("Attempting LLM fallback for %s", url)
+            
+            # Load OpenAI API key
+            load_dotenv('api.env')
+            openai_api_key = os.getenv('OPENAI_API_KEY')
+            client = OpenAI(api_key=openai_api_key)
+            
+            # Re-download the PDF for image conversion
+            try:
+                pdf_response = self.session.get(report_link)
+                pdf_response.raise_for_status()
+                pdf_bytes = pdf_response.content
+            except Exception as e:
+                logger.error("Failed to fetch PDF for image conversion: %s", e)
+                pdf_bytes = None
+            
+            base64_images = []
+            if pdf_bytes:
+                try:
+                    images = convert_from_bytes(pdf_bytes)
+                except Exception as e:
+                    logger.error("Error converting PDF to images: %s", e)
+                    images = []
+                for img in images:
+                    buffered = BytesIO()
+                    img.save(buffered, format="JPEG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                    base64_images.append(img_str)
+            
+            # Construct messages for GPT vision call
+            messages = [
+                {
+                    "type": "text",
+                    "text": (
+                        "Your goal is to transcribe the text from this report, presented as images. \n\n"
+                        "You must return the text in the exact format given below:\n\n"
+                        "Receiver: [Name of the person or people the report is sent to]\n"
+                        "Investigation and Inquest: [The text from the Investigation and Inquest section of the report]\n"
+                        "Circumstances of Death: [The text from the Circumstances of Death section of the report]\n"
+                        "Coroner's Concerns: [The text from the Coroner's Concerns section of the report. Some reports may refer to this as 'Matters of Concern']\n\n"
+                        "*\n\n"
+                        "Respond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n\n"
+                        "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" (without quotation marks) for each section.\n\n"
+                        "Sometimes text may be redacted, shown by a black box. In these cases, transcribe the black box as '[REDACTED]', preserving the rest of the section.\n\n"
+                        "Make sure you transcribe the *full* text for each section, not just a snippet. Sometimes, the text you must extract will span many paragraphs."
+                    )
+                }
+            ]
+            
+            # Append each image as an image message
+            for b64_img in base64_images:
+                messages.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64_img}"
+                    }
+                })
+            
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "user", "content": messages}
+                ],
+            )
+            
+            # Correct extraction of the response text from the ChatCompletion object.
+            llm_text = response.choices[0].message.content
+            logger.info("LLM fallback response: %s", llm_text)
+            
+            # Parse the LLM response to update the fields only if they are still "N/A: Not found".
+            fallback_receiver = 'N/A: Not found'
+            fallback_investigation = 'N/A: Not found'
+            fallback_circumstances = 'N/A: Not found'
+            fallback_concerns = 'N/A: Not found'
+            for line in llm_text.splitlines():
+                line = line.strip()
+                if line.startswith("Receiver:"):
+                    fallback_receiver = line.split("Receiver:", 1)[1].strip()
+                elif line.startswith("Investigation and Inquest:"):
+                    fallback_investigation = line.split("Investigation and Inquest:", 1)[1].strip()
+                elif line.startswith("Circumstances of Death:"):
+                    fallback_circumstances = line.split("Circumstances of Death:", 1)[1].strip()
+                elif line.startswith("Coroner's Concerns:"):
+                    fallback_concerns = line.split("Coroner's Concerns:", 1)[1].strip()
+            
+            # Update each field only if it is "N/A: Not found"
+            if receiver == 'N/A: Not found':
+                receiver = fallback_receiver
+            if investigation == 'N/A: Not found':
+                investigation = fallback_investigation
+            if circumstances == 'N/A: Not found':
+                circumstances = fallback_circumstances
+            if concerns == 'N/A: Not found':
+                concerns = fallback_concerns
         
         return {
             "URL": url,
@@ -328,7 +421,8 @@ class PFDScraper:
 
 
 # Example usage:
-scraper = PFDScraper(category='child_death', start_page=2, end_page=2, max_workers=10)
+scraper = PFDScraper(category='suicide', start_page=2, end_page=2, max_workers=10,
+                     llm_fallback=True)
 reports = scraper.scrape_all_reports()
 reports
 
