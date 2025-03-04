@@ -27,7 +27,7 @@ class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website."""
     
     def __init__(self, category: str = 'all', start_page: int = 1, end_page: int = 559, max_workers: int = 10, 
-                 llm_fallback: bool = False) -> None:
+                 llm_fallback: bool = False, llm_model: str = "gpt-4o-mini") -> None:
         """
         Initialises the scraper.
         
@@ -35,13 +35,15 @@ class PFDScraper:
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
         :param max_workers: Maximum number of workers for concurrent fetching. 
-        :param llm_fallback: If PDF scraping fails, whether to fallback to OpenAI LLM to process reports as images. API key must be set.
+        :param llm_fallback: If PDF scraping fails, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
+        :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
         """
         self.category = category.lower()
         self.start_page = start_page
         self.end_page = end_page
         self.max_workers = max_workers
         self.llm_fallback = llm_fallback
+        self.llm_model = llm_model
         self.report_links = []
         
         # Setup a requests session with retry logic.
@@ -356,7 +358,7 @@ class PFDScraper:
                 })
             
             response = client.chat.completions.create(
-                model="gpt-4o-mini",
+                model=self.llm_model,
                 messages=[
                     {"role": "user", "content": messages}
                 ],
