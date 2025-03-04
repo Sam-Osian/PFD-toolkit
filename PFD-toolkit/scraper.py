@@ -9,6 +9,7 @@ import re
 from dateutil import parser
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from io import BytesIO  # For in-memory buffer
 
 # Configure error logging for the module
 logger = logging.getLogger(__name__)
@@ -45,50 +46,31 @@ class PFDScraper:
         # Compile regex for report ID extraction (e.g. "2025-0296").
         self._id_pattern = re.compile(r'(\d{4}-\d{4})')
         
-        # Define URL templates for different PFD categories.
-        if self.category == "all":
-            self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/"
-        elif self.category == "suicide":
-            self.page_template = "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015"
-        elif self.category == "accident_work_safety":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths"
-        elif self.category == "alcohol_drug_medication":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths"
-        elif self.category == "care_home":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths"
-        elif self.category == "child_death":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015"
-        elif self.category == "community_health_emergency":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths"
-        elif self.category == "emergency_services":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards"
-        elif self.category == "hospital_deaths":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths"
-        elif self.category == "mental_health":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths"
-        elif self.category == "police":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths"
-        elif self.category == "product":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths"
-        elif self.category == "railway":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths"
-        elif self.category == "road":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths"
-        elif self.category == "service_personnel":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths"
-        elif self.category == "custody":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths"
-        elif self.category == "wales":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards"
-        elif self.category == "other":
-            self.page_template = "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths"
+        # Define URL templates for different PFD categories using a dictionary mapping.
+        category_templates = {
+            "all": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/",
+            "suicide": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015",
+            "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths",
+            "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths",
+            "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths",
+            "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015",
+            "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths",
+            "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards",
+            "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths",
+            "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths",
+            "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths",
+            "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths",
+            "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths",
+            "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths",
+            "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths",
+            "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths",
+            "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards",
+            "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths",
+        }
+        if self.category in category_templates:
+            self.page_template = category_templates[self.category]
         else:
-            valid_options = (
-                "'all', 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', "
-                "'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', "
-                "'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', "
-                "'wales', 'other'"
-            )
+            valid_options = ", ".join(sorted(category_templates.keys()))
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
         
     def get_href_values(self, url: str) -> list:
@@ -139,7 +121,7 @@ class PFDScraper:
     
     def extract_text_from_pdf(self, pdf_url: str) -> str:
         """
-        Downloads and extracts text from a PDF report.
+        Downloads and extracts text from a PDF report using an in-memory bytes buffer.
 
         :param pdf_url: URL of the PDF to extract text from.
         :return: Cleaned text extracted from the PDF.
@@ -151,14 +133,11 @@ class PFDScraper:
             logger.error("Failed to fetch PDF: %s; Error: %s", pdf_url, e)
             return "N/A"
         
-        # Use tempfile for automatic clean-up of temporary files
         try:
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=True) as temp_file:
-                temp_file.write(response.content)
-                temp_file.flush()
-                pdf_document = pymupdf.open(temp_file.name)
-                text = "".join(page.get_text() for page in pdf_document)
-                pdf_document.close()
+            pdf_buffer = BytesIO(response.content)
+            pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
+            text = "".join(page.get_text() for page in pdf_document)
+            pdf_document.close()
         except Exception as e:
             logger.error("Error processing PDF %s: %s", pdf_url, e)
             return "N/A"
@@ -195,7 +174,6 @@ class PFDScraper:
             start_index = lower_text.find(start_lower)
             if start_index != -1:
                 section_start = start_index + len(start_lower)
-                # Find all occurrences of end keywords after section_start
                 end_indices = []
                 for end in end_keywords:
                     end_lower = end.lower()
@@ -209,7 +187,6 @@ class PFDScraper:
                     return text[section_start:]
         return "N/A: Not found"
 
-    
     def extract_report_info(self, url: str) -> dict:
         """
         Extracts metadata and text from a PFD report webpage.
@@ -316,6 +293,12 @@ class PFDScraper:
         if len(concerns) < 30:
             concerns = 'N/A: Not found'
         
+        # OCR fallback if needed (implementation can be expanded)
+        if self.ocr_fallback and ('N/A: Not found' in [receiver, investigation, circumstances, concerns]):
+            logger.info("Attempting OCR fallback for %s", url)
+            pdf_text_ocr = self.extract_text_from_pdf(report_link)
+            # Additional OCR parsing logic could be added here.
+        
         return {
             "URL": url,
             "ID": report_id,
@@ -336,15 +319,15 @@ class PFDScraper:
         """
         if not self.report_links:
             self.get_report_links()
-        records = []
-        for url in self.report_links:
-            report_data = self.extract_report_info(url)
-            if report_data:
-                records.append(report_data)
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            results = list(executor.map(self.extract_report_info, self.report_links))
+        # Filter out any failed report extractions (None)
+        records = [record for record in results if record is not None]
         return pd.DataFrame(records)
 
 
-
+# Example usage:
 scraper = PFDScraper(category='child_death', start_page=2, end_page=2, max_workers=10)
 reports = scraper.scrape_all_reports()
 reports
