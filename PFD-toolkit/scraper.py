@@ -9,7 +9,7 @@ import re
 from dateutil import parser
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
-from io import BytesIO  # For in-memory buffer
+from io import BytesIO 
 from urllib.parse import urlparse, unquote
 import base64
 from pdf2image import convert_from_bytes
@@ -95,9 +95,9 @@ class PFDScraper:
             valid_options = ", ".join(sorted(category_templates.keys()))
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
     
-    def get_href_values(self, url: str) -> list:
+    def _get_href_values(self, url: str) -> list:
         """
-        Extracts href values from <a> elements with class 'card__link'.
+        Internal function to extract href values from <a> elements with class 'card__link'.
         
         :param url: URL of the page to scrape.
         :return: List of href values.
@@ -113,23 +113,23 @@ class PFDScraper:
         links = soup.find_all('a', class_='card__link')
         return [link.get('href') for link in links if link.get('href')]
     
-    def get_report_links(self) -> list:
+    def _get_report_links(self) -> list:
         """
-        Collects all PFD report links from the paginated pages.
+        Internal function to collect all PFD report links from the paginated pages.
         
         :return: A list of report URLs.
         """
         self.report_links = []
         pages = list(range(self.start_page, self.end_page + 1))
         
-        def fetch_page_links(page_number: int) -> list:
+        def _fetch_page_links(page_number: int) -> list:
             page_url = self.page_template.format(page=page_number)
-            href_values = self.get_href_values(page_url)
+            href_values = self._get_href_values(page_url)
             logger.info("Scraped %d links from %s", len(href_values), page_url)
             return href_values
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = list(executor.map(fetch_page_links, pages))
+            results = list(executor.map(_fetch_page_links, pages))
         
         for href_values in results:
             self.report_links.extend(href_values)
@@ -137,19 +137,19 @@ class PFDScraper:
         return self.report_links
 
     @staticmethod
-    def normalise_apostrophes(text: str) -> str:
-        """Replaces "fancy" (typographic) apostrophes with the standard apostrophe."""
+    def _normalise_apostrophes(text: str) -> str:
+        """Helper function to replace "fancy" (typographic) apostrophes with the standard apostrophe."""
         return text.replace("’", "'").replace("‘", "'")
 
     @staticmethod
-    def clean_text(text: str) -> str:
-        """Cleans text by removing excessive whitespace & replacing typographic apostrophes."""
-        normalised = PFDScraper.normalise_apostrophes(text)
+    def _clean_text(text: str) -> str:
+        """Helper function to clean text by removing excessive whitespace & replacing typographic apostrophes."""
+        normalised = PFDScraper._normalise_apostrophes(text)
         return ' '.join(normalised.split())
     
-    def extract_text_from_pdf(self, pdf_url: str) -> str:
+    def _extract_text_from_pdf(self, pdf_url: str) -> str:
         """
-        Downloads and extracts text from a PDF report. If the file is not in PDF format (.docx or .doc),
+        Internal function to download and extract text from a PDF report. If the file is not in PDF format (.docx or .doc),
         converts it to PDF using the method specified by self.docx_conversion.
         
         :param pdf_url: URL of the file to extract text from.
@@ -230,11 +230,11 @@ class PFDScraper:
             logger.error("Error processing PDF %s: %s", pdf_url, e)
             return "N/A"
         
-        return self.clean_text(text)
+        return self._clean_text(text)
     
     def _extract_paragraph_text_by_keywords(self, soup: BeautifulSoup, keywords: list) -> str:
         """
-        Helper function to extract text from a <p> element containing any of the given keywords.
+        Internal function to extract text from a <p> element containing any of the given keywords.
         
         :param soup: BeautifulSoup object of the page.
         :param keywords: List of keywords to search for.
@@ -243,12 +243,12 @@ class PFDScraper:
         for keyword in keywords:
             element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
             if element:
-                return self.clean_text(element.get_text())
+                return self._clean_text(element.get_text())
         return 'N/A: Not found'
     
     def _extract_section_text_by_keywords(self, soup: BeautifulSoup, header_keywords: list) -> str:
         """
-        Helper function to extract text from a section of HTML that spans multiple elements,
+        Internal function to extract text from a section of HTML that spans multiple elements,
         based on a header that matches any of the provided keywords. The search is case-insensitive,
         and the function accepts multiple keyword variations for a single section.
 
@@ -276,13 +276,13 @@ class PFDScraper:
                             content_parts.append(text)
                 # Return the concatenated content if found
                 if content_parts:
-                    return self.clean_text(" ".join(content_parts))
+                    return self._clean_text(" ".join(content_parts))
         return "N/A: Not found"
 
     
     def _extract_section_from_pdf_text(self, text: str, start_keywords: list, end_keywords: list) -> str:
         """
-        Helper function to extract a section from text using multiple start and end keywords.
+        Internal function to extract a section from text using multiple start and end keywords.
         Uses case-insensitive search to locate the markers.
         
         :param text: The full text to search in.
@@ -310,9 +310,9 @@ class PFDScraper:
         return "N/A: Not found"
     
     
-    def extract_report_info(self, url: str) -> dict:
+    def _extract_report_info(self, url: str) -> dict:
         """
-        Extracts metadata and text from a PFD report webpage.
+        Internal function to extract metadata and text from a PFD report webpage.
         
         :param url: URL of the report page.
         :return: Dictionary containing extracted report information.
@@ -331,7 +331,7 @@ class PFDScraper:
             return None
         
         report_link = pdf_links[0]
-        pdf_text = self.extract_text_from_pdf(report_link)
+        pdf_text = self._extract_text_from_pdf(report_link)
         
         
         # -----------------------------------------------------------------------#
@@ -510,7 +510,7 @@ class PFDScraper:
                     start_keywords=[" SENT ", "SENT TO:"],
                     end_keywords=["CORONER", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
                 )
-                receiver = self.clean_text(receiver_element).replace("TO:", "").strip()
+                receiver = self._clean_text(receiver_element).replace("TO:", "").strip()
                 
                 if len(receiver) < 5:
                     receiver = 'N/A: Not found'
@@ -523,7 +523,7 @@ class PFDScraper:
                     start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"],
                     end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
                 )
-                investigation = self.clean_text(investigation_element)
+                investigation = self._clean_text(investigation_element)
                 
                 if len(investigation) < 30:
                     investigation = 'N/A: Not found'
@@ -535,7 +535,7 @@ class PFDScraper:
                     start_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"],
                     end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"]
                 )
-                circumstances = self.clean_text(circumstances_section)
+                circumstances = self._clean_text(circumstances_section)
                 
                 if len(circumstances) < 30:
                     circumstances = 'N/A: Not found'
@@ -547,7 +547,7 @@ class PFDScraper:
                     start_keywords=["CORONER'S CONCERNS", "as follows"],
                     end_keywords=["ACTION SHOULD BE TAKEN"]
                 )
-                concerns = self.clean_text(concerns_section)
+                concerns = self._clean_text(concerns_section)
                 
                 if len(concerns) < 30:
                     concerns = 'N/A: Not found'
@@ -721,10 +721,10 @@ class PFDScraper:
         :return: A pandas DataFrame containing one row per scraped report.
         """
         if not self.report_links:
-            self.get_report_links()
+            self._get_report_links()
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = list(executor.map(self.extract_report_info, self.report_links))
+            results = list(executor.map(self._extract_report_info, self.report_links))
         # Filter out any failed report extractions (None)
         records = [record for record in results if record is not None]
         return pd.DataFrame(records)
