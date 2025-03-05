@@ -44,7 +44,7 @@ class PFDScraper:
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
         :param max_workers: Maximum number of workers for concurrent fetching.
-        :param pdf_fallback: If HTML scraping fails for any given report section, whether to fallback to PDF scraping. 
+        :param pdf_fallback: If HTML scraping fails for any given report section, whether to fallback to .pdf scraping. 
         :param llm_fallback: If previous scraping method fails for any given report section, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
@@ -60,6 +60,14 @@ class PFDScraper:
         self.docx_conversion = docx_conversion
         self.verbose = verbose
         self.report_links = []
+        
+        if self.verbose:
+            logger.debug(
+                f"Initialised PFDScraper with category='{self.category}', "
+                f"start_page={self.start_page}, end_page={self.end_page}, "
+                f"max_workers={self.max_workers}, pdf_fallback={self.pdf_fallback}, "
+                f"llm_fallback={self.llm_fallback}, docx_conversion='{self.docx_conversion}'"
+            )
         
         # Setup a requests session with retry logic.
         self.session = requests.Session()
@@ -108,6 +116,8 @@ class PFDScraper:
         try:
             response = self.session.get(url)
             response.raise_for_status()
+            if self.verbose:
+                logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
         except requests.RequestException as e:
             logger.error("Failed to fetch page: %s; Error: %s", url, e)
             return []
@@ -152,16 +162,19 @@ class PFDScraper:
     
     def _extract_text_from_pdf(self, pdf_url: str) -> str:
         """
-        Internal function to download and extract text from a PDF report. If the file is not in PDF format (.docx or .doc),
-        converts it to PDF using the method specified by self.docx_conversion.
+        Internal function to download and extract text from a .pdf report. If the file is not in .pdf format (.docx or .doc),
+        converts it to .pdf using the method specified by self.docx_conversion.
         
         :param pdf_url: URL of the file to extract text from.
-        :return: Cleaned text extracted from the PDF, or "N/A" on failure.
+        :return: Cleaned text extracted from the .pdf, or "N/A" on failure.
         """
         # Determine file extension from URL
         parsed_url = urlparse(pdf_url)
         path = unquote(parsed_url.path)
         ext = os.path.splitext(path)[1].lower()
+        
+        if self.verbose:
+            logger.debug(f"Processing .pdf {pdf_url}.")
         
         # Download the file bytes
         try:
@@ -174,7 +187,7 @@ class PFDScraper:
         
         pdf_bytes = None
         if ext != ".pdf":
-            logger.info("File %s is not a PDF (extension %s)", pdf_url, ext)
+            logger.info("File %s is not a .pdf (extension %s)", pdf_url, ext)
             if self.docx_conversion == "MicrosoftWord":
                 logger.info("Attempting conversion using Microsoft Word...")
                 try:
@@ -193,7 +206,7 @@ class PFDScraper:
                         pdf_bytes = f.read()
                     os.remove(input_path)
                     os.remove(output_path)
-                    logger.info("Conversion successful using Microsoft Word!")
+                    logger.info("Conversion successful using Microsoft Word! Proceeding with .pdf extraction...")
                 except Exception as e:
                     logger.error("Conversion using Microsoft Word failed: %s", e)
                     return "N/A"
@@ -213,7 +226,7 @@ class PFDScraper:
                         pdf_bytes = f.read()
                     os.remove(input_path)
                     os.remove(output_path)
-                    logger.info("Conversion successful using LibreOffice!")
+                    logger.info("Conversion successful using LibreOffice! Proceeding with .pdf extraction...")
                 except Exception as e:
                     logger.error("Conversion using LibreOffice failed: %s", e)
                     return "N/A"
@@ -223,14 +236,14 @@ class PFDScraper:
         else:
             pdf_bytes = file_bytes
         
-        # Process pdf_bytes as PDF
+        # Process pdf_bytes as .pdf
         try:
             pdf_buffer = BytesIO(pdf_bytes)
             pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
             text = "".join(page.get_text() for page in pdf_document)
             pdf_document.close()
         except Exception as e:
-            logger.error("Error processing PDF %s: %s", pdf_url, e)
+            logger.error("Error processing .pdf %s: %s", pdf_url, e)
             return "N/A"
         
         return self._clean_text(text)
@@ -330,7 +343,7 @@ class PFDScraper:
         soup = BeautifulSoup(response.content, 'html.parser')
         pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
         if not pdf_links:
-            logger.error("No PDF links found on %s", url)
+            logger.error("No .pdf links found on %s", url)
             return None
         
         report_link = pdf_links[0]
@@ -475,7 +488,10 @@ class PFDScraper:
                 concerns
             ]
         ):
-            logger.info("Attempting .pdf fallback for %s", url)
+            if self.verbose:
+                logger.debug(f"Initiating .pdf fallback for URL: {url} because one or more fields are missing.")
+            else:
+                logger.info("Attempting .pdf fallback for %s", url)
             
             # Coroner name extraction if missing
             if coroner == "N/A: Not found":
@@ -558,8 +574,8 @@ class PFDScraper:
         # -------------------------------------------------------------------------------------------- #
         #                                LLM Data Extraction Fallback                                  #
         #                                                                                              #
-        # If the previous method of scraping (whether HTML or PDF) was unsuccessful for any given      #
-        # section, the below code will (re-)download PDFs, convert them to images, and feed it to a    #
+        # If the previous method of scraping (whether HTML or .pdf) was unsuccessful for any given      #
+        # section, the below code will (re-)download .pdfs, convert them to images, and feed it to a    #
         # GPT Vision model to extract text.                                                            #
         # ---------------------------------------------------------------------------------------------#
         
@@ -575,6 +591,12 @@ class PFDScraper:
                 concerns
             ]
         ):
+            if self.verbose:
+                logger.debug(f"Initiating LLM fallback for URL: {url}. Missing fields: " +
+                     f"date='{date}', deceased='{deceased}', coroner='{coroner}', " +
+                     f"area='{area}', receiver='{receiver}', investigation='{investigation}', " +
+                     f"circumstances='{circumstances}', concerns='{concerns}'")
+                
             logger.info("Attempting LLM fallback for %s", url)
             
             # Load OpenAI API key
@@ -582,13 +604,13 @@ class PFDScraper:
             openai_api_key = os.getenv('OPENAI_API_KEY')
             client = OpenAI(api_key=openai_api_key)
             
-            # (Re-)download the PDF for image conversion
+            # (Re-)download the .pdf for image conversion
             try:
                 pdf_response = self.session.get(report_link)
                 pdf_response.raise_for_status()
                 pdf_bytes = pdf_response.content
             except Exception as e:
-                logger.error("Failed to fetch PDF for image conversion: %s", e)
+                logger.error("Failed to fetch .pdf for image conversion: %s", e)
                 pdf_bytes = None
             
             base64_images = []
@@ -596,7 +618,7 @@ class PFDScraper:
                 try:
                     images = convert_from_bytes(pdf_bytes)
                 except Exception as e:
-                    logger.error("Error converting PDF to images: %s", e)
+                    logger.error("Error converting .pdf to images: %s", e)
                     images = []
                 for img in images:
                     buffered = BytesIO()
@@ -611,14 +633,14 @@ class PFDScraper:
                     "text": (
                         "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
                         "You must return the text in the **exact** format given below:\n\n"
-                        "Date of Report: [Date in YYYY-MM-DD format if it is not already.]\n"
-                        "Deceased's Name: [Name of the deceased. Provide the name only with no additional information.]\n"
-                        "Coroner's Name: [Name of the coroner writing the report. Provide the name only, with no additional information.]\n"
-                        "Area: [Area/location of the Coroner. Provide the location only, with no additional information.]\n"
-                        "Receiver: [Name of the person or people the report is sent to. Provide the name only with no additional information.]\n"
+                        "Date of Report: [Date of the report, not the death]\n"
+                        "Deceased Name(s): [Name or names of the deceased.]\n"
+                        "Coroner's Name: [Name of the coroner. Provide the name only.]\n"
+                        "Area: [Area/location of the Coroner. Provide the location itself only.]\n"
+                        "Receiver: [Name or names of the person/people or organisation(s) the report is sent to, including job roles if provided.]\n"
                         "Investigation and Inquest: [The text from the Investigation and Inquest section. Do not extract from any other section.]\n"
                         "Circumstances of Death: [The text from the Circumstances of Death section. Do not extract from any other section.]\n"
-                        "Coroner's Concerns: [The text from the Coroner's Concerns or Matters of Concern section. Do not extract from any other section.]\n\n"
+                        "Coroner's Concerns: [The text from the Coroner's Concerns or Matters of Concern section. Sometimes this will follow boilerplate text (e.g. 'The matters of concern are as follows...')]\n\n"
                         "*\n\n"
                         "Respond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n\n"
                         "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for each section.\n\n"
@@ -648,7 +670,7 @@ class PFDScraper:
             llm_text = response.choices[0].message.content
             
             if self.verbose:
-                logger.info("LLM fallback response: %s", llm_text)
+                logger.info("LLM fallback response:\n%s\n\n", llm_text)
             else:
                 logger.info("LLM fallback response received.")
 
@@ -744,10 +766,10 @@ scraper = PFDScraper(
     end_page=3, 
     max_workers=10,
     pdf_fallback=True,
-    llm_fallback=False,
+    llm_fallback=True,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice",
-    verbose=False
+    verbose=True
 )
 reports = scraper.scrape_all_reports()
 reports
