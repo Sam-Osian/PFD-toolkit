@@ -592,11 +592,12 @@ class PFDScraper:
             ]
         ):
             if self.verbose:
-                logger.debug(f"Initiating LLM fallback for URL: {url}. Missing fields: " +
-                     f"date='{date}', deceased='{deceased}', coroner='{coroner}', " +
-                     f"area='{area}', receiver='{receiver}', investigation='{investigation}', " +
-                     f"circumstances='{circumstances}', concerns='{concerns}'")
-                
+                logger.debug(
+                    f"Initiating LLM fallback for URL: {url}. Missing fields: " +
+                    f"date='{date}', deceased='{deceased}', coroner='{coroner}', " +
+                    f"area='{area}', receiver='{receiver}', investigation='{investigation}', " +
+                    f"circumstances='{circumstances}', concerns='{concerns}'"
+                )
             logger.info("Attempting LLM fallback for %s", url)
             
             # Load OpenAI API key
@@ -626,57 +627,69 @@ class PFDScraper:
                     img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
                     base64_images.append(img_str)
             
+            # Create a dictionary of missing fields and their extraction instructions
+            missing_fields = {}
+            if date == "N/A: Not found":
+                missing_fields["Date of Report"] = "[Date of the report, not the death]"
+            if deceased == "N/A: Not found":
+                missing_fields["Deceased Name(s)"] = "[Name or names of the deceased.]"
+            if coroner == "N/A: Not found":
+                missing_fields["Coroner's Name"] = "[Name of the coroner. Provide the name only.]"
+            if area == "N/A: Not found":
+                missing_fields["Area"] = "[Area/location of the Coroner. Provide the location itself only.]"
+            if receiver == "N/A: Not found":
+                missing_fields["Receiver"] = "[Name or names of the person/people or organisation(s) the report is sent to, including job roles if provided.]"
+            if investigation == "N/A: Not found":
+                missing_fields["Investigation and Inquest"] = "[The text from the Investigation/Inquest section.]"
+            if circumstances == "N/A: Not found":
+                missing_fields["Circumstances of Death"] = "[The text from the Circumstances of Death section.]"
+            if concerns == "N/A: Not found":
+                missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns or Matters of Concern section. Sometimes this will follow boilerplate text (e.g. 'The matters of concern are as follows...')]"
+            
+            # Build a dynamic prompt only including the missing fields
+            prompt = (
+                "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
+                "Please extract the following section(s):\n"
+            )
+            for field, instruction in missing_fields.items():
+                prompt += f"\n{field}: {instruction}\n"
+            prompt += (
+                "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
+                "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for that section.\n"
+                "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
+                "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
+                "Do *not* change the section title(s) from the above format. For example, you must not change Circumstances of Death to Circumstances of _the_ Death.\n"
+            )
+            
+            # If verbose, print out the prompt for debugging
+            if self.verbose:
+                logger.info("Report: %s", url)
+                logger.info("LLM prompt:\n\n%s", prompt)
+            
             # Construct messages for GPT vision call
             messages = [
-                {
-                    "type": "text",
-                    "text": (
-                        "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
-                        "You must return the text in the **exact** format given below:\n\n"
-                        "Date of Report: [Date of the report, not the death]\n"
-                        "Deceased Name(s): [Name or names of the deceased.]\n"
-                        "Coroner's Name: [Name of the coroner. Provide the name only.]\n"
-                        "Area: [Area/location of the Coroner. Provide the location itself only.]\n"
-                        "Receiver: [Name or names of the person/people or organisation(s) the report is sent to, including job roles if provided.]\n"
-                        "Investigation and Inquest: [The text from the Investigation and Inquest section. Do not extract from any other section.]\n"
-                        "Circumstances of Death: [The text from the Circumstances of Death section. Do not extract from any other section.]\n"
-                        "Coroner's Concerns: [The text from the Coroner's Concerns or Matters of Concern section. Sometimes this will follow boilerplate text (e.g. 'The matters of concern are as follows...')]\n\n"
-                        "*\n\n"
-                        "Respond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n\n"
-                        "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for each section.\n\n"
-                        "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n\n"
-                        "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
-                    )
-                }
+                {"type": "text", "text": prompt}
             ]
-            
-            # Append each image as an image message
             for b64_img in base64_images:
                 messages.append({
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{b64_img}"
-                    }
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
                 })
             
             response = client.chat.completions.create(
                 model=self.llm_model,
-                messages=[
-                    {"role": "user", "content": messages}
-                ],
+                messages=[{"role": "user", "content": messages}],
             )
             
-            # Correct extraction of the response text from the ChatCompletion object.
+            # Extract the LLM response
             llm_text = response.choices[0].message.content
             
             if self.verbose:
                 logger.info("LLM fallback response:\n%s\n\n", llm_text)
             else:
                 logger.info("LLM fallback response received.")
-
             
-            # Parse the LLM response to update the fields only if they are still "N/A: Not found".
-            
+            # Parse the LLM response to update only missing fields
             fallback_date = 'N/A: Not found'
             fallback_deceased = 'N/A: Not found'
             fallback_coroner = 'N/A: Not found'
@@ -687,25 +700,26 @@ class PFDScraper:
             fallback_concerns = 'N/A: Not found'
             
             for line in llm_text.splitlines():
-                line = line.strip()
-                if line.startswith("Date of Report:"):
-                    fallback_date = line.split("Date of Report:", 1)[1].strip()
-                elif line.startswith("Deceased Name(s):"):
-                    fallback_deceased = line.split("Deceased Name(s):", 1)[1].strip()
-                elif line.startswith("Coroner's Name:"):
-                    fallback_coroner = line.split("Coroner's Name:", 1)[1].strip()
-                elif line.startswith("Area:"):
-                    fallback_area = line.split("Area:", 1)[1].strip()
-                elif line.startswith("Receiver:"):
-                    fallback_receiver = line.split("Receiver:", 1)[1].strip()
-                elif line.startswith("Investigation and Inquest:"):
-                    fallback_investigation = line.split("Investigation and Inquest:", 1)[1].strip()
-                elif line.startswith("Circumstances of Death:"):
-                    fallback_circumstances = line.split("Circumstances of Death:", 1)[1].strip()
-                elif line.startswith("Coroner's Concerns:"):
-                    fallback_concerns = line.split("Coroner's Concerns:", 1)[1].strip()
+                line_strip = line.strip()
+                line_lower = line_strip.lower()
+                if line_lower.startswith("date of report:"):
+                    fallback_date = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("deceased name(s):"):
+                    fallback_deceased = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("coroner's name:"):
+                    fallback_coroner = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("area:"):
+                    fallback_area = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("receiver:"):
+                    fallback_receiver = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("investigation and inquest:"):
+                    fallback_investigation = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("circumstances of death:"):
+                    fallback_circumstances = line_strip.split(":", 1)[1].strip()
+                elif line_lower.startswith("coroner's concerns:"):
+                    fallback_concerns = line_strip.split(":", 1)[1].strip()
             
-            # Update each field only if it is "N/A: Not found"
+            # Optionally, re-parse date if needed
             if fallback_date != 'N/A: Not found':
                 try:
                     parsed_date = parser.parse(fallback_date, fuzzy=True)
@@ -713,6 +727,7 @@ class PFDScraper:
                 except Exception as e:
                     logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
             
+            # Update each field only if it is still missing
             if date == 'N/A: Not found':
                 date = fallback_date
             if deceased == 'N/A: Not found':
@@ -729,6 +744,7 @@ class PFDScraper:
                 circumstances = fallback_circumstances
             if concerns == 'N/A: Not found':
                 concerns = fallback_concerns
+
         
         return {
             "URL": url,
@@ -759,7 +775,9 @@ class PFDScraper:
         return pd.DataFrame(records)
 
 
-# Example usage:
+
+# -----------------------------------------------------------------------------------------
+# TESTING
 scraper = PFDScraper(
     category='alcohol_drug_medication', 
     start_page=3, 
