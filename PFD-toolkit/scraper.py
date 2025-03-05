@@ -34,7 +34,8 @@ class PFDScraper:
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
         llm_model: str = "gpt-4o-mini",
-        docx_conversion: str = "None"  
+        docx_conversion: str = "None",
+        verbose: bool = True  
     ) -> None:
         """
         Initialises the scraper.
@@ -47,6 +48,7 @@ class PFDScraper:
         :param llm_fallback: If previous scraping method fails for any given report section, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
+        :param verbose: Whether to print verbose output.
         """
         self.category = category.lower()
         self.start_page = start_page
@@ -56,6 +58,7 @@ class PFDScraper:
         self.llm_fallback = llm_fallback
         self.llm_model = llm_model
         self.docx_conversion = docx_conversion
+        self.verbose = verbose
         self.report_links = []
         
         # Setup a requests session with retry logic.
@@ -643,8 +646,12 @@ class PFDScraper:
             
             # Correct extraction of the response text from the ChatCompletion object.
             llm_text = response.choices[0].message.content
-            logger.info("LLM fallback response received.")
-            #logger.info("LLM fallback response: %s", llm_text) # Too verbose but might need later
+            
+            if self.verbose:
+                logger.info("LLM fallback response: %s", llm_text)
+            else:
+                logger.info("LLM fallback response received.")
+
             
             # Parse the LLM response to update the fields only if they are still "N/A: Not found".
             
@@ -732,14 +739,15 @@ class PFDScraper:
 
 # Example usage:
 scraper = PFDScraper(
-    category='accident_work_safety', 
+    category='alcohol_drug_medication', 
     start_page=3, 
     end_page=3, 
     max_workers=10,
-    pdf_fallback=False,
+    pdf_fallback=True,
     llm_fallback=False,
     llm_model="gpt-4o-mini",
-    docx_conversion="LibreOffice"
+    docx_conversion="LibreOffice",
+    verbose=False
 )
 reports = scraper.scrape_all_reports()
 reports
