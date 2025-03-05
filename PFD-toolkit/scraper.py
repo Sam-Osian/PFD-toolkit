@@ -31,6 +31,7 @@ class PFDScraper:
         start_page: int = 1,
         end_page: int = 559,
         max_workers: int = 10,
+        pdf_fallback: bool = True,
         llm_fallback: bool = False,
         llm_model: str = "gpt-4o-mini",
         docx_conversion: str = "None"  
@@ -38,11 +39,12 @@ class PFDScraper:
         """
         Initialises the scraper.
         
-        :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all', 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
+        :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all' (default), 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
-        :param max_workers: Maximum number of workers for concurrent fetching. 
-        :param llm_fallback: If PDF scraping fails, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
+        :param max_workers: Maximum number of workers for concurrent fetching.
+        :param pdf_fallback: If HTML scraping fails for any given report section, whether to fallback to PDF scraping. 
+        :param llm_fallback: If previous scraping method fails for any given report section, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         """
@@ -50,6 +52,7 @@ class PFDScraper:
         self.start_page = start_page
         self.end_page = end_page
         self.max_workers = max_workers
+        self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
         self.llm_model = llm_model
         self.docx_conversion = docx_conversion
@@ -91,7 +94,7 @@ class PFDScraper:
         else:
             valid_options = ", ".join(sorted(category_templates.keys()))
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
-        
+    
     def get_href_values(self, url: str) -> list:
         """
         Extracts href values from <a> elements with class 'card__link'.
@@ -132,11 +135,17 @@ class PFDScraper:
             self.report_links.extend(href_values)
         logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
-    
+
+    @staticmethod
+    def normalise_apostrophes(text: str) -> str:
+        """Replaces "fancy" (typographic) apostrophes with the standard apostrophe."""
+        return text.replace("’", "'").replace("‘", "'")
+
     @staticmethod
     def clean_text(text: str) -> str:
-        """Cleans text by removing excessive whitespace."""
-        return ' '.join(text.split())
+        """Cleans text by removing excessive whitespace & replacing typographic apostrophes."""
+        normalised = PFDScraper.normalise_apostrophes(text)
+        return ' '.join(normalised.split())
     
     def extract_text_from_pdf(self, pdf_url: str) -> str:
         """
@@ -223,7 +232,7 @@ class PFDScraper:
         
         return self.clean_text(text)
     
-    def _extract_text_by_keywords(self, soup: BeautifulSoup, keywords: list) -> str:
+    def _extract_paragraph_text_by_keywords(self, soup: BeautifulSoup, keywords: list) -> str:
         """
         Helper function to extract text from a <p> element containing any of the given keywords.
         
@@ -234,10 +243,44 @@ class PFDScraper:
         for keyword in keywords:
             element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
             if element:
-                return element.get_text().strip()
+                return self.clean_text(element.get_text())
         return 'N/A: Not found'
     
-    def _extract_section_from_text(self, text: str, start_keywords: list, end_keywords: list) -> str:
+    def _extract_section_text_by_keywords(self, soup: BeautifulSoup, header_keywords: list) -> str:
+        """
+        Helper function to extract text from a section of HTML that spans multiple elements,
+        based on a header that matches any of the provided keywords. The search is case-insensitive,
+        and the function accepts multiple keyword variations for a single section.
+
+        :param soup: BeautifulSoup object of the page.
+        :param header_keywords: List of header keyword variations to search for.
+        :return: Extracted section text or 'N/A: Not found'.
+        """
+        # Look for all <strong> tags which (hopefully!) contain section headers
+        for strong in soup.find_all('strong'):
+            header_text = strong.get_text(strip=True)
+            # Check if any of the header keywords match
+            if any(keyword.lower() in header_text.lower() for keyword in header_keywords):
+                content_parts = []
+                # Iterate over siblings that follow the header within the same parent element
+                for sibling in strong.next_siblings:
+                    # If the sibling is a string, strip it
+                    if isinstance(sibling, str):
+                        text = sibling.strip()
+                        if text:
+                            content_parts.append(text)
+                    else:
+                        # For tags, get their text content (thru handling inner <br> tags by using a space as separator)
+                        text = sibling.get_text(separator=" ", strip=True)
+                        if text:
+                            content_parts.append(text)
+                # Return the concatenated content if found
+                if content_parts:
+                    return self.clean_text(" ".join(content_parts))
+        return "N/A: Not found"
+
+    
+    def _extract_section_from_pdf_text(self, text: str, start_keywords: list, end_keywords: list) -> str:
         """
         Helper function to extract a section from text using multiple start and end keywords.
         Uses case-insensitive search to locate the markers.
@@ -266,6 +309,7 @@ class PFDScraper:
                     return text[section_start:]
         return "N/A: Not found"
     
+    
     def extract_report_info(self, url: str) -> dict:
         """
         Extracts metadata and text from a PFD report webpage.
@@ -289,115 +333,239 @@ class PFDScraper:
         report_link = pdf_links[0]
         pdf_text = self.extract_text_from_pdf(report_link)
         
-        # ------------------
-        # HTML Data Extraction
-        # ------------------
+        
+        # -----------------------------------------------------------------------#
+        #                          HTML Data Extraction                          #
+        #                                                                        #
+        #   The below attempts to scrape data from each report's HTML webpage.   #
+        # -----------------------------------------------------------------------#
+        
+        
         # Report ID extraction using compiled regex
         ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
         if ref_element:
             match = self._id_pattern.search(ref_element.get_text())
             report_id = match.group(1) if match else 'N/A: Not found'
         else:
-            report_id = 'N/A: Not found'
+            report_id = "N/A: Not found"
+        
         
         # Date of report extraction with fuzzy date parsing
-        date_text = self._extract_text_by_keywords(soup, ["Date of report:"])
-        if date_text != 'N/A: Not found':
-            date_text = date_text.replace("Date of report:", "").strip()
+        date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
+        if date_element != "N/A: Not found":
+            date_element = date_element.replace("Date of report:", "").strip()
             try:
-                parsed_date = parser.parse(date_text, fuzzy=True)
-                report_date = parsed_date.strftime("%Y-%m-%d")
+                parsed_date = parser.parse(date_element, fuzzy=True)
+                date = parsed_date.strftime("%Y-%m-%d")
             except Exception as e:
-                logger.error("Error parsing date '%s': %s", date_text, e)
-                report_date = date_text
+                logger.error("Error parsing date '%s': %s", date_element, e)
+                date = date_element
         else:
-            report_date = 'N/A: Not found'
+            date = 'N/A: Not found'
+        
+        # Receiver extraction
+        receiver_element = self._extract_paragraph_text_by_keywords(
+            soup, ["This report is being sent to:", "Sent to:"]
+        )
+        receiver = receiver_element.replace("This report is being sent to:", "") \
+                                       .replace("Sent to:", "") \
+                                       .strip()
+                                       
+        if len(receiver) < 5 or len(receiver) > 30:
+            receiver = 'N/A: Not found'
         
         # Name of deceased extraction
-        deceased_text = self._extract_text_by_keywords(
+        deceased_element = self._extract_paragraph_text_by_keywords(
             soup, ["Deceased name:", "Deceased's name:", "Deceaseds name:"]
         )
-        report_deceased = deceased_text.replace("Deceased name:", "") \
+        deceased = deceased_element.replace("Deceased name:", "") \
                                        .replace("Deceased's name:", "") \
                                        .replace("Deceaseds name:", "") \
                                        .strip()
-        if len(report_deceased) < 5 or len(report_deceased) > 30:
-            report_deceased = 'N/A: Not found'
+                                       
+        if len(deceased) < 5 or len(deceased) > 30:
+            deceased = 'N/A: Not found'
+        
         
         # Name of coroner extraction
-        coroner_text = self._extract_text_by_keywords(
+        coroner_element = self._extract_paragraph_text_by_keywords(
             soup, ["Coroners name:", "Coroner name:", "Coroner's name:"]
         )
-        report_coroner = coroner_text.replace("Coroners name:", "") \
+        coroner = coroner_element.replace("Coroners name:", "") \
                                      .replace("Coroner name:", "") \
                                      .replace("Coroner's name:", "") \
                                      .strip()
-        if len(report_coroner) < 5 or len(report_coroner) > 30:
-            report_coroner = 'N/A: Not found'
+        if len(coroner) < 5 or len(coroner) > 30:
+            coroner = 'N/A: Not found'
+        
         
         # Area extraction
-        area_text = self._extract_text_by_keywords(
+        area_element = self._extract_paragraph_text_by_keywords(
             soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"]
         )
-        report_area = area_text.replace("Coroners Area:", "") \
+        area = area_element.replace("Coroners Area:", "") \
                                .replace("Coroner Area:", "") \
                                .replace("Coroner's Area:", "") \
                                .strip()
-        if len(report_area) < 5 or len(report_area) > 30:
-            report_area = 'N/A: Not found'
+                               
+        if len(area) < 4 or len(area) > 40:
+            area = 'N/A: Not found'
         
-        # ------------------
-        # PDF Data Extraction
-        # ------------------
         
-        # Receiver extraction
-        try:
-            receiver_section = pdf_text.split(" SENT ")[1].split("CORONER")[0]
-        except IndexError:
-            receiver_section = "N/A: Not found"
-        receiver = self.clean_text(receiver_section).replace("TO:", "").strip()
-        if len(receiver) < 5:
-            receiver = 'N/A: Not found'
-        
-        # Investigation & inquest extraction
-        investigation_section = self._extract_section_from_text(
-            pdf_text,
-            start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"],
-            end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
+        # Investigation and Inquest extraction
+        investigation_section = self._extract_section_text_by_keywords(
+            soup, ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"]
         )
-        investigation = self.clean_text(investigation_section)
+        investigation = investigation_section.replace("INVESTIGATION and INQUEST", "") \
+                                            .replace("INVESTIGATION & INQUEST", "") \
+                                            .replace("3 INQUEST", "") \
+                                            .strip()
+
         if len(investigation) < 30:
             investigation = 'N/A: Not found'
         
-        # Circumstances of Death extraction
-        circumstances_section = self._extract_section_from_text(
-            pdf_text,
-            start_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"],
-            end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"]
+        
+        # Circumstances of the Death extraction
+        circumstances_section = self._extract_section_text_by_keywords(
+            soup, 
+            ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"]
         )
-        circumstances = self.clean_text(circumstances_section)
+        circumstances = circumstances_section.replace("CIRCUMSTANCES OF THE DEATH", "") \
+                                            .replace("CIRCUMSTANCES OF DEATH", "") \
+                                            .replace("CIRCUMSTANCES OF", "") \
+                                            .strip()
         if len(circumstances) < 30:
             circumstances = 'N/A: Not found'
-        
-        # Matters of Concern extraction
-        concerns_section = self._extract_section_from_text(
-            pdf_text,
-            start_keywords=["CORONER’S CONCERNS", "as follows"],
-            end_keywords=["ACTION SHOULD BE TAKEN"]
+
+
+        # Coroner's Concerns extraction
+        concerns_text = self._extract_section_text_by_keywords(
+            soup, 
+            ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"]
         )
-        concerns = self.clean_text(concerns_section)
+        concerns = concerns_text.replace("CORONER'S CONCERNS", "") \
+                                            .replace("CORONERS CONCERNS", "") \
+                                            .replace("CORONER CONCERNS", "") \
+                                            .strip()
         if len(concerns) < 30:
             concerns = 'N/A: Not found'
+
         
-        # ------------------
-        # LLM Fallback (Only if any field is "N/A: Not found")
-        # ------------------
+        # -------------------------------------------------------------------------------------------- #
+        #                               .pdf Data Extraction Fallback                                  #
+        #                                                                                              #
+        # If pdf.fallback is set to True (default), any PFD reports where our HTML scraper was unable  #
+        # to scrape any given section will switch to .pdf scraping. Any successfully scraped sections  #
+        # will be unchanged.                                                                           #
+        # ---------------------------------------------------------------------------------------------#
+        
+        
+        if self.pdf_fallback and (
+            'N/A: Not found' in [
+                #date, # Tricky to implement due to date placement in .pdfs; 
+                #deceased, # Unable to read from .pdfs; information not _structurally_ recorded but is sometimes mentioned in anothe section. LLM fallback better suited to this.
+                coroner,
+                area,
+                receiver,
+                investigation,
+                circumstances,
+                concerns
+            ]
+        ):
+            logger.info("Attempting .pdf fallback for %s", url)
+            
+            # Coroner name extraction if missing
+            if coroner == "N/A: Not found":
+                coroner_element = self._extract_section_from_pdf_text(
+                    pdf_text,
+                    start_keywords=["I am", "CORONER"],
+                    end_keywords=["CORONER'S LEGAL POWERS", "paragraph 7"]
+                )
+            
+                coroner = coroner_element.replace("I am", "") \
+                                        .replace("CORONER'S LEGAL POWERS", "") \
+                                        .replace("CORONER", "") \
+                                        .replace("paragraph 7", "") \
+                                        .strip()
+            
+            # Area extraction if missing
+            if area == "N/A: Not found":
+                area_element = self._extract_section_from_pdf_text(
+                    pdf_text,
+                    start_keywords=["area of"],
+                    end_keywords=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"]
+                )
+            
+                area = area_element.replace("area of", "") \
+                                        .replace("CORONER'S", "") \
+                                        .replace("CORONER", "") \
+                                        .replace("CORONERS", "") \
+                                        .replace("paragraph 7", "") \
+                                        .strip()
+            
+            # Receiver extraction if missing
+            if receiver == "N/A: Not found":
+                receiver_element = self._extract_section_from_pdf_text(
+                    pdf_text,
+                    start_keywords=[" SENT ", "SENT TO:"],
+                    end_keywords=["CORONER", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
+                )
+                receiver = self.clean_text(receiver_element).replace("TO:", "").strip()
+                
+                if len(receiver) < 5:
+                    receiver = 'N/A: Not found'
+                
+            
+            # Investigation & Inquest extraction if missing
+            if investigation == "N/A: Not found":
+                investigation_element = self._extract_section_from_pdf_text(
+                    pdf_text,
+                    start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"],
+                    end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
+                )
+                investigation = self.clean_text(investigation_element)
+                
+                if len(investigation) < 30:
+                    investigation = 'N/A: Not found'
+            
+            # Circumstances of Death extraction if missing
+            if circumstances == "N/A: Not found":
+                circumstances_section = self._extract_section_from_pdf_text(
+                    pdf_text,
+                    start_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"],
+                    end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"]
+                )
+                circumstances = self.clean_text(circumstances_section)
+                
+                if len(circumstances) < 30:
+                    circumstances = 'N/A: Not found'
+            
+            # Matters of Concern extraction
+            if concerns == "N/A: Not found":
+                concerns_section = self._extract_section_from_pdf_text(
+                    pdf_text,
+                    start_keywords=["CORONER'S CONCERNS", "as follows"],
+                    end_keywords=["ACTION SHOULD BE TAKEN"]
+                )
+                concerns = self.clean_text(concerns_section)
+                
+                if len(concerns) < 30:
+                    concerns = 'N/A: Not found'
+        
+        # -------------------------------------------------------------------------------------------- #
+        #                                LLM Data Extraction Fallback                                  #
+        #                                                                                              #
+        # If the previous method of scraping (whether HTML or PDF) was unsuccessful for any given      #
+        # section, the below code will (re-)download PDFs, convert them to images, and feed it to a    #
+        # GPT Vision model to extract text.                                                            #
+        # ---------------------------------------------------------------------------------------------#
+        
         if self.llm_fallback and (
             'N/A: Not found' in [
-                report_date,
-                report_deceased,
-                report_coroner,
-                report_area,
+                date,
+                deceased,
+                coroner,
+                area,
                 receiver,
                 investigation,
                 circumstances,
@@ -411,7 +579,7 @@ class PFDScraper:
             openai_api_key = os.getenv('OPENAI_API_KEY')
             client = OpenAI(api_key=openai_api_key)
             
-            # Re-download the PDF for image conversion
+            # (Re-)download the PDF for image conversion
             try:
                 pdf_response = self.session.get(report_link)
                 pdf_response.raise_for_status()
@@ -475,7 +643,8 @@ class PFDScraper:
             
             # Correct extraction of the response text from the ChatCompletion object.
             llm_text = response.choices[0].message.content
-            logger.info("LLM fallback response: %s", llm_text)
+            logger.info("LLM fallback response received.")
+            #logger.info("LLM fallback response: %s", llm_text) # Too verbose but might need later
             
             # Parse the LLM response to update the fields only if they are still "N/A: Not found".
             
@@ -515,14 +684,14 @@ class PFDScraper:
                 except Exception as e:
                     logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
             
-            if report_date == 'N/A: Not found':
-                report_date = fallback_date
-            if report_deceased == 'N/A: Not found':
-                report_deceased = fallback_deceased
-            if report_coroner == 'N/A: Not found':
-                report_coroner = fallback_coroner
-            if report_area == 'N/A: Not found':
-                report_area = fallback_area
+            if date == 'N/A: Not found':
+                date = fallback_date
+            if deceased == 'N/A: Not found':
+                deceased = fallback_deceased
+            if coroner == 'N/A: Not found':
+                coroner = fallback_coroner
+            if area == 'N/A: Not found':
+                area = fallback_area
             if receiver == 'N/A: Not found':
                 receiver = fallback_receiver
             if investigation == 'N/A: Not found':
@@ -535,10 +704,10 @@ class PFDScraper:
         return {
             "URL": url,
             "ID": report_id,
-            "Date": report_date,
-            "DeceasedName": report_deceased,
-            "CoronerName": report_coroner,
-            "Area": report_area,
+            "Date": date,
+            "DeceasedName": deceased,
+            "CoronerName": coroner,
+            "Area": area,
             "Receiver": receiver,
             "InvestigationAndInquest": investigation,
             "CircumstancesOfDeath": circumstances,
@@ -564,12 +733,13 @@ class PFDScraper:
 # Example usage:
 scraper = PFDScraper(
     category='accident_work_safety', 
-    start_page=2, 
-    end_page=2, 
+    start_page=3, 
+    end_page=3, 
     max_workers=10,
+    pdf_fallback=False,
     llm_fallback=False,
     llm_model="gpt-4o-mini",
-    docx_conversion="LibreOffice"  # Options: "MicrosoftWord", "LibreOffice", "None"
+    docx_conversion="LibreOffice"
 )
 reports = scraper.scrape_all_reports()
 reports
