@@ -690,8 +690,8 @@ class PFDScraper:
                 line = line.strip()
                 if line.startswith("Date of Report:"):
                     fallback_date = line.split("Date of Report:", 1)[1].strip()
-                elif line.startswith("Deceased's Name:"):
-                    fallback_deceased = line.split("Deceased's Name:", 1)[1].strip()
+                elif line.startswith("Deceased Name(s):"):
+                    fallback_deceased = line.split("Deceased Name(s):", 1)[1].strip()
                 elif line.startswith("Coroner's Name:"):
                     fallback_coroner = line.split("Coroner's Name:", 1)[1].strip()
                 elif line.startswith("Area:"):
