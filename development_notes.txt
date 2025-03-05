@@ -1,0 +1,32 @@
+-----------------------------------------
+
+ISSUE #1: ACTIVE
+Failed HTML extraction for long-text sections.
+
+DETAIL:
+Currently the HTML scraper is unable to extract Investigation, Circumstances, and Concerns sections. Consequently, it will 
+    always fallback to the .pdf extraction. The issue arises because the HTML content for the previous sections have a <p> 
+    tag in most reports, while the long-text sections are nested within a table. I've already tried to devise dedicated HTML 
+    pattern-matching functions for these long-text sections, but it's not working.
+
+POSSIBLE FIX: 
+More familiarity with how HTML is handled for these long-text sections is likely to be enough. If each report's
+    webpage is configured differently, we might need to accept that rule-based HTML extraction will never work and .pdf / LLM
+    fallbacks are necessary rather than a contingency.
+
+
+-----------------------------------------
+
+ISSUE #2: ACTIVE
+LibreOffice .docx conversion isn't working.
+
+DETAIL: 
+Unclear on why this is happening. I'm also not sure if the MicrosoftOffice converstion works either, as running it requires
+    Word to be installed on the local machine (development machine uses Ubuntu 24).
+
+POSSIBLE FIX:
+Not sure! Currently the script errors/warnings suggest that the document is never converted, despite the logged message
+    stating that it was successful. 
+
+
+-----------------------------------------
