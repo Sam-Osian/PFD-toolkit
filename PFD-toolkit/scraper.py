@@ -33,6 +33,7 @@ class PFDScraper:
         max_workers: int = 10,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
+        api_key: str = None,
         llm_model: str = "gpt-4o-mini",
         docx_conversion: str = "None",
         verbose: bool = True  
@@ -46,6 +47,7 @@ class PFDScraper:
         :param max_workers: Maximum number of workers for concurrent fetching.
         :param pdf_fallback: If HTML scraping fails for any given report section, whether to fallback to .pdf scraping. 
         :param llm_fallback: If previous scraping method fails for any given report section, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
+        :param api_key: OpenAI API Key
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         :param verbose: Whether to print verbose output.
@@ -56,10 +58,14 @@ class PFDScraper:
         self.max_workers = max_workers
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
+        self.api_key = api_key
         self.llm_model = llm_model
         self.docx_conversion = docx_conversion
         self.verbose = verbose
         self.report_links = []
+        
+        if self.llm_fallback and not self.api_key:
+            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled.")
         
         if self.verbose:
             logger.debug(
@@ -69,17 +75,17 @@ class PFDScraper:
                 f"llm_fallback={self.llm_fallback}, docx_conversion='{self.docx_conversion}'"
             )
         
-        # Setup a requests session with retry logic.
+        # Setting up a requests session with retry logic
         self.session = requests.Session()
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
         adapter = HTTPAdapter(max_retries=retries)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
         
-        # Compile regex for report ID extraction (e.g. "2025-0296").
+        # Compile regex for report ID extraction (e.g. "2025-0296")
         self._id_pattern = re.compile(r'(\d{4}-\d{4})')
         
-        # Define URL templates for different PFD categories using a dictionary mapping.
+        # Define URL templates for different PFD categories. 'All' and 'suicide' have different formats, so we can't use a universal URL format.
         category_templates = {
             "all": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/",
             "suicide": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015",
@@ -151,7 +157,7 @@ class PFDScraper:
 
     @staticmethod
     def _normalise_apostrophes(text: str) -> str:
-        """Helper function to replace "fancy" (typographic) apostrophes with the standard apostrophe."""
+        """Helper function to replace ‘fancy’ (typographic) apostrophes with the standard apostrophe."""
         return text.replace("’", "'").replace("‘", "'")
 
     @staticmethod
@@ -168,7 +174,7 @@ class PFDScraper:
         :param pdf_url: URL of the file to extract text from.
         :return: Cleaned text extracted from the .pdf, or "N/A" on failure.
         """
-        # Determine file extension from URL
+        # Find the file extension from URL, in case it's not .pdf as expected
         parsed_url = urlparse(pdf_url)
         path = unquote(parsed_url.path)
         ext = os.path.splitext(path)[1].lower()
@@ -231,12 +237,11 @@ class PFDScraper:
                     logger.error("Conversion using LibreOffice failed: %s", e)
                     return "N/A"
             else:
-                logger.info("docx_conversion is set to 'None'; skipping conversion.")
+                logger.info("docx_conversion is set to 'None'; skipping conversion!")
                 return "N/A"
         else:
             pdf_bytes = file_bytes
         
-        # Process pdf_bytes as .pdf
         try:
             pdf_buffer = BytesIO(pdf_bytes)
             pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
@@ -272,6 +277,8 @@ class PFDScraper:
         :param header_keywords: List of header keyword variations to search for.
         :return: Extracted section text or 'N/A: Not found'.
         """
+        # The below is more extensively commented because it has a low success rate and could possibly be improved.
+        
         # Look for all <strong> tags which (hopefully!) contain section headers
         for strong in soup.find_all('strong'):
             header_text = strong.get_text(strip=True)
@@ -286,7 +293,7 @@ class PFDScraper:
                         if text:
                             content_parts.append(text)
                     else:
-                        # For tags, get their text content (thru handling inner <br> tags by using a space as separator)
+                        # For tags, get their text content (thru handling inner <br> tags by using a space as separator
                         text = sibling.get_text(separator=" ", strip=True)
                         if text:
                             content_parts.append(text)
@@ -379,6 +386,7 @@ class PFDScraper:
         else:
             date = 'N/A: Not found'
         
+        
         # Receiver extraction
         receiver_element = self._extract_paragraph_text_by_keywords(
             soup, ["This report is being sent to:", "Sent to:"]
@@ -389,6 +397,7 @@ class PFDScraper:
                                        
         if len(receiver) < 5 or len(receiver) > 30:
             receiver = 'N/A: Not found'
+        
         
         # Name of deceased extraction
         deceased_element = self._extract_paragraph_text_by_keywords(
@@ -522,6 +531,7 @@ class PFDScraper:
                                         .replace("paragraph 7", "") \
                                         .strip()
             
+            
             # Receiver extraction if missing
             if receiver == "N/A: Not found":
                 receiver_element = self._extract_section_from_pdf_text(
@@ -547,6 +557,7 @@ class PFDScraper:
                 if len(investigation) < 30:
                     investigation = 'N/A: Not found'
             
+            
             # Circumstances of Death extraction if missing
             if circumstances == "N/A: Not found":
                 circumstances_section = self._extract_section_from_pdf_text(
@@ -559,7 +570,8 @@ class PFDScraper:
                 if len(circumstances) < 30:
                     circumstances = 'N/A: Not found'
             
-            # Matters of Concern extraction
+            
+            # Matters of Concern extraction if missing
             if concerns == "N/A: Not found":
                 concerns_section = self._extract_section_from_pdf_text(
                     pdf_text,
@@ -574,9 +586,9 @@ class PFDScraper:
         # -------------------------------------------------------------------------------------------- #
         #                                LLM Data Extraction Fallback                                  #
         #                                                                                              #
-        # If the previous method of scraping (whether HTML or .pdf) was unsuccessful for any given      #
-        # section, the below code will (re-)download .pdfs, convert them to images, and feed it to a    #
-        # GPT Vision model to extract text.                                                            #
+        # If the previous method of scraping (whether HTML or .pdf) was unsuccessful for any given     #
+        # section, the below code will (re-)download .pdfs, convertws to images, and fed it to a GPT   #
+        # Vision model to extract text.                                                                #
         # ---------------------------------------------------------------------------------------------#
         
         if self.llm_fallback and (
@@ -600,12 +612,7 @@ class PFDScraper:
                 )
             logger.info("Attempting LLM fallback for %s", url)
             
-            # Load OpenAI API key
-            load_dotenv('api.env')
-            openai_api_key = os.getenv('OPENAI_API_KEY')
-            client = OpenAI(api_key=openai_api_key)
-            
-            # (Re-)download the .pdf for image conversion
+            # (Re-)downloading the .pdf for image conversion
             try:
                 pdf_response = self.session.get(report_link)
                 pdf_response.raise_for_status()
@@ -627,7 +634,7 @@ class PFDScraper:
                     img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
                     base64_images.append(img_str)
             
-            # Create a dictionary of missing fields and their extraction instructions
+            # Dictionary of missing fields and their extraction instructions. 
             missing_fields = {}
             if date == "N/A: Not found":
                 missing_fields["Date of Report"] = "[Date of the report, not the death]"
@@ -646,7 +653,7 @@ class PFDScraper:
             if concerns == "N/A: Not found":
                 missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns or Matters of Concern section. Sometimes this will follow boilerplate text (e.g. 'The matters of concern are as follows...')]"
             
-            # Build a dynamic prompt only including the missing fields
+            # Dynamic prompt only including the missing fields
             prompt = (
                 "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
                 "Please extract the following section(s):\n"
@@ -719,7 +726,7 @@ class PFDScraper:
                 elif line_lower.startswith("coroner's concerns:"):
                     fallback_concerns = line_strip.split(":", 1)[1].strip()
             
-            # Optionally, re-parse date if needed
+            # Parse the date into YYYY-MM-DD format
             if fallback_date != 'N/A: Not found':
                 try:
                     parsed_date = parser.parse(fallback_date, fuzzy=True)
@@ -727,7 +734,7 @@ class PFDScraper:
                 except Exception as e:
                     logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
             
-            # Update each field only if it is still missing
+            # Update each field only if it's still missing
             if date == 'N/A: Not found':
                 date = fallback_date
             if deceased == 'N/A: Not found':
@@ -745,7 +752,7 @@ class PFDScraper:
             if concerns == 'N/A: Not found':
                 concerns = fallback_concerns
 
-        
+        # Return the extracted report information 
         return {
             "URL": url,
             "ID": report_id,
@@ -759,6 +766,7 @@ class PFDScraper:
             "MattersOfConcern": concerns
         }
     
+    # The below function serves as the entry point for the scraper.
     def scrape_all_reports(self) -> pd.DataFrame:
         """
         Scrapes all reports from the collected report links.
@@ -778,6 +786,13 @@ class PFDScraper:
 
 # -----------------------------------------------------------------------------------------
 # TESTING
+
+# Load OpenAI API key
+load_dotenv('api.env')
+openai_api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=openai_api_key)
+
+# Run the scraper :D
 scraper = PFDScraper(
     category='alcohol_drug_medication', 
     start_page=3, 
@@ -785,6 +800,7 @@ scraper = PFDScraper(
     max_workers=10,
     pdf_fallback=True,
     llm_fallback=True,
+    api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice",
     verbose=True
