@@ -5,4 +5,4 @@
 data/testreports.csv
 
 # OpenAI API key
-src/pfd_toolkit_sam-osian/api.env
+src/pfd_toolkit/api.env
