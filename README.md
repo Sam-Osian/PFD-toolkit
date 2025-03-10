@@ -23,6 +23,27 @@ If you need .docx -> .pdf conversion, install with
 pip install pfd-toolkit[docx-conversion]
 ```
 
-## License
+## UV (Package Manager)
+### Installation
+1.  Download and install UV using [this guide](https://docs.astral.sh/uv/getting-started/installation/).
 
+2. Add UV to Path.
+    - Windows Powershell - `$env:Path = "C:\Users\jonat\.local\bin;$env:Path"`.
+    - Linux - `ehhh dunno`.
+
+3. Install required Python version using `uv python install 3.12.3`.
+
+4. Install pfd-toolkit using `uv sync`.
+
+5. Activate uv environment.
+    - Linux - `source .venv/bin/activate`.
+    - Windows Powershell - `.venv\Scripts\Activate.ps1`.
+
+6. When adding dependencies or modifying the pyproject.toml file, it's advisable to run `uv sync` to ensure the uv.lock file is up to date.
+### Usage
+1. Add dependencies with `uv add {package_name}` eg: `uv add pandas`, `uv add pandas==2.0.1`.
+2. Remove dependencies with `uv remove {package_name}` eg: `uv remove pandas`.
+3. Update packages using add command but use `==` to specify version.
+
+## License
 This project is licensed under the terms of the MIT Licence. For more information, see `LICENSE`.
