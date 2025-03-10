@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pfd_toolkit"
+version = "0.1.0"
+description = "A toolkit for scraping and processing Prevention of Future Death (PFD) reports from the UK Judiciary website."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Samuel Osian", email = "soandrews98@gmail.com" },
+  { name = "Jonathan Pytches", email = "jonathan.pytches@gmail.com " }
+]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.8",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent"
+]
+dependencies = [
+  "requests",
+  "beautifulsoup4",
+  "pymupdf",
+  "pandas",
+  "python-dateutil",
+  "pdf2image",
+  "openai",
+  "python-dotenv"
+]
+requires-python = ">=3.8"
+
+[project.optional-dependencies]
+docx-conversion = ["docx2pdf"]
+
+[project.urls]
+"Source" = "https://github.com/Sam-Osian/PFD-toolkit"
+"Issues" = "https://github.com/Sam-Osian/PFD-toolkit/issues"
