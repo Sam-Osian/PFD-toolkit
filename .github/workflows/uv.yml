@@ -12,7 +12,7 @@ jobs:
 
     steps:
       - name: checkout pfd-toolkit
-      - uses: actions/checkout@v4
+        uses: actions/checkout@v4
 
       - name: Install UV
         uses: astral-sh/setup-uv@v5
@@ -25,5 +25,5 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
       
-      - name: Install pfd=toolkit
+      - name: Install pfd-toolkit
         run: uv sync --all-extras --dev
