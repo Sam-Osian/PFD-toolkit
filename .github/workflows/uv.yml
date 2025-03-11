@@ -1,4 +1,9 @@
 name: Verify UV Package Build
+on:
+  push:
+    branches:
+      - master
+  pull_request:
 
 jobs:
   uv:
