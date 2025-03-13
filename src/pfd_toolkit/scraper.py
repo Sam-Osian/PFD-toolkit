@@ -27,7 +27,7 @@ import threading
 #   debugging messages, and error messages.
 # -----------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, force=True)
 
 # Define PFDScraper class
 class PFDScraper:
@@ -115,6 +115,10 @@ class PFDScraper:
             "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths",
         }
         
+        # Normalise delay_range if set to 0 or None
+        if self.delay_range is None or self.delay_range == 0:
+            self.delay_range = (0, 0)
+
         # -----------------------------------------------------------------------------
         # Error and Warning Handling
         # -----------------------------------------------------------------------------
@@ -148,10 +152,10 @@ class PFDScraper:
         if self.end_page < self.start_page:
             raise ValueError("end_page must be greater than or equal to start_page.")
         
-        # If delay_range is not a tuple of two integers
-        if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, int) for i in self.delay_range):
-            raise ValueError("delay_range must be a tuple of two integers - e.g. (1, 2). If you are attempting to disable delays, set to (0,0).")
-        
+        # If delay_range is not a tuple of two numbers (int or float)
+        if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, (int, float)) for i in self.delay_range):
+            raise ValueError("delay_range must be a tuple of two numbers (int or float) - e.g. (1, 2) or (1.5, 2.5). If you are attempting to disable delays, set to (0,0).")
+
         # If upper bound of delay_range is less than lower bound
         if self.delay_range[1] < self.delay_range[0]:
             raise ValueError("Upper bound of delay_range must be greater than or equal to lower bound.")
@@ -192,24 +196,37 @@ class PFDScraper:
         if self.max_requests < 3:
             logger.warning("max_requests is set to a low value (<3). This may result in slower scraping speeds. Consider increasing the value for faster performance. We recommend setting to between 3 and 10.")
 
-        # If delay_range lower bound is set below 0.5 seconds
-        if self.delay_range[0] < 0.5:
-            logger.warning("delay_range is set to a low value (<0.5 seconds). This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between 1 and 2.")
+        # If delay range is set to (0,0)
+        if self.delay_range == (0, 0):
+            logger.warning("delay_range has been disabled. This will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to (1,2).")
+        elif self.delay_range[0] < 0.5 and self.delay_range[1] != 0:
+            logger.warning("delay_range is set to a low value (<0.5 seconds). This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).")
         
         # If delay_range upper bound is set above 5 seconds
         if self.delay_range[1] > 5:
-            logger.warning("delay_range is set to a high value (>5 seconds). This may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between 1 and 2.")
+            logger.warning("delay_range is set to a high value (>5 seconds). This may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).")
 
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
         # -----------------------------------------------------------------------------
-        if self.verbose:
-            logger.debug(
-                f"Initialised PFDScraper with category='{self.category}', "
-                f"start_page={self.start_page}, end_page={self.end_page}, "
-                f"max_workers={self.max_workers}, pdf_fallback={self.pdf_fallback}, "
-                f"llm_fallback={self.llm_fallback}, docx_conversion='{self.docx_conversion}'"
-            )
+        # Log all initialization parameters
+        if verbose:
+            logger.info(
+                "\nPFDScraper initialised with parameters:\n "
+                f"category='{self.category}',\n "
+                f"start_page={self.start_page},\n "
+                f"end_page={self.end_page},\n "
+                f"max_workers={self.max_workers},\n "
+                f"max_requests={self.max_requests},\n "
+                f"delay_range={self.delay_range},\n "
+                f"html_scraping={self.html_scraping},\n "
+                f"pdf_fallback={self.pdf_fallback},\n "
+                f"llm_fallback={self.llm_fallback},\n "
+                f"api_key={'provided' if self.api_key else 'not provided'},\n " # ...Preventing the API key from being printed
+                f"llm_model='{self.llm_model}',\n "
+                f"docx_conversion='{self.docx_conversion}',\n "
+                f"verbose={self.verbose}"
+    )
         
         # -----------------------------------------------------------------------------
         # Setting up a requests session with retry logic:
@@ -772,14 +789,16 @@ class PFDScraper:
                 )
             logger.info("Attempting LLM fallback for %s", url)
             
-            # (Re-)downloading the .pdf for image conversion
-            try:
-                pdf_response = self.session.get(report_link)
-                pdf_response.raise_for_status()
-                pdf_bytes = pdf_response.content
-            except Exception as e:
-                logger.error("Failed to fetch .pdf for image conversion: %s", e)
-                pdf_bytes = None
+            # Reuse previously downloaded .pdf bytes if available; otherwise, download again
+            pdf_bytes = getattr(self, '_last_pdf_bytes', None)
+            if pdf_bytes is None:
+                try:
+                    pdf_response = self.session.get(report_link)
+                    pdf_response.raise_for_status()
+                    pdf_bytes = pdf_response.content
+                except Exception as e:
+                    logger.error("Failed to fetch .pdf for image conversion: %s", e)
+                    pdf_bytes = None
             
 
             base64_images = []  # ...OpenAI requires base64 encoded images
@@ -975,16 +994,16 @@ scraper = PFDScraper(
     start_page=1, 
     end_page=2, 
     max_workers=15,
-    html_scraping=True,
-    pdf_fallback=False,
-    llm_fallback=False,
+    html_scraping=False,
+    pdf_fallback=True,
+    llm_fallback=True,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-    delay_range = (0,0),
-    verbose=False
+    delay_range = None,
+    verbose=True
 )
 reports = scraper.scrape_all_reports()
 reports
 
-# reports.to_csv('../data/testreports.csv')
+reports.to_csv('../../data/testreports.csv')
