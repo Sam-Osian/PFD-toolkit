@@ -210,7 +210,7 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
         # -----------------------------------------------------------------------------
-        # Log all initialization parameters
+        # Log all initialisation parameters
         if verbose:
             logger.info(
                 "\nPFDScraper initialised with parameters:\n "
@@ -237,7 +237,7 @@ class PFDScraper:
         
         self.session = requests.Session()
         retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retries)
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
         
