@@ -494,7 +494,7 @@ class PFDScraper:
           1. Download the webpage and parse it using BeautifulSoup.
           2. Identify the .pdf download link.
           3. Extract text from the .pdf file.
-          4. Scrape various metadata (report ID, date, receiver, deceased name, coroner name, area,
+          4. Scrape various metadata (report ID, date, receiver, coroner name, area,
              investigation details, circumstances, and concerns) from the HTML.
           5. If one or more fields are missing and PDF fallback is enabled, attempt to extract missing
              data from the PDF text.
@@ -512,7 +512,6 @@ class PFDScraper:
         report_id = "N/A: Not found"
         date = "N/A: Not found"
         receiver = "N/A: Not found"
-        deceased = "N/A: Not found"
         coroner = "N/A: Not found"
         area = "N/A: Not found"
         investigation = "N/A: Not found"
@@ -581,20 +580,7 @@ class PFDScraper:
                                         
             if len(receiver) < 5 or len(receiver) > 30:
                 receiver = 'N/A: Not found'
-            
-            
-            # Name(s) of deceased extraction
-            deceased_element = self._extract_paragraph_text_by_keywords(
-                soup, ["Deceased name:", "Deceased's name:", "Deceaseds name:"]
-            )
-            deceased = deceased_element.replace("Deceased name:", "") \
-                                        .replace("Deceased's name:", "") \
-                                        .replace("Deceaseds name:", "") \
-                                        .strip()
-                                        
-            if len(deceased) < 5 or len(deceased) > 30:
-                deceased = 'N/A: Not found'
-            
+                        
             
             # Name of coroner extraction
             coroner_element = self._extract_paragraph_text_by_keywords(
@@ -671,7 +657,6 @@ class PFDScraper:
         if self.pdf_fallback and (
             'N/A: Not found' in [
                 #date, # Tricky to implement due to date placement in .pdfs. However, HTML extraction is usually successful.
-                #deceased, # Unable to read from .pdfs; information not _structurally_ recorded but is sometimes mentioned in anothe section. LLM fallback better suited to this.
                 coroner,
                 area,
                 receiver,
@@ -775,7 +760,6 @@ class PFDScraper:
         if self.llm_fallback and (
             'N/A: Not found' in [
                 date,
-                deceased,
                 coroner,
                 area,
                 receiver,
@@ -787,7 +771,7 @@ class PFDScraper:
             if self.verbose:
                 logger.debug(
                     f"Initiating LLM fallback for URL: {url}. Missing fields: " +
-                    f"date='{date}', deceased='{deceased}', coroner='{coroner}', " +
+                    f"date='{date}', coroner='{coroner}', " +
                     f"area='{area}', receiver='{receiver}', investigation='{investigation}', " +
                     f"circumstances='{circumstances}', concerns='{concerns}'"
                 )
@@ -829,8 +813,6 @@ class PFDScraper:
             missing_fields = {}
             if date == "N/A: Not found":
                 missing_fields["Date of Report"] = "[Date of the report, not the death]"
-            if deceased == "N/A: Not found":
-                missing_fields["Deceased Name(s)"] = "[Name or names of the deceased.]"
             if coroner == "N/A: Not found":
                 missing_fields["Coroner's Name"] = "[Name of the coroner. Provide the name only.]"
             if area == "N/A: Not found":
@@ -892,7 +874,6 @@ class PFDScraper:
             
             # Parse the LLM response to update only missing fields
             fallback_date = 'N/A: Not found'
-            fallback_deceased = 'N/A: Not found'
             fallback_coroner = 'N/A: Not found'
             fallback_area = 'N/A: Not found'
             fallback_receiver = 'N/A: Not found'
@@ -911,8 +892,6 @@ class PFDScraper:
                 line_lower = line_strip.lower() # ...convert to lowercase, in case the LLM outputs in a different case
                 if line_lower.startswith("date of report:"):
                     fallback_date = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("deceased name(s):"):
-                    fallback_deceased = line_strip.split(":", 1)[1].strip()
                 elif line_lower.startswith("coroner's name:"):
                     fallback_coroner = line_strip.split(":", 1)[1].strip()
                 elif line_lower.startswith("area:"):
@@ -937,8 +916,6 @@ class PFDScraper:
             # Update each field **only** if the HTML/.pdf extraction failed to find the information
             if date == 'N/A: Not found':
                 date = fallback_date
-            if deceased == 'N/A: Not found':
-                deceased = fallback_deceased
             if coroner == 'N/A: Not found':
                 coroner = fallback_coroner
             if area == 'N/A: Not found':
@@ -957,7 +934,6 @@ class PFDScraper:
             "URL": url,
             "ID": report_id,
             "Date": date,
-            "DeceasedName": deceased,
             "CoronerName": coroner,
             "Area": area,
             "Receiver": receiver,
@@ -999,7 +975,7 @@ scraper = PFDScraper(
     start_page=1, 
     end_page=2, 
     max_workers=15,
-    html_scraping=False,
+    html_scraping=True,
     pdf_fallback=True,
     llm_fallback=False,
     api_key=openai_api_key,
