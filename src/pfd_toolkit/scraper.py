@@ -17,6 +17,9 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 import subprocess
+import time
+import random
+import threading
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -44,6 +47,8 @@ class PFDScraper:
         start_page: int = 1,
         end_page: int = 559,
         max_workers: int = 10,
+        max_requests: int = 5, 
+        delay_range = (1, 2),
         html_scraping: bool = True,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
@@ -52,13 +57,16 @@ class PFDScraper:
         docx_conversion: str = "None",
         verbose: bool = True  
     ) -> None:
+        
         """
         Initialises the scraper.
         
         :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all' (default), 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
-        :param max_workers: Maximum number of workers for concurrent fetching.
+        :param max_workers: The total number of concurrent threads the scraper can use for fetching data across all pages.
+        :param max_requests: Maximum number of requests per domain to avoid IP address block.
+        :param delay_range: None, or a tuple of two integers representing the range of seconds to delay between requests. Default is (1, 2) for a random delay between 1 and 2 seconds.
         :param html_scraping: Whether to attempt HTML-based scraping.
         :param pdf_fallback: Whether to fallback to .pdf scraping if missing values remain following HTML scraping (if set).
         :param llm_fallback: Whether to fallback to LLM scraping if missing values remain following previous method(s), if set. OpenAI API key must provided.
@@ -71,6 +79,8 @@ class PFDScraper:
         self.start_page = start_page
         self.end_page = end_page
         self.max_workers = max_workers
+        self.max_requests = max_requests
+        self.delay_range = delay_range
         self.html_scraping = html_scraping
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
@@ -78,21 +88,121 @@ class PFDScraper:
         self.llm_model = llm_model
         self.docx_conversion = docx_conversion
         self.verbose = verbose
+        
+        self.domain_semaphore = threading.Semaphore(self.max_requests) # Semaphore to limit requests per domain
         self.report_links = [] # List to store all report URLs
         
+        # Define URL templates for different PFD categories.
+        # ...Some categories (like 'all' and 'suicide') have unique URL formats.
+        category_templates = {
+            "all": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/",
+            "suicide": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015",
+            "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths",
+            "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths",
+            "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths",
+            "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015",
+            "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths",
+            "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards",
+            "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths",
+            "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths",
+            "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths",
+            "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths",
+            "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths",
+            "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths",
+            "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths",
+            "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths",
+            "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards",
+            "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths",
+        }
         
+        # -----------------------------------------------------------------------------
+        # Error and Warning Handling
+        # -----------------------------------------------------------------------------
         
-        # Check that OpenAI API key is provided if LLM fallback is enabled
+        ### Errors
+        
+        # If category is not one of the allowed values
+        if self.category in category_templates:
+            self.page_template = category_templates[self.category]
+        else:
+            valid_options = ", ".join(sorted(category_templates.keys()))
+            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
+        
+        # If max_workers is set to 0 or a negative number
+        if self.max_workers <= 0:
+            raise ValueError("max_workers must be a positive integer.")
+        
+        # If max_requests is set to 0 or a negative number
+        if self.max_requests <= 0:
+            raise ValueError("max_requests must be a positive integer.")
+        
+        # If start_page is set to 0 or a negative number
+        if self.start_page <= 0:
+            raise ValueError("start_page must be a positive integer.")
+        
+        # If end_page is set to 0 or a negative number
+        if self.end_page <= 0:
+            raise ValueError("end_page must be a positive integer.")
+        
+        # If end_page is less than start_page
+        if self.end_page < self.start_page:
+            raise ValueError("end_page must be greater than or equal to start_page.")
+        
+        # If delay_range is not a tuple of two integers
+        if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, int) for i in self.delay_range):
+            raise ValueError("delay_range must be a tuple of two integers - e.g. (1, 2). If you are attempting to disable delays, set to (0,0).")
+        
+        # If upper bound of delay_range is less than lower bound
+        if self.delay_range[1] < self.delay_range[0]:
+            raise ValueError("Upper bound of delay_range must be greater than or equal to lower bound.")
+        
+        # If docx_conversion is not one of the allowed values
+        if self.docx_conversion not in ["MicrosoftWord", "LibreOffice", "None"]:
+            raise ValueError("docx_conversion must be one of 'MicrosoftWord', 'LibreOffice', or 'None'.")
+        
+        # If OpenAI API key is not provided when LLM fallback is enabled
         if self.llm_fallback and not self.api_key:
-            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled. Please set 'api_key' parameter. Get your API key from https://platform.openai.com/.")
+            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled. Please set 'api_key' parameter. \nGet your API key from https://platform.openai.com/.")
         
-        # Check that at least one scrape method is enabled
+        # If no scrape method is enabled
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
             raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
         
+
         
+        ### Warnings (code will still run)
         
-        # Log the initialisation parameters if verbose is enabled
+        # If only html_scraping is enabled
+        if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
+            logger.warning("Only HTML scraping is enabled. Consider enabling .pdf or LLM fallback for more complete data extraction.")
+        
+        # If max_workers is set above 50
+        if self.max_workers > 50:
+            logger.warning("max_workers is set to a high value (>50). Depending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between 10 and 50.")
+        
+        # If max_workers is set below 10
+        if self.max_workers < 10:
+            logger.warning("max_workers is set to a low value (<10). This may result in slower scraping speeds. Consider increasing the value for faster performance. We recommend setting to between 10 and 50.")
+        
+        # If max_requests is set above 10
+        if self.max_requests > 10:
+            logger.warning("max_requests is set to a high value (>10). This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between 3 and 10.")
+            
+        # If max_requests is set below 3
+        if self.max_requests < 3:
+            logger.warning("max_requests is set to a low value (<3). This may result in slower scraping speeds. Consider increasing the value for faster performance. We recommend setting to between 3 and 10.")
+
+        # If delay_range lower bound is set below 0.5 seconds
+        if self.delay_range[0] < 0.5:
+            logger.warning("delay_range is set to a low value (<0.5 seconds). This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between 1 and 2.")
+        
+        # If delay_range upper bound is set above 5 seconds
+        if self.delay_range[1] > 5:
+            logger.warning("delay_range is set to a high value (>5 seconds). This may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between 1 and 2.")
+
+        # -----------------------------------------------------------------------------
+        # Log the initialisation parameters for debug if verbose is enabled
+        # -----------------------------------------------------------------------------
         if self.verbose:
             logger.debug(
                 f"Initialised PFDScraper with category='{self.category}', "
@@ -119,55 +229,24 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         self._id_pattern = re.compile(r'(\d{4}-\d{4})')
         
-        
-        # -----------------------------------------------------------------------------
-        # Define URL templates for different PFD categories.
-        # Some categories (like 'all' and 'suicide') have unique URL formats.
-        # If an invalid category is provided, a ValueError is raised with valid options.
-        # -----------------------------------------------------------------------------
-        
-        # Define URL templates for different PFD categories.
-        category_templates = {
-            "all": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/",
-            "suicide": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015",
-            "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths",
-            "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths",
-            "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths",
-            "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015",
-            "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths",
-            "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards",
-            "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths",
-            "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths",
-            "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths",
-            "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths",
-            "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths",
-            "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths",
-            "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths",
-            "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths",
-            "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards",
-            "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths",
-        }
-        if self.category in category_templates:
-            self.page_template = category_templates[self.category]
-        else:
-            valid_options = ", ".join(sorted(category_templates.keys()))
-            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
+       
     
     def _get_report_href_values(self, url: str) -> list:
         """
-        Internal function to extract URLs from <a> tag.
-        
-        :param url: URL of the page to scrape.
-        :return: A list of URLs (as strings) extracted from the page.
+        Extracts URLs from <a> tags on a page, applying a random delay and limiting concurrent
+        requests to the host using a semaphore.
         """
-        try:
-            response = self.session.get(url)
-            response.raise_for_status()
-            if self.verbose:
-                logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
-        except requests.RequestException as e:
-            logger.error("Failed to fetch page: %s; Error: %s", url, e)
-            return []
+        with self.domain_semaphore:
+            # Introduce a random delay between delay_range[0] and delay_range[1] secs. Default is between 1 and 2 secs.
+            time.sleep(random.uniform(*self.delay_range))
+            try:
+                response = self.session.get(url)
+                response.raise_for_status()
+                if self.verbose:
+                    logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
+            except requests.RequestException as e:
+                logger.error("Failed to fetch page: %s; Error: %s", url, e)
+                return []
         
         soup = BeautifulSoup(response.text, 'html.parser')
         links = soup.find_all('a', class_='card__link')
@@ -202,7 +281,7 @@ class PFDScraper:
     def _normalise_apostrophes(text: str) -> str:
         """Helper function to replace ‘fancy’ (typographic) apostrophes with the standard apostrophe.
         
-        Some reports use fancy apostrophes (‘ and ’) which can cause issues with text processing.
+        Some reports use fancy apostrophes (‘ and ’) over typical 'keyboard' apostrophes (') which can cause issues with text processing.
         
         """
         return text.replace("’", "'").replace("‘", "'")
@@ -893,16 +972,17 @@ client = OpenAI(api_key=openai_api_key)
 # Run the scraper! :D
 scraper = PFDScraper(
     category='alcohol_drug_medication', 
-    start_page=3, 
-    end_page=3, 
-    max_workers=10,
+    start_page=1, 
+    end_page=2, 
+    max_workers=15,
     html_scraping=True,
     pdf_fallback=False,
     llm_fallback=False,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-    verbose=True
+    delay_range = (0,0),
+    verbose=False
 )
 reports = scraper.scrape_all_reports()
 reports
