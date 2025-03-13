@@ -20,6 +20,7 @@ import subprocess
 import time
 import random
 import threading
+from itertools import chain
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -288,9 +289,8 @@ class PFDScraper:
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(_fetch_page_links, pages))
         
-        # Flatten the list of lists into a single list of report URLs
-        for href_values in results:
-            self.report_links.extend(href_values)
+        # Flatten the list of lists into a single list of report URLs -- replaced for loop with chain from itertools
+        self.report_links = list(chain.from_iterable(results))
         logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
 
@@ -384,6 +384,10 @@ class PFDScraper:
                 return "N/A"
         else:
             pdf_bytes = file_bytes
+        
+        # If llm_fallback is enabled, cache the downloaded .pdf bytes for later reuse
+        if self.llm_fallback:
+            self._last_pdf_bytes = pdf_bytes
         
         # Use pymupdf to read and extract text from the .pdf
         try:
@@ -796,6 +800,7 @@ class PFDScraper:
                     pdf_response = self.session.get(report_link)
                     pdf_response.raise_for_status()
                     pdf_bytes = pdf_response.content
+                    self._last_pdf_bytes = pdf_bytes
                 except Exception as e:
                     logger.error("Failed to fetch .pdf for image conversion: %s", e)
                     pdf_bytes = None
@@ -996,7 +1001,7 @@ scraper = PFDScraper(
     max_workers=15,
     html_scraping=False,
     pdf_fallback=True,
-    llm_fallback=True,
+    llm_fallback=False,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
