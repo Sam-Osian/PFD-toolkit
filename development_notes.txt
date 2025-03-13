@@ -4,14 +4,16 @@ ISSUE #1: ACTIVE
 Failed HTML extraction for long-text sections.
 
 DETAIL:
-Currently the HTML scraper is unable to extract Investigation, Circumstances, and Concerns sections from many reports. 
-    Consequently, it will often fallback to the .pdf extraction. The issue arises because the HTML content for the previous sections have a <p> 
+Currently the HTML scraper is unable to consistently extract Investigation, Circumstances, and Concerns sections from many reports. 
+    Consequently, it will often fallback to the .pdf extraction. The issue arises because the HTML content for the shorter sections have a <p> 
     tag in most reports, while the long-text sections are nested within a table. I've already tried to devise dedicated HTML 
-    pattern-matching functions for these long-text sections, but the HTML webpage formats are very inconsistent.
+    pattern-matching functions for these long-text sections, but the HTML webpage formats appear inconsistent.
 
 POSSIBLE FIX: 
-Need to investigate more granular fallback methods in the HTML stage of the scraper. ALternatively, accept that the PDF
-    fallback will always be needed.
+Need to investigate whether we can make the HTML scraper more granular to cater for different document formats.
+However, a convoluted HTML scraper section may not be desirable as it could become difficult to maintain and debug.
+Therefore, we may need to accept that frequent reliance on the .pdf fallback is necessary.
+
 
 -----------------------------------------
 

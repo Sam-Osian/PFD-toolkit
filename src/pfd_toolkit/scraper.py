@@ -44,6 +44,7 @@ class PFDScraper:
         start_page: int = 1,
         end_page: int = 559,
         max_workers: int = 10,
+        html_scraping: bool = True,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
         api_key: str = None,
@@ -58,10 +59,11 @@ class PFDScraper:
         :param start_page: The first page to scrape.
         :param end_page: The last page to scrape.
         :param max_workers: Maximum number of workers for concurrent fetching.
-        :param pdf_fallback: If HTML scraping fails for any given report section, whether to fallback to .pdf scraping. 
-        :param llm_fallback: If previous scraping method fails for any given report section, whether to fallback to OpenAI LLM to process reports as images. OpenAI API key must be set.
+        :param html_scraping: Whether to attempt HTML-based scraping.
+        :param pdf_fallback: Whether to fallback to .pdf scraping if missing values remain following HTML scraping (if set).
+        :param llm_fallback: Whether to fallback to LLM scraping if missing values remain following previous method(s), if set. OpenAI API key must provided.
         :param api_key: OpenAI API Key
-        :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True.
+        :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True. Default is "gpt_4o_mini".
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         :param verbose: Whether to print verbose output.
         """
@@ -69,6 +71,7 @@ class PFDScraper:
         self.start_page = start_page
         self.end_page = end_page
         self.max_workers = max_workers
+        self.html_scraping = html_scraping
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
         self.api_key = api_key
@@ -77,9 +80,17 @@ class PFDScraper:
         self.verbose = verbose
         self.report_links = [] # List to store all report URLs
         
-        # Checking that OpenAI API key is provided if LLM fallback is enabled
+        
+        
+        # Check that OpenAI API key is provided if LLM fallback is enabled
         if self.llm_fallback and not self.api_key:
-            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled.")
+            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled. Please set 'api_key' parameter. Get your API key from https://platform.openai.com/.")
+        
+        # Check that at least one scrape method is enabled
+        if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
+            raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
+        
+        
         
         # Log the initialisation parameters if verbose is enabled
         if self.verbose:
@@ -393,6 +404,21 @@ class PFDScraper:
         :param url: URL of the report page.
         :return: Dictionary containing extracted report information.
         """
+        
+        # Initialise all fields with default missing values.
+        #   We do this because if `html_scraping` is disabled, we need to ensure all fields are still set,
+        #   because our .pdf and LLM fallbacks only kick in if a field is missing.
+        
+        report_id = "N/A: Not found"
+        date = "N/A: Not found"
+        receiver = "N/A: Not found"
+        deceased = "N/A: Not found"
+        coroner = "N/A: Not found"
+        area = "N/A: Not found"
+        investigation = "N/A: Not found"
+        circumstances = "N/A: Not found"
+        concerns = "N/A: Not found"
+        
         try:
             response = self.session.get(url)
             response.raise_for_status()
@@ -414,125 +440,133 @@ class PFDScraper:
         #                          HTML Data Extraction                          
         # -----------------------------------------------------------------------
         
-        # Report ID extraction using compiled regex (e.g. "2025-0296")
-        ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
-        if ref_element:
-            match = self._id_pattern.search(ref_element.get_text())
-            report_id = match.group(1) if match else 'N/A: Not found'
-        else:
-            report_id = "N/A: Not found"
+        # The below is the primary method of data extraction, using the HTML content. 
+        # `html_scraping` must be set to True (default).
         
+        if self.html_scraping:
+            if self.verbose:
+                logger.debug(f"Extracting data from HTML for URL: {url}")
         
-        # Date of report extraction
-        # We use fuzzy date parsing to handle variations in date formats (e.g. "1st January 2025" and "01/01/2025")
-        date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
-        if date_element != "N/A: Not found":
-            date_element = date_element.replace("Date of report:", "").strip()
-            try:
-                parsed_date = parser.parse(date_element, fuzzy=True)
-                date = parsed_date.strftime("%Y-%m-%d")
-            except Exception as e:
-                logger.error("Error parsing date '%s': %s", date_element, e)
-                date = date_element
-        else:
-            date = 'N/A: Not found'
-        
-        
-        # Receiver extraction (who the report is sent to)
-        receiver_element = self._extract_paragraph_text_by_keywords(
-            soup, ["This report is being sent to:", "Sent to:"]
-        )
-        receiver = receiver_element.replace("This report is being sent to:", "") \
-                                       .replace("Sent to:", "") \
-                                       .strip()
-                                       
-        if len(receiver) < 5 or len(receiver) > 30:
-            receiver = 'N/A: Not found'
-        
-        
-        # Name(s) of deceased extraction
-        deceased_element = self._extract_paragraph_text_by_keywords(
-            soup, ["Deceased name:", "Deceased's name:", "Deceaseds name:"]
-        )
-        deceased = deceased_element.replace("Deceased name:", "") \
-                                       .replace("Deceased's name:", "") \
-                                       .replace("Deceaseds name:", "") \
-                                       .strip()
-                                       
-        if len(deceased) < 5 or len(deceased) > 30:
-            deceased = 'N/A: Not found'
-        
-        
-        # Name of coroner extraction
-        coroner_element = self._extract_paragraph_text_by_keywords(
-            soup, ["Coroners name:", "Coroner name:", "Coroner's name:"]
-        )
-        coroner = coroner_element.replace("Coroners name:", "") \
-                                     .replace("Coroner name:", "") \
-                                     .replace("Coroner's name:", "") \
-                                     .strip()
-        if len(coroner) < 5 or len(coroner) > 30:
-            coroner = 'N/A: Not found'
-        
-        
-        # Area extraction
-        area_element = self._extract_paragraph_text_by_keywords(
-            soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"]
-        )
-        area = area_element.replace("Coroners Area:", "") \
-                               .replace("Coroner Area:", "") \
-                               .replace("Coroner's Area:", "") \
-                               .strip()
-                               
-        if len(area) < 4 or len(area) > 40:
-            area = 'N/A: Not found'
-        
-        
-        # Investigation and Inquest extraction
-        investigation_section = self._extract_section_text_by_keywords(
-            soup, ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"]
-        )
-        investigation = investigation_section.replace("INVESTIGATION and INQUEST", "") \
-                                            .replace("INVESTIGATION & INQUEST", "") \
-                                            .replace("3 INQUEST", "") \
-                                            .strip()
+            # Report ID extraction using compiled regex (e.g. "2025-0296")
+            ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
+            if ref_element:
+                match = self._id_pattern.search(ref_element.get_text())
+                report_id = match.group(1) if match else 'N/A: Not found'
+            else:
+                report_id = "N/A: Not found"
+            
+            
+            # Date of report extraction
+            # We use fuzzy date parsing to handle variations in date formats (e.g. "1st January 2025" and "01/01/2025")
+            date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
+            if date_element != "N/A: Not found":
+                date_element = date_element.replace("Date of report:", "").strip()
+                try:
+                    parsed_date = parser.parse(date_element, fuzzy=True)
+                    date = parsed_date.strftime("%Y-%m-%d")
+                except Exception as e:
+                    logger.error("Error parsing date '%s': %s", date_element, e)
+                    date = date_element
+            else:
+                date = 'N/A: Not found'
+            
+            
+            # Receiver extraction (who the report is sent to)
+            receiver_element = self._extract_paragraph_text_by_keywords(
+                soup, ["This report is being sent to:", "Sent to:"]
+            )
+            receiver = receiver_element.replace("This report is being sent to:", "") \
+                                        .replace("Sent to:", "") \
+                                        .strip()
+                                        
+            if len(receiver) < 5 or len(receiver) > 30:
+                receiver = 'N/A: Not found'
+            
+            
+            # Name(s) of deceased extraction
+            deceased_element = self._extract_paragraph_text_by_keywords(
+                soup, ["Deceased name:", "Deceased's name:", "Deceaseds name:"]
+            )
+            deceased = deceased_element.replace("Deceased name:", "") \
+                                        .replace("Deceased's name:", "") \
+                                        .replace("Deceaseds name:", "") \
+                                        .strip()
+                                        
+            if len(deceased) < 5 or len(deceased) > 30:
+                deceased = 'N/A: Not found'
+            
+            
+            # Name of coroner extraction
+            coroner_element = self._extract_paragraph_text_by_keywords(
+                soup, ["Coroners name:", "Coroner name:", "Coroner's name:"]
+            )
+            coroner = coroner_element.replace("Coroners name:", "") \
+                                        .replace("Coroner name:", "") \
+                                        .replace("Coroner's name:", "") \
+                                        .strip()
+            if len(coroner) < 5 or len(coroner) > 30:
+                coroner = 'N/A: Not found'
+            
+            
+            # Area extraction
+            area_element = self._extract_paragraph_text_by_keywords(
+                soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"]
+            )
+            area = area_element.replace("Coroners Area:", "") \
+                                .replace("Coroner Area:", "") \
+                                .replace("Coroner's Area:", "") \
+                                .strip()
+                                
+            if len(area) < 4 or len(area) > 40:
+                area = 'N/A: Not found'
+            
+            
+            # Investigation and Inquest extraction
+            investigation_section = self._extract_section_text_by_keywords(
+                soup, ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"]
+            )
+            investigation = investigation_section.replace("INVESTIGATION and INQUEST", "") \
+                                                .replace("INVESTIGATION & INQUEST", "") \
+                                                .replace("3 INQUEST", "") \
+                                                .strip()
 
-        if len(investigation) < 30:
-            investigation = 'N/A: Not found'
-        
-        
-        # Circumstances of the Death extraction
-        circumstances_section = self._extract_section_text_by_keywords(
-            soup, 
-            ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"]
-        )
-        circumstances = circumstances_section.replace("CIRCUMSTANCES OF THE DEATH", "") \
-                                            .replace("CIRCUMSTANCES OF DEATH", "") \
-                                            .replace("CIRCUMSTANCES OF", "") \
-                                            .strip()
-        if len(circumstances) < 30:
-            circumstances = 'N/A: Not found'
+            if len(investigation) < 30:
+                investigation = 'N/A: Not found'
+            
+            
+            # Circumstances of the Death extraction
+            circumstances_section = self._extract_section_text_by_keywords(
+                soup, 
+                ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"]
+            )
+            circumstances = circumstances_section.replace("CIRCUMSTANCES OF THE DEATH", "") \
+                                                .replace("CIRCUMSTANCES OF DEATH", "") \
+                                                .replace("CIRCUMSTANCES OF", "") \
+                                                .strip()
+            if len(circumstances) < 30:
+                circumstances = 'N/A: Not found'
 
 
-        # Coroner's Concerns extraction
-        concerns_text = self._extract_section_text_by_keywords(
-            soup, 
-            ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"]
-        )
-        concerns = concerns_text.replace("CORONER'S CONCERNS", "") \
-                                            .replace("CORONERS CONCERNS", "") \
-                                            .replace("CORONER CONCERNS", "") \
-                                            .strip()
-        if len(concerns) < 30:
-            concerns = 'N/A: Not found'
+            # Coroner's Concerns extraction
+            concerns_text = self._extract_section_text_by_keywords(
+                soup, 
+                ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"]
+            )
+            concerns = concerns_text.replace("CORONER'S CONCERNS", "") \
+                                                .replace("CORONERS CONCERNS", "") \
+                                                .replace("CORONER CONCERNS", "") \
+                                                .strip()
+            if len(concerns) < 30:
+                concerns = 'N/A: Not found'
 
         
         # -----------------------------------------------------------------------------
-        #                          PDF Data Extraction Fallback                           
+        #                          .pdf Data Extraction Fallback                           
         # -----------------------------------------------------------------------------
         
         # The below will only run if (1) pdf_fallback is enabled and (2) one or more fields are missing
-        #    following HTML extraction
+        #    following previous extraction method (if any). This will always run if `html_scraping` is 
+        #    disabled.
         
         if self.pdf_fallback and (
             'N/A: Not found' in [
@@ -548,8 +582,6 @@ class PFDScraper:
         ):
             if self.verbose:
                 logger.debug(f"Initiating .pdf fallback for URL: {url} because one or more fields are missing.")
-            else:
-                logger.info("Attempting .pdf fallback for %s", url)
             
             # Coroner name extraction if missing
             if coroner == "N/A: Not found":
@@ -636,8 +668,9 @@ class PFDScraper:
         #                         LLM Data Extraction Fallback                          
         # -----------------------------------------------------------------------------
         
-        # The below will only run if (1) llm_fallback is enabled and (2) one or more fields are missing
-        #   following previous extraction method
+        # The below will only run if (1) llm_fallback is enabled and (2) one or more elements are missing
+        #   following previous extraction method. This will always run if both `html_scraping` and` 
+        #   `pdf_fallback` are disabled.
         
         if self.llm_fallback and (
             'N/A: Not found' in [
@@ -857,14 +890,15 @@ load_dotenv('api.env')
 openai_api_key = os.getenv('OPENAI_API_KEY')
 client = OpenAI(api_key=openai_api_key)
 
-# Run the scraper :D
+# Run the scraper! :D
 scraper = PFDScraper(
     category='alcohol_drug_medication', 
     start_page=3, 
     end_page=3, 
     max_workers=10,
-    pdf_fallback=True,
-    llm_fallback=True,
+    html_scraping=True,
+    pdf_fallback=False,
+    llm_fallback=False,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
