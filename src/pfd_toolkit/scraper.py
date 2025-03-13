@@ -21,6 +21,7 @@ import time
 import random
 import threading
 from itertools import chain
+from datetime import datetime
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -56,6 +57,7 @@ class PFDScraper:
         api_key: str = None,
         llm_model: str = "gpt-4o-mini",
         docx_conversion: str = "None",
+        time_stamp: str = False,
         verbose: bool = True  
     ) -> None:
         
@@ -74,6 +76,7 @@ class PFDScraper:
         :param api_key: OpenAI API Key
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True. Default is "gpt_4o_mini".
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
+        :param time_stamp: Whether to add a timestamp column to the output file.
         :param verbose: Whether to print verbose output.
         """
         self.category = category.lower()
@@ -88,6 +91,7 @@ class PFDScraper:
         self.api_key = api_key
         self.llm_model = llm_model
         self.docx_conversion = docx_conversion
+        self.time_stamp = time_stamp
         self.verbose = verbose
         
         self.domain_semaphore = threading.Semaphore(self.max_requests) # Semaphore to limit requests per domain
@@ -504,6 +508,8 @@ class PFDScraper:
         :param url: URL of the report page.
         :return: Dictionary containing extracted report information.
         """
+        
+        date_scraped = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if self.time_stamp else None
         
         # Initialise all fields with default missing values.
         #   We do this because if `html_scraping` is disabled, we need to ensure all fields are still set,
@@ -930,7 +936,7 @@ class PFDScraper:
                 concerns = fallback_concerns
 
         # Return the extracted report information
-        return {
+        report = {
             "URL": url,
             "ID": report_id,
             "Date": date,
@@ -941,6 +947,10 @@ class PFDScraper:
             "CircumstancesOfDeath": circumstances,
             "MattersOfConcern": concerns
         }
+        if self.time_stamp:
+            report["DateScraped"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return report
+
     
     # The below function serves as the user entry point for the scraper.
     # It is currently the only function that is not internal (i.e. doesn't start with a _)
@@ -957,7 +967,9 @@ class PFDScraper:
             results = list(executor.map(self._extract_report_info, self.report_links))
         # Filter out any failed report extractions (None)
         records = [record for record in results if record is not None]
-        return pd.DataFrame(records)
+        # Create timestamp if parameter is set to True
+        records = pd.DataFrame(records)
+        return records
 
 
 
@@ -973,18 +985,19 @@ client = OpenAI(api_key=openai_api_key)
 scraper = PFDScraper(
     category='alcohol_drug_medication', 
     start_page=1, 
-    end_page=2, 
+    end_page=3, 
     max_workers=15,
     html_scraping=True,
     pdf_fallback=True,
-    llm_fallback=False,
+    llm_fallback=True,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
+    time_stamp=True,
     delay_range = None,
     verbose=True
 )
 reports = scraper.scrape_all_reports()
 reports
 
-reports.to_csv('../../data/testreports.csv')
+#reports.to_csv('../../data/testreports.csv')
