@@ -125,7 +125,7 @@ class PFDScraper:
             self.delay_range = (0, 0)
 
         # -----------------------------------------------------------------------------
-        # Error and Warning Handling
+        # Error and Warning Handling for Initialisation Parameters
         # -----------------------------------------------------------------------------
         
         ### Errors
@@ -176,7 +176,6 @@ class PFDScraper:
         # If no scrape method is enabled
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
             raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
-        
 
         
         ### Warnings (code will still run)
@@ -184,6 +183,14 @@ class PFDScraper:
         # If only html_scraping is enabled
         if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
             logger.warning("Only HTML scraping is enabled. Consider enabling .pdf or LLM fallback for more complete data extraction.")
+        
+        # If only pdf_fallback is enabled
+        if not self.html_scraping and self.pdf_fallback and not self.llm_fallback:
+            logger.warning("Only .pdf fallback is enabled. Consider enabling HTML scraping or LLM fallback for more complete data extraction.")
+            
+        # If only llm_fallback is enabled
+        if not self.html_scraping and not self.pdf_fallback and self.llm_fallback:
+            logger.warning("Only LLM fallback is enabled. While this is a high-performance option, large API costs may be incurred, especially for large requests. Consider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.")
         
         # If max_workers is set above 50
         if self.max_workers > 50:
@@ -989,11 +996,11 @@ scraper = PFDScraper(
     max_workers=15,
     html_scraping=True,
     pdf_fallback=True,
-    llm_fallback=True,
+    llm_fallback=False,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-    time_stamp=True,
+    time_stamp=False,
     delay_range = None,
     verbose=True
 )
