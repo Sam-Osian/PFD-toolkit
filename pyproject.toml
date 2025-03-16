@@ -4,10 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pfd_toolkit"
-version = "0.1.1"
+version = "0.1.2"
 description = "A toolkit for scraping and processing Prevention of Future Death (PFD) reports from the UK Judiciary website."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = { file = "LICENCE" }
 authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
   { name = "Jonathan Pytches", email = "jonathan.pytches@gmail.com " }

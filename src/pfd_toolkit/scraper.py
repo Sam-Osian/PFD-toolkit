@@ -95,7 +95,9 @@ class PFDScraper:
         self.verbose = verbose
         
         self.domain_semaphore = threading.Semaphore(self.max_requests) # Semaphore to limit requests per domain
-        self.report_links = [] # List to store all report URLs
+        
+        self.reports = None # ...So that the user can access them later if they forget to assign
+        self.report_links = [] 
         
         # Define URL templates for different PFD categories.
         # ...Some categories (like 'all' and 'suicide') have unique URL formats.
@@ -293,7 +295,8 @@ class PFDScraper:
         def _fetch_page_links(page_number: int) -> list:
             page_url = self.page_template.format(page=page_number)
             href_values = self._get_report_href_values(page_url)
-            logger.info("Scraped %d links from %s", len(href_values), page_url)
+            if self.verbose:
+                logger.info("Scraped %d links from %s", len(href_values), page_url)
             return href_values
         
         # Use a thread pool to concurrently fetch multiple pages
@@ -972,10 +975,16 @@ class PFDScraper:
         
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(self._extract_report_info, self.report_links))
-        # Filter out any failed report extractions (None)
+            
+        # Filter out any failed report extractions 
         records = [record for record in results if record is not None]
+        
         # Create timestamp if parameter is set to True
         records = pd.DataFrame(records)
+        
+        # Save the reports internally in case the user forgets to assign
+        self.reports = pd.DataFrame(records)
+        
         return records
 
 
@@ -992,10 +1001,10 @@ client = OpenAI(api_key=openai_api_key)
 scraper = PFDScraper(
     category='alcohol_drug_medication', 
     start_page=1, 
-    end_page=3, 
+    end_page=1, 
     max_workers=15,
     html_scraping=True,
-    pdf_fallback=True,
+    pdf_fallback=False,
     llm_fallback=False,
     api_key=openai_api_key,
     llm_model="gpt-4o-mini",
@@ -1006,5 +1015,7 @@ scraper = PFDScraper(
 )
 reports = scraper.scrape_all_reports()
 reports
+
+#scraper.reports
 
 #reports.to_csv('../../data/testreports.csv')

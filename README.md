@@ -13,6 +13,8 @@ A Python toolkit for using cleaned **Prevention of Future Death (PFD) reports** 
 
 ## Installation
 
+IMPORTANT: the package is not yet live and the below instructions will not work.
+
 ```bash
 pip install pfd-toolkit
 ```
@@ -23,6 +25,6 @@ If you need .docx -> .pdf conversion, install with
 pip install pfd-toolkit[docx-conversion]
 ```
 
-## License
+## Licence
 
-This project is licensed under the terms of the MIT Licence. For more information, see `LICENSE`.
+This project is licensed under the terms of the MIT Licence. For more information, see `LICENCE`.
