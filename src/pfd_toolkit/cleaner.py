@@ -99,7 +99,7 @@ class Cleaner:
         # LLM configuration
         llm_model: str = "gpt-4o-mini",
         openai_api_key: str = None,
-        llm_client: OpenAI = None,
+        openai_client: OpenAI = None,
         
         # Fields to clean
         Coroner: bool = True,
@@ -134,12 +134,13 @@ class Cleaner:
         self.openai_api_key = openai_api_key
         
         # Use injected LLM client if provided; otherwise, create one from the API key.
-        if llm_client is not None:
-            self.llm_client = llm_client
+        # This allows the user to pass in their own OpenAI client instance as an alternative to supplying an API key.
+        if openai_client is not None:
+            self.openai_client = openai_client
         elif openai_api_key is not None:
-            self.llm_client = OpenAI(api_key=openai_api_key)
+            self.openai_client = OpenAI(api_key=openai_api_key)
         else:
-            raise ValueError("Either llm_client or openai_api_key must be provided.")
+            raise ValueError("Either openai_client or openai_api_key must be provided.")
         
         self.Coroner = Coroner
         self.Receiver = Receiver
@@ -204,7 +205,7 @@ class Cleaner:
         """Call the OpenAI API to generate a cleaned string based on the given prompt."""
         
         try:
-            response = self.llm_client.chat.completions.create(
+            response = self.openai_client.chat.completions.create(
                 model=self.llm_model,
                 messages=[
                     {"role": "system", "content": prompt},

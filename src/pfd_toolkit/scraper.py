@@ -54,7 +54,8 @@ class PFDScraper:
         html_scraping: bool = True,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
-        api_key: str = None,
+        openai_api_key: str = None,
+        openai_client: OpenAI = None,
         llm_model: str = "gpt-4o-mini",
         docx_conversion: str = "None",
         time_stamp: str = False,
@@ -73,7 +74,7 @@ class PFDScraper:
         :param html_scraping: Whether to attempt HTML-based scraping.
         :param pdf_fallback: Whether to fallback to .pdf scraping if missing values remain following HTML scraping (if set).
         :param llm_fallback: Whether to fallback to LLM scraping if missing values remain following previous method(s), if set. OpenAI API key must provided.
-        :param api_key: OpenAI API Key
+        :param openai_api_key: OpenAI API Key
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True. Default is "gpt_4o_mini".
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         :param time_stamp: Whether to add a timestamp column to the output file.
@@ -88,7 +89,8 @@ class PFDScraper:
         self.html_scraping = html_scraping
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
-        self.api_key = api_key
+        self.openai_api_key = openai_api_key
+        
         self.llm_model = llm_model
         self.docx_conversion = docx_conversion
         self.time_stamp = time_stamp
@@ -98,6 +100,19 @@ class PFDScraper:
         
         self.reports = None # ...So that the user can access them later if they forget to assign
         self.report_links = [] 
+        
+        # Use injected LLM client if provided; otherwise, create one from the API key.
+        # This allows the user to pass in their own OpenAI client instance as an alternative to supplying an API key.
+        if self.llm_fallback:
+            if openai_client is not None:
+                self.openai_client = openai_client
+            elif openai_api_key is not None:
+                self.openai_client = OpenAI(openai_api_key=openai_api_key)
+            else:
+                raise ValueError("LLM fallback enabled, but neither an API key nor OpenAI client was provided.")
+        else:
+            self.openai_client = openai_client 
+        
         
         # Define URL templates for different PFD categories.
         # ...Some categories (like 'all' and 'suicide') have unique URL formats.
@@ -172,8 +187,8 @@ class PFDScraper:
             raise ValueError("docx_conversion must be one of 'MicrosoftWord', 'LibreOffice', or 'None'.")
         
         # If OpenAI API key is not provided when LLM fallback is enabled
-        if self.llm_fallback and not self.api_key:
-            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled. Please set 'api_key' parameter. \nGet your API key from https://platform.openai.com/.")
+        if self.llm_fallback and not self.openai_api_key:
+            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled. Please set 'openai_api_key' parameter. \nGet your API key from https://platform.openai.com/.")
         
         # If no scrape method is enabled
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
@@ -236,7 +251,7 @@ class PFDScraper:
                 f"html_scraping={self.html_scraping},\n "
                 f"pdf_fallback={self.pdf_fallback},\n "
                 f"llm_fallback={self.llm_fallback},\n "
-                f"api_key={'provided' if self.api_key else 'not provided'},\n " # ...Preventing the API key from being printed
+                f"openai_api_key={'provided' if self.openai_api_key else 'not provided'},\n " # ...Preventing the API key from being printed
                 f"llm_model='{self.llm_model}',\n "
                 f"docx_conversion='{self.docx_conversion}',\n "
                 f"verbose={self.verbose}"
@@ -875,7 +890,7 @@ class PFDScraper:
                     "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
                 })
             
-            response = client.chat.completions.create(
+            response = self.openai_client.chat.completions.create(
                 model=self.llm_model,
                 messages=[{"role": "user", "content": messages}],
             )
@@ -994,8 +1009,8 @@ class PFDScraper:
 
 # Load OpenAI API key
 load_dotenv('api.env')
-openai_api_key = os.getenv('OPENAI_API_KEY')
-client = OpenAI(api_key=openai_api_key)
+openai_openai_api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(openai_api_key=openai_openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
@@ -1006,7 +1021,7 @@ scraper = PFDScraper(
     html_scraping=True,
     pdf_fallback=False,
     llm_fallback=False,
-    api_key=openai_api_key,
+    openai_api_key=openai_openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
     time_stamp=False,
