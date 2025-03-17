@@ -1029,6 +1029,36 @@ class PFDScraper:
         # Use the provided DataFrame if supplied, or fall back to the internal self.reports
         base_df = old_reports if old_reports is not None else self.reports
 
+        # Check that base_df contains the required columns; if not, throw an error
+        # This is an interim measure! We need to implement a mapping feature so that if the user
+        #    renames columns, the top up scraper can still work.
+        required_columns = []
+        if self.include_url:
+            required_columns.append("URL")
+        if self.include_id:
+            required_columns.append("ID")
+        if self.include_date:
+            required_columns.append("Date")
+        if self.include_coroner:
+            required_columns.append("CoronerName")
+        if self.include_area:
+            required_columns.append("Area")
+        if self.include_receiver:
+            required_columns.append("Receiver")
+        if self.include_investigation:
+            required_columns.append("InvestigationAndInquest")
+        if self.include_circumstances:
+            required_columns.append("CircumstancesOfDeath")
+        if self.include_concerns:
+            required_columns.append("MattersOfConcern")
+        if self.include_time_stamp:
+            required_columns.append("DateScraped")
+
+        if base_df is not None:
+            missing_cols = [col for col in required_columns if col not in base_df.columns]
+            if missing_cols:
+                raise ValueError(f"Required columns missing from the provided DataFrame: {missing_cols}")
+
         # Retrieve the latest report links from the website.
         updated_links = self._get_report_links()
 
