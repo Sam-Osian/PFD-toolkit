@@ -990,7 +990,7 @@ class PFDScraper:
     
     def scrape_reports(self) -> pd.DataFrame:
         """
-        Scrapes reports from the collected report links based on the user configuration of the PFDScraper class instance.
+        Scrapes reports from the collected report links based on the user configuration of the PFDScraper class instance (self).
         
         :return: A pandas DataFrame containing one row per scraped report.
         """
@@ -1013,20 +1013,26 @@ class PFDScraper:
         return reports
 
 
-    def top_up(self) -> pd.DataFrame:
+    def top_up(self, old_reports: pd.DataFrame = None) -> pd.DataFrame:
         """
-        Adds new reports to the existing scraped reports based on the user configuration of the PFDScraper class instance.
+        Adds new reports to the existing scraped reports based on the user configuration of the PFDScraper class instance (self).
         Duplicate checking is based on the URL as a unique identifier – by default the URL (if include_url is True)
         or the report ID otherwise.
+        
+        Parameters:
+            old_reports (pd.DataFrame): Optional DataFrame containing previously scraped reports. If not supplied,
+                                         the internal self.reports will be used.
         
         Returns:
             pd.DataFrame: Updated DataFrame containing both the old and new scraped reports.
         """
-        # Retrieve the latest report links from the website
+        # Use the provided DataFrame if supplied, or fall back to the internal self.reports
+        base_df = old_reports if old_reports is not None else self.reports
+
+        # Retrieve the latest report links from the website.
         updated_links = self._get_report_links()
 
         # Determine which unique key to use for duplicate checking
-        # ...The method will prefer the URL if available; otherwise, fall back to the report ID
         if self.include_url:
             unique_key = "URL"
         elif self.include_id:
@@ -1034,11 +1040,11 @@ class PFDScraper:
         else:
             logger.error("No unique identifier available for duplicate checking.\n"
                          "Ensure include_url or include_id was set to True in instance initialisation.")
-            return self.reports if self.reports is not None else pd.DataFrame()
+            return base_df if base_df is not None else pd.DataFrame()
 
-        # Gather identifiers from already scraped reports
-        if self.reports is not None and unique_key in self.reports.columns:
-            existing_identifiers = set(self.reports[unique_key].tolist())
+        # Gather identifiers from the base DataFrame
+        if base_df is not None and unique_key in base_df.columns:
+            existing_identifiers = set(base_df[unique_key].tolist())
         else:
             existing_identifiers = set()
 
@@ -1046,31 +1052,32 @@ class PFDScraper:
         new_links = [link for link in updated_links if link not in existing_identifiers]
         duplicates_count = len(updated_links) - len(new_links)
         new_count = len(new_links)
-
+        
         logger.info("Top-up: %d new report(s) found; %d duplicate(s) not added", new_count, duplicates_count)
 
         if not new_links:
             logger.info("No new reports to scrape during top-up.")
-            return self.reports if self.reports is not None else pd.DataFrame()
+            return base_df if base_df is not None else pd.DataFrame()
 
-        # As before, use a thread pool to concurrently scrape the new report links
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             new_results = list(executor.map(self._extract_report_info, new_links))
 
-        # Filter out any failed extractions
         new_records = [record for record in new_results if record is not None]
-        
-        # If new, add new reports to the existing DataFrame
-        if new_records:
-            new_df = pd.DataFrame(new_records)
-            if self.reports is not None:
-                self.reports = pd.concat([self.reports, new_df], ignore_index=True)
-            else:
-                self.reports = new_df
-        else:
-            logger.info("No new reports were successfully scraped during top-up.")
 
-        return self.reports
+        # Convert new records to DataFrame
+        new_df = pd.DataFrame(new_records)
+
+        # Add the new records to the old dataframe
+        if base_df is not None:
+            updated_reports = pd.concat([base_df, new_df], ignore_index=True)
+        else:
+            updated_reports = new_df
+
+        # Update the internal self.reports
+        self.reports = updated_reports
+
+        return updated_reports
+
 
 
 # -----------------------------------------------------------------------------------------
