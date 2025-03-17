@@ -298,6 +298,10 @@ class Cleaner:
         self.cleaned_reports = cleaned_df
         return cleaned_df
 
+# Attach the base prompt and field-specific configurations to the class for easy access
+Cleaner.BASE_PROMPT = BASE_PROMPT
+Cleaner.PROMPT_CONFIG = PROMPT_CONFIG
+
 
 # Load OpenAI API key
 load_dotenv('api.env')
