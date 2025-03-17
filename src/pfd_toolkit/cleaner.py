@@ -21,8 +21,8 @@ Task:
 1. **Extract** only the information related to {field_description}.
 2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content.
 3. **Correct** any misspellings, ensuring the text is in **British English**.
-4. **Return** exactly and only the cleaned data for {field_contents_and_rules}.
-5. **If extraction fails**, return exactly: "N/A: Not found" (without any additional commentary).
+4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.
+5. **If extraction fails**, return exactly: N/A: Not found (without any additional commentary).
 
 Extra instructions:
 {extra_instructions}
@@ -32,7 +32,7 @@ Input Text:
 
 
 # Dictionary holding field-specific configurations for the prompt
-# Each field has a description, rules for the field contents, and extra_instructions.
+# The placeholders for the above `BASE_PROMPT` will be 'filled in' using the values below...
 PROMPT_CONFIG = {
     "Coroner": {
         "field_description": "the name of the Coroner who presided over the inquest",
@@ -55,8 +55,8 @@ PROMPT_CONFIG = {
         "field_description": "the name(s)/organisation(s) of the receiver(s) of the report",
         "field_contents_and_rules": "only the name(s)/organisation(s) and, if given, their job title(s) and nothing else",
         "extra_instructions": (
-            "Separate multiple names/organisations with semicolons (;).\n"
-            "Do not use a numbered list.\n"
+            "Separate multiple names/organisations with semicolons (;)."
+            "Do not use a numbered list."
             "Do not separate information with commas or new lines."
         ),
     },
@@ -65,6 +65,7 @@ PROMPT_CONFIG = {
         "field_contents_and_rules": "only the details of the investigation and inquest—nothing else",
         "extra_instructions": (
             "If the string appears to need no cleaning, return it as is."
+            "Change all dates to the format 'YYYY-MM-DD'"
         ),
     },
     "CircumstancesOfDeath": {
@@ -72,26 +73,19 @@ PROMPT_CONFIG = {
         "field_contents_and_rules": "only the circumstances of death—nothing else",
         "extra_instructions": (
             "If the string appears to need no cleaning, return it as is."
+            "Change all dates to the format 'YYYY-MM-DD'"
         ),
     },
     "MattersOfConcern": {
         "field_description": "the matters of concern",
         "field_contents_and_rules": "only the matters of concern—nothing else",
         "extra_instructions": (
-            "Remove reference to boiletplate text, if any occurs. This is usually 1 or 2 non-specific sentences ending with '...The Matters of Concern are as follows:',"
+            "Remove reference to boiletplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string ending with '...The Matters of Concern are as follows:',"
             "If the string appears to need no cleaning, return it as is."
+            "Change all dates to the format 'YYYY-MM-DD'"
         ),
     },
 }
-
-def _get_prompt_for_field(field_name: str) -> str:
-    """Generates a complete prompt for a given PFD report field based on the BASE_PROMPT and configuration."""
-    config = PROMPT_CONFIG[field_name]
-    return BASE_PROMPT.format(
-        field_description=config["field_description"],
-        field_contents_and_rules=config["field_contents_and_rules"],
-        extra_instructions=config["extra_instructions"],
-    )
 
 class Cleaner:
     """
@@ -99,18 +93,18 @@ class Cleaner:
     """
     def __init__(
         self,
-        
         # Input DataFrame containing PFD reports
         reports: pd.DataFrame,
         
         # LLM configuration
         llm_model: str = "gpt-4o-mini",
         openai_api_key: str = None,
+        llm_client: OpenAI = None,
         
         # Fields to clean
         Coroner: bool = True,
         Receiver: bool = True,
-        Area: bool=True,
+        Area: bool = True,
         InvestigationAndInquest: bool = True,
         CircumstancesOfDeath: bool = True,
         MattersOfConcern: bool = True,
@@ -136,9 +130,16 @@ class Cleaner:
     ) -> None:
         
         self.reports = reports
-        
         self.llm_model = llm_model
         self.openai_api_key = openai_api_key
+        
+        # Use injected LLM client if provided; otherwise, create one from the API key.
+        if llm_client is not None:
+            self.llm_client = llm_client
+        elif openai_api_key is not None:
+            self.llm_client = OpenAI(api_key=openai_api_key)
+        else:
+            raise ValueError("Either llm_client or openai_api_key must be provided.")
         
         self.Coroner = Coroner
         self.Receiver = Receiver
@@ -155,12 +156,12 @@ class Cleaner:
         self.concerns_field = concerns_field
         
         # The below makes it so that the class instance uses the user-set prompts if provided, or the default ones if not.
-        self.coroner_prompt = coroner_prompt if coroner_prompt is not None else _get_prompt_for_field("Coroner")
-        self.area_prompt = area_prompt if area_prompt is not None else _get_prompt_for_field("Area")
-        self.receiver_prompt = receiver_prompt if receiver_prompt is not None else _get_prompt_for_field("Receiver")
-        self.investigation_prompt = investigation_prompt if investigation_prompt is not None else _get_prompt_for_field("InvestigationAndInquest")
-        self.circumstances_prompt = circumstances_prompt if circumstances_prompt is not None else _get_prompt_for_field("CircumstancesOfDeath")
-        self.concerns_prompt = concerns_prompt if concerns_prompt is not None else _get_prompt_for_field("MattersOfConcern")
+        self.coroner_prompt = coroner_prompt if coroner_prompt is not None else Cleaner._get_prompt_for_field("Coroner")
+        self.area_prompt = area_prompt if area_prompt is not None else Cleaner._get_prompt_for_field("Area")
+        self.receiver_prompt = receiver_prompt if receiver_prompt is not None else Cleaner._get_prompt_for_field("Receiver")
+        self.investigation_prompt = investigation_prompt if investigation_prompt is not None else Cleaner._get_prompt_for_field("InvestigationAndInquest")
+        self.circumstances_prompt = circumstances_prompt if circumstances_prompt is not None else Cleaner._get_prompt_for_field("CircumstancesOfDeath")
+        self.concerns_prompt = concerns_prompt if concerns_prompt is not None else Cleaner._get_prompt_for_field("MattersOfConcern")
         
         self.verbose = verbose
         
@@ -189,16 +190,26 @@ class Cleaner:
         if missing_columns:
             raise ValueError(f"Cleaner could not find the following fields in your input DataFrame: {missing_columns}.")
     
+    @staticmethod
+    def _get_prompt_for_field(field_name: str) -> str:
+        """Generates a complete prompt for a given PFD report field based on the BASE_PROMPT and configuration."""
+        config = PROMPT_CONFIG[field_name]
+        return BASE_PROMPT.format(
+            field_description=config["field_description"],
+            field_contents_and_rules=config["field_contents_and_rules"],
+            extra_instructions=config["extra_instructions"],
+        )
     
     def _call_llm(self, prompt: str) -> str:
         """Call the OpenAI API to generate a cleaned string based on the given prompt."""
         
         try:
-            response = client.chat.completions.create(
+            response = self.llm_client.chat.completions.create(
                 model=self.llm_model,
                 messages=[
                     {"role": "system", "content": prompt},
-                ], temperature=0.0,
+                ],
+                temperature=0.0,
             )
             # Extract the cleaned string from the response
             cleaned_string = response.choices[0].message.content.strip()
@@ -238,7 +249,6 @@ class Cleaner:
         prompt = self.concerns_prompt + "\n" + text
         return self._call_llm(prompt)
     
-
     def _apply_cleaning(self, text: str, cleaning_func) -> str:
         """
         Helper function to apply the cleaning function to a cell's text, and if the cleaned result
@@ -261,42 +271,27 @@ class Cleaner:
         """
         # Make a copy for non-destructive cleaning
         cleaned_df = self.reports.copy()
-
-        if self.Coroner:
-            logger.info(f"Cleaning field: {self.coroner_field}")
-            cleaned_df[self.coroner_field] = cleaned_df[self.coroner_field].apply(
-                lambda text: self._apply_cleaning(text, self._clean_coroner)
-            )
-
-        if self.Area:
-            logger.info(f"Cleaning field: {self.area_field}")
-            cleaned_df[self.area_field] = cleaned_df[self.area_field].apply(
-                lambda text: self._apply_cleaning(text, self._clean_area)
-            )
         
-        if self.Receiver:
-            logger.info(f"Cleaning field: {self.receiver_field}")
-            cleaned_df[self.receiver_field] = cleaned_df[self.receiver_field].apply(
-                lambda text: self._apply_cleaning(text, self._clean_receiver)
-            )
-
-        if self.InvestigationAndInquest:
-            logger.info(f"Cleaning field: {self.investigation_field}")
-            cleaned_df[self.investigation_field] = cleaned_df[self.investigation_field].apply(
-                lambda text: self._apply_cleaning(text, self._clean_investigation)
-            )
-
-        if self.CircumstancesOfDeath:
-            logger.info(f"Cleaning field: {self.circumstances_field}")
-            cleaned_df[self.circumstances_field] = cleaned_df[self.circumstances_field].apply(
-                lambda text: self._apply_cleaning(text, self._clean_circumstances)
-            )
-
-        if self.MattersOfConcern:
-            logger.info(f"Cleaning field: {self.concerns_field}")
-            cleaned_df[self.concerns_field] = cleaned_df[self.concerns_field].apply(
-                lambda text: self._apply_cleaning(text, self._clean_concerns)
-            )
+        # Mapping of field configuration...
+        # 1. Field Name
+        # 2. Field Boolean (whether to clean)
+        # 3. Column Name in input dataframe, 
+        # 4. Cleaning Function
+        fields_to_clean = [
+            ("Coroner", self.Coroner, self.coroner_field, self._clean_coroner),
+            ("Area", self.Area, self.area_field, self._clean_area),
+            ("Receiver", self.Receiver, self.receiver_field, self._clean_receiver),
+            ("InvestigationAndInquest", self.InvestigationAndInquest, self.investigation_field, self._clean_investigation),
+            ("CircumstancesOfDeath", self.CircumstancesOfDeath, self.circumstances_field, self._clean_circumstances),
+            ("MattersOfConcern", self.MattersOfConcern, self.concerns_field, self._clean_concerns),
+        ]
+        # Loop over each field and clean it if the corresponding flag is set to True
+        for field_name, flag, column_name, cleaning_func in fields_to_clean:
+            if flag:
+                logger.info(f"Cleaning field: {column_name}")
+                cleaned_df[column_name] = cleaned_df[column_name].apply(
+                    lambda text: self._apply_cleaning(text, cleaning_func)
+                )
         
         # Save as internal attribute in case user forgets to assign the output to a variable
         self.cleaned_reports = cleaned_df
@@ -306,19 +301,18 @@ class Cleaner:
 # Load OpenAI API key
 load_dotenv('api.env')
 openai_api_key = os.getenv('OPENAI_API_KEY')
-client = OpenAI(api_key=openai_api_key)
-
 
 # Read reports data frame
 reports = pd.read_csv('../../data/testreports.csv')
-cleaner = Cleaner(reports=reports, 
-                  Coroner=False, 
-                  Receiver=False, 
-                  Area=False, 
-                  InvestigationAndInquest=True, 
-                  CircumstancesOfDeath=False, 
-                  MattersOfConcern=False)
+cleaner = Cleaner(
+    reports=reports, 
+    openai_api_key=openai_api_key,
+    Coroner=False, 
+    Receiver=False, 
+    Area=False, 
+    InvestigationAndInquest=False, 
+    CircumstancesOfDeath=False, 
+    MattersOfConcern=True
+)
 clean_reports = cleaner.clean_reports()
 clean_reports
-
-cleaner.cleaned_reports
