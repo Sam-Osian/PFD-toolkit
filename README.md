@@ -1,3 +1,5 @@
+![Header Image](assets/header.png)
+
 # PFD-toolkit
 
 A Python toolkit for using cleaned **Prevention of Future Death (PFD) reports** from the UK Judiciary website.
