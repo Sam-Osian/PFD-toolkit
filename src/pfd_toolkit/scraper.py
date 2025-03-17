@@ -45,20 +45,42 @@ class PFDScraper:
     
     def __init__(
         self,
+        
+        # Web page logic
         category: str = 'all',
         start_page: int = 1,
         end_page: int = 559,
+        
+        # Threading and request logic
         max_workers: int = 10,
         max_requests: int = 5, 
         delay_range = (1, 2),
+        
+        # Straping strategy
         html_scraping: bool = True,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
+        
+        # OpenAI API configuration
         openai_api_key: str = None,
         openai_client: OpenAI = None,
         llm_model: str = "gpt-4o-mini",
+        
+        # Document conversion
         docx_conversion: str = "None",
-        time_stamp: str = False,
+        
+        # Output configuration
+        include_url: bool = True,
+        include_id: bool = True,
+        include_date: bool = True,
+        include_coroner: bool = True,
+        include_area: bool = True,
+        include_receiver: bool = True,
+        include_investigation: bool = True,
+        include_circumstances: bool = True,
+        include_concerns: bool = True,
+        include_time_stamp: bool = False,
+        
         verbose: bool = True  
     ) -> None:
         
@@ -77,28 +99,42 @@ class PFDScraper:
         :param openai_api_key: OpenAI API Key
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True. Default is "gpt_4o_mini".
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
-        :param time_stamp: Whether to add a timestamp column to the output file.
+        :param include_time_stamp: Whether to add a timestamp column to the output file.
         :param verbose: Whether to print verbose output.
         """
         self.category = category.lower()
         self.start_page = start_page
         self.end_page = end_page
+        
         self.max_workers = max_workers
         self.max_requests = max_requests
         self.delay_range = delay_range
+        
         self.html_scraping = html_scraping
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
-        self.openai_api_key = openai_api_key
         
+        self.openai_api_key = openai_api_key
         self.llm_model = llm_model
+        
         self.docx_conversion = docx_conversion
-        self.time_stamp = time_stamp
+        
+        self.include_url = include_url
+        self.include_id = include_id
+        self.include_date = include_date
+        self.include_coroner = include_coroner
+        self.include_area = include_area
+        self.include_receiver = include_receiver
+        self.include_investigation = include_investigation
+        self.include_circumstances = include_circumstances
+        self.include_concerns = include_concerns
+        self.include_time_stamp = include_time_stamp
+        
         self.verbose = verbose
         
         self.domain_semaphore = threading.Semaphore(self.max_requests) # Semaphore to limit requests per domain
         
-        self.reports = None # ...So that the user can access them later if they forget to assign
+        self.reports = None # ...So that the user can access them later as an internal attribute
         self.report_links = [] 
         
         # Use injected LLM client if provided; otherwise, create one from the API key.
@@ -194,6 +230,9 @@ class PFDScraper:
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
             raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
 
+        # If no fields are included
+        if not any([self.include_id, self.include_date, self.include_coroner, self.include_area, self.include_receiver, self.include_investigation, self.include_circumstances, self.include_concerns]):
+            raise ValueError("At least one field must be included in the output. Please set one or more of 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', or 'include_concerns' to True.")
         
         ### Warnings (code will still run)
         
@@ -534,7 +573,7 @@ class PFDScraper:
         :return: Dictionary containing extracted report information.
         """
         
-        date_scraped = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if self.time_stamp else None
+        date_scraped = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if self.include_time_stamp else None
         
         # Initialise all fields with default missing values.
         #   We do this because if `html_scraping` is disabled, we need to ensure all fields are still set,
@@ -578,103 +617,111 @@ class PFDScraper:
                 logger.debug(f"Extracting data from HTML for URL: {url}")
         
             # Report ID extraction using compiled regex (e.g. "2025-0296")
-            ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
-            if ref_element:
-                match = self._id_pattern.search(ref_element.get_text())
-                report_id = match.group(1) if match else 'N/A: Not found'
-            else:
-                report_id = "N/A: Not found"
+            if self.include_id:
+                ref_element = soup.find(lambda tag: tag.name == 'p' and 'Ref:' in tag.get_text(), recursive=True)
+                if ref_element:
+                    match = self._id_pattern.search(ref_element.get_text())
+                    report_id = match.group(1) if match else 'N/A: Not found'
+                else:
+                    report_id = "N/A: Not found"
             
             
             # Date of report extraction
             # We use fuzzy date parsing to handle variations in date formats (e.g. "1st January 2025" and "01/01/2025")
-            date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
-            if date_element != "N/A: Not found":
-                date_element = date_element.replace("Date of report:", "").strip()
-                try:
-                    parsed_date = parser.parse(date_element, fuzzy=True)
-                    date = parsed_date.strftime("%Y-%m-%d")
-                except Exception as e:
-                    logger.error("Error parsing date '%s': %s", date_element, e)
-                    date = date_element
-            else:
-                date = 'N/A: Not found'
-            
+            if self.include_date:
+                date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
+                if date_element != "N/A: Not found":
+                    date_element = date_element.replace("Date of report:", "").strip()
+                    try:
+                        parsed_date = parser.parse(date_element, fuzzy=True)
+                        date = parsed_date.strftime("%Y-%m-%d")
+                    except Exception as e:
+                        logger.error("Error parsing date '%s': %s", date_element, e)
+                        date = date_element
+                else:
+                    date = 'N/A: Not found'
+                
             
             # Receiver extraction (who the report is sent to)
-            receiver_element = self._extract_paragraph_text_by_keywords(
-                soup, ["This report is being sent to:", "Sent to:"]
-            )
-            receiver = receiver_element.replace("This report is being sent to:", "") \
-                                        .replace("Sent to:", "") \
-                                        .strip()
-                                        
-            if len(receiver) < 5 or len(receiver) > 30:
-                receiver = 'N/A: Not found'
-                        
+            if self.include_receiver:
+                receiver_element = self._extract_paragraph_text_by_keywords(
+                    soup, ["This report is being sent to:", "Sent to:"]
+                )
+                receiver = receiver_element.replace("This report is being sent to:", "") \
+                                            .replace("Sent to:", "") \
+                                            .strip()
+                                            
+                if len(receiver) < 5 or len(receiver) > 30:
+                    receiver = 'N/A: Not found'
+                            
             
             # Name of coroner extraction
-            coroner_element = self._extract_paragraph_text_by_keywords(
-                soup, ["Coroners name:", "Coroner name:", "Coroner's name:"]
-            )
-            coroner = coroner_element.replace("Coroners name:", "") \
-                                        .replace("Coroner name:", "") \
-                                        .replace("Coroner's name:", "") \
-                                        .strip()
-            if len(coroner) < 5 or len(coroner) > 30:
-                coroner = 'N/A: Not found'
+            if self.include_coroner:
+                coroner_element = self._extract_paragraph_text_by_keywords(
+                    soup, ["Coroners name:", "Coroner name:", "Coroner's name:"]
+                )
+                coroner = coroner_element.replace("Coroners name:", "") \
+                                            .replace("Coroner name:", "") \
+                                            .replace("Coroner's name:", "") \
+                                            .strip()
+                if len(coroner) < 5 or len(coroner) > 30:
+                    coroner = 'N/A: Not found'
             
             
             # Area extraction
-            area_element = self._extract_paragraph_text_by_keywords(
-                soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"]
-            )
-            area = area_element.replace("Coroners Area:", "") \
-                                .replace("Coroner Area:", "") \
-                                .replace("Coroner's Area:", "") \
-                                .strip()
-                                
-            if len(area) < 4 or len(area) > 40:
-                area = 'N/A: Not found'
+            if self.include_area:
+                area_element = self._extract_paragraph_text_by_keywords(
+                    soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"]
+                )
+                area = area_element.replace("Coroners Area:", "") \
+                                    .replace("Coroner Area:", "") \
+                                    .replace("Coroner's Area:", "") \
+                                    .strip()
+                                    
+                if len(area) < 4 or len(area) > 40:
+                    area = 'N/A: Not found'
             
             
             # Investigation and Inquest extraction
-            investigation_section = self._extract_section_text_by_keywords(
-                soup, ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"]
-            )
-            investigation = investigation_section.replace("INVESTIGATION and INQUEST", "") \
-                                                .replace("INVESTIGATION & INQUEST", "") \
-                                                .replace("3 INQUEST", "") \
-                                                .strip()
+            if self.include_investigation:
+                investigation_section = self._extract_section_text_by_keywords(
+                    soup, ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"]
+                )
+                investigation = investigation_section.replace("INVESTIGATION and INQUEST", "") \
+                                                    .replace("INVESTIGATION & INQUEST", "") \
+                                                    .replace("3 INQUEST", "") \
+                                                    .strip()
 
-            if len(investigation) < 30:
-                investigation = 'N/A: Not found'
+                if len(investigation) < 30:
+                    investigation = 'N/A: Not found'
             
             
             # Circumstances of the Death extraction
-            circumstances_section = self._extract_section_text_by_keywords(
-                soup, 
-                ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"]
-            )
-            circumstances = circumstances_section.replace("CIRCUMSTANCES OF THE DEATH", "") \
-                                                .replace("CIRCUMSTANCES OF DEATH", "") \
-                                                .replace("CIRCUMSTANCES OF", "") \
-                                                .strip()
-            if len(circumstances) < 30:
-                circumstances = 'N/A: Not found'
+            if self.include_circumstances:
+                circumstances_section = self._extract_section_text_by_keywords(
+                    soup, 
+                    ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"]
+                )
+                circumstances = circumstances_section.replace("CIRCUMSTANCES OF THE DEATH", "") \
+                                                    .replace("CIRCUMSTANCES OF DEATH", "") \
+                                                    .replace("CIRCUMSTANCES OF", "") \
+                                                    .strip()
+                if len(circumstances) < 30:
+                    circumstances = 'N/A: Not found'
 
 
             # Coroner's Concerns extraction
-            concerns_text = self._extract_section_text_by_keywords(
-                soup, 
-                ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"]
-            )
-            concerns = concerns_text.replace("CORONER'S CONCERNS", "") \
-                                                .replace("CORONERS CONCERNS", "") \
-                                                .replace("CORONER CONCERNS", "") \
-                                                .strip()
-            if len(concerns) < 30:
-                concerns = 'N/A: Not found'
+            if self.include_concerns:
+                concerns_text = self._extract_section_text_by_keywords(
+                    soup, 
+                    ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"]
+                )
+                concerns = concerns_text.replace("CORONER'S CONCERNS", "") \
+                                                    .replace("CORONERS CONCERNS", "") \
+                                                    .replace("CORONER CONCERNS", "") \
+                                                    .strip()
+                if len(concerns) < 30:
+                    concerns = 'N/A: Not found'
 
         
         # -----------------------------------------------------------------------------
@@ -686,100 +733,77 @@ class PFDScraper:
         #    disabled.
         
         if self.pdf_fallback and (
-            'N/A: Not found' in [
-                #date, # Tricky to implement due to date placement in .pdfs. However, HTML extraction is usually successful.
-                coroner,
-                area,
-                receiver,
-                investigation,
-                circumstances,
-                concerns
-            ]
+            "N/A: Not found" in [coroner, area, receiver, investigation, circumstances, concerns]
         ):
             if self.verbose:
                 logger.debug(f"Initiating .pdf fallback for URL: {url} because one or more fields are missing.")
-            
-            # Coroner name extraction if missing
-            if coroner == "N/A: Not found":
+
+            if self.include_coroner and coroner == "N/A: Not found":
                 coroner_element = self._extract_section_from_pdf_text(
                     pdf_text,
                     start_keywords=["I am", "CORONER"],
                     end_keywords=["CORONER'S LEGAL POWERS", "paragraph 7"]
                 )
-            
                 coroner = coroner_element.replace("I am", "") \
                                         .replace("CORONER'S LEGAL POWERS", "") \
                                         .replace("CORONER", "") \
                                         .replace("paragraph 7", "") \
                                         .strip()
-            
             # Area extraction if missing
-            if area == "N/A: Not found":
+            if self.include_area and area == "N/A: Not found":
                 area_element = self._extract_section_from_pdf_text(
                     pdf_text,
                     start_keywords=["area of"],
                     end_keywords=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"]
                 )
-            
                 area = area_element.replace("area of", "") \
-                                        .replace("CORONER'S", "") \
-                                        .replace("CORONER", "") \
-                                        .replace("CORONERS", "") \
-                                        .replace("paragraph 7", "") \
-                                        .strip()
-            
-            
+                                .replace("CORONER'S", "") \
+                                .replace("CORONER", "") \
+                                .replace("CORONERS", "") \
+                                .replace("paragraph 7", "") \
+                                .strip()
+
             # Receiver extraction if missing
-            if receiver == "N/A: Not found":
+            if self.include_receiver and receiver == "N/A: Not found":
                 receiver_element = self._extract_section_from_pdf_text(
                     pdf_text,
                     start_keywords=[" SENT ", "SENT TO:"],
                     end_keywords=["CORONER", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
                 )
                 receiver = self._clean_text(receiver_element).replace("TO:", "").strip()
-                
                 if len(receiver) < 5:
                     receiver = 'N/A: Not found'
-                
-            
             # Investigation & Inquest extraction if missing
-            if investigation == "N/A: Not found":
+            if self.include_investigation and investigation == "N/A: Not found":
                 investigation_element = self._extract_section_from_pdf_text(
                     pdf_text,
                     start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"],
                     end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"]
                 )
                 investigation = self._clean_text(investigation_element)
-                
                 if len(investigation) < 30:
                     investigation = 'N/A: Not found'
-            
-            
             # Circumstances of Death extraction if missing
-            if circumstances == "N/A: Not found":
+            if self.include_circumstances and circumstances == "N/A: Not found":
                 circumstances_section = self._extract_section_from_pdf_text(
                     pdf_text,
                     start_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"],
                     end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"]
                 )
                 circumstances = self._clean_text(circumstances_section)
-                
                 if len(circumstances) < 30:
                     circumstances = 'N/A: Not found'
-            
-            
             # Matters of Concern extraction if missing
-            if concerns == "N/A: Not found":
+            if self.include_concerns and concerns == "N/A: Not found":
                 concerns_section = self._extract_section_from_pdf_text(
                     pdf_text,
                     start_keywords=["CORONER'S CONCERNS", "as follows"],
                     end_keywords=["ACTION SHOULD BE TAKEN"]
                 )
                 concerns = self._clean_text(concerns_section)
-                
                 if len(concerns) < 30:
                     concerns = 'N/A: Not found'
-        
+
         # -----------------------------------------------------------------------------
         #                         LLM Data Extraction Fallback                          
         # -----------------------------------------------------------------------------
@@ -788,193 +812,176 @@ class PFDScraper:
         #   following previous extraction method. This will always run if both `html_scraping` and` 
         #   `pdf_fallback` are disabled.
         
-        if self.llm_fallback and (
-            'N/A: Not found' in [
-                date,
-                coroner,
-                area,
-                receiver,
-                investigation,
-                circumstances,
-                concerns
-            ]
-        ):
-            if self.verbose:
-                logger.debug(
-                    f"Initiating LLM fallback for URL: {url}. Missing fields: " +
-                    f"date='{date}', coroner='{coroner}', " +
-                    f"area='{area}', receiver='{receiver}', investigation='{investigation}', " +
-                    f"circumstances='{circumstances}', concerns='{concerns}'"
-                )
-            logger.info("Attempting LLM fallback for %s", url)
-            
-            # Reuse previously downloaded .pdf bytes if available; otherwise, download again
-            pdf_bytes = getattr(self, '_last_pdf_bytes', None)
-            if pdf_bytes is None:
-                try:
-                    pdf_response = self.session.get(report_link)
-                    pdf_response.raise_for_status()
-                    pdf_bytes = pdf_response.content
-                    self._last_pdf_bytes = pdf_bytes
-                except Exception as e:
-                    logger.error("Failed to fetch .pdf for image conversion: %s", e)
-                    pdf_bytes = None
-            
-
-            base64_images = []  # ...OpenAI requires base64 encoded images
-            
-            # Convert the .pdf to images using pdf2image
-            # Each page of the .pdf is converted to a separate image
-            if pdf_bytes:
-                try:
-                    images = convert_from_bytes(pdf_bytes)
-                except Exception as e:
-                    logger.error("Error converting .pdf to images: %s", e)
-                    images = []
-                for img in images:
-                    buffered = BytesIO()
-                    img.save(buffered, format="JPEG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                    base64_images.append(img_str)
-            
-            # Dictionary of missing fields and their extraction instructions.
-            # This is formatted in this way because we use dynamic prompting for the LLM, only
-            #   asking it to fill in the fields that remain missing.
-            
+        if self.llm_fallback:
             missing_fields = {}
-            if date == "N/A: Not found":
+            if self.include_date and date == "N/A: Not found":
                 missing_fields["Date of Report"] = "[Date of the report, not the death]"
-            if coroner == "N/A: Not found":
+            if self.include_coroner and coroner == "N/A: Not found":
                 missing_fields["Coroner's Name"] = "[Name of the coroner. Provide the name only.]"
-            if area == "N/A: Not found":
+            if self.include_area and area == "N/A: Not found":
                 missing_fields["Area"] = "[Area/location of the Coroner. Provide the location itself only.]"
-            if receiver == "N/A: Not found":
-                missing_fields["Receiver"] = "[Name or names of the person/people or organisation(s) the report is sent to, including job roles if provided.]"
-            if investigation == "N/A: Not found":
+            if self.include_receiver and receiver == "N/A: Not found":
+                missing_fields["Receiver"] = "[Name or names of the recipient(s) as provided in the report.]"
+            if self.include_investigation and investigation == "N/A: Not found":
                 missing_fields["Investigation and Inquest"] = "[The text from the Investigation/Inquest section.]"
-            if circumstances == "N/A: Not found":
+            if self.include_circumstances and circumstances == "N/A: Not found":
                 missing_fields["Circumstances of Death"] = "[The text from the Circumstances of Death section.]"
-            if concerns == "N/A: Not found":
-                missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns or Matters of Concern section. Sometimes this will follow boilerplate text (e.g. 'The matters of concern are as follows...')]"
-            
-            # Main prompt set-up
-            prompt = (
-                "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
-                "Please extract the following section(s):\n"
-            )
-            # Add missing fields to the prompt
-            for field, instruction in missing_fields.items():
-                prompt += f"\n{field}: {instruction}\n"
-                
-            # Additional instructions for the LLM
-            prompt += (
-                "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
-                "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for that section.\n"
-                "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
-                "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
-                "Do *not* change the section title(s) from the above format. For example, you must **not** change Circumstances of Death to Circumstances of the Death.\n"
-            )
-            
-            # If verbose, print out the prompt for debugging
-            if self.verbose:
-                logger.info("Report: %s", url)
-                logger.info("LLM prompt:\n\n%s", prompt)
-            
-            # Construct the messages to send to the LLM (first the prompt text then each image)
-            messages = [
-                {"type": "text", "text": prompt}
-            ]
-            for b64_img in base64_images:
-                messages.append({
-                    "type": "image_url",
-                    "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-                })
-            
-            response = self.openai_client.chat.completions.create(
-                model=self.llm_model,
-                messages=[{"role": "user", "content": messages}],
-            )
-            
-            # Extract the LLM response
-            llm_text = response.choices[0].message.content
-            
-            if self.verbose:
-                logger.info("LLM fallback response:\n%s\n\n", llm_text)
-            else:
-                logger.info("LLM fallback response received.")
-            
-            # Parse the LLM response to update only missing fields
-            fallback_date = 'N/A: Not found'
-            fallback_coroner = 'N/A: Not found'
-            fallback_area = 'N/A: Not found'
-            fallback_receiver = 'N/A: Not found'
-            fallback_investigation = 'N/A: Not found'
-            fallback_circumstances = 'N/A: Not found'
-            fallback_concerns = 'N/A: Not found'
-            
-            
-            # NEED TO CHANGE
-            # The below looks for lines that start with the field name and then extracts the text after the colon.
-            # This is problematic, because the LLM does not always output exactly as instructued
-            # It also requires the LLM to output everything on a single line, which is doesn't currently do.
-            # Structured outputs would (hopefully!) be better, but this requires a different approach.
-            for line in llm_text.splitlines():
-                line_strip = line.strip()
-                line_lower = line_strip.lower() # ...convert to lowercase, in case the LLM outputs in a different case
-                if line_lower.startswith("date of report:"):
-                    fallback_date = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("coroner's name:"):
-                    fallback_coroner = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("area:"):
-                    fallback_area = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("receiver:"):
-                    fallback_receiver = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("investigation and inquest:"):
-                    fallback_investigation = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("circumstances of death:"):
-                    fallback_circumstances = line_strip.split(":", 1)[1].strip()
-                elif line_lower.startswith("coroner's concerns:"):
-                    fallback_concerns = line_strip.split(":", 1)[1].strip()
-            
-            # Parse the date into YYYY-MM-DD format
-            if fallback_date != 'N/A: Not found':
-                try:
-                    parsed_date = parser.parse(fallback_date, fuzzy=True)
-                    fallback_date = parsed_date.strftime("%Y-%m-%d")
-                except Exception as e:
-                    logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
-            
-            # Update each field **only** if the HTML/.pdf extraction failed to find the information
-            if date == 'N/A: Not found':
-                date = fallback_date
-            if coroner == 'N/A: Not found':
-                coroner = fallback_coroner
-            if area == 'N/A: Not found':
-                area = fallback_area
-            if receiver == 'N/A: Not found':
-                receiver = fallback_receiver
-            if investigation == 'N/A: Not found':
-                investigation = fallback_investigation
-            if circumstances == 'N/A: Not found':
-                circumstances = fallback_circumstances
-            if concerns == 'N/A: Not found':
-                concerns = fallback_concerns
+            if self.include_concerns and concerns == "N/A: Not found":
+                missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns section.]"
+
+            if missing_fields:
+                if self.verbose:
+                    logger.debug(
+                        f"Initiating LLM fallback for URL: {url}. Missing fields: {missing_fields}"
+                    )
+                logger.info("Attempting LLM fallback for %s", url)
+
+                # Reuse previously downloaded .pdf bytes if available
+                pdf_bytes = getattr(self, '_last_pdf_bytes', None)
+                if pdf_bytes is None:
+                    try:
+                        pdf_response = self.session.get(report_link)
+                        pdf_response.raise_for_status()
+                        pdf_bytes = pdf_response.content
+                        self._last_pdf_bytes = pdf_bytes
+                    except Exception as e:
+                        logger.error("Failed to fetch .pdf for image conversion: %s", e)
+                        pdf_bytes = None
+
+                base64_images = [] # ...OpenAI requires base64 encoded images
+                # Convert the .pdf to images using pdf2image
+                # Each page of the .pdf is converted to a separate image
+                if pdf_bytes:
+                    try:
+                        images = convert_from_bytes(pdf_bytes)
+                    except Exception as e:
+                        logger.error("Error converting .pdf to images: %s", e)
+                        images = []
+                    for img in images:
+                        buffered = BytesIO()
+                        img.save(buffered, format="JPEG")
+                        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                        base64_images.append(img_str)
+
+                prompt = (
+                    "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
+                    "Please extract the following section(s):\n"
+                )
+                # Add missing fields to the prompt
+                for field, instruction in missing_fields.items():
+                    prompt += f"\n{field}: {instruction}\n"
+                # Additional instructions for the LLM
+                prompt += (
+                    "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
+                    "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for that section.\n"
+                    "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
+                    "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
+                    "Do *not* change the section title(s) from the above format.\n"
+                )
+                # If verbose, print out the prompt for debugging
+                if self.verbose:
+                    logger.info("LLM prompt:\n\n%s", prompt)
+
+                # Construct the messages to send to the LLM (first the prompt text then each image)
+                messages = [{"type": "text", "text": prompt}]
+                for b64_img in base64_images:
+                    messages.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+                    })
+
+                response = self.openai_client.chat.completions.create(
+                    model=self.llm_model,
+                    messages=[{"role": "user", "content": messages}],
+                )
+                # Extract the LLM response
+                llm_text = response.choices[0].message.content
+                if self.verbose:
+                    logger.info("LLM fallback response:\n%s\n\n", llm_text)
+                else:
+                    logger.info("LLM fallback response received.")
+
+                # Parse the LLM response to update only missing fields
+                fallback_date = 'N/A: Not found'
+                fallback_coroner = 'N/A: Not found'
+                fallback_area = 'N/A: Not found'
+                fallback_receiver = 'N/A: Not found'
+                fallback_investigation = 'N/A: Not found'
+                fallback_circumstances = 'N/A: Not found'
+                fallback_concerns = 'N/A: Not found'
+
+                # NEED TO CHANGE
+                # The below looks for lines that start with the field name and then extracts the text after the colon.
+                # This is problematic, because the LLM does not always output exactly as instructued
+                # It also requires the LLM to output everything on a single line, which is doesn't currently do.
+                # Structured outputs would (hopefully!) be better, but this requires a different approach.
+                for line in llm_text.splitlines():
+                    line_strip = line.strip()
+                    line_lower = line_strip.lower()
+                    if line_lower.startswith("date of report:"):
+                        fallback_date = line_strip.split(":", 1)[1].strip()
+                    elif line_lower.startswith("coroner's name:"):
+                        fallback_coroner = line_strip.split(":", 1)[1].strip()
+                    elif line_lower.startswith("area:"):
+                        fallback_area = line_strip.split(":", 1)[1].strip()
+                    elif line_lower.startswith("receiver:"):
+                        fallback_receiver = line_strip.split(":", 1)[1].strip()
+                    elif line_lower.startswith("investigation and inquest:"):
+                        fallback_investigation = line_strip.split(":", 1)[1].strip()
+                    elif line_lower.startswith("circumstances of death:"):
+                        fallback_circumstances = line_strip.split(":", 1)[1].strip()
+                    elif line_lower.startswith("coroner's concerns:"):
+                        fallback_concerns = line_strip.split(":", 1)[1].strip()
+
+                # Parse the date into YYYY-MM_DD format
+                if fallback_date != 'N/A: Not found':
+                    try:
+                        parsed_date = parser.parse(fallback_date, fuzzy=True)
+                        fallback_date = parsed_date.strftime("%Y-%m-%d")
+                    except Exception as e:
+                        logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
+
+                # Update each field **only** if the HTML/.pdf extraction failed to find the information
+                if self.include_date and date == 'N/A: Not found':
+                    date = fallback_date
+                if self.include_coroner and coroner == 'N/A: Not found':
+                    coroner = fallback_coroner
+                if self.include_area and area == 'N/A: Not found':
+                    area = fallback_area
+                if self.include_receiver and receiver == 'N/A: Not found':
+                    receiver = fallback_receiver
+                if self.include_investigation and investigation == 'N/A: Not found':
+                    investigation = fallback_investigation
+                if self.include_circumstances and circumstances == 'N/A: Not found':
+                    circumstances = fallback_circumstances
+                if self.include_concerns and concerns == 'N/A: Not found':
+                    concerns = fallback_concerns
+
 
         # Return the extracted report information
-        report = {
-            "URL": url,
-            "ID": report_id,
-            "Date": date,
-            "CoronerName": coroner,
-            "Area": area,
-            "Receiver": receiver,
-            "InvestigationAndInquest": investigation,
-            "CircumstancesOfDeath": circumstances,
-            "MattersOfConcern": concerns
-        }
-        if self.time_stamp:
+        report = {}
+        if self.include_url:
+            report["URL"] = url
+        if self.include_id:
+            report["ID"] = report_id
+        if self.include_date:
+            report["Date"] = date
+        if self.include_coroner:
+            report["CoronerName"] = coroner
+        if self.include_area:
+            report["Area"] = area
+        if self.include_receiver:
+            report["Receiver"] = receiver
+        if self.include_investigation:
+            report["InvestigationAndInquest"] = investigation
+        if self.include_circumstances:
+            report["CircumstancesOfDeath"] = circumstances
+        if self.include_concerns:
+            report["MattersOfConcern"] = concerns
+        if self.include_time_stamp:
             report["DateScraped"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return report
+
 
     
     # The below function serves as the user entry point for the scraper.
@@ -1009,8 +1016,8 @@ class PFDScraper:
 
 # Load OpenAI API key
 load_dotenv('api.env')
-openai_openai_api_key = os.getenv('OPENAI_API_KEY')
-client = OpenAI(openai_api_key=openai_openai_api_key)
+openai_api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
@@ -1021,12 +1028,12 @@ scraper = PFDScraper(
     html_scraping=True,
     pdf_fallback=False,
     llm_fallback=False,
-    openai_api_key=openai_openai_api_key,
+    openai_api_key=openai_api_key,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-    time_stamp=False,
+    include_time_stamp=False,
     delay_range = None,
-    verbose=True
+    verbose=True,
 )
 reports = scraper.scrape_all_reports()
 reports
