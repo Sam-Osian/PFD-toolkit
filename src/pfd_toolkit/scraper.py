@@ -982,33 +982,95 @@ class PFDScraper:
             report["DateScraped"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return report
 
-
+    # -----------------------------------------------------------------------------------------
+    # PUBLIC METHODS - These are the two main methods that the user will interact with.
+    # -----------------------------------------------------------------------------------------
+    # 1) scrape_reports(): Scrapes reports from the collected report links based on the user configuration.
+    # 2) top_up(): Adds new reports to the existing scraped reports based on the user configuration.
     
-    # The below function serves as the user entry point for the scraper.
-    # It is currently the only function that is not internal (i.e. doesn't start with a _)
-    def scrape_all_reports(self) -> pd.DataFrame:
+    def scrape_reports(self) -> pd.DataFrame:
         """
-        Scrapes all reports from the collected report links.
+        Scrapes reports from the collected report links based on the user configuration of the PFDScraper class instance.
         
         :return: A pandas DataFrame containing one row per scraped report.
         """
         if not self.report_links:
             self._get_report_links()
         
+        # Use a thread pool to concurrently scrape the new report links
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(self._extract_report_info, self.report_links))
             
         # Filter out any failed report extractions 
-        records = [record for record in results if record is not None]
+        reports = [report for report in results if report is not None]
         
         # Create timestamp if parameter is set to True
-        records = pd.DataFrame(records)
+        reports_df = pd.DataFrame(reports)
         
         # Save the reports internally in case the user forgets to assign
-        self.reports = pd.DataFrame(records)
+        self.reports = pd.DataFrame(reports_df)
         
-        return records
+        return reports
 
+
+    def top_up(self) -> pd.DataFrame:
+        """
+        Adds new reports to the existing scraped reports based on the user configuration of the PFDScraper class instance.
+        Duplicate checking is based on the URL as a unique identifier – by default the URL (if include_url is True)
+        or the report ID otherwise.
+        
+        Returns:
+            pd.DataFrame: Updated DataFrame containing both the old and new scraped reports.
+        """
+        # Retrieve the latest report links from the website
+        updated_links = self._get_report_links()
+
+        # Determine which unique key to use for duplicate checking
+        # ...The method will prefer the URL if available; otherwise, fall back to the report ID
+        if self.include_url:
+            unique_key = "URL"
+        elif self.include_id:
+            unique_key = "ID"
+        else:
+            logger.error("No unique identifier available for duplicate checking.\n"
+                         "Ensure include_url or include_id was set to True in instance initialisation.")
+            return self.reports if self.reports is not None else pd.DataFrame()
+
+        # Gather identifiers from already scraped reports
+        if self.reports is not None and unique_key in self.reports.columns:
+            existing_identifiers = set(self.reports[unique_key].tolist())
+        else:
+            existing_identifiers = set()
+
+        # Identify new report links by filtering out duplicates
+        new_links = [link for link in updated_links if link not in existing_identifiers]
+        duplicates_count = len(updated_links) - len(new_links)
+        new_count = len(new_links)
+
+        logger.info("Top-up: %d new report(s) found; %d duplicate(s) not added", new_count, duplicates_count)
+
+        if not new_links:
+            logger.info("No new reports to scrape during top-up.")
+            return self.reports if self.reports is not None else pd.DataFrame()
+
+        # As before, use a thread pool to concurrently scrape the new report links
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            new_results = list(executor.map(self._extract_report_info, new_links))
+
+        # Filter out any failed extractions
+        new_records = [record for record in new_results if record is not None]
+        
+        # If new, add new reports to the existing DataFrame
+        if new_records:
+            new_df = pd.DataFrame(new_records)
+            if self.reports is not None:
+                self.reports = pd.concat([self.reports, new_df], ignore_index=True)
+            else:
+                self.reports = new_df
+        else:
+            logger.info("No new reports were successfully scraped during top-up.")
+
+        return self.reports
 
 
 # -----------------------------------------------------------------------------------------
@@ -1021,12 +1083,11 @@ client = OpenAI(api_key=openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
-    category='alcohol_drug_medication', 
+    category='all', 
     start_page=1, 
     end_page=1, 
-    max_workers=15,
     html_scraping=True,
-    pdf_fallback=False,
+    pdf_fallback=True,
     llm_fallback=False,
     openai_api_key=openai_api_key,
     llm_model="gpt-4o-mini",
@@ -1035,9 +1096,9 @@ scraper = PFDScraper(
     delay_range = None,
     verbose=True,
 )
-reports = scraper.scrape_all_reports()
-reports
-
+scraper.scrape_reports()
+scraper.top_up()
 #scraper.reports
+
 
 #reports.to_csv('../../data/testreports.csv')
