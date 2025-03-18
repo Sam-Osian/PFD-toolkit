@@ -143,7 +143,7 @@ class PFDScraper:
             if openai_client is not None:
                 self.openai_client = openai_client
             elif openai_api_key is not None:
-                self.openai_client = OpenAI(openai_api_key=openai_api_key)
+                self.openai_client = OpenAI(api_key=self.openai_api_key)
             else:
                 raise ValueError("LLM fallback enabled, but neither an API key nor OpenAI client was provided.")
         else:
@@ -222,9 +222,9 @@ class PFDScraper:
         if self.docx_conversion not in ["MicrosoftWord", "LibreOffice", "None"]:
             raise ValueError("docx_conversion must be one of 'MicrosoftWord', 'LibreOffice', or 'None'.")
         
-        # If OpenAI API key is not provided when LLM fallback is enabled
-        if self.llm_fallback and not self.openai_api_key:
-            raise ValueError("OpenAI API key must be provided if LLM fallback is enabled. Please set 'openai_api_key' parameter. \nGet your API key from https://platform.openai.com/.")
+        # If OpenAI API key or client is not provided when LLM fallback is enabled
+        if self.llm_fallback and not self.openai_api_key and not self.openai_client:
+            raise ValueError("OpenAI API Key or Client key must be provided if LLM fallback is enabled. \nPlease set either 'openai_api_key' or 'openai_client' parameters. \nGet your API key from https://platform.openai.com/.")
         
         # If no scrape method is enabled
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
@@ -232,47 +232,47 @@ class PFDScraper:
 
         # If no fields are included
         if not any([self.include_id, self.include_date, self.include_coroner, self.include_area, self.include_receiver, self.include_investigation, self.include_circumstances, self.include_concerns]):
-            raise ValueError("At least one field must be included in the output. Please set one or more of 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', or 'include_concerns' to True.")
+            raise ValueError("At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.")
         
         ### Warnings (code will still run)
         
         # If only html_scraping is enabled
         if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only HTML scraping is enabled. Consider enabling .pdf or LLM fallback for more complete data extraction.")
+            logger.warning("Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.")
         
         # If only pdf_fallback is enabled
         if not self.html_scraping and self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only .pdf fallback is enabled. Consider enabling HTML scraping or LLM fallback for more complete data extraction.")
+            logger.warning("Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.")
             
         # If only llm_fallback is enabled
         if not self.html_scraping and not self.pdf_fallback and self.llm_fallback:
-            logger.warning("Only LLM fallback is enabled. While this is a high-performance option, large API costs may be incurred, especially for large requests. Consider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.")
+            logger.warning("Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.")
         
         # If max_workers is set above 50
         if self.max_workers > 50:
-            logger.warning("max_workers is set to a high value (>50). Depending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between 10 and 50.")
+            logger.warning("max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.")
         
         # If max_workers is set below 10
         if self.max_workers < 10:
-            logger.warning("max_workers is set to a low value (<10). This may result in slower scraping speeds. Consider increasing the value for faster performance. We recommend setting to between 10 and 50.")
+            logger.warning("max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.")
         
         # If max_requests is set above 10
         if self.max_requests > 10:
-            logger.warning("max_requests is set to a high value (>10). This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between 3 and 10.")
+            logger.warning("max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.")
             
         # If max_requests is set below 3
         if self.max_requests < 3:
-            logger.warning("max_requests is set to a low value (<3). This may result in slower scraping speeds. Consider increasing the value for faster performance. We recommend setting to between 3 and 10.")
+            logger.warning("max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.")
 
         # If delay range is set to (0,0)
         if self.delay_range == (0, 0):
-            logger.warning("delay_range has been disabled. This will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to (1,2).")
+            logger.warning("delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).")
         elif self.delay_range[0] < 0.5 and self.delay_range[1] != 0:
-            logger.warning("delay_range is set to a low value (<0.5 seconds). This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).")
+            logger.warning("delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).")
         
         # If delay_range upper bound is set above 5 seconds
         if self.delay_range[1] > 5:
-            logger.warning("delay_range is set to a high value (>5 seconds). This may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).")
+            logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).")
 
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
@@ -1087,7 +1087,7 @@ class PFDScraper:
 
         if not new_links:
             logger.info("No new reports to scrape during top-up.")
-            return base_df if base_df is not None else pd.DataFrame()
+            return None  # Don't return anything if there are no new reports to scrape
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             new_results = list(executor.map(self._extract_report_info, new_links))
@@ -1103,9 +1103,8 @@ class PFDScraper:
         else:
             updated_reports = new_df
 
-        # Update the internal self.reports
+        # Update the internal self.reports if new reports were successfully added
         self.reports = updated_reports
-
         return updated_reports
 
 
@@ -1125,8 +1124,8 @@ scraper = PFDScraper(
     end_page=1, 
     html_scraping=True,
     pdf_fallback=True,
-    llm_fallback=False,
-    openai_api_key=openai_api_key,
+    llm_fallback=True,
+    openai_client = client,
     llm_model="gpt-4o-mini",
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
     include_time_stamp=False,
@@ -1135,7 +1134,7 @@ scraper = PFDScraper(
 )
 scraper.scrape_reports()
 scraper.top_up()
-#scraper.reports
+scraper.reports
 
 
 #reports.to_csv('../../data/testreports.csv')

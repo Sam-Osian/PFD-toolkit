@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pfd_toolkit"
-version = "0.1.10"
+version = "0.1.11"
 description = "A toolkit for scraping and processing Prevention of Future Death (PFD) reports from the UK Judiciary website."
 readme = "README.md"
 license = { file = "LICENCE" }
