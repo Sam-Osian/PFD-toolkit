@@ -3,6 +3,9 @@ import pandas as pd
 from openai import OpenAI
 from dotenv import load_dotenv
 import os
+from tqdm import tqdm
+
+tqdm.pandas() # ...initialising tqdm's pandas integration
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -12,6 +15,8 @@ import os
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
 
+# Set the log level for the 'httpx' library to WARNING to reduce verbosity
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Base prompt template that all prompts will share, with placeholders for field-specific information.
 BASE_PROMPT = """\
@@ -290,7 +295,7 @@ class Cleaner:
         for field_name, flag, column_name, cleaning_func in fields_to_clean:
             if flag:
                 logger.info(f"Cleaning field: {column_name}")
-                cleaned_df[column_name] = cleaned_df[column_name].apply(
+                cleaned_df[column_name] = cleaned_df[column_name].progress_apply( # ...apply changed to .progress_apply for tqdm integration
                     lambda text: self._apply_cleaning(text, cleaning_func)
                 )
         

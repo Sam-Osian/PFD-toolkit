@@ -22,6 +22,8 @@ import random
 import threading
 from itertools import chain
 from datetime import datetime
+from tqdm import tqdm
+from concurrent.futures import as_completed
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -30,6 +32,9 @@ from datetime import datetime
 # -----------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
+
+# Set the log level for the 'httpx' library to WARNING to reduce verbosity
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Define PFDScraper class
 class PFDScraper:
@@ -232,47 +237,47 @@ class PFDScraper:
 
         # If no fields are included
         if not any([self.include_id, self.include_date, self.include_coroner, self.include_area, self.include_receiver, self.include_investigation, self.include_circumstances, self.include_concerns]):
-            raise ValueError("At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.")
+            raise ValueError("At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.\n")
         
         ### Warnings (code will still run)
         
         # If only html_scraping is enabled
         if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.")
+            logger.warning("Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.\n")
         
         # If only pdf_fallback is enabled
         if not self.html_scraping and self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.")
+            logger.warning("Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.\n")
             
         # If only llm_fallback is enabled
         if not self.html_scraping and not self.pdf_fallback and self.llm_fallback:
-            logger.warning("Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.")
+            logger.warning("Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.\n")
         
         # If max_workers is set above 50
         if self.max_workers > 50:
-            logger.warning("max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.")
+            logger.warning("max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.\n")
         
         # If max_workers is set below 10
         if self.max_workers < 10:
-            logger.warning("max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.")
+            logger.warning("max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.\n")
         
         # If max_requests is set above 10
         if self.max_requests > 10:
-            logger.warning("max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.")
+            logger.warning("max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.\n")
             
         # If max_requests is set below 3
         if self.max_requests < 3:
-            logger.warning("max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.")
+            logger.warning("max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.\n")
 
         # If delay range is set to (0,0)
         if self.delay_range == (0, 0):
-            logger.warning("delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).")
+            logger.warning("delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).\n")
         elif self.delay_range[0] < 0.5 and self.delay_range[1] != 0:
-            logger.warning("delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).")
+            logger.warning("delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).\n")
         
         # If delay_range upper bound is set above 5 seconds
         if self.delay_range[1] > 5:
-            logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).")
+            logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).\n")
 
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
@@ -355,7 +360,7 @@ class PFDScraper:
         
         # Use a thread pool to concurrently fetch multiple pages
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = list(executor.map(_fetch_page_links, pages))
+            results = list(tqdm(executor.map(_fetch_page_links, pages), total=len(pages), desc="Fetching pages"))
         
         # Flatten the list of lists into a single list of report URLs -- replaced for loop with chain from itertools
         self.report_links = list(chain.from_iterable(results))
@@ -898,8 +903,6 @@ class PFDScraper:
                 llm_text = response.choices[0].message.content
                 if self.verbose:
                     logger.info("LLM fallback response:\n%s\n\n", llm_text)
-                else:
-                    logger.info("LLM fallback response received.")
 
                 # Parse the LLM response to update only missing fields
                 fallback_date = 'N/A: Not found'
@@ -999,7 +1002,11 @@ class PFDScraper:
         
         # Use a thread pool to concurrently scrape the new report links
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = list(executor.map(self._extract_report_info, self.report_links))
+            futures = [executor.submit(self._extract_report_info, url) for url in self.report_links]
+            results = []
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports"):
+                results.append(future.result())
+            
             
         # Filter out any failed report extractions 
         reports = [report for report in results if report is not None]
@@ -1010,7 +1017,7 @@ class PFDScraper:
         # Save the reports internally in case the user forgets to assign
         self.reports = pd.DataFrame(reports_df)
         
-        return reports
+        return reports_df
 
 
     def top_up(self, old_reports: pd.DataFrame = None) -> pd.DataFrame:
@@ -1090,7 +1097,7 @@ class PFDScraper:
             return None  # Don't return anything if there are no new reports to scrape
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(executor.map(self._extract_report_info, new_links))
+            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up dataframe with new reports..."))
 
         new_records = [record for record in new_results if record is not None]
 
@@ -1121,7 +1128,7 @@ client = OpenAI(api_key=openai_api_key)
 scraper = PFDScraper(
     category='all', 
     start_page=1, 
-    end_page=1, 
+    end_page=3, 
     html_scraping=True,
     pdf_fallback=True,
     llm_fallback=True,
@@ -1130,11 +1137,11 @@ scraper = PFDScraper(
     docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
     include_time_stamp=False,
     delay_range = None,
-    verbose=True,
+    verbose=False
 )
 scraper.scrape_reports()
-scraper.top_up()
-scraper.reports
+#scraper.top_up()
+#scraper.reports
 
 
 #reports.to_csv('../../data/testreports.csv')
