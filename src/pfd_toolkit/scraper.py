@@ -1097,7 +1097,7 @@ class PFDScraper:
             return None  # Don't return anything if there are no new reports to scrape
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up dataframe with new reports..."))
+            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports"))
 
         new_records = [record for record in new_results if record is not None]
 
