@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 import os
 from tqdm import tqdm
 
+from pfd_toolkit.prompts import BASE_PROMPT, PROMPT_CONFIG
+
 tqdm.pandas()  # ...initialising tqdm's pandas integration
 
 # -----------------------------------------------------------------------------
@@ -17,80 +19,6 @@ logging.basicConfig(level=logging.INFO, force=True)
 
 # Set the log level for the 'httpx' library to WARNING to reduce verbosity
 logging.getLogger("httpx").setLevel(logging.WARNING)
-
-# Base prompt template that all prompts will share, with placeholders for field-specific information.
-BASE_PROMPT = """\
-You are an expert in extracting and cleaning specific information from UK Coronial Prevention of Future Death Reports.
-
-Task:
-1. **Extract** only the information related to {field_description}.
-2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content.
-3. **Correct** any misspellings, ensuring the text is in **British English**.
-4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.
-5. **If extraction fails**, return exactly: N/A: Not found (without any additional commentary).
-
-Extra instructions:
-{extra_instructions}
-
-Input Text:
-"""
-
-
-# Dictionary holding field-specific configurations for the prompt
-# The placeholders for the above `BASE_PROMPT` will be 'filled in' using the values below...
-PROMPT_CONFIG = {
-    "Coroner": {
-        "field_description": "the name of the Coroner who presided over the inquest",
-        "field_contents_and_rules": "the name of the Coroner and nothing else",
-        "extra_instructions": (
-            'For example, if the string is "Coroner: Mr. Joe Bloggs", return "Joe Bloggs".\n'
-            'If the string is "Joe Bloggs Senior Coroner for West London", return "Joe Bloggs".\n'
-            'If the string is "Joe Bloggs", just return "Joe Bloggs" (no modification).'
-        ),
-    },
-    "Area": {
-        "field_description": "the area where the inquest took place",
-        "field_contents_and_rules": "only the name of the area and nothing else",
-        "extra_instructions": (
-            'For example, if the string is "Area: West London", return "West London".\n'
-            'If the string is "Hampshire, Portsmouth and Southampton", return it as is.'
-        ),
-    },
-    "Receiver": {
-        "field_description": "the name(s)/organisation(s) of the receiver(s) of the report",
-        "field_contents_and_rules": "only the name(s)/organisation(s) and, if given, their job title(s) and nothing else",
-        "extra_instructions": (
-            "Separate multiple names/organisations with semicolons (;)."
-            "Do not use a numbered list."
-            "Do not separate information with commas or new lines."
-        ),
-    },
-    "InvestigationAndInquest": {
-        "field_description": "the details of the investigation and inquest",
-        "field_contents_and_rules": "only the details of the investigation and inquest—nothing else",
-        "extra_instructions": (
-            "If the string appears to need no cleaning, return it as is."
-            "Change all dates to the format 'YYYY-MM-DD'"
-        ),
-    },
-    "CircumstancesOfDeath": {
-        "field_description": "the circumstances of death",
-        "field_contents_and_rules": "only the circumstances of death—nothing else",
-        "extra_instructions": (
-            "If the string appears to need no cleaning, return it as is."
-            "Change all dates to the format 'YYYY-MM-DD'"
-        ),
-    },
-    "MattersOfConcern": {
-        "field_description": "the matters of concern",
-        "field_contents_and_rules": "only the matters of concern—nothing else",
-        "extra_instructions": (
-            "Remove reference to boiletplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string ending with '...The Matters of Concern are as follows:',"
-            "If the string appears to need no cleaning, return it as is."
-            "Change all dates to the format 'YYYY-MM-DD'"
-        ),
-    },
-}
 
 
 class Cleaner:
@@ -107,12 +35,12 @@ class Cleaner:
         openai_api_key: str = None,
         openai_client: OpenAI = None,
         # Fields to clean
-        Coroner: bool = True,
-        Receiver: bool = True,
-        Area: bool = True,
-        InvestigationAndInquest: bool = True,
-        CircumstancesOfDeath: bool = True,
-        MattersOfConcern: bool = True,
+        coroner: bool = True,
+        receiver: bool = True,
+        area: bool = True,
+        investigation_and_inquest: bool = True,
+        circumstances_of_death: bool = True,
+        matters_of_concern: bool = True,
         # Name of column for each report section; default to the names provided by PFDScraper
         coroner_field: str = "CoronerName",
         area_field: str = "Area",
@@ -129,6 +57,35 @@ class Cleaner:
         concerns_prompt: str = None,
         verbose: bool = False,
     ) -> None:
+        """Create Cleaner object.
+
+        Args:
+            reports (pd.DataFrame) Input DataFrame containing PFD reports.
+            llm_model (str): The llm model name. Defaults to gpt-4o-mini.
+            openai_api_key (str): The openai api key.
+            coroner (bool): Whether or not to clean the coroner field.
+            receiver (bool): Whether or not to clean the receiver field.
+            area (bool): Whether or not to clean the area field.
+            investigation_and_inquest (bool): Whether or not to clean the InvestigationAndInquest field?.
+            circumstances_of_death (bool): Whether or not to clean the CircumstancesOfDeath field.
+            matters_of_concern (bool): Whether or not to clean the MattersOfConcern field.
+
+            coroner_field (str): Name of the coroner field, defaults to 'CoronerName'.
+            area_field (str): Name of the area field, defaults to 'Area'.
+            receiver_field (str): Name of the receiver field, defaults to 'Receiver'.
+            investigation_field (str): Name of the ingestigation field, defaults to 'InvestigationAndInquest'.
+            circumstances_field (str): Name of the  circumstances of death field, defaults to 'CircumstancesOfDeath'.
+            concerns_field (str): Name of the concerns field, defaults to MattersOfConcern.
+
+            coroner_prompt (str): Coroner prompt override. Defaults to hardcoded version.
+            area_prompt (str): Area prompt override. Defaults to hardcoded version.
+            receiver_prompt (str): Receiver prompt override. Defaults to hardcoded version.
+            investigation_prompt (str): Investigation prompt override. Defaults to hardcoded version.
+            circumstances_prompt (str): Circumstances prompt override. Defaults to hardcoded version.
+            concerns_prompt (str): Concerns prompt override. Defaults to hardcoded version.
+
+            verbose (bool): Whether or not to verbosely run pfd-toolkit. Defaults to False.
+        """
 
         self.reports = reports
         self.llm_model = llm_model
@@ -143,12 +100,12 @@ class Cleaner:
         else:
             raise ValueError("Either openai_client or openai_api_key must be provided.")
 
-        self.Coroner = Coroner
-        self.Receiver = Receiver
-        self.Area = Area
-        self.InvestigationAndInquest = InvestigationAndInquest
-        self.CircumstancesOfDeath = CircumstancesOfDeath
-        self.MattersOfConcern = MattersOfConcern
+        self.coroner = coroner
+        self.receiver = receiver
+        self.area = area
+        self.investigation_and_inquest = investigation_and_inquest
+        self.circumstances_of_death = circumstances_of_death
+        self.matters_of_concern = matters_of_concern
 
         self.coroner_field = coroner_field
         self.area_field = area_field
@@ -202,15 +159,15 @@ class Cleaner:
 
         # If the input DataFrame does not contain the necessary columns
         required_columns = []
-        if self.Coroner:
+        if self.coroner:
             required_columns.append("CoronerName")
-        if self.Receiver:
+        if self.receiver:
             required_columns.append("Receiver")
-        if self.InvestigationAndInquest:
+        if self.investigation_and_inquest:
             required_columns.append("InvestigationAndInquest")
-        if self.CircumstancesOfDeath:
+        if self.circumstances_of_death:
             required_columns.append("CircumstancesOfDeath")
-        if self.MattersOfConcern:
+        if self.matters_of_concern:
             required_columns.append("MattersOfConcern")
         missing_columns = [
             col for col in required_columns if col not in reports.columns
@@ -236,7 +193,9 @@ class Cleaner:
         try:
             response = self.openai_client.chat.completions.create(
                 model=self.llm_model,
-                messages=[{"role": "system", "content": prompt},],
+                messages=[
+                    {"role": "system", "content": prompt},
+                ],
                 temperature=0.0,
             )
             # Extract the cleaned string from the response
@@ -293,7 +252,7 @@ class Cleaner:
     def clean_reports(self) -> pd.DataFrame:
         """
         Clean the text fields in a DataFrame of Prevention of Future Death Reports.
-        
+
         Returns:
             A new DataFrame with the cleaned fields.
         """
@@ -306,24 +265,24 @@ class Cleaner:
         # 3. Column Name in input dataframe,
         # 4. Cleaning Function
         fields_to_clean = [
-            ("Coroner", self.Coroner, self.coroner_field, self._clean_coroner),
-            ("Area", self.Area, self.area_field, self._clean_area),
-            ("Receiver", self.Receiver, self.receiver_field, self._clean_receiver),
+            ("Coroner", self.coroner, self.coroner_field, self._clean_coroner),
+            ("Area", self.area, self.area_field, self._clean_area),
+            ("Receiver", self.receiver, self.receiver_field, self._clean_receiver),
             (
                 "InvestigationAndInquest",
-                self.InvestigationAndInquest,
+                self.investigation_and_inquest,
                 self.investigation_field,
                 self._clean_investigation,
             ),
             (
                 "CircumstancesOfDeath",
-                self.CircumstancesOfDeath,
+                self.circumstances_of_death,
                 self.circumstances_field,
                 self._clean_circumstances,
             ),
             (
                 "MattersOfConcern",
-                self.MattersOfConcern,
+                self.matters_of_concern,
                 self.concerns_field,
                 self._clean_concerns,
             ),
@@ -357,12 +316,12 @@ reports = pd.read_csv("../../data/testreports.csv")
 cleaner = Cleaner(
     reports=reports,
     openai_api_key=openai_api_key,
-    Coroner=False,
-    Receiver=False,
-    Area=False,
-    InvestigationAndInquest=False,
-    CircumstancesOfDeath=False,
-    MattersOfConcern=True,
+    coroner=False,
+    receiver=False,
+    area=False,
+    investigation_and_inquest=False,
+    circumstances_of_death=False,
+    matters_of_concern=True,
 )
 clean_reports = cleaner.clean_reports()
 clean_reports
