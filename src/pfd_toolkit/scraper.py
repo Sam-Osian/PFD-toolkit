@@ -637,14 +637,115 @@ class PFDScraper:
         return "N/A: Not found"
     
     # -----------------------------------------------------------------------------
-    # Core report extraction logic
+    # LLM Report Extraction Logic
     # ----------------------------------------------------------------------------- 
-    # This pieces together the above functions to extract all report information from a given URL.
-    # It serves as the internal core of the scraper.
+
+    def _fetch_pdf_bytes(self, report_url: str) -> bytes:
+        """
+        Helper to fetch the .pdf bytes given a report URL.
+        """
+        try:
+            page_response = self.session.get(report_url)
+            page_response.raise_for_status()
+            soup = BeautifulSoup(page_response.content, 'html.parser')
+            pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
+            if pdf_links:
+                pdf_link = pdf_links[0]
+                pdf_response = self.session.get(pdf_link)
+                pdf_response.raise_for_status()
+                return pdf_response.content
+            else:
+                logger.error("No PDF link found for report at %s", report_url)
+                return None
+        except Exception as e:
+            logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
+            return None
+
+
+    def _call_llm_fallback(self, pdf_bytes: bytes, missing_fields: dict) -> dict:
+        """
+        Helper that converts pdf_bytes to images, builds a prompt based on missing_fields,
+        calls the LLM API, and parses the response.
+        
+        Returns a dictionary of fallback updates.
+        """
+        base64_images = [] # ...OpenAI requires images to be base64 encoded
+        if pdf_bytes:
+            try:
+                images = convert_from_bytes(pdf_bytes)
+                for img in images:
+                    buffered = BytesIO()
+                    img.save(buffered, format="JPEG")
+                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
+                    base64_images.append(img_str)
+            except Exception as e:
+                logger.error("Error converting PDF to images: %s", e)
+        
+        prompt = (
+            "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
+            "Please extract the following section(s):\n"
+        )
+        for field, instruction in missing_fields.items():
+            prompt += f"\n{field}: {instruction}\n"
+        prompt += (
+            "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
+            "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for that section.\n"
+            "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
+            "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
+            "Do *not* change the section title(s) from the above format.\n"
+        )
+        if self.verbose:
+            logger.info("LLM prompt:\n\n%s", prompt)
+        
+        messages = [{"type": "text", "text": prompt}]
+        for b64_img in base64_images:
+            messages.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
+            })
+        try:
+            response = self.openai_client.chat.completions.create(
+                model=self.llm_model,
+                messages=[{"role": "user", "content": messages}],
+            )
+            llm_text = response.choices[0].message.content
+            if self.verbose:
+                logger.info("LLM fallback response:\n%s\n\n", llm_text)
+        except Exception as e:
+            logger.error("LLM fallback failed: %s", e)
+            return {}
+        
+        fallback_updates = {}
+        for line in llm_text.splitlines():
+            line_strip = line.strip()
+            line_lower = line_strip.lower()
+            if line_lower.startswith("date of report:"):
+                fallback_updates["Date"] = line_strip.split(":", 1)[1].strip()
+            elif line_lower.startswith("coroner's name:"):
+                fallback_updates["CoronerName"] = line_strip.split(":", 1)[1].strip()
+            elif line_lower.startswith("area:"):
+                fallback_updates["Area"] = line_strip.split(":", 1)[1].strip()
+            elif line_lower.startswith("receiver:"):
+                fallback_updates["Receiver"] = line_strip.split(":", 1)[1].strip()
+            elif line_lower.startswith("investigation and inquest:"):
+                fallback_updates["InvestigationAndInquest"] = line_strip.split(":", 1)[1].strip()
+            elif line_lower.startswith("circumstances of death:"):
+                fallback_updates["CircumstancesOfDeath"] = line_strip.split(":", 1)[1].strip()
+            elif line_lower.startswith("coroner's concerns:"):
+                fallback_updates["MattersOfConcern"] = line_strip.split(":", 1)[1].strip()
+        if "Date" in fallback_updates and fallback_updates["Date"] != "N/A: Not found":
+            try:
+                parsed_date = parser.parse(fallback_updates["Date"], fuzzy=True)
+                fallback_updates["Date"] = parsed_date.strftime("%Y-%m-%d")
+            except Exception as e:
+                logger.error("LLM fallback: could not parse date '%s': %s", fallback_updates["Date"], e)
+        return fallback_updates
+
+    
     
     def _extract_report_info(self, url: str) -> dict:
         """
-        Internal function to extract metadata and text from a PFD report webpage.
+        Extract metadata and text from a PFD report webpage.
         
         Process:
           1. Download the webpage and parse it using BeautifulSoup.
@@ -739,7 +840,7 @@ class PFDScraper:
                                             .replace("Sent to:", "") \
                                             .strip()
                                             
-                if len(receiver) < 5 or len(receiver) > 30:
+                if len(receiver) < 5 or len(receiver) > 20:
                     receiver = 'N/A: Not found'
                             
             
@@ -752,7 +853,7 @@ class PFDScraper:
                                             .replace("Coroner name:", "") \
                                             .replace("Coroner's name:", "") \
                                             .strip()
-                if len(coroner) < 5 or len(coroner) > 30:
+                if len(coroner) < 5 or len(coroner) > 20:
                     coroner = 'N/A: Not found'
             
             
@@ -916,132 +1017,29 @@ class PFDScraper:
                 missing_fields["Circumstances of Death"] = "[The text from the Circumstances of Death section.]"
             if self.include_concerns and concerns == "N/A: Not found":
                 missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns section.]"
-
             if missing_fields:
-                if self.verbose:
-                    logger.debug(
-                        f"Initiating LLM fallback for URL: {url}. Missing fields: {missing_fields}"
-                    )
-                logger.info("Attempting LLM fallback for %s", url)
-
-                # Reuse previously downloaded .pdf bytes if available
+                # Attempt to use cached PDF bytes or re-fetch if needed
                 pdf_bytes = getattr(self, '_last_pdf_bytes', None)
                 if pdf_bytes is None:
-                    try:
-                        pdf_response = self.session.get(report_link)
-                        pdf_response.raise_for_status()
-                        pdf_bytes = pdf_response.content
-                        self._last_pdf_bytes = pdf_bytes
-                    except Exception as e:
-                        logger.error("Failed to fetch .pdf for image conversion: %s", e)
-                        pdf_bytes = None
+                    pdf_bytes = self._fetch_pdf_bytes(report_link)
 
-                base64_images = [] # ...OpenAI requires base64 encoded images
-                # Convert the .pdf to images using pdf2image
-                # Each page of the .pdf is converted to a separate image
-                if pdf_bytes:
-                    try:
-                        images = convert_from_bytes(pdf_bytes)
-                    except Exception as e:
-                        logger.error("Error converting .pdf to images: %s", e)
-                        images = []
-                    for img in images:
-                        buffered = BytesIO()
-                        img.save(buffered, format="JPEG")
-                        img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                        base64_images.append(img_str)
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
+                if fallback_updates:
+                    if self.include_date and date == "N/A: Not found" and "Date" in fallback_updates:
+                        date = fallback_updates["Date"]
+                    if self.include_coroner and coroner == "N/A: Not found" and "CoronerName" in fallback_updates:
+                        coroner = fallback_updates["CoronerName"]
+                    if self.include_area and area == "N/A: Not found" and "Area" in fallback_updates:
+                        area = fallback_updates["Area"]
+                    if self.include_receiver and receiver == "N/A: Not found" and "Receiver" in fallback_updates:
+                        receiver = fallback_updates["Receiver"]
+                    if self.include_investigation and investigation == "N/A: Not found" and "InvestigationAndInquest" in fallback_updates:
+                        investigation = fallback_updates["InvestigationAndInquest"]
+                    if self.include_circumstances and circumstances == "N/A: Not found" and "CircumstancesOfDeath" in fallback_updates:
+                        circumstances = fallback_updates["CircumstancesOfDeath"]
+                    if self.include_concerns and concerns == "N/A: Not found" and "MattersOfConcern" in fallback_updates:
+                        concerns = fallback_updates["MattersOfConcern"]
 
-                prompt = (
-                    "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
-                    "Please extract the following section(s):\n"
-                )
-                # Add missing fields to the prompt
-                for field, instruction in missing_fields.items():
-                    prompt += f"\n{field}: {instruction}\n"
-                # Additional instructions for the LLM
-                prompt += (
-                    "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
-                    "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for that section.\n"
-                    "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
-                    "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
-                    "Do *not* change the section title(s) from the above format.\n"
-                )
-                # If verbose, print out the prompt for debugging
-                if self.verbose:
-                    logger.info("LLM prompt:\n\n%s", prompt)
-
-                # Construct the messages to send to the LLM (first the prompt text then each image)
-                messages = [{"type": "text", "text": prompt}]
-                for b64_img in base64_images:
-                    messages.append({
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-                    })
-
-                response = self.openai_client.chat.completions.create(
-                    model=self.llm_model,
-                    messages=[{"role": "user", "content": messages}],
-                )
-                # Extract the LLM response
-                llm_text = response.choices[0].message.content
-                if self.verbose:
-                    logger.info("LLM fallback response:\n%s\n\n", llm_text)
-
-                # Parse the LLM response to update only missing fields
-                fallback_date = 'N/A: Not found'
-                fallback_coroner = 'N/A: Not found'
-                fallback_area = 'N/A: Not found'
-                fallback_receiver = 'N/A: Not found'
-                fallback_investigation = 'N/A: Not found'
-                fallback_circumstances = 'N/A: Not found'
-                fallback_concerns = 'N/A: Not found'
-
-                # NEED TO CHANGE
-                # The below looks for lines that start with the field name and then extracts the text after the colon.
-                # This is problematic, because the LLM does not always output exactly as instructued
-                # It also requires the LLM to output everything on a single line, which is doesn't currently do.
-                # Structured outputs would (hopefully!) be better, but this requires a different approach.
-                for line in llm_text.splitlines():
-                    line_strip = line.strip()
-                    line_lower = line_strip.lower()
-                    if line_lower.startswith("date of report:"):
-                        fallback_date = line_strip.split(":", 1)[1].strip()
-                    elif line_lower.startswith("coroner's name:"):
-                        fallback_coroner = line_strip.split(":", 1)[1].strip()
-                    elif line_lower.startswith("area:"):
-                        fallback_area = line_strip.split(":", 1)[1].strip()
-                    elif line_lower.startswith("receiver:"):
-                        fallback_receiver = line_strip.split(":", 1)[1].strip()
-                    elif line_lower.startswith("investigation and inquest:"):
-                        fallback_investigation = line_strip.split(":", 1)[1].strip()
-                    elif line_lower.startswith("circumstances of death:"):
-                        fallback_circumstances = line_strip.split(":", 1)[1].strip()
-                    elif line_lower.startswith("coroner's concerns:"):
-                        fallback_concerns = line_strip.split(":", 1)[1].strip()
-
-                # Parse the date into YYYY-MM_DD format
-                if fallback_date != 'N/A: Not found':
-                    try:
-                        parsed_date = parser.parse(fallback_date, fuzzy=True)
-                        fallback_date = parsed_date.strftime("%Y-%m-%d")
-                    except Exception as e:
-                        logger.error("LLM fallback: could not parse date '%s': %s", fallback_date, e)
-
-                # Update each field **only** if the HTML/.pdf extraction failed to find the information
-                if self.include_date and date == 'N/A: Not found':
-                    date = fallback_date
-                if self.include_coroner and coroner == 'N/A: Not found':
-                    coroner = fallback_coroner
-                if self.include_area and area == 'N/A: Not found':
-                    area = fallback_area
-                if self.include_receiver and receiver == 'N/A: Not found':
-                    receiver = fallback_receiver
-                if self.include_investigation and investigation == 'N/A: Not found':
-                    investigation = fallback_investigation
-                if self.include_circumstances and circumstances == 'N/A: Not found':
-                    circumstances = fallback_circumstances
-                if self.include_concerns and concerns == 'N/A: Not found':
-                    concerns = fallback_concerns
 
 
         # Return the extracted report information
@@ -1235,12 +1233,12 @@ client = OpenAI(api_key=openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
-    category='accident_work_safety', 
-    date_from="2020-01-01",
-    date_to="2023-02-07",
+    category='all', 
+    date_from="2025-03-10",
+    date_to="2025-03-19",
     html_scraping=True,
-    pdf_fallback=False,
-    llm_fallback=False,
+    pdf_fallback=True,
+    llm_fallback=True,
     openai_client = client,
     llm_model="gpt-4o-mini",
     #docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
@@ -1249,8 +1247,8 @@ scraper = PFDScraper(
     verbose=False
 )
 scraper.scrape_reports()
-scraper.top_up(date_to="2025-03-19")
-#scraper.reports
+#scraper.top_up(date_to="2025-03-19")
+scraper.reports
 
 
 #reports.to_csv('../../data/testreports.csv')
