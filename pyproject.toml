@@ -10,7 +10,7 @@ authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
   { name = "Jonathan Pytches", email = "Search-me@on-Linkedin.co.uk" }
 ]
-license = { file = "LICENSE" }
+license = { file = "LICENCE" }
 classifiers = [
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.8",
