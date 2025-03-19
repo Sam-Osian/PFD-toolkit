@@ -408,7 +408,7 @@ class PFDScraper:
         links = soup.find_all('a', class_='card__link')
         return [link.get('href') for link in links if link.get('href')]
     
-    def _get_report_links(self) -> list:
+    def get_report_links(self) -> list:
         """
         Dynamically collects all PFD report links from consecutive pages until a page returns no new links.
         
@@ -440,7 +440,7 @@ class PFDScraper:
             return 
         
         logger.info("Total collected report links: %d", len(self.report_links))
-        return self.report_links
+        #return self.report_links
 
     # -----------------------------------------------------------------------------
     # Report extraction logic
@@ -1081,7 +1081,7 @@ class PFDScraper:
         :return: A pandas DataFrame containing one row per scraped report.
         """
         if not self.report_links:
-            self._get_report_links()
+            self.get_report_links()
         
         # Use a thread pool to concurrently scrape the new report links
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
@@ -1174,7 +1174,7 @@ class PFDScraper:
                 raise ValueError(f"Required columns missing from the provided DataFrame: {missing_cols}")
 
         # Retrieve the latest report links from the website.
-        updated_links = self._get_report_links()
+        updated_links = self.get_report_links()
 
         # Determine which unique key to use for duplicate checking
         if self.include_url:
@@ -1234,7 +1234,7 @@ client = OpenAI(api_key=openai_api_key)
 # Run the scraper! :D
 scraper = PFDScraper(
     category='accident_work_safety', 
-    date_from="2023-01-01",
+    date_from="2020-01-01",
     date_to="2025-02-07",
     html_scraping=True,
     pdf_fallback=True,
@@ -1246,9 +1246,11 @@ scraper = PFDScraper(
     delay_range = None,
     verbose=False
 )
-#scraper.scrape_reports()
-scraper.top_up(date_to="2025-03-30")
-scraper.reports
+scraper.scrape_reports()
+#scraper.top_up(date_to="2025-03-30")
+#scraper.reports
 
 
 #reports.to_csv('../../data/testreports.csv')
+
+#scraper.get_report_links()
