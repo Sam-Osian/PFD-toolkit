@@ -1103,7 +1103,7 @@ class PFDScraper:
         return reports_df
 
 
-    def top_up(self, old_reports: pd.DataFrame = None) -> pd.DataFrame:
+    def top_up(self, old_reports: pd.DataFrame = None, date_from: str = None, date_to: str = None) -> pd.DataFrame:
         """
         Adds new reports to the existing scraped reports based on the user configuration of the PFDScraper class instance (self).
         Duplicate checking is based on the URL as a unique identifier – by default the URL (if include_url is True)
@@ -1112,10 +1112,34 @@ class PFDScraper:
         Parameters:
             old_reports (pd.DataFrame): Optional DataFrame containing previously scraped reports. If not supplied,
                                          the internal self.reports will be used.
+            date_from (str): Optional new start date in YYYY-MM-DD format.
+            date_to (str): Optional new end date in YYYY-MM-DD format.
         
         Returns:
             pd.DataFrame: Updated DataFrame containing both the old and new scraped reports.
         """
+        
+        logger.info("Attempting to 'top up' the existing reports with new data.")
+        
+        # Update the date range if new parameters are provided
+        if date_from is not None or date_to is not None:
+            new_date_from = parser.parse(date_from) if date_from is not None else self.date_from
+            new_date_to = parser.parse(date_to) if date_to is not None else self.date_to
+            
+            if new_date_from > new_date_to:
+                raise ValueError("date_from must be before date_to.")
+            
+            self.date_from = new_date_from
+            self.date_to = new_date_to
+            self.date_params = {
+                "after_day": self.date_from.day,
+                "after_month": self.date_from.month,
+                "after_year": self.date_from.year,
+                "before_day": self.date_to.day,
+                "before_month": self.date_to.month,
+                "before_year": self.date_to.year,
+            }
+        
         # Use the provided DataFrame if supplied, or fall back to the internal self.reports
         base_df = old_reports if old_reports is not None else self.reports
 
@@ -1222,8 +1246,8 @@ scraper = PFDScraper(
     delay_range = None,
     verbose=False
 )
-scraper.scrape_reports()
-scraper.top_up()
+#scraper.scrape_reports()
+scraper.top_up(date_to="2025-03-30")
 scraper.reports
 
 
