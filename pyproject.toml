@@ -8,7 +8,7 @@ version = "0.1.17"
 description = "A toolkit for scraping and processing Prevention of Future Death (PFD) reports from the UK Judiciary website."
 authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
-  { name = "Jonathan Pytches", email = "Search me on Linkedin" }
+  { name = "Jonathan Pytches", email = "Search-me@on-Linkedin.co.uk" }
 ]
 license = { file = "LICENSE" }
 classifiers = [
