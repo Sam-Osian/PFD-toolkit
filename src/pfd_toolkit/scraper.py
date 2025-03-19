@@ -440,7 +440,7 @@ class PFDScraper:
             return 
         
         logger.info("Total collected report links: %d", len(self.report_links))
-        #return self.report_links
+        return self.report_links
 
     # -----------------------------------------------------------------------------
     # Report extraction logic
@@ -1175,7 +1175,7 @@ class PFDScraper:
 
         # Retrieve the latest report links from the website.
         updated_links = self.get_report_links()
-
+        
         # Determine which unique key to use for duplicate checking
         if self.include_url:
             unique_key = "URL"
@@ -1197,7 +1197,9 @@ class PFDScraper:
         duplicates_count = len(updated_links) - len(new_links)
         new_count = len(new_links)
         
-        logger.info("Top-up: %d new report(s) found; %d duplicate(s) not added", new_count, duplicates_count)
+        
+        
+        logger.info("Top-up: %d new report(s) found; %d duplicate(s) which won't be added", new_count, duplicates_count)
 
         if not new_links:
             logger.info("No new reports to scrape during top-up.")
@@ -1235,9 +1237,9 @@ client = OpenAI(api_key=openai_api_key)
 scraper = PFDScraper(
     category='accident_work_safety', 
     date_from="2020-01-01",
-    date_to="2025-02-07",
+    date_to="2023-02-07",
     html_scraping=True,
-    pdf_fallback=True,
+    pdf_fallback=False,
     llm_fallback=False,
     openai_client = client,
     llm_model="gpt-4o-mini",
@@ -1247,7 +1249,7 @@ scraper = PFDScraper(
     verbose=False
 )
 scraper.scrape_reports()
-#scraper.top_up(date_to="2025-03-30")
+scraper.top_up(date_to="2025-03-19")
 #scraper.reports
 
 
