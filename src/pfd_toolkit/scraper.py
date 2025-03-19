@@ -1071,6 +1071,8 @@ class PFDScraper:
     # -----------------------------------------------------------------------------------------
     # 1) scrape_reports(): Scrapes reports from the collected report links based on the user configuration.
     # 2) top_up(): Adds new reports to the existing scraped reports based on the user configuration.
+    # 3) run_llm_fallback(): Runs the LLM fallback. This is a separate method to allow the user to run this
+    #                        separately if needed.
     
     def scrape_reports(self) -> pd.DataFrame:
         """
@@ -1195,8 +1197,6 @@ class PFDScraper:
         duplicates_count = len(updated_links) - len(new_links)
         new_count = len(new_links)
         
-        
-        
         logger.info("Top-up: %d new report(s) found; %d duplicate(s) which won't be added", new_count, duplicates_count)
 
         if not new_links:
@@ -1222,7 +1222,72 @@ class PFDScraper:
         return updated_reports
 
 
+    def run_llm_fallback(self, reports_df: pd.DataFrame = None):
+        """ 
+        Runs the LLM fallback on already scraped reports that have at least one missing field.
+        For each report (row) where any enabled field has the value "N/A: Not found", it will
+        re-fetch the .pdf and update those missing fields.
+        
+        Parameters:
+            reports_df (pd.DataFrame): Optional DataFrame of scraped reports. If not provided,
+                                       self.reports will be used.
+                                       
+        Returns:
+            pd.DataFrame: The updated DataFrame with fallback values filled in.
+        """
+        
+        if reports_df is None:
+            if self.reports is None:
+                raise ValueError("No scraped reports found. Please run scrape_reports() first.")
+            reports_df = self.reports.copy()
+        
+        # Iterate over each report row in the DataFrame with tqdm progress bar
+        
+        for idx, row in tqdm(reports_df.iterrows(), total=len(reports_df), desc="Running LLM Fallback"):
+            missing_fields = {}
+            if self.include_date and row.get("Date", "") == "N/A: Not found":
+                missing_fields["date of report"] = "[Date of the report, not the death]"
+            if self.include_coroner and row.get("CoronerName", "") == "N/A: Not found":
+                missing_fields["coroner's name"] = "[Name of the coroner. Provide the name only.]"
+            if self.include_area and row.get("Area", "") == "N/A: Not found":
+                missing_fields["area"] = "[Area/location of the Coroner. Provide the location itself only.]"
+            if self.include_receiver and row.get("Receiver", "") == "N/A: Not found":
+                missing_fields["receiver"] = "[Name or names of the recipient(s) as provided in the report.]"
+            if self.include_investigation and row.get("InvestigationAndInquest", "") == "N/A: Not found":
+                missing_fields["investigation and inquest"] = "[The text from the Investigation/Inquest section.]"
+            if self.include_circumstances and row.get("CircumstancesOfDeath", "") == "N/A: Not found":
+                missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
+            if self.include_concerns and row.get("MattersOfConcern", "") == "N/A: Not found":
+                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section.]"
+            
+            if missing_fields:
+                report_url = row.get("URL")
+                if report_url:
+                    pdf_bytes = self._fetch_pdf_bytes(report_url)
+                else:
+                    pdf_bytes = None
 
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
+                # Update the dataframe row with any fallback values that were returned.
+                if "Date" in fallback_updates:
+                    reports_df.at[idx, "Date"] = fallback_updates["Date"]
+                if "CoronerName" in fallback_updates:
+                    reports_df.at[idx, "CoronerName"] = fallback_updates["CoronerName"]
+                if "Area" in fallback_updates:
+                    reports_df.at[idx, "Area"] = fallback_updates["Area"]
+                if "Receiver" in fallback_updates:
+                    reports_df.at[idx, "Receiver"] = fallback_updates["Receiver"]
+                if "InvestigationAndInquest" in fallback_updates:
+                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["InvestigationAndInquest"]
+                if "CircumstancesOfDeath" in fallback_updates:
+                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["CircumstancesOfDeath"]
+                if "MattersOfConcern" in fallback_updates:
+                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["MattersOfConcern"]
+        
+        # Update the internal reports attribute and return the updated DataFrame.
+        self.reports = reports_df.copy()
+        return reports_df
+        
 # -----------------------------------------------------------------------------------------
 # TESTING
 
@@ -1233,12 +1298,12 @@ client = OpenAI(api_key=openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
-    category='all', 
+    category='suicide', 
     date_from="2025-03-10",
     date_to="2025-03-19",
     html_scraping=True,
     pdf_fallback=True,
-    llm_fallback=True,
+    llm_fallback=False,
     openai_client = client,
     llm_model="gpt-4o-mini",
     #docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
@@ -1247,6 +1312,7 @@ scraper = PFDScraper(
     verbose=False
 )
 scraper.scrape_reports()
+scraper.run_llm_fallback()
 #scraper.top_up(date_to="2025-03-19")
 scraper.reports
 
