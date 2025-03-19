@@ -53,8 +53,8 @@ class PFDScraper:
         
         # Web page logic
         category: str = 'all',
-        start_page: int = 1,
-        end_page: int = 559,
+        date_from: str = "2000-01-01",
+        date_to: str = "2030-01-01",
         
         # Threading and request logic
         max_workers: int = 10,
@@ -93,8 +93,8 @@ class PFDScraper:
         Initialises the scraper.
         
         :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all' (default), 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
-        :param start_page: The first page to scrape.
-        :param end_page: The last page to scrape.
+        :param date_from: Only reports published on or after this date will be scraped.
+        :param date_to: Only reports published on or before this date will be scraped.
         :param max_workers: The total number of concurrent threads the scraper can use for fetching data across all pages.
         :param max_requests: Maximum number of requests per domain to avoid IP address block.
         :param delay_range: None, or a tuple of two integers representing the range of seconds to delay between requests. Default is (1, 2) for a random delay between 1 and 2 seconds.
@@ -108,8 +108,22 @@ class PFDScraper:
         :param verbose: Whether to print verbose output.
         """
         self.category = category.lower()
-        self.start_page = start_page
-        self.end_page = end_page
+        
+        # Parsing dates into datetime objects
+        self.date_from = parser.parse(date_from)
+        self.date_to = parser.parse(date_to)
+        
+        # Storing the parsed date parts for the URL formatting that comes later
+        self.date_params = {
+            "after_day": self.date_from.day,
+            "after_month": self.date_from.month,
+            "after_year": self.date_from.year,
+            "before_day": self.date_to.day,
+            "before_month": self.date_to.month,
+            "before_year": self.date_to.year,
+        }
+        
+        self.start_page = 1
         
         self.max_workers = max_workers
         self.max_requests = max_requests
@@ -156,27 +170,74 @@ class PFDScraper:
         
         
         # Define URL templates for different PFD categories.
-        # ...Some categories (like 'all' and 'suicide') have unique URL formats.
+        # ...Some categories (like 'all' and 'suicide') have unique URL formats, which is why we're specifying them individually
+        
         category_templates = {
-            "all": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/",
-            "suicide": "https://www.judiciary.uk/prevention-of-future-death-reports/page/{page}/?s&pfd_report_type=suicide-from-2015",
-            "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths",
-            "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths",
-            "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths",
-            "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015",
-            "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths",
-            "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards",
-            "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths",
-            "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths",
-            "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths",
-            "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths",
-            "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths",
-            "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths",
-            "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths",
-            "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths",
-            "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards",
-            "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths",
+            "all": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type&post_type=pfd&order=relevance"
+                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "suicide": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=suicide-from-2015&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths&post_type=pfd&order=relevance"
+                                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths&post_type=pfd&order=relevance"
+                                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths&post_type=pfd&order=relevance"
+                        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015&post_type=pfd&order=relevance"
+                        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths&post_type=pfd&order=relevance"
+                                        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                                        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards&post_type=pfd&order=relevance"
+                                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths&post_type=pfd&order=relevance"
+                            "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                            "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths&post_type=pfd&order=relevance"
+                            "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                            "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths&post_type=pfd&order=relevance"
+                                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
+            "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths&post_type=pfd&order=relevance"
+                    "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+                    "&before-day={before_day}&before-month={before_month}&before-year={before_year}"
         }
+
+        
+        if self.category in category_templates:
+            self.page_template = category_templates[self.category]
+        else:
+            valid_options = ", ".join(sorted(category_templates.keys()))
+            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
+        
+        # Set pagination parameter
+        self.start_page = 1
         
         # Normalise delay_range if set to 0 or None
         if self.delay_range is None or self.delay_range == 0:
@@ -195,6 +256,10 @@ class PFDScraper:
             valid_options = ", ".join(sorted(category_templates.keys()))
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
         
+        # If date_from is after date_to
+        if self.date_from > self.date_to:
+            raise ValueError("date_from must be before date_to.")
+        
         # If max_workers is set to 0 or a negative number
         if self.max_workers <= 0:
             raise ValueError("max_workers must be a positive integer.")
@@ -202,18 +267,6 @@ class PFDScraper:
         # If max_requests is set to 0 or a negative number
         if self.max_requests <= 0:
             raise ValueError("max_requests must be a positive integer.")
-        
-        # If start_page is set to 0 or a negative number
-        if self.start_page <= 0:
-            raise ValueError("start_page must be a positive integer.")
-        
-        # If end_page is set to 0 or a negative number
-        if self.end_page <= 0:
-            raise ValueError("end_page must be a positive integer.")
-        
-        # If end_page is less than start_page
-        if self.end_page < self.start_page:
-            raise ValueError("end_page must be greater than or equal to start_page.")
         
         # If delay_range is not a tuple of two numbers (int or float)
         if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, (int, float)) for i in self.delay_range):
@@ -282,23 +335,32 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
         # -----------------------------------------------------------------------------
-        # Log all initialisation parameters
+
         if verbose:
             logger.info(
                 "\nPFDScraper initialised with parameters:\n "
-                f"category='{self.category}',\n "
-                f"start_page={self.start_page},\n "
-                f"end_page={self.end_page},\n "
-                f"max_workers={self.max_workers},\n "
-                f"max_requests={self.max_requests},\n "
-                f"delay_range={self.delay_range},\n "
-                f"html_scraping={self.html_scraping},\n "
-                f"pdf_fallback={self.pdf_fallback},\n "
-                f"llm_fallback={self.llm_fallback},\n "
-                f"openai_api_key={'provided' if self.openai_api_key else 'not provided'},\n " # ...Preventing the API key from being printed
-                f"llm_model='{self.llm_model}',\n "
-                f"docx_conversion='{self.docx_conversion}',\n "
-                f"verbose={self.verbose}"
+                f"Category: {self.category}\n "
+                f"Date Range: {self.date_from} to {self.date_to}\n "
+                f"Max Workers: {self.max_workers}\n "
+                f"Max Requests: {self.max_requests}\n "
+                f"Delay Range: {self.delay_range}\n "
+                f"HTML Scraping: {self.html_scraping}\n "
+                f"PDF Fallback: {self.pdf_fallback}\n "
+                f"LLM Fallback: {self.llm_fallback}\n "
+                f"OpenAI API Key Provided: {'Yes' if self.openai_api_key else 'No'}\n " # Hide the API key 
+                f"LLM Model: {self.llm_model}\n "
+                f"Docx Conversion: {self.docx_conversion}\n "
+                f"Include URL: {'Yes' if self.include_url else 'No'}\n "
+                f"Include ID: {'Yes' if self.include_id else 'No'}\n "
+                f"Include Date: {'Yes' if self.include_date else 'No'}\n "
+                f"Include Coroner: {'Yes' if self.include_coroner else 'No'}\n "
+                f"Include Area: {'Yes' if self.include_area else 'No'}\n "
+                f"Include Receiver: {'Yes' if self.include_receiver else 'No'}\n "
+                f"Include Investigation: {'Yes' if self.include_investigation else 'No'}\n "
+                f"Include Circumstances: {'Yes' if self.include_circumstances else 'No'}\n "
+                f"Include Concerns: {'Yes' if self.include_concerns else 'No'}\n "
+                f"Include Time Stamp: {'Yes' if self.include_time_stamp else 'No'}\n "
+                f"Verbose: {'Yes' if self.verbose else 'No'}\n "
     )
         
         # -----------------------------------------------------------------------------
@@ -319,8 +381,11 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         self._id_pattern = re.compile(r'(\d{4}-\d{4})')
         
-       
-    
+        
+    # -----------------------------------------------------------------------------
+    # Link fetching logic
+    # -----------------------------------------------------------------------------
+        
     def _get_report_href_values(self, url: str) -> list:
         """
         Extracts URLs from <a> tags on a page, applying a random delay and limiting concurrent
@@ -335,7 +400,8 @@ class PFDScraper:
                 if self.verbose:
                     logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
             except requests.RequestException as e:
-                logger.error("Failed to fetch page: %s; Error: %s", url, e)
+                if self.verbose:
+                    logger.error("Failed to fetch page: %s; Error: %s", url, e)
                 return []
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -344,29 +410,42 @@ class PFDScraper:
     
     def _get_report_links(self) -> list:
         """
-        Internal function to collect all PFD report links from the paginated pages.
+        Dynamically collects all PFD report links from consecutive pages until a page returns no new links.
         
         :return: A list of report URLs.
         """
         self.report_links = []
-        pages = list(range(self.start_page, self.end_page + 1))
+        page = self.start_page  # Always start at page 1
         
-        def _fetch_page_links(page_number: int) -> list:
-            page_url = self.page_template.format(page=page_number)
+        # Create a progress bar with an unknown total
+        pbar = tqdm(desc="Fetching pages", unit=" page(s)", leave=False, initial=page)
+        
+        while True:
+            # Format the URL with both the page number and the date parameters
+            page_url = self.page_template.format(page=page, **self.date_params)
             href_values = self._get_report_href_values(page_url)
+            pbar.update(1)
+            
             if self.verbose:
                 logger.info("Scraped %d links from %s", len(href_values), page_url)
-            return href_values
+            if not href_values:
+                # If no links are returned, assume we've reached the end and stop the loop
+                break
+            self.report_links.extend(href_values)
+            page += 1  # Move to the next page
         
-        # Use a thread pool to concurrently fetch multiple pages
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            results = list(tqdm(executor.map(_fetch_page_links, pages), total=len(pages), desc="Fetching pages"))
+        # Throw error if no report links are found
+        if len(self.report_links) == 0:
+            logger.error("\nNo report links found. Please check your date range.")
+            return 
         
-        # Flatten the list of lists into a single list of report URLs -- replaced for loop with chain from itertools
-        self.report_links = list(chain.from_iterable(results))
         logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
 
+    # -----------------------------------------------------------------------------
+    # Report extraction logic
+    # -----------------------------------------------------------------------------
+    
     @staticmethod
     def _normalise_apostrophes(text: str) -> str:
         """Helper function to replace ‘fancy’ (typographic) apostrophes with the standard apostrophe.
@@ -557,8 +636,12 @@ class PFDScraper:
                     return text[section_start:]
         return "N/A: Not found"
     
+    # -----------------------------------------------------------------------------
+    # Core report extraction logic
+    # ----------------------------------------------------------------------------- 
     # This pieces together the above functions to extract all report information from a given URL.
     # It serves as the internal core of the scraper.
+    
     def _extract_report_info(self, url: str) -> dict:
         """
         Internal function to extract metadata and text from a PFD report webpage.
@@ -1126,22 +1209,22 @@ client = OpenAI(api_key=openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
-    category='all', 
-    start_page=1, 
-    end_page=3, 
+    category='accident_work_safety', 
+    date_from="2023-01-01",
+    date_to="2025-02-07",
     html_scraping=True,
     pdf_fallback=True,
-    llm_fallback=True,
+    llm_fallback=False,
     openai_client = client,
     llm_model="gpt-4o-mini",
-    docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
+    #docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
     include_time_stamp=False,
     delay_range = None,
     verbose=False
 )
 scraper.scrape_reports()
-#scraper.top_up()
-#scraper.reports
+scraper.top_up()
+scraper.reports
 
 
 #reports.to_csv('../../data/testreports.csv')
