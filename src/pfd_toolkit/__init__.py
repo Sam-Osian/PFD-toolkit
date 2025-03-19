@@ -3,4 +3,5 @@
 from .scraper import PFDScraper
 from .cleaner import Cleaner
 
-__all__ = ['PFDScraper', 'Cleaner']
+__all__ = ["PFDScraper", "Cleaner"]
+__version__ = "0.1.17"
