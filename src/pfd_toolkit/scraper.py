@@ -1323,15 +1323,15 @@ class PFDScraper:
 
         # Pricing structure per million tokens (input and output)
         # ...unfortunately, OpenAI does not (I think!) provide a public API for querying the pricing structure
-        #    so we have to hardcode it
+        #    so we have to hardcode it.
         MODEL_PRICING_PER_1M_TOKENS = {
             "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached_input": 0.075},
             "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
-            "gpt-4.5": {"input": 75.00, "output": 150.00, "cached_input": 37.50},
+            "gpt-4.5-preview": {"input": 75.00, "output": 150.00, "cached_input": 37.50},
             "o1-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
             "o1": {"input": 15.00, "output": 60.00, "cached_input": 7.50},
+            "o1-pro": {"input": 150.00, "output": 600.00, "cached_input": 600.00},
             "o3-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
-            # Legacy models don't have cached input, so we'll just use the input price
             "gpt-4-turbo": {"input": 10.00, "output": 30.00, "cached_input": 10.00},
             "gpt-4": {"input": 30.00, "output": 60.00, "cached_input": 30.00},
             "gpt-3.5-turbo": {"input": 0.50, "output": 1.50, "cached_input": 0.50},
@@ -1341,7 +1341,7 @@ class PFDScraper:
         if self.llm_model not in MODEL_PRICING_PER_1M_TOKENS:
             raise ValueError(f"LLM model '{self.llm_model}' is not supported in the pricing estimation.")
         
-        # Determine the pricing per million tokens for the selected model
+        # Extract the pricing per million tokens for the selected model
         input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["input"]
         output_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["output"]
         cached_input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["cached_input"]
@@ -1371,12 +1371,16 @@ class PFDScraper:
                 total_missing_fields += missing_count
 
         # Assume average tokens per missing field...
-        #   In testing, we ran an experiment where we disabled the LLM fallback, resulting in 394 missing fields and 181 reports containing at least one missing field.
-        #   We then ran the LLM fallback on these fields and calculated the average number of tokens used via the OpenAI API web interface.
+        #   In testing, we ran an experiment where we disabled the LLM fallback and ran the scraper, resulting 
+        #     in 394 missing fields.
+        #   We then ran the LLM fallback on these fields and calculated the average number of tokens used via 
+        #     the OpenAI API web interface.
+        #
         #   From here, we observed:
         #       - Total input tokens: 21,201,984
         #       - Total output tokens: 68,989
         #       - Total cache input tokens: 0
+        #
         #   Dividing this by the 394 missing fields gave us:
         AVERAGE_INPUT_TOKENS = 53812
         AVERAGE_OUTPUT_TOKENS = 175
@@ -1393,7 +1397,6 @@ class PFDScraper:
                       (total_output_tokens / 1_000_000.0) * output_price)
         logger.info("Estimated API cost for LLM fallback (model: %s): $%.2f based on %d missing fields.",
                     self.llm_model, total_cost, total_missing_fields)
-        return round(total_cost, 2)
 
 
 
