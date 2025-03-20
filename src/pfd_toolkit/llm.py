@@ -28,13 +28,14 @@ class LLM:
         self.client = openai.Client(api_key=self.api_key, base_url=base_url)
 
     def generate(
-        self, prompt: str, response_format: BaseModel = None
+        self, prompt: str, response_format: BaseModel = None, temperature: float = 0.0
     ) -> str | BaseModel:
         """Generate response to given input prompt
 
         Args:
             prompt (str): The prompt to pass to the LLM.
             response_format (BaseModel): Pass a class name that inherits from pydantic BaseModel if you wish to use guided outputs. Defaults to None.
+            temperature (float): The temperature to use.
         """
 
         messages = [{"role": "user", "content": prompt}]
@@ -43,7 +44,7 @@ class LLM:
                 response = self.client.beta.chat.completions.parse(
                     model=self.model,
                     messages=messages,
-                    temperature=0.0,
+                    temperature=temperature,
                     response_format=response_format,
                 )
                 return response_format.model_validate_json(
@@ -59,7 +60,7 @@ class LLM:
                 response = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    temperature=0.0,
+                    temperature=temperature,
                 )
                 # Extract the cleaned string from the response
                 response_str = response.choices[0].message.content.strip()
