@@ -37,11 +37,12 @@ We scrape and clean PFD reports so you don't have to. Each week (at Monday 00:00
 To load data, run:
 
 ```python
-from pfd-scraper import Downloader
+from pfd-toolkit import PFDDownloader
 
-downloader = Downloader(
-    category='all' # See 'category' section for more
-    dates={"2020-01-01", "2025-01-01"}, # Start and end dates for reports
+downloader = PFDDownloader(
+    category='all',
+    date_from="2020-01-01",
+    date_to="2025-01-01",
     clean=True
 )
 
@@ -56,7 +57,7 @@ reports = downloader.load_reports()
 The current problem with analysing PFDs for specific research questions is that it takes far too long to read through each report and manually 'tag' them as you go along. PFD Toolkit handles this for you:
 
 ```python
-from pfd-toolkit import Sorter
+from pfd-toolkit import PFDSorter
 
 # Define a dictionary to sort PFD reports by
 # ..."Theme 1": ["Guidence note 1", "Guidance note 2"]
@@ -73,7 +74,7 @@ NHS_death_themes = {
     "Emergency & Critical Care": ["Ambulance delays", "A&E overcrowding"]
 }
 
-sorter = Sorter(
+sorter = PFDSorter(
     description = description, # Supply our description of the task.
     themes = NHS_death_themes, # Supply our dictionary
     exhaustive = False # Whether guidance notes are exhaustive/illustrative
@@ -87,9 +88,9 @@ sorted = sorter.group_reports(reports) # Supply original dataframe containing re
 By default, PFD downloaded report data will be cleaned and preprocessed ready for you to use. However, if you want to use your own custom cleaning configurations, you can run:
 
 ```python
-from pfd-scraper import Cleaner
+from pfd-toolkit import PFDCleaner
 
-cleaner = Cleaner(
+cleaner = PFDCleaner(
     correct_spelling=True,
     anonymise=False,
     # [other arguments]
@@ -104,12 +105,13 @@ We expect most users to simply download the data using Downloader. However, you 
 
 
 ```python
-from pfd-scraper import PFDScraper
+from pfd-toolkit import PFDScraper
 
 scraper = PFDScraper(
     category='all', # The category from the judiciary website
-    dates={"2020-01-01", "2025-01-01"} # Start and end dates
-    llm_fallback=True, # If True, an LLM will attempt to fix any missing data
+    date_from = "2020-01-01", # Dates in YYYY-MM-DD format
+    date_to = "2025-01-01",
+    llm_fallback=True, # If True, an LLM will attempt to fill in any missing data
     openai_api = "[your-openai-api-key]", # See API section for more
 )
 reports = scraper.scrape_reports()
@@ -118,11 +120,10 @@ reports = scraper.scrape_reports()
 Suppose you want to update your dataframe with newly published reports. PFD Toolkit lets you 'top up' your dataset with these reports.
 
 ```python
-reports_topped_up = scraper.top_up(reports, dates={
-    "2025-01-01", "2026-01-01"})
+reports_topped_up = scraper.top_up(reports, date_to="2025-03-01")
 
 ```
+
 ## Licence
 
 This project is licensed under the terms of the MIT Licence. For more information, see `LICENCE`.
-
