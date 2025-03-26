@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="assets/header.png" width="400"/>
+  <img src="assets/header.png" width="500"/>
 </div>
 
 <br>
 
 
 <h1 align="center">PFD-Toolkit</h1>
-<h3 align="center"><em>A toolkit for turning <strong>Prevention of Future Death (PFD)</strong> reports into research and policy insights</em></p>
+<h4 align="center"><em>A toolkit for turning <strong>Prevention of Future Death (PFD)</strong> reports into research and policy insights</em></p>
 
 
 <br>
