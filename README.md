@@ -1,8 +1,15 @@
-![Header Image](assets/header.png)
+<div align="center">
+  <img src="assets/header.png" width="400"/>
+</div>
 
-# PFD-toolkit
+<br>
 
-A Python toolkit for using cleaned **Prevention of Future Death (PFD) reports** from the UK Judiciary website.
+
+<h1 align="center">PFD-Toolkit</h1>
+<h3 align="center"><em>A toolkit for turning <strong>Prevention of Future Death (PFD)</strong> reports into research and policy insights</em></p>
+
+
+<br>
 
 ## Features
 
