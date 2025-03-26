@@ -1,23 +1,22 @@
-<div align="center">
-  <img src="assets/header.png" width="500"/>
-</div>
+# PFD-Toolkit <a href='https://github.com/sam-osian/pfd-toolkit'><img src='assets/badge.png' align="right" height="120" /></a>
 
-<br>
+Turn raw PFD reports into structured insights — fast.
+
+PFD-Toolkit streamlines the process of working with UK Coronial PFD reports. With built-in modules for loading, scraping, cleaning, and structuring the data, it helps researchers, journalists, and public health analysts turn raw reports into actionable insights.
+
+## Use this package to:
+
+ - Text mine coronial concerns
+
+ - Identify recurring public health or patient safety issues
+
+ - Tabulate reports by theme/topic, date, recipient, and coroner
+
+ - Track institutional responses
+
+ - Train language models on legal/medical safety data
 
 
-<h1 align="center">PFD-Toolkit</h1>
-<h4 align="center"><em>A toolkit for turning <strong>Prevention of Future Death (PFD)</strong> reports into research and policy insights</em></p>
-
-
-<br>
-
-## Features
-
-- Load ready-to-use and fully-cleaned PFD report datasets - all updated once a week.
-- Query reports to find matches for your specific research questions.
-- Create custom categorisation systems for tailored data curation.
-- Generate concise summaries of reports.
-- Call a web scraper for custom data collection.
 
 
 ## Installation
@@ -128,7 +127,6 @@ Suppose you want to update your dataframe with newly published reports. PFD Tool
 
 ```python
 reports_topped_up = scraper.top_up(reports, date_to="2025-03-01")
-
 ```
 
 ## Licence
