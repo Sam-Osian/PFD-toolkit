@@ -1,4 +1,4 @@
-# PFD-Toolkit <a href='https://github.com/sam-osian/pfd-toolkit'><img src='assets/badge.png' align="right" height="120" /></a>
+# PFD Toolkit <a href='https://github.com/sam-osian/pfd-toolkit'><img src='docs/assets/badge.png' align="right" height="120" /></a>
 
 Turn raw PFD reports into structured insights — fast.
 
