@@ -9,3 +9,4 @@ src/pfd_toolkit/api.env
 .venv
 venv
 __pycache__
+.env
