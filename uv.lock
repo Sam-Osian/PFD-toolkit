@@ -1054,7 +1054,7 @@ wheels = [
 
 [[package]]
 name = "pfd-toolkit"
-version = "0.1.17"
+version = "0.1.20"
 source = { editable = "." }
 dependencies = [
     { name = "acres" },
