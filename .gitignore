@@ -6,7 +6,12 @@ data/testreports.csv
 
 # OpenAI API key
 src/pfd_toolkit/api.env
+
+# Dependencies
 .venv
 venv
 __pycache__
 .env
+
+# Project plan
+Project Plan PFD Toolkit.pdf
