@@ -1,0 +1,30 @@
+name: Verify UV Package Build
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  uv:
+    name: python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout pfd-toolkit
+        uses: actions/checkout@v4
+
+      # @v5 is the version of astrals setup script - best to keep it hardcoded.
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+      
+      - name: Install pfd-toolkit
+        run: uv sync --all-extras --dev

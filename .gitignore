@@ -6,3 +6,7 @@ data/testreports.csv
 
 # OpenAI API key
 src/pfd_toolkit/api.env
+.venv
+venv
+__pycache__
+.env
