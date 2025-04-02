@@ -1,18 +1,24 @@
-![Header Image](assets/header.png)
+# PFD Toolkit <a href='https://github.com/sam-osian/pfd-toolkit'><img src='docs/assets/badge.png' align="right" height="120" /></a>
 
-# PFD-toolkit
+Turn raw PFD reports into structured insights — fast.
 
-A Python toolkit for using cleaned **Prevention of Future Death (PFD) reports** from the UK Judiciary website.
+PFD-Toolkit streamlines the process of working with UK Coronial PFD reports. With built-in modules for loading, scraping, cleaning, and structuring the data, it helps researchers, journalists, and public health analysts turn raw reports into actionable insights.
 
-# Features
+## Use this package to:
 
-- Load ready-to-use and fully-cleaned PFD report datasets - all updated once a week.
-- Query reports to find matches for your specific research questions.
-- Create custom categorisation systems for tailored data curation.
-- Generate concise summaries of reports.
-- Call a web scraper for custom data collection.
+ - Text mine coronial concerns
 
-# Getting started
+ - Identify recurring public health or patient safety issues
+
+ - Tabulate reports by theme/topic, date, recipient, and coroner
+
+ - Track institutional responses
+
+ - Train language models on legal/medical safety data
+
+
+
+
 ## Installation
 
 IMPORTANT: the package is not yet live and the below instructions will not work.
@@ -27,41 +33,22 @@ If you need .docx -> .pdf conversion, install with
 pip install pfd-toolkit[docx-conversion]
 ```
 
-### UV (Package Manager)
-#### Installation
-1.  Download and install UV using [this guide](https://docs.astral.sh/uv/getting-started/installation/).
-
-2. Add UV to Path.
-    - Windows Powershell - `$env:Path = "C:\Users\jonat\.local\bin;$env:Path"`.
-    - Linux - `ehhh dunno`.
-
-3. Install required Python version using `uv python install 3.12.3`.
-
-4. Install pfd-toolkit using `uv sync`.
-
-5. Activate uv environment.
-    - Linux - `source .venv/bin/activate`.
-    - Windows Powershell - `.venv\Scripts\Activate.ps1`.
-
-6. When adding dependencies or modifying the pyproject.toml file, it's advisable to run `uv sync` to ensure the uv.lock file is up to date.
-#### Usage
-1. Add dependencies with `uv add {package_name}` eg: `uv add pandas`, `uv add pandas==2.0.1`.
-2. Remove dependencies with `uv remove {package_name}` eg: `uv remove pandas`.
-3. Update packages using add command but use `==` to specify version.
+## Getting started
 
 
-## Download PFD Report Data
+### Download PFD Report Data
 
 We scrape and clean PFD reports so you don't have to. Each week (at Monday 00:00), we update our collection of cleaned & processed PFD reports so that the collection stays up-to-date.
 
 To load data, run:
 
 ```python
-from pfd-scraper import Downloader
+from pfd-toolkit import PFDDownloader
 
-downloader = Downloader(
-    category='all' # See 'category' section for more
-    dates={"2020-01-01", "2025-01-01"}, # Start and end dates for reports
+downloader = PFDDownloader(
+    category='all',
+    date_from="2020-01-01",
+    date_to="2025-01-01",
     clean=True
 )
 
@@ -76,7 +63,7 @@ reports = downloader.load_reports()
 The current problem with analysing PFDs for specific research questions is that it takes far too long to read through each report and manually 'tag' them as you go along. PFD Toolkit handles this for you:
 
 ```python
-from pfd-toolkit import Sorter
+from pfd-toolkit import PFDSorter
 
 # Define a dictionary to sort PFD reports by
 # ..."Theme 1": ["Guidence note 1", "Guidance note 2"]
@@ -93,7 +80,7 @@ NHS_death_themes = {
     "Emergency & Critical Care": ["Ambulance delays", "A&E overcrowding"]
 }
 
-sorter = Sorter(
+sorter = PFDSorter(
     description = description, # Supply our description of the task.
     themes = NHS_death_themes, # Supply our dictionary
     exhaustive = False # Whether guidance notes are exhaustive/illustrative
@@ -107,9 +94,9 @@ sorted = sorter.group_reports(reports) # Supply original dataframe containing re
 By default, PFD downloaded report data will be cleaned and preprocessed ready for you to use. However, if you want to use your own custom cleaning configurations, you can run:
 
 ```python
-from pfd-scraper import Cleaner
+from pfd-toolkit import PFDCleaner
 
-cleaner = Cleaner(
+cleaner = PFDCleaner(
     correct_spelling=True,
     anonymise=False,
     # [other arguments]
@@ -124,12 +111,13 @@ We expect most users to simply download the data using Downloader. However, you 
 
 
 ```python
-from pfd-scraper import PFDScraper
+from pfd-toolkit import PFDScraper
 
 scraper = PFDScraper(
     category='all', # The category from the judiciary website
-    dates={"2020-01-01", "2025-01-01"} # Start and end dates
-    llm_fallback=True, # If True, an LLM will attempt to fix any missing data
+    date_from = "2020-01-01", # Dates in YYYY-MM-DD format
+    date_to = "2025-01-01",
+    llm_fallback=True, # If True, an LLM will attempt to fill in any missing data
     openai_api = "[your-openai-api-key]", # See API section for more
 )
 reports = scraper.scrape_reports()
@@ -138,11 +126,9 @@ reports = scraper.scrape_reports()
 Suppose you want to update your dataframe with newly published reports. PFD Toolkit lets you 'top up' your dataset with these reports.
 
 ```python
-reports_topped_up = scraper.top_up(reports, dates={
-    "2025-01-01", "2026-01-01"})
-
+reports_topped_up = scraper.top_up(reports, date_to="2025-03-01")
 ```
-# Licence
+
+## Licence
 
 This project is licensed under the terms of the MIT Licence. For more information, see `LICENCE`.
-

@@ -2,7 +2,7 @@ name: Verify UV Package Build
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
 
 jobs:
@@ -14,6 +14,7 @@ jobs:
       - name: checkout pfd-toolkit
         uses: actions/checkout@v4
 
+      # @v5 is the version of astrals setup script - best to keep it hardcoded.
       - name: Install UV
         uses: astral-sh/setup-uv@v5
         with:

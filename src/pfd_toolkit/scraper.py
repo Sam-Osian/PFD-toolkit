@@ -36,16 +36,17 @@ logging.basicConfig(level=logging.INFO, force=True)
 # Set the log level for the 'httpx' library to WARNING to reduce verbosity
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+
 # Define PFDScraper class
 class PFDScraper:
     """Web scraper for extracting Prevention of Future Death (PFD) reports from the UK Judiciary website.
-    
+
     This class handles:
       - Fetching PFD URLs.
       - Parsing HTML to extract report data.
       - Fallback to .pdf scraping if HTML fails for any given field.
       - Fallback to OpenAI LLM for image-based .pdf extraction if scraping fails for any given field.
-      
+
     """
 
     def __init__(
@@ -81,13 +82,12 @@ class PFDScraper:
         include_time_stamp: bool = False,
         verbose: bool = True,
     ) -> None:
-
         """
         Initialises the scraper.
-        
+
         :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all' (default), 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
-        :param date_from: Only reports published on or after this date will be scraped.
-        :param date_to: Only reports published on or before this date will be scraped.
+        :param date_from: In "YYYY-MM-DD" format. Only reports published on or after this date will be scraped.
+        :param date_to: In "YYYY-MM-DD" format. Only reports published on or before this date will be scraped.
         :param max_workers: The total number of concurrent threads the scraper can use for fetching data across all pages.
         :param max_requests: Maximum number of requests per domain to avoid IP address block.
         :param delay_range: None, or a tuple of two integers representing the range of seconds to delay between requests. Default is (1, 2) for a random delay between 1 and 2 seconds.
@@ -97,6 +97,15 @@ class PFDScraper:
         :param openai_api_key: OpenAI API Key
         :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True. Default is "gpt_4o_mini".
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
+        :param include_url: Whether to add a URL column to the output file.
+        :param include_id: Whether to add a report ID column to the output file.
+        :param include_date: Whether to add a date column to the output file.
+        :param include_coroner: Whether to add a coroner column to the output file.
+        :param include_area: Whether to add an area column to the output file.
+        :param include_receiver: Whether to add a receiver column to the output file.
+        :param include_investigation: Whether to add an investigation column to the output file.
+        :param include_circumstances: Whether to add a circumstances column to the output file.
+        :param include_concerns: Whether to add a concerns column to the output file.
         :param include_time_stamp: Whether to add a timestamp column to the output file.
         :param verbose: Whether to print verbose output.
         """
@@ -460,7 +469,7 @@ class PFDScraper:
     def get_report_links(self) -> list:
         """
         Dynamically collects all PFD report links from consecutive pages until a page returns no new links.
-        
+
         :return: A list of report URLs.
         """
         self.report_links = []
@@ -498,9 +507,9 @@ class PFDScraper:
     @staticmethod
     def _normalise_apostrophes(text: str) -> str:
         """Helper function to replace ‘fancy’ (typographic) apostrophes with the standard apostrophe.
-        
+
         Some reports use fancy apostrophes (‘ and ’) over typical 'keyboard' apostrophes (') which can cause issues with text processing.
-        
+
         """
         return text.replace("’", "'").replace("‘", "'")
 
@@ -514,7 +523,7 @@ class PFDScraper:
         """
         Internal function to download and extract text from a .pdf report. If the file is not in .pdf format (.docx or .doc),
         converts it to .pdf using the method specified by self.docx_conversion.
-        
+
         :param pdf_url: URL of the file to extract text from.
         :return: Cleaned text extracted from the .pdf, or "N/A" on failure.
         """
@@ -627,7 +636,7 @@ class PFDScraper:
     ) -> str:
         """
         Internal function to search for a <p> element in the HTML that contains any of the provided keywords.
-        
+
         :param soup: BeautifulSoup object of the page.
         :param keywords: List of keywords to search for.
         :return: Extracted text or 'N/A: Not found'.
@@ -649,7 +658,7 @@ class PFDScraper:
         """
         Extracts a block of text from HTML by locating a header (within <strong> tags) that matches
         one of the provided header keywords, then collecting all sibling elements that follow.
-        
+
 
         :param soup: BeautifulSoup object of the page.
         :param header_keywords: List of header keyword variations to search for.
@@ -689,7 +698,7 @@ class PFDScraper:
         """
         Internal function to extract a section from text using multiple start and end keywords.
         Uses case-insensitive search to locate the markers.
-        
+
         :param text: The full text to search in.
         :param start_keywords: List of possible starting keywords.
         :param end_keywords: List of possible ending keywords.
@@ -747,7 +756,7 @@ class PFDScraper:
         """
         Helper that converts pdf_bytes to images, builds a prompt based on missing_fields,
         calls the LLM API, and parses the response.
-        
+
         Returns a dictionary of fallback updates.
         """
         base64_images = []  # ...OpenAI requires images to be base64 encoded
@@ -836,7 +845,7 @@ class PFDScraper:
     def _extract_report_info(self, url: str) -> dict:
         """
         Extract metadata and text from a PFD report webpage.
-        
+
         Process:
           1. Download the webpage and parse it using BeautifulSoup.
           2. Identify the .pdf download link.
@@ -847,7 +856,7 @@ class PFDScraper:
              data from the PDF text.
           6. Optionally, if llm_fallback is enabled, use OpenAI GPT to extract missing data from images
              generated from the PDF.
-        
+
         :param url: URL of the report page.
         :return: Dictionary containing extracted report information.
         """
@@ -1250,11 +1259,13 @@ class PFDScraper:
     # 2) top_up(): Adds new reports to the existing scraped reports based on the user configuration.
     # 3) run_llm_fallback(): Runs the LLM fallback. This is a separate method to allow the user to run this
     #                        separately if needed.
+    # 4) estimate_api_costs(): Estimates the API costs for the current configuration. The user can supply
+    #                          a dataframe with their existing scrape
 
     def scrape_reports(self) -> pd.DataFrame:
         """
         Scrapes reports from the collected report links based on the user configuration of the PFDScraper class instance (self).
-        
+
         :return: A pandas DataFrame containing one row per scraped report.
         """
         if not self.report_links:
@@ -1293,13 +1304,13 @@ class PFDScraper:
         Adds new reports to the existing scraped reports based on the user configuration of the PFDScraper class instance (self).
         Duplicate checking is based on the URL as a unique identifier – by default the URL (if include_url is True)
         or the report ID otherwise.
-        
+
         Parameters:
             old_reports (pd.DataFrame): Optional DataFrame containing previously scraped reports. If not supplied,
                                          the internal self.reports will be used.
             date_from (str): Optional new start date in YYYY-MM-DD format.
             date_to (str): Optional new end date in YYYY-MM-DD format.
-        
+
         Returns:
             pd.DataFrame: Updated DataFrame containing both the old and new scraped reports.
         """
@@ -1425,15 +1436,15 @@ class PFDScraper:
         return updated_reports
 
     def run_llm_fallback(self, reports_df: pd.DataFrame = None):
-        """ 
+        """
         Runs the LLM fallback on already scraped reports that have at least one missing field.
         For each report (row) where any enabled field has the value "N/A: Not found", it will
         re-fetch the .pdf and update those missing fields.
-        
+
         Parameters:
             reports_df (pd.DataFrame): Optional DataFrame of scraped reports. If not provided,
                                        self.reports will be used.
-                                       
+
         Returns:
             pd.DataFrame: The updated DataFrame with fallback values filled in.
         """
@@ -1521,6 +1532,118 @@ class PFDScraper:
         self.reports = reports_df.copy()
         return reports_df
 
+    def estimate_api_costs(self, df: pd.DataFrame = None) -> float:
+        """
+        Estimates the API cost in USD for LLM fallback based on the number of missing fields
+        in the scraped reports. This method uses the pricing structure for tokens and looks at
+        each missing cell in the DataFrame.
+
+        Parameters:
+            df (pd.DataFrame): Optional DataFrame containing scraped reports. If not supplied,
+                               self.reports is used.
+
+        Returns:
+            float: The estimated API cost in USD.
+        """
+
+        # Use the provided DataFrame or default to self.reports
+        if df is None:
+            if self.reports is None:
+                logger.error(
+                    "No scraped reports available for cost estimation. Please run scrape_reports() first."
+                )
+                return 0.0
+            df = self.reports
+
+        # Pricing structure per million tokens (input and output)
+        # ...unfortunately, OpenAI does not (I think!) provide a public API for querying the pricing structure
+        #    so we have to hardcode it.
+        MODEL_PRICING_PER_1M_TOKENS = {
+            "gpt-4o-mini": {"input": 0.15, "output": 0.60, "cached_input": 0.075},
+            "gpt-4o": {"input": 2.50, "output": 10.00, "cached_input": 1.25},
+            "gpt-4.5-preview": {
+                "input": 75.00,
+                "output": 150.00,
+                "cached_input": 37.50,
+            },
+            "o1-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
+            "o1": {"input": 15.00, "output": 60.00, "cached_input": 7.50},
+            "o1-pro": {"input": 150.00, "output": 600.00, "cached_input": 600.00},
+            "o3-mini": {"input": 1.10, "output": 4.40, "cached_input": 0.55},
+            "gpt-4-turbo": {"input": 10.00, "output": 30.00, "cached_input": 10.00},
+            "gpt-4": {"input": 30.00, "output": 60.00, "cached_input": 30.00},
+            "gpt-3.5-turbo": {"input": 0.50, "output": 1.50, "cached_input": 0.50},
+        }
+
+        # Throw error if the model is not found in the pricing structure
+        if self.llm_model not in MODEL_PRICING_PER_1M_TOKENS:
+            raise ValueError(
+                f"LLM model '{self.llm_model}' is not supported in the pricing estimation."
+            )
+
+        # Extract the pricing per million tokens for the selected model
+        input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["input"]
+        output_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["output"]
+        cached_input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["cached_input"]
+
+        # Determine which columns are relevant (only those that are enabled)
+        relevant_columns = []
+        if self.include_date:
+            relevant_columns.append("Date")
+        if self.include_coroner:
+            relevant_columns.append("CoronerName")
+        if self.include_area:
+            relevant_columns.append("Area")
+        if self.include_receiver:
+            relevant_columns.append("Receiver")
+        if self.include_investigation:
+            relevant_columns.append("InvestigationAndInquest")
+        if self.include_circumstances:
+            relevant_columns.append("CircumstancesOfDeath")
+        if self.include_concerns:
+            relevant_columns.append("MattersOfConcern")
+
+        # Count total missing fields (cells with "N/A: Not found")
+        total_missing_fields = 0
+        for col in relevant_columns:
+            if col in df.columns:
+                missing_count = df[col].eq("N/A: Not found").sum()
+                total_missing_fields += missing_count
+
+        # Assume average tokens per missing field...
+        #   In testing, we ran an experiment where we disabled the LLM fallback and ran the scraper, resulting
+        #     in 394 missing fields.
+        #   We then ran the LLM fallback on these fields and calculated the average number of tokens used via
+        #     the OpenAI API web interface.
+        #
+        #   From here, we observed:
+        #       - Total input tokens: 21,201,984
+        #       - Total output tokens: 68,989
+        #       - Total cache input tokens: 0
+        #
+        #   Dividing this by the 394 missing fields gave us:
+        AVERAGE_INPUT_TOKENS = 53812
+        AVERAGE_OUTPUT_TOKENS = 175
+        AVERAGE_CACHE_INPUT_TOKENS = 0
+
+        # Calculate total tokens required based on missing fields
+        total_input_tokens = total_missing_fields * AVERAGE_INPUT_TOKENS
+        total_output_tokens = total_missing_fields * AVERAGE_OUTPUT_TOKENS
+        total_cached_input_tokens = total_missing_fields * AVERAGE_CACHE_INPUT_TOKENS
+
+        # Calculate cost in USD: convert tokens to millions
+        total_cost = (
+            (total_input_tokens / 1_000_000.0) * input_price
+            + (total_cached_input_tokens / 1_000_000.0) * cached_input_price
+            + (total_output_tokens / 1_000_000.0) * output_price
+        )
+        logger.info(
+            "Estimated API cost for LLM fallback (model: %s): $%.2f based on %d missing fields.",
+            self.llm_model,
+            total_cost,
+            total_missing_fields,
+        )
+
 
 # -----------------------------------------------------------------------------------------
 # TESTING
@@ -1532,11 +1655,11 @@ client = OpenAI(api_key=openai_api_key)
 
 # Run the scraper! :D
 scraper = PFDScraper(
-    category="suicide",
-    date_from="2025-03-10",
-    date_to="2025-03-19",
+    category="all",
+    date_from="2024-01-10",
+    date_to="2024-04-19",
     html_scraping=True,
-    pdf_fallback=True,
+    pdf_fallback=False,
     llm_fallback=False,
     openai_client=client,
     llm_model="gpt-4o-mini",
@@ -1546,7 +1669,9 @@ scraper = PFDScraper(
     verbose=False,
 )
 scraper.scrape_reports()
-scraper.run_llm_fallback()
+scraper.estimate_api_costs()
+
+# scraper.run_llm_fallback()
 # scraper.top_up(date_to="2025-03-19")
 scraper.reports
 

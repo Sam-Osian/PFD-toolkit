@@ -1,0 +1,27 @@
+@import url('https://fonts.googleapis.com/css?family=Ubuntu:400,500,700&display=swap');
+
+body,
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Ubuntu', sans-serif;
+}
+
+.md-typeset,
+.md-typeset .md-typeset,
+.md-content,
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  font-family: 'Ubuntu', sans-serif !important;
+}
+
+.md-content__heading .headerlink {
+    font-size: 0.8em;      /* Slightly smaller */
+    color: #6272a4;        /* Example subtle color from Dracula palette */
+    opacity: 0.7;
+    text-decoration: none;
+  }
+  .md-content__heading .headerlink:hover {
+    opacity: 1;
+    color: #bd93f9;  /* Example highlight on hover */
+  }
+  
