@@ -1,10 +1,10 @@
 import logging
 import pandas as pd
-from openai import OpenAI
 from dotenv import load_dotenv
 import os
 from tqdm import tqdm
 
+from pfd_toolkit.llm import LLM
 from pfd_toolkit.prompts import BASE_PROMPT, PROMPT_CONFIG
 
 tqdm.pandas()  # ...initialising tqdm's pandas integration
@@ -30,10 +30,7 @@ class Cleaner:
         self,
         # Input DataFrame containing PFD reports
         reports: pd.DataFrame,
-        # LLM configuration
-        llm_model: str = "gpt-4o-mini",
-        openai_api_key: str = None,
-        openai_client: OpenAI = None,
+        llm: LLM,
         # Fields to clean
         coroner: bool = True,
         receiver: bool = True,
@@ -60,45 +57,31 @@ class Cleaner:
         """Create Cleaner object.
 
         Args:
-            reports (pd.DataFrame) Input DataFrame containing PFD reports.
-            llm_model (str): The llm model name. Defaults to gpt-4o-mini.
-            openai_api_key (str): The openai api key.
+            reports (pd.DataFrame): Input DataFrame containing PFD reports.
+            llm (LLM): The LLM client to use for text cleaning.
             coroner (bool): Whether or not to clean the coroner field.
             receiver (bool): Whether or not to clean the receiver field.
             area (bool): Whether or not to clean the area field.
             investigation_and_inquest (bool): Whether or not to clean the InvestigationAndInquest field?.
             circumstances_of_death (bool): Whether or not to clean the CircumstancesOfDeath field.
             matters_of_concern (bool): Whether or not to clean the MattersOfConcern field.
-
             coroner_field (str): Name of the coroner field, defaults to 'CoronerName'.
             area_field (str): Name of the area field, defaults to 'Area'.
             receiver_field (str): Name of the receiver field, defaults to 'Receiver'.
             investigation_field (str): Name of the ingestigation field, defaults to 'InvestigationAndInquest'.
             circumstances_field (str): Name of the  circumstances of death field, defaults to 'CircumstancesOfDeath'.
             concerns_field (str): Name of the concerns field, defaults to MattersOfConcern.
-
             coroner_prompt (str): Coroner prompt override. Defaults to hardcoded version.
             area_prompt (str): Area prompt override. Defaults to hardcoded version.
             receiver_prompt (str): Receiver prompt override. Defaults to hardcoded version.
             investigation_prompt (str): Investigation prompt override. Defaults to hardcoded version.
             circumstances_prompt (str): Circumstances prompt override. Defaults to hardcoded version.
             concerns_prompt (str): Concerns prompt override. Defaults to hardcoded version.
-
             verbose (bool): Whether or not to verbosely run pfd-toolkit. Defaults to False.
         """
 
         self.reports = reports
-        self.llm_model = llm_model
-        self.openai_api_key = openai_api_key
-
-        # Use injected LLM client if provided; otherwise, create one from the API key.
-        # This allows the user to pass in their own OpenAI client instance as an alternative to supplying an API key.
-        if openai_client is not None:
-            self.openai_client = openai_client
-        elif openai_api_key is not None:
-            self.openai_client = OpenAI(api_key=openai_api_key)
-        else:
-            raise ValueError("Either openai_client or openai_api_key must be provided.")
+        self.llm = llm
 
         self.coroner = coroner
         self.receiver = receiver
@@ -187,54 +170,35 @@ class Cleaner:
             extra_instructions=config["extra_instructions"],
         )
 
-    def _call_llm(self, prompt: str) -> str:
-        """Call the OpenAI API to generate a cleaned string based on the given prompt."""
-
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=self.llm_model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                ],
-                temperature=0.0,
-            )
-            # Extract the cleaned string from the response
-            cleaned_string = response.choices[0].message.content.strip()
-            return cleaned_string
-
-        except Exception as e:
-            logger.error(f"An error occurred while calling the LLM model: {e}")
-            return "Error: Could not clean string"
-
     def _clean_coroner(self, text: str) -> str:
         """Clean the coroner field using the generated prompt."""
         prompt = self.coroner_prompt + "\n" + text
-        return self._call_llm(prompt)
+        return self.llm.generate(prompt)
 
     def _clean_area(self, text: str) -> str:
         """Clean the area field using the generated prompt."""
         prompt = self.area_prompt + "\n" + text
-        return self._call_llm(prompt)
+        return self.llm.generate(prompt)
 
     def _clean_receiver(self, text: str) -> str:
         """Clean the receiver field using the generated prompt."""
         prompt = self.receiver_prompt + "\n" + text
-        return self._call_llm(prompt)
+        return self.llm.generate(prompt)
 
     def _clean_investigation(self, text: str) -> str:
         """Clean the investigation field using the generated prompt."""
         prompt = self.investigation_prompt + "\n" + text
-        return self._call_llm(prompt)
+        return self.llm.generate(prompt)
 
     def _clean_circumstances(self, text: str) -> str:
         """Clean the circumstances of death field using the generated prompt."""
         prompt = self.circumstances_prompt + "\n" + text
-        return self._call_llm(prompt)
+        return self.llm.generate(prompt)
 
     def _clean_concerns(self, text: str) -> str:
         """Clean the matters of concern field using the generated prompt."""
         prompt = self.concerns_prompt + "\n" + text
-        return self._call_llm(prompt)
+        return self.llm.generate(prompt)
 
     def _apply_cleaning(self, text: str, cleaning_func) -> str:
         """
@@ -311,11 +275,14 @@ Cleaner.PROMPT_CONFIG = PROMPT_CONFIG
 load_dotenv("api.env")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 
+# Create instance of LLM class as required
+llm = LLM(api_key=openai_api_key)
+
 # Read reports data frame
-reports = pd.read_csv("../../data/testreports.csv")
+reports = pd.read_csv("../data/testreports.csv")
 cleaner = Cleaner(
+    llm=llm,
     reports=reports,
-    openai_api_key=openai_api_key,
     coroner=False,
     receiver=False,
     area=False,

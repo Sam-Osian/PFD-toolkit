@@ -1,5 +1,6 @@
 import openai
 import logging
+from typing import List, Optional
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -28,17 +29,30 @@ class LLM:
         self.client = openai.Client(api_key=self.api_key, base_url=base_url)
 
     def generate(
-        self, prompt: str, response_format: BaseModel = None, temperature: float = 0.0
+        self,
+        prompt: str,
+        images: Optional[List[bytes]] = None,
+        response_format: BaseModel = None,
+        temperature: float = 0.0,
     ) -> str | BaseModel:
         """Generate response to given input prompt
 
         Args:
             prompt (str): The prompt to pass to the LLM.
+            images (List[bytes]): Byes for images to pass to the LLM.
             response_format (BaseModel): Pass a class name that inherits from pydantic BaseModel if you wish to use guided outputs. Defaults to None.
             temperature (float): The temperature to use.
         """
 
         messages = [{"role": "user", "content": prompt}]
+        if images:
+            for b64_img in images:
+                messages.append(
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
+                    }
+                )
         if response_format:
             try:
                 response = self.client.beta.chat.completions.parse(
