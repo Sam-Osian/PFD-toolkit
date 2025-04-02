@@ -1,3 +1,8 @@
+# The following workflow is used to verify the UV package build.
+# It is triggered on push to the main branch and on pull requests.
+# It checks out the pfd-toolkit repository, installs the UV package using the astral-sh/setup-uv action,
+# sets up Python using the actions/setup-python action, and installs the pfd-toolkit package with all extras and dev dependencies.
+
 name: Verify UV Package Build
 on:
   push:
@@ -14,9 +19,8 @@ jobs:
       - name: checkout pfd-toolkit
         uses: actions/checkout@v4
 
-      # @v5 is the version of astrals setup script - best to keep it hardcoded.
       - name: Install UV
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@v5  # @v5 is the version of astrals setup script - best to keep it hardcoded.
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
