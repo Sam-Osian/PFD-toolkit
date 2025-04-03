@@ -9,6 +9,8 @@ import re
 from dateutil import parser
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
+from pydantic import create_model, BaseModel
+from typing import Type
 from io import BytesIO
 from urllib.parse import urlparse, unquote
 import base64
@@ -738,6 +740,14 @@ class PFDScraper:
             logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
             return None
 
+    def _construct_missing_fields_model(required_fields: list[str]) -> Type[BaseModel]:
+        fields = {field: (str, ...) for field in required_fields}
+        return create_model(
+            "MissingFields",
+            **fields,
+            __doc__="Missing fields populated with the required information from the PFD report.",
+        )
+
     def _call_llm_fallback(self, pdf_bytes: bytes, missing_fields: dict) -> dict:
         """
         Helper that converts pdf_bytes to images, builds a prompt based on missing_fields,
@@ -761,7 +771,9 @@ class PFDScraper:
             "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
             "Please extract the following section(s):\n"
         )
+        response_fields = []
         for field, instruction in missing_fields.items():
+            response_fields.append(field)
             prompt += f"\n{field}: {instruction}\n"
         prompt += (
             "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
@@ -769,43 +781,38 @@ class PFDScraper:
             "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
             "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
             "Do *not* change the section title(s) from the above format.\n"
+            "Respond in the specified response format\n"
         )
         if self.verbose:
             logger.info("LLM prompt:\n\n%s", prompt)
-
+        # Construct dynamic response_format model
+        missing_fields_model = self._construct_missing_fields_model(
+            required_fields=response_fields
+        )
         try:
-            llm_text = self.llm.generate(prompt=prompt, images=base64_images)
+            llm_text = self.llm.generate(
+                prompt=prompt,
+                images=base64_images,
+                response_format=missing_fields_model,
+            )
 
             if self.verbose:
-                logger.info("LLM fallback response:\n%s\n\n", llm_text)
+                # Display the returned populated model
+                logger.info(
+                    "LLM fallback response:\n%s\n\n", llm_text.model_dump_json(indent=2)
+                )
         except Exception as e:
             logger.error("LLM fallback failed: %s", e)
             return {}
 
         fallback_updates = {}
-        for line in llm_text.splitlines():
-            line_strip = line.strip()
-            line_lower = line_strip.lower()
-            if line_lower.startswith("date of report:"):
-                fallback_updates["Date"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("coroner's name:"):
-                fallback_updates["CoronerName"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("area:"):
-                fallback_updates["Area"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("receiver:"):
-                fallback_updates["Receiver"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("investigation and inquest:"):
-                fallback_updates["InvestigationAndInquest"] = line_strip.split(":", 1)[
-                    1
-                ].strip()
-            elif line_lower.startswith("circumstances of death:"):
-                fallback_updates["CircumstancesOfDeath"] = line_strip.split(":", 1)[
-                    1
-                ].strip()
-            elif line_lower.startswith("coroner's concerns:"):
-                fallback_updates["MattersOfConcern"] = line_strip.split(":", 1)[
-                    1
-                ].strip()
+        output_json = llm_text.model_dump()
+        for field in response_fields:
+            try:
+                fallback_updates[field] = output_json[field]
+            except:
+                fallback_updates[field] = "LLM Fallback failed"
+
         if "Date" in fallback_updates and fallback_updates["Date"] != "N/A: Not found":
             try:
                 parsed_date = parser.parse(fallback_updates["Date"], fuzzy=True)

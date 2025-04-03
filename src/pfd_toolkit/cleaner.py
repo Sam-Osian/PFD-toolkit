@@ -4,8 +4,7 @@ from dotenv import load_dotenv
 import os
 from tqdm import tqdm
 
-from pfd_toolkit.llm import LLM
-from pfd_toolkit.prompts import BASE_PROMPT, PROMPT_CONFIG
+from pfd_toolkit.llm import LLM, BASE_PROMPT, PROMPT_CONFIG
 
 tqdm.pandas()  # ...initialising tqdm's pandas integration
 
