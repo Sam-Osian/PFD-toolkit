@@ -95,50 +95,26 @@ class Cleaner:
         self.investigation_field = investigation_field
         self.circumstances_field = circumstances_field
         self.concerns_field = concerns_field
-
+        
         # The below makes it so that the class instance uses the user-set prompts if provided, or the default ones if not.
-        self.coroner_prompt = (
-            coroner_prompt
-            if coroner_prompt is not None
-            else Cleaner._get_prompt_for_field("Coroner")
-        )
-        self.area_prompt = (
-            area_prompt
-            if area_prompt is not None
-            else Cleaner._get_prompt_for_field("Area")
-        )
-        self.receiver_prompt = (
-            receiver_prompt
-            if receiver_prompt is not None
-            else Cleaner._get_prompt_for_field("Receiver")
-        )
-        self.investigation_prompt = (
-            investigation_prompt
-            if investigation_prompt is not None
-            else Cleaner._get_prompt_for_field("InvestigationAndInquest")
-        )
-        self.circumstances_prompt = (
-            circumstances_prompt
-            if circumstances_prompt is not None
-            else Cleaner._get_prompt_for_field("CircumstancesOfDeath")
-        )
-        self.concerns_prompt = (
-            concerns_prompt
-            if concerns_prompt is not None
-            else Cleaner._get_prompt_for_field("MattersOfConcern")
-        )
-
+        self.coroner_prompt = coroner_prompt if coroner_prompt is not None else Cleaner._get_prompt_for_field("Coroner")
+        self.area_prompt = area_prompt if area_prompt is not None else Cleaner._get_prompt_for_field("Area")
+        self.receiver_prompt = receiver_prompt if receiver_prompt is not None else Cleaner._get_prompt_for_field("Receiver")
+        self.investigation_prompt = investigation_prompt if investigation_prompt is not None else Cleaner._get_prompt_for_field("InvestigationAndInquest")
+        self.circumstances_prompt = circumstances_prompt if circumstances_prompt is not None else Cleaner._get_prompt_for_field("CircumstancesOfDeath")
+        self.concerns_prompt = concerns_prompt if concerns_prompt is not None else Cleaner._get_prompt_for_field("MattersOfConcern")
+        
         self.verbose = verbose
-
+        
         # -----------------------------------------------------------------------------
         # Error and Warning Handling for Initialisation Parameters
         # -----------------------------------------------------------------------------
-
+        
         ### Errors
         # If the reports parameter is not a DataFrame
         if not isinstance(reports, pd.DataFrame):
             raise TypeError("The 'reports' parameter must be a pandas DataFrame.")
-
+        
         # If the input DataFrame does not contain the necessary columns
         required_columns = []
         if self.coroner:
@@ -151,14 +127,10 @@ class Cleaner:
             required_columns.append("CircumstancesOfDeath")
         if self.matters_of_concern:
             required_columns.append("MattersOfConcern")
-        missing_columns = [
-            col for col in required_columns if col not in reports.columns
-        ]
+        missing_columns = [col for col in required_columns if col not in reports.columns]
         if missing_columns:
-            raise ValueError(
-                f"Cleaner could not find the following fields in your input DataFrame: {missing_columns}."
-            )
-
+            raise ValueError(f"Cleaner could not find the following fields in your input DataFrame: {missing_columns}.")
+    
     @staticmethod
     def _get_prompt_for_field(field_name: str) -> str:
         """Generates a complete prompt for a given PFD report field based on the BASE_PROMPT and configuration."""
@@ -210,18 +182,16 @@ class Cleaner:
         if cleaned == "N/A: Not found":
             return text
         return cleaned
-
     # Main public function
     def clean_reports(self) -> pd.DataFrame:
         """
         Clean the text fields in a DataFrame of Prevention of Future Death Reports.
-
         Returns:
             A new DataFrame with the cleaned fields.
         """
         # Make a copy for non-destructive cleaning
         cleaned_df = self.reports.copy()
-
+        
         # Mapping of field configuration...
         # 1. Field Name
         # 2. Field Boolean (whether to clean)
@@ -231,39 +201,21 @@ class Cleaner:
             ("Coroner", self.coroner, self.coroner_field, self._clean_coroner),
             ("Area", self.area, self.area_field, self._clean_area),
             ("Receiver", self.receiver, self.receiver_field, self._clean_receiver),
-            (
-                "InvestigationAndInquest",
-                self.investigation_and_inquest,
-                self.investigation_field,
-                self._clean_investigation,
-            ),
-            (
-                "CircumstancesOfDeath",
-                self.circumstances_of_death,
-                self.circumstances_field,
-                self._clean_circumstances,
-            ),
-            (
-                "MattersOfConcern",
-                self.matters_of_concern,
-                self.concerns_field,
-                self._clean_concerns,
-            ),
+            ("InvestigationAndInquest", self.investigation_and_inquest, self.investigation_field, self._clean_investigation),
+            ("CircumstancesOfDeath", self.circumstances_of_death, self.circumstances_field, self._clean_circumstances),
+            ("MattersOfConcern", self.matters_of_concern, self.concerns_field, self._clean_concerns),
         ]
         # Loop over each field and clean it if the corresponding flag is set to True
         for field_name, flag, column_name, cleaning_func in fields_to_clean:
             if flag:
                 logger.info(f"Cleaning field: {column_name}")
-                cleaned_df[column_name] = cleaned_df[
-                    column_name
-                ].progress_apply(  # ...apply changed to .progress_apply for tqdm integration
+                cleaned_df[column_name] = cleaned_df[column_name].progress_apply( # ...apply changed to .progress_apply for tqdm integration
                     lambda text: self._apply_cleaning(text, cleaning_func)
                 )
-
+        
         # Save as internal attribute in case user forgets to assign the output to a variable
         self.cleaned_reports = cleaned_df
         return cleaned_df
-
 
 # Attach the base prompt and field-specific configurations to the class for easy access
 Cleaner.BASE_PROMPT = BASE_PROMPT

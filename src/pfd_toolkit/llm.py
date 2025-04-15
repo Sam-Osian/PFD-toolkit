@@ -77,9 +77,7 @@ class LLM:
             try:
                 # Normal text generation.
                 response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
+                    model=self.model, messages=messages, temperature=temperature,
                 )
                 # Extract the cleaned string from the response
                 response_str = response.choices[0].message.content.strip()
