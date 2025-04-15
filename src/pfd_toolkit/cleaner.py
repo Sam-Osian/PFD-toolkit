@@ -217,29 +217,29 @@ class Cleaner:
         self.cleaned_reports = cleaned_df
         return cleaned_df
 
-# Attach the base prompt and field-specific configurations to the class for easy access
-Cleaner.BASE_PROMPT = BASE_PROMPT
-Cleaner.PROMPT_CONFIG = PROMPT_CONFIG
+# # Attach the base prompt and field-specific configurations to the class for easy access
+# Cleaner.BASE_PROMPT = BASE_PROMPT
+# Cleaner.PROMPT_CONFIG = PROMPT_CONFIG
 
 
-# Load OpenAI API key
-load_dotenv("api.env")
-openai_api_key = os.getenv("OPENAI_API_KEY")
+# # Load OpenAI API key
+# load_dotenv("api.env")
+# openai_api_key = os.getenv("OPENAI_API_KEY")
 
-# Create instance of LLM class as required
-llm = LLM(api_key=openai_api_key)
+# # Create instance of LLM class as required
+# llm = LLM(api_key=openai_api_key)
 
-# Read reports data frame
-reports = pd.read_csv("../data/testreports.csv")
-cleaner = Cleaner(
-    llm=llm,
-    reports=reports,
-    coroner=False,
-    receiver=False,
-    area=False,
-    investigation_and_inquest=False,
-    circumstances_of_death=False,
-    matters_of_concern=True,
-)
-clean_reports = cleaner.clean_reports()
-clean_reports
+# # Read reports data frame
+# reports = pd.read_csv("../data/testreports.csv")
+# cleaner = Cleaner(
+#     llm=llm,
+#     reports=reports,
+#     coroner=False,
+#     receiver=False,
+#     area=False,
+#     investigation_and_inquest=False,
+#     circumstances_of_death=False,
+#     matters_of_concern=True,
+# )
+# clean_reports = cleaner.clean_reports()
+# clean_reports

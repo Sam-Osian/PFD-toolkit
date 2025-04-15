@@ -45,17 +45,12 @@ class LLM:
             response_format (BaseModel): Pass a class name that inherits from pydantic BaseModel if you wish to use guided outputs. Defaults to None.
             temperature (float): The temperature to use.
         """
-
-        messages = [{"role": "user", "content": prompt}]
+        content = [{"type": 'text', "text": prompt}]
         if images:
-            # Add images to messages if given.
             for b64_img in images:
-                messages.append(
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"},
-                    }
-                )
+                content.append({'type': "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}})
+        messages = [{"role": "user", "content": content}]
+        
         if response_format:
             try:
                 # For guided outputs, you have to use beta.chat.completions.parse to use response_format.

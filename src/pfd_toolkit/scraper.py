@@ -275,8 +275,8 @@ class PFDScraper:
             raise ValueError("docx_conversion must be one of 'MicrosoftWord', 'LibreOffice', or 'None'.")
         
         # If OpenAI API key or client is not provided when LLM fallback is enabled
-        if self.llm_fallback and not self.openai_api_key and not self.openai_client:
-            raise ValueError("OpenAI API Key or Client key must be provided if LLM fallback is enabled. \nPlease set either 'openai_api_key' or 'openai_client' parameters. \nGet your API key from https://platform.openai.com/.")
+        if self.llm_fallback and not self.llm:
+            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
         
         # If no scrape method is enabled
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
@@ -655,7 +655,7 @@ class PFDScraper:
             logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
             return None
 
-    def _construct_missing_fields_model(required_fields: list[str]) -> Type[BaseModel]:
+    def _construct_missing_fields_model(self, required_fields: list[str]) -> Type[BaseModel]:
         fields = {field: (str, ...) for field in required_fields}
         return create_model(
             "MissingFields",
@@ -673,7 +673,7 @@ class PFDScraper:
         base64_images = [] # ...OpenAI requires images to be base64 encoded
         if pdf_bytes:
             try:
-                images = convert_from_bytes(pdf_bytes)
+                images = convert_from_bytes(pdf_bytes, poppler_path="C:\\Users\\jonat\\Documents\\Poppler\\poppler-24.08.0\\Library\\bin")
                 for img in images:
                     buffered = BytesIO()
                     img.save(buffered, format="JPEG")
@@ -705,7 +705,7 @@ class PFDScraper:
             required_fields=response_fields
         )
         try:
-            llm_text = self.llm.generate(
+            output = self.llm.generate(
                 prompt=prompt,
                 images=base64_images,
                 response_format=missing_fields_model,
@@ -714,18 +714,21 @@ class PFDScraper:
             if self.verbose:
                 # Display the returned populated model
                 logger.info(
-                    "LLM fallback response:\n%s\n\n", llm_text.model_dump_json(indent=2)
+                    "LLM fallback response:\n%s\n\n", output.model_dump_json(indent=2)
                 )
         except Exception as e:
-            logger.error("LLM fallback failed: %s", e)
+            logger.error(f"LLM fallback failed: {e}")
             return {}
         
         fallback_updates = {}
-        output_json = llm_text.model_dump()
+        output_json = output.model_dump()
+        print('OUTPUT JSON:\n\n', output_json, '\n\n')
+        print(f'And missing fields are: {response_fields}')
         for field in response_fields:
             try:
                 fallback_updates[field] = output_json[field]
-            except:
+            except Exception as e:
+                print(e)
                 fallback_updates[field] = "LLM Fallback failed"
 
         if "Date" in fallback_updates and fallback_updates["Date"] != "N/A: Not found":
@@ -999,19 +1002,19 @@ class PFDScraper:
         if self.llm_fallback:
             missing_fields = {}
             if self.include_date and date == "N/A: Not found":
-                missing_fields["Date of Report"] = "[Date of the report, not the death]"
+                missing_fields["date of report"] = "[Date of the report, not the death]"
             if self.include_coroner and coroner == "N/A: Not found":
-                missing_fields["Coroner's Name"] = "[Name of the coroner. Provide the name only.]"
+                missing_fields["coroner's name"] = "[Name of the coroner. Provide the name only.]"
             if self.include_area and area == "N/A: Not found":
-                missing_fields["Area"] = "[Area/location of the Coroner. Provide the location itself only.]"
+                missing_fields["area"] = "[Area/location of the Coroner. Provide the location itself only.]"
             if self.include_receiver and receiver == "N/A: Not found":
-                missing_fields["Receiver"] = "[Name or names of the recipient(s) as provided in the report.]"
+                missing_fields["receiver"] = "[Name or names of the recipient(s) as provided in the report.]"
             if self.include_investigation and investigation == "N/A: Not found":
-                missing_fields["Investigation and Inquest"] = "[The text from the Investigation/Inquest section.]"
+                missing_fields["investigation and inquest"] = "[The text from the Investigation/Inquest section.]"
             if self.include_circumstances and circumstances == "N/A: Not found":
-                missing_fields["Circumstances of Death"] = "[The text from the Circumstances of Death section.]"
+                missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
             if self.include_concerns and concerns == "N/A: Not found":
-                missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns section.]"
+                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section.]"
             if missing_fields:
                 # Attempt to use cached PDF bytes or re-fetch if needed
                 pdf_bytes = getattr(self, '_last_pdf_bytes', None)
@@ -1020,20 +1023,20 @@ class PFDScraper:
 
                 fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
                 if fallback_updates:
-                    if self.include_date and date == "N/A: Not found" and "Date" in fallback_updates:
-                        date = fallback_updates["Date"]
-                    if self.include_coroner and coroner == "N/A: Not found" and "CoronerName" in fallback_updates:
-                        coroner = fallback_updates["CoronerName"]
-                    if self.include_area and area == "N/A: Not found" and "Area" in fallback_updates:
-                        area = fallback_updates["Area"]
-                    if self.include_receiver and receiver == "N/A: Not found" and "Receiver" in fallback_updates:
-                        receiver = fallback_updates["Receiver"]
-                    if self.include_investigation and investigation == "N/A: Not found" and "InvestigationAndInquest" in fallback_updates:
-                        investigation = fallback_updates["InvestigationAndInquest"]
-                    if self.include_circumstances and circumstances == "N/A: Not found" and "CircumstancesOfDeath" in fallback_updates:
-                        circumstances = fallback_updates["CircumstancesOfDeath"]
-                    if self.include_concerns and concerns == "N/A: Not found" and "MattersOfConcern" in fallback_updates:
-                        concerns = fallback_updates["MattersOfConcern"]
+                    if self.include_date and date == "N/A: Not found" and "date of report" in fallback_updates:
+                        date = fallback_updates["date of report"]
+                    if self.include_coroner and coroner == "N/A: Not found" and "coroner's name" in fallback_updates:
+                        coroner = fallback_updates["coroner's name"]
+                    if self.include_area and area == "N/A: Not found" and "area" in fallback_updates:
+                        area = fallback_updates["area"]
+                    if self.include_receiver and receiver == "N/A: Not found" and "receiver" in fallback_updates:
+                        receiver = fallback_updates["receiver"]
+                    if self.include_investigation and investigation == "N/A: Not found" and "investigation and inquest" in fallback_updates:
+                        investigation = fallback_updates["investigation and inquest"]
+                    if self.include_circumstances and circumstances == "N/A: Not found" and "circumstances of death" in fallback_updates:
+                        circumstances = fallback_updates["circumstances of death"]
+                    if self.include_concerns and concerns == "N/A: Not found" and "coroner's concerns" in fallback_updates:
+                        concerns = fallback_updates["coroner's concerns"]
 
 
 
@@ -1266,20 +1269,20 @@ class PFDScraper:
 
                 fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
                 # Update the dataframe row with any fallback values that were returned.
-                if "Date" in fallback_updates:
-                    reports_df.at[idx, "Date"] = fallback_updates["Date"]
-                if "CoronerName" in fallback_updates:
-                    reports_df.at[idx, "CoronerName"] = fallback_updates["CoronerName"]
-                if "Area" in fallback_updates:
-                    reports_df.at[idx, "Area"] = fallback_updates["Area"]
-                if "Receiver" in fallback_updates:
-                    reports_df.at[idx, "Receiver"] = fallback_updates["Receiver"]
-                if "InvestigationAndInquest" in fallback_updates:
-                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["InvestigationAndInquest"]
-                if "CircumstancesOfDeath" in fallback_updates:
-                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["CircumstancesOfDeath"]
-                if "MattersOfConcern" in fallback_updates:
-                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["MattersOfConcern"]
+                if "date of report" in fallback_updates:
+                    reports_df.at[idx, "Date"] = fallback_updates["date of report"]
+                if "coroner's name" in fallback_updates:
+                    reports_df.at[idx, "CoronerName"] = fallback_updates["coroner's name"]
+                if "area" in fallback_updates:
+                    reports_df.at[idx, "Area"] = fallback_updates["area"]
+                if "receiver" in fallback_updates:
+                    reports_df.at[idx, "Receiver"] = fallback_updates["receiver"]
+                if "investigation and inquest" in fallback_updates:
+                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["investigation and inquest"]
+                if "circumstances of death" in fallback_updates:
+                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["circumstances of death"]
+                if "coroner's concerns" in fallback_updates:
+                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["coroner's concerns"]
         
         # Update the internal reports attribute and return the updated DataFrame.
         self.reports = reports_df.copy()
@@ -1391,31 +1394,31 @@ class PFDScraper:
 # -----------------------------------------------------------------------------------------
 # TESTING
 
-# Load OpenAI API key
-load_dotenv("api.env")
-openai_api_key = os.getenv("OPENAI_API_KEY")
-llm = LLM(api_key=openai_api_key)
+# # Load OpenAI API key
+# load_dotenv("api.env")
+# openai_api_key = os.getenv("OPENAI_API_KEY")
+# llm = LLM(api_key=openai_api_key)
 
-# Run the scraper! :D
-scraper = PFDScraper(
-    llm=llm,
-    category="all",
-    date_from="2024-01-10",
-    date_to="2024-04-19",
-    html_scraping=True,
-    pdf_fallback=False,
-    llm_fallback=False,
-    # docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-    include_time_stamp=False,
-    delay_range=None,
-    verbose=False,
-)
-scraper.scrape_reports()
-scraper.estimate_api_costs()
+# # Run the scraper! :D
+# scraper = PFDScraper(
+#     llm=llm,
+#     category="all",
+#     date_from="2024-01-10",
+#     date_to="2024-04-19",
+#     html_scraping=True,
+#     pdf_fallback=False,
+#     llm_fallback=False,
+#     # docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
+#     include_time_stamp=False,
+#     delay_range=None,
+#     verbose=False,
+# )
+# scraper.scrape_reports()
+# scraper.estimate_api_costs()
 
 # scraper.run_llm_fallback()
 # scraper.top_up(date_to="2025-03-19")
-scraper.reports
+# scraper.reports
 # scraper.reports.to_csv("../../data/testreports.csv")
 
 # scraper.get_report_links()
