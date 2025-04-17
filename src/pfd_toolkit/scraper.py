@@ -26,7 +26,7 @@ from datetime import datetime
 from tqdm import tqdm
 from concurrent.futures import as_completed
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Type
 
 # Only import LLM if needed
 if TYPE_CHECKING:                           
@@ -460,6 +460,18 @@ class PFDScraper:
         normalised = self._normalise_apostrophes(text)
         return " ".join(normalised.split())
 
+    def _normalise_date(self, raw: str) -> str:
+        """
+        Convert any human‑readable date to ISO‑8601 (YYYY‑MM‑DD).
+        Returns the original string on failure.
+        """
+        try:
+            dt = parser.parse(raw, fuzzy=True, dayfirst=True)
+            return dt.strftime("%Y-%m-%d")
+        except Exception as e:
+            logger.warning("Date parse failed for '%s' – keeping raw (%s)", raw, e)
+            return raw
+
     def _extract_text_from_pdf(self, pdf_url: str) -> str:
         """
         Internal function to download and extract text from a .pdf report. If the file is not in .pdf format (.docx or .doc),
@@ -680,7 +692,7 @@ class PFDScraper:
         base64_images = [] # ...OpenAI requires images to be base64 encoded
         if pdf_bytes:
             try:
-                images = convert_from_bytes(pdf_bytes, poppler_path="C:\\Users\\jonat\\Documents\\Poppler\\poppler-24.08.0\\Library\\bin")
+                images = convert_from_bytes(pdf_bytes)
                 for img in images:
                     buffered = BytesIO()
                     img.save(buffered, format="JPEG")
@@ -737,16 +749,8 @@ class PFDScraper:
             except Exception as e:
                 print(e)
                 fallback_updates[field] = "LLM Fallback failed"
-
-        if "Date" in fallback_updates and fallback_updates["Date"] != "N/A: Not found":
-            try:
-                parsed_date = parser.parse(fallback_updates["Date"], fuzzy=True)
-                fallback_updates["Date"] = parsed_date.strftime("%Y-%m-%d")
-            except Exception as e:
-                logger.error("LLM fallback: could not parse date '%s': %s", fallback_updates["Date"], e)
-        return fallback_updates
-
     
+        return fallback_updates
     
     def _extract_report_info(self, url: str) -> dict:
         """
@@ -821,19 +825,11 @@ class PFDScraper:
             
             
             # Date of report extraction
-            # We use fuzzy date parsing to handle variations in date formats (e.g. "1st January 2025" and "01/01/2025")
             if self.include_date:
                 date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
                 if date_element != "N/A: Not found":
                     date_element = date_element.replace("Date of report:", "").strip()
-                    try:
-                        parsed_date = parser.parse(date_element, fuzzy=True)
-                        date = parsed_date.strftime("%Y-%m-%d")
-                    except Exception as e:
-                        logger.error("Error parsing date '%s': %s", date_element, e)
-                        date = date_element
-                else:
-                    date = 'N/A: Not found'
+                    date = self._normalise_date(date_element)
                 
             
             # Receiver extraction (who the report is sent to)
@@ -1030,7 +1026,11 @@ class PFDScraper:
 
                 fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
                 if fallback_updates:
-                    if self.include_date and date == "N/A: Not found" and "date of report" in fallback_updates:
+                    if ("date of report" in fallback_updates
+                            and fallback_updates["date of report"] != "N/A: Not found"):
+                        fallback_updates["date of report"] = self._normalise_date(
+                            fallback_updates["date of report"]
+                        )
                         date = fallback_updates["date of report"]
                     if self.include_coroner and coroner == "N/A: Not found" and "coroner's name" in fallback_updates:
                         coroner = fallback_updates["coroner's name"]
@@ -1276,7 +1276,11 @@ class PFDScraper:
 
                 fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
                 # Update the dataframe row with any fallback values that were returned.
-                if "date of report" in fallback_updates:
+                if ("date of report" in fallback_updates
+                        and fallback_updates["date of report"] != "N/A: Not found"):
+                    fallback_updates["date of report"] = self._normalise_date(
+                        fallback_updates["date of report"]
+                    )
                     reports_df.at[idx, "Date"] = fallback_updates["date of report"]
                 if "coroner's name" in fallback_updates:
                     reports_df.at[idx, "CoronerName"] = fallback_updates["coroner's name"]
