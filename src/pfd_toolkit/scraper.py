@@ -1028,7 +1028,7 @@ class PFDScraper:
                 if pdf_bytes is None:
                     pdf_bytes = self._fetch_pdf_bytes(report_link)
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=url)
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
                 if fallback_updates:
                     if ("date of report" in fallback_updates
                             and fallback_updates["date of report"] != "N/A: Not found"):
@@ -1278,7 +1278,7 @@ class PFDScraper:
                 else:
                     pdf_bytes = None
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=url)
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
                 # Update the dataframe row with any fallback values that were returned.
                 if ("date of report" in fallback_updates
                         and fallback_updates["date of report"] != "N/A: Not found"):
