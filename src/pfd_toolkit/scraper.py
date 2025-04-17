@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import requests
 from requests.adapters import HTTPAdapter
@@ -8,22 +10,16 @@ import pandas as pd
 import re
 from dateutil import parser
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
-from io import BytesIO 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, unquote
-import base64
-from pdf2image import convert_from_bytes
-from openai import OpenAI
-from dotenv import load_dotenv
+from io import BytesIO
 import os
 import subprocess
 import time
 import random
 import threading
-from itertools import chain
 from datetime import datetime
 from tqdm import tqdm
-from concurrent.futures import as_completed
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -50,7 +46,7 @@ class PFDScraper:
     
     def __init__(
         self,
-        
+        llm: "LLM" = None, 
         # Web page logic
         category: str = 'all',
         date_from: str = "2000-01-01",
@@ -65,12 +61,6 @@ class PFDScraper:
         html_scraping: bool = True,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
-        
-        # OpenAI API configuration
-        openai_api_key: str = None,
-        openai_client: OpenAI = None,
-        llm_model: str = "gpt-4o-mini",
-        
         # Document conversion
         docx_conversion: str = "None",
         
@@ -86,14 +76,13 @@ class PFDScraper:
         include_concerns: bool = True,
         include_time_stamp: bool = False,
         
-        verbose: bool = True  
+        verbose: bool = False  
     ) -> None:
-        
         """
         Initialises the scraper.
-        
+        :param llm: The LLM client to use when llm_fallback is True.
         :param category: Category of reports as categorised on the judiciary.uk website. Options are 'all' (default), 'suicide', 'accident_work_safety', 'alcohol_drug_medication', 'care_home', 'child_death', 'community_health_emergency', 'emergency_services', 'hospital_deaths', 'mental_health', 'police', 'product', 'railway', 'road', 'service_personnel', 'custody', 'wales', 'other'.
-        :param date_from: In "YYYY-MM-DD" format. Only reports published on or after this date will be scraped. 
+        :param date_from: In "YYYY-MM-DD" format. Only reports published on or after this date will be scraped.
         :param date_to: In "YYYY-MM-DD" format. Only reports published on or before this date will be scraped.
         :param max_workers: The total number of concurrent threads the scraper can use for fetching data across all pages.
         :param max_requests: Maximum number of requests per domain to avoid IP address block.
@@ -101,8 +90,6 @@ class PFDScraper:
         :param html_scraping: Whether to attempt HTML-based scraping.
         :param pdf_fallback: Whether to fallback to .pdf scraping if missing values remain following HTML scraping (if set).
         :param llm_fallback: Whether to fallback to LLM scraping if missing values remain following previous method(s), if set. OpenAI API key must provided.
-        :param openai_api_key: OpenAI API Key
-        :param llm_model: The specific OpenAI LLM model to use, if llm_fallback is set to True. Default is "gpt_4o_mini".
         :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         :param include_url: Whether to add a URL column to the output file.
         :param include_id: Whether to add a report ID column to the output file.
@@ -141,10 +128,8 @@ class PFDScraper:
         self.html_scraping = html_scraping
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
-        
-        self.openai_api_key = openai_api_key
-        self.llm_model = llm_model
-        
+        self.llm = llm
+
         self.docx_conversion = docx_conversion
         
         self.include_url = include_url
@@ -165,18 +150,7 @@ class PFDScraper:
         self.reports = None # ...So that the user can access them later as an internal attribute
         self.report_links = [] 
         
-        # Use injected LLM client if provided; otherwise, create one from the API key.
-        # This allows the user to pass in their own OpenAI client instance as an alternative to supplying an API key.
-        if self.llm_fallback:
-            if openai_client is not None:
-                self.openai_client = openai_client
-            elif openai_api_key is not None:
-                self.openai_client = OpenAI(api_key=self.openai_api_key)
-            else:
-                raise ValueError("LLM fallback enabled, but neither an API key nor OpenAI client was provided.")
-        else:
-            self.openai_client = openai_client 
-        
+        self.llm_model = self.llm.model if self.llm else "None"
         
         # Define URL templates for different PFD categories.
         # ...Some categories (like 'all' and 'suicide') have unique URL formats, which is why we're specifying them individually
@@ -237,13 +211,6 @@ class PFDScraper:
                     "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
                     "&before-day={before_day}&before-month={before_month}&before-year={before_year}"
         }
-
-        
-        if self.category in category_templates:
-            self.page_template = category_templates[self.category]
-        else:
-            valid_options = ", ".join(sorted(category_templates.keys()))
-            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
         
         # Set pagination parameter
         self.start_page = 1
@@ -252,6 +219,7 @@ class PFDScraper:
         if self.delay_range is None or self.delay_range == 0:
             self.delay_range = (0, 0)
 
+        
         # -----------------------------------------------------------------------------
         # Error and Warning Handling for Initialisation Parameters
         # -----------------------------------------------------------------------------
@@ -268,6 +236,10 @@ class PFDScraper:
         # If date_from is after date_to
         if self.date_from > self.date_to:
             raise ValueError("date_from must be before date_to.")
+        
+        # If LLM fallback is enabled but no LLM client is provided
+        if self.llm_fallback and not self.llm:
+            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
         
         # If max_workers is set to 0 or a negative number
         if self.max_workers <= 0:
@@ -290,8 +262,8 @@ class PFDScraper:
             raise ValueError("docx_conversion must be one of 'MicrosoftWord', 'LibreOffice', or 'None'.")
         
         # If OpenAI API key or client is not provided when LLM fallback is enabled
-        if self.llm_fallback and not self.openai_api_key and not self.openai_client:
-            raise ValueError("OpenAI API Key or Client key must be provided if LLM fallback is enabled. \nPlease set either 'openai_api_key' or 'openai_client' parameters. \nGet your API key from https://platform.openai.com/.")
+        if self.llm_fallback and not self.llm:
+            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
         
         # If no scrape method is enabled
         if not self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
@@ -344,7 +316,7 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
         # -----------------------------------------------------------------------------
-
+        
         if verbose:
             logger.info(
                 "\nPFDScraper initialised with parameters:\n "
@@ -356,7 +328,6 @@ class PFDScraper:
                 f"HTML Scraping: {self.html_scraping}\n "
                 f"PDF Fallback: {self.pdf_fallback}\n "
                 f"LLM Fallback: {self.llm_fallback}\n "
-                f"OpenAI API Key Provided: {'Yes' if self.openai_api_key else 'No'}\n " # Hide the API key 
                 f"LLM Model: {self.llm_model}\n "
                 f"Docx Conversion: {self.docx_conversion}\n "
                 f"Include URL: {'Yes' if self.include_url else 'No'}\n "
@@ -464,12 +435,23 @@ class PFDScraper:
         """
         return text.replace("’", "'").replace("‘", "'")
 
-    @staticmethod
-    def _clean_text(text: str) -> str:
+    def _clean_text(self, text: str) -> str:
         """Helper function to clean text by removing excessive whitespace & replacing typographic apostrophes."""
-        normalised = PFDScraper._normalise_apostrophes(text)
-        return ' '.join(normalised.split())
-    
+        normalised = self._normalise_apostrophes(text)
+        return " ".join(normalised.split())
+
+    def _normalise_date(self, raw: str) -> str:
+        """
+        Convert any human‑readable date to ISO‑8601 (YYYY‑MM‑DD).
+        Returns the original string on failure.
+        """
+        try:
+            dt = parser.parse(raw, fuzzy=True, dayfirst=True)
+            return dt.strftime("%Y-%m-%d")
+        except Exception as e:
+            logger.warning("Date parse failed for '%s' – keeping raw (%s)", raw, e)
+            return raw
+
     def _extract_text_from_pdf(self, pdf_url: str) -> str:
         """
         Internal function to download and extract text from a .pdf report. If the file is not in .pdf format (.docx or .doc),
@@ -580,7 +562,9 @@ class PFDScraper:
     
     # Method 2 of HTML extraction that looks for a <strong> tag containing keywords
     # This is intended for the main report sections, such as Investigation, Circumstances of Death, etc.
-    def _extract_section_text_by_keywords(self, soup: BeautifulSoup, header_keywords: list) -> str:
+    def _extract_section_text_by_keywords(
+        self, soup: BeautifulSoup, header_keywords: list
+    ) -> str:
         """
         Extracts a block of text from HTML by locating a header (within <strong> tags) that matches
         one of the provided header keywords, then collecting all sibling elements that follow.
@@ -669,88 +653,6 @@ class PFDScraper:
         except Exception as e:
             logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
             return None
-
-
-    def _call_llm_fallback(self, pdf_bytes: bytes, missing_fields: dict) -> dict:
-        """
-        Helper that converts pdf_bytes to images, builds a prompt based on missing_fields,
-        calls the LLM API, and parses the response.
-        
-        Returns a dictionary of fallback updates.
-        """
-        base64_images = [] # ...OpenAI requires images to be base64 encoded
-        if pdf_bytes:
-            try:
-                images = convert_from_bytes(pdf_bytes)
-                for img in images:
-                    buffered = BytesIO()
-                    img.save(buffered, format="JPEG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                    base64_images.append(img_str)
-            except Exception as e:
-                logger.error("Error converting PDF to images: %s", e)
-        
-        prompt = (
-            "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
-            "Please extract the following section(s):\n"
-        )
-        for field, instruction in missing_fields.items():
-            prompt += f"\n{field}: {instruction}\n"
-        prompt += (
-            "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
-            "If you are unable to identify the text from the image for any given section, simply respond: \"N/A: Not found\" for that section.\n"
-            "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
-            "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
-            "Do *not* change the section title(s) from the above format.\n"
-        )
-        if self.verbose:
-            logger.info("LLM prompt:\n\n%s", prompt)
-        
-        messages = [{"type": "text", "text": prompt}]
-        for b64_img in base64_images:
-            messages.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{b64_img}"}
-            })
-        try:
-            response = self.openai_client.chat.completions.create(
-                model=self.llm_model,
-                messages=[{"role": "user", "content": messages}],
-            )
-            llm_text = response.choices[0].message.content
-            if self.verbose:
-                logger.info("LLM fallback response:\n%s\n\n", llm_text)
-        except Exception as e:
-            logger.error("LLM fallback failed: %s", e)
-            return {}
-        
-        fallback_updates = {}
-        for line in llm_text.splitlines():
-            line_strip = line.strip()
-            line_lower = line_strip.lower()
-            if line_lower.startswith("date of report:"):
-                fallback_updates["Date"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("coroner's name:"):
-                fallback_updates["CoronerName"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("area:"):
-                fallback_updates["Area"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("receiver:"):
-                fallback_updates["Receiver"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("investigation and inquest:"):
-                fallback_updates["InvestigationAndInquest"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("circumstances of death:"):
-                fallback_updates["CircumstancesOfDeath"] = line_strip.split(":", 1)[1].strip()
-            elif line_lower.startswith("coroner's concerns:"):
-                fallback_updates["MattersOfConcern"] = line_strip.split(":", 1)[1].strip()
-        if "Date" in fallback_updates and fallback_updates["Date"] != "N/A: Not found":
-            try:
-                parsed_date = parser.parse(fallback_updates["Date"], fuzzy=True)
-                fallback_updates["Date"] = parsed_date.strftime("%Y-%m-%d")
-            except Exception as e:
-                logger.error("LLM fallback: could not parse date '%s': %s", fallback_updates["Date"], e)
-        return fallback_updates
-
-    
     
     def _extract_report_info(self, url: str) -> dict:
         """
@@ -825,19 +727,11 @@ class PFDScraper:
             
             
             # Date of report extraction
-            # We use fuzzy date parsing to handle variations in date formats (e.g. "1st January 2025" and "01/01/2025")
             if self.include_date:
                 date_element = self._extract_paragraph_text_by_keywords(soup, ["Date of report:"])
                 if date_element != "N/A: Not found":
                     date_element = date_element.replace("Date of report:", "").strip()
-                    try:
-                        parsed_date = parser.parse(date_element, fuzzy=True)
-                        date = parsed_date.strftime("%Y-%m-%d")
-                    except Exception as e:
-                        logger.error("Error parsing date '%s': %s", date_element, e)
-                        date = date_element
-                else:
-                    date = 'N/A: Not found'
+                    date = self._normalise_date(date_element)
                 
             
             # Receiver extraction (who the report is sent to)
@@ -1013,41 +907,49 @@ class PFDScraper:
         if self.llm_fallback:
             missing_fields = {}
             if self.include_date and date == "N/A: Not found":
-                missing_fields["Date of Report"] = "[Date of the report, not the death]"
+                missing_fields["date of report"] = "[Date of the report, not the death]"
             if self.include_coroner and coroner == "N/A: Not found":
-                missing_fields["Coroner's Name"] = "[Name of the coroner. Provide the name only.]"
+                missing_fields["coroner's name"] = "[Name of the coroner. Provide the name only.]"
             if self.include_area and area == "N/A: Not found":
-                missing_fields["Area"] = "[Area/location of the Coroner. Provide the location itself only.]"
+                missing_fields["area"] = "[Area/location of the Coroner. Provide the location itself only.]"
             if self.include_receiver and receiver == "N/A: Not found":
-                missing_fields["Receiver"] = "[Name or names of the recipient(s) as provided in the report.]"
+                missing_fields["receiver"] = "[Recipients of the report. Always extract the role & organisation of the recipients, if provided, and *not* individual names -- if no organisational details are provided the name is fine. ]"
             if self.include_investigation and investigation == "N/A: Not found":
-                missing_fields["Investigation and Inquest"] = "[The text from the Investigation/Inquest section.]"
+                missing_fields["investigation and inquest"] = "[The text from the Investigation/Inquest section.]"
             if self.include_circumstances and circumstances == "N/A: Not found":
-                missing_fields["Circumstances of Death"] = "[The text from the Circumstances of Death section.]"
+                missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
             if self.include_concerns and concerns == "N/A: Not found":
-                missing_fields["Coroner's Concerns"] = "[The text from the Coroner's Concerns section.]"
+                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section. This is sometimes under 'Matters of Concern'.]"
             if missing_fields:
                 # Attempt to use cached PDF bytes or re-fetch if needed
                 pdf_bytes = getattr(self, '_last_pdf_bytes', None)
                 if pdf_bytes is None:
                     pdf_bytes = self._fetch_pdf_bytes(report_link)
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
+                fallback_updates = self.llm.call_llm_fallback(
+                    pdf_bytes=pdf_bytes, 
+                    missing_fields=missing_fields,
+                    report_url=url,
+                    verbose = self.verbose)
                 if fallback_updates:
-                    if self.include_date and date == "N/A: Not found" and "Date" in fallback_updates:
-                        date = fallback_updates["Date"]
-                    if self.include_coroner and coroner == "N/A: Not found" and "CoronerName" in fallback_updates:
-                        coroner = fallback_updates["CoronerName"]
-                    if self.include_area and area == "N/A: Not found" and "Area" in fallback_updates:
-                        area = fallback_updates["Area"]
-                    if self.include_receiver and receiver == "N/A: Not found" and "Receiver" in fallback_updates:
-                        receiver = fallback_updates["Receiver"]
-                    if self.include_investigation and investigation == "N/A: Not found" and "InvestigationAndInquest" in fallback_updates:
-                        investigation = fallback_updates["InvestigationAndInquest"]
-                    if self.include_circumstances and circumstances == "N/A: Not found" and "CircumstancesOfDeath" in fallback_updates:
-                        circumstances = fallback_updates["CircumstancesOfDeath"]
-                    if self.include_concerns and concerns == "N/A: Not found" and "MattersOfConcern" in fallback_updates:
-                        concerns = fallback_updates["MattersOfConcern"]
+                    if ("date of report" in fallback_updates
+                            and fallback_updates["date of report"] != "N/A: Not found"):
+                        fallback_updates["date of report"] = self._normalise_date(
+                            fallback_updates["date of report"]
+                        )
+                        date = fallback_updates["date of report"]
+                    if self.include_coroner and coroner == "N/A: Not found" and "coroner's name" in fallback_updates:
+                        coroner = fallback_updates["coroner's name"]
+                    if self.include_area and area == "N/A: Not found" and "area" in fallback_updates:
+                        area = fallback_updates["area"]
+                    if self.include_receiver and receiver == "N/A: Not found" and "receiver" in fallback_updates:
+                        receiver = fallback_updates["receiver"]
+                    if self.include_investigation and investigation == "N/A: Not found" and "investigation and inquest" in fallback_updates:
+                        investigation = fallback_updates["investigation and inquest"]
+                    if self.include_circumstances and circumstances == "N/A: Not found" and "circumstances of death" in fallback_updates:
+                        circumstances = fallback_updates["circumstances of death"]
+                    if self.include_concerns and concerns == "N/A: Not found" and "coroner's concerns" in fallback_updates:
+                        concerns = fallback_updates["coroner's concerns"]
 
 
 
@@ -1278,22 +1180,26 @@ class PFDScraper:
                 else:
                     pdf_bytes = None
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
+                fallback_updates = self.llm.call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
                 # Update the dataframe row with any fallback values that were returned.
-                if "Date" in fallback_updates:
-                    reports_df.at[idx, "Date"] = fallback_updates["Date"]
-                if "CoronerName" in fallback_updates:
-                    reports_df.at[idx, "CoronerName"] = fallback_updates["CoronerName"]
-                if "Area" in fallback_updates:
-                    reports_df.at[idx, "Area"] = fallback_updates["Area"]
-                if "Receiver" in fallback_updates:
-                    reports_df.at[idx, "Receiver"] = fallback_updates["Receiver"]
-                if "InvestigationAndInquest" in fallback_updates:
-                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["InvestigationAndInquest"]
-                if "CircumstancesOfDeath" in fallback_updates:
-                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["CircumstancesOfDeath"]
-                if "MattersOfConcern" in fallback_updates:
-                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["MattersOfConcern"]
+                if ("date of report" in fallback_updates
+                        and fallback_updates["date of report"] != "N/A: Not found"):
+                    fallback_updates["date of report"] = self._normalise_date(
+                        fallback_updates["date of report"]
+                    )
+                    reports_df.at[idx, "Date"] = fallback_updates["date of report"]
+                if "coroner's name" in fallback_updates:
+                    reports_df.at[idx, "CoronerName"] = fallback_updates["coroner's name"]
+                if "area" in fallback_updates:
+                    reports_df.at[idx, "Area"] = fallback_updates["area"]
+                if "receiver" in fallback_updates:
+                    reports_df.at[idx, "Receiver"] = fallback_updates["receiver"]
+                if "investigation and inquest" in fallback_updates:
+                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["investigation and inquest"]
+                if "circumstances of death" in fallback_updates:
+                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["circumstances of death"]
+                if "coroner's concerns" in fallback_updates:
+                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["coroner's concerns"]
         
         # Update the internal reports attribute and return the updated DataFrame.
         self.reports = reports_df.copy()
@@ -1313,7 +1219,14 @@ class PFDScraper:
         Returns:
             float: The estimated API cost in USD.
         """
-
+        
+        # Check if the LLM client is set
+        if self.llm is None:
+            raise RuntimeError(
+                "estimate_api_costs() needs an LLM client. "
+                "Pass one to the constructor or skip this call."
+            )
+            
         # Use the provided DataFrame or default to self.reports
         if df is None:
             if self.reports is None:
@@ -1338,13 +1251,15 @@ class PFDScraper:
         }
         
         # Throw error if the model is not found in the pricing structure
-        if self.llm_model not in MODEL_PRICING_PER_1M_TOKENS:
-            raise ValueError(f"LLM model '{self.llm_model}' is not supported in the pricing estimation.")
-        
+        if self.llm.model not in MODEL_PRICING_PER_1M_TOKENS:
+            raise ValueError(
+                f"LLM model '{self.llm.model}' is not supported in the pricing estimation."
+            )
+
         # Extract the pricing per million tokens for the selected model
-        input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["input"]
-        output_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["output"]
-        cached_input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm_model]["cached_input"]
+        input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm.model]["input"]
+        output_price = MODEL_PRICING_PER_1M_TOKENS[self.llm.model]["output"]
+        cached_input_price = MODEL_PRICING_PER_1M_TOKENS[self.llm.model]["cached_input"]
 
         # Determine which columns are relevant (only those that are enabled)
         relevant_columns = []
@@ -1396,41 +1311,5 @@ class PFDScraper:
                       (total_cached_input_tokens / 1_000_000.0) * cached_input_price +
                       (total_output_tokens / 1_000_000.0) * output_price)
         logger.info("Estimated API cost for LLM fallback (model: %s): $%.2f based on %d missing fields.",
-                    self.llm_model, total_cost, total_missing_fields)
+                    self.llm.model, total_cost, total_missing_fields)
 
-
-
-# -----------------------------------------------------------------------------------------
-# TESTING
-
-# Load OpenAI API key
-load_dotenv('api.env')
-openai_api_key = os.getenv('OPENAI_API_KEY')
-client = OpenAI(api_key=openai_api_key)
-
-# Run the scraper! :D
-scraper = PFDScraper(
-    category='all', 
-    date_from="2024-01-10",
-    date_to="2024-04-19",
-    html_scraping=True,
-    pdf_fallback=False,
-    llm_fallback=False,
-    openai_client = client,
-    llm_model="gpt-4o-mini",
-    #docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-    include_time_stamp=False,
-    delay_range = None,
-    verbose=False
-)
-scraper.scrape_reports()
-scraper.estimate_api_costs()
-
-#scraper.run_llm_fallback()
-#scraper.top_up(date_to="2025-03-19")
-scraper.reports
-
-
-#reports.to_csv('../../data/testreports.csv')
-
-#scraper.get_report_links()
