@@ -10,13 +10,9 @@ import pandas as pd
 import re
 from dateutil import parser
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
-from pydantic import create_model, BaseModel
-from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, unquote
-import base64
-from pdf2image import convert_from_bytes
-from dotenv import load_dotenv
+from io import BytesIO
 import os
 import subprocess
 import time
@@ -24,15 +20,6 @@ import random
 import threading
 from datetime import datetime
 from tqdm import tqdm
-from concurrent.futures import as_completed
-
-from typing import TYPE_CHECKING, Optional, Type
-
-# Only import LLM if needed
-if TYPE_CHECKING:                           
-    from pfd_toolkit.llm import LLM         
-
-#from pfd_toolkit.llm import LLM
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -59,7 +46,7 @@ class PFDScraper:
     
     def __init__(
         self,
-        llm: Optional["LLM"] = None, # Quoted LLM so that runtime import not needed
+        llm: "LLM" = None, 
         # Web page logic
         category: str = 'all',
         date_from: str = "2000-01-01",
@@ -224,13 +211,6 @@ class PFDScraper:
                     "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
                     "&before-day={before_day}&before-month={before_month}&before-year={before_year}"
         }
-
-        
-        if self.category in category_templates:
-            self.page_template = category_templates[self.category]
-        else:
-            valid_options = ", ".join(sorted(category_templates.keys()))
-            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
         
         # Set pagination parameter
         self.start_page = 1
@@ -673,88 +653,6 @@ class PFDScraper:
         except Exception as e:
             logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
             return None
-
-    def _construct_missing_fields_model(self, required_fields: list[str]) -> Type[BaseModel]:
-        fields = {field: (str, ...) for field in required_fields}
-        return create_model(
-            "MissingFields",
-            **fields,
-            __doc__="Missing fields populated with the required information from the PFD report.",
-        )
-
-    def _call_llm_fallback(self, pdf_bytes: bytes, missing_fields: dict, report_url: str | None = None) -> dict:
-        """
-        Helper that converts pdf_bytes to images, builds a prompt based on missing_fields,
-        calls the LLM API, and parses the response.
-        
-        Returns a dictionary of fallback updates.
-        """
-        base64_images = [] # ...OpenAI requires images to be base64 encoded
-        if pdf_bytes:
-            try:
-                images = convert_from_bytes(pdf_bytes)
-                for img in images:
-                    buffered = BytesIO()
-                    img.save(buffered, format="JPEG")
-                    img_str = base64.b64encode(buffered.getvalue()).decode("utf-8")
-                    base64_images.append(img_str)
-            except Exception as e:
-                logger.error("Error converting PDF to images: %s", e)
-        
-        prompt = (
-            "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
-            "Please extract the following section(s):\n"
-        )
-        response_fields = []
-        for field, instruction in missing_fields.items():
-            response_fields.append(field)
-            prompt += f"\n{field}: {instruction}\n"
-        prompt += (
-            "\nRespond with nothing else whatsoever. You must not respond in your own 'voice' or even acknowledge the task.\n"
-            'If you are unable to identify the text from the image for any given section, simply respond: "N/A: Not found" for that section.\n'
-            "Sometimes text may be redacted with a black box; transcribe it as '[REDACTED]'.\n"
-            "Make sure you transcribe the *full* text for each section, not just a snippet.\n"
-            "Do *not* change the section title(s) from the above format.\n"
-            "Respond in the specified response format\n"
-        )
-        #if self.verbose:
-        #    logger.info("LLM prompt:\n\n%s", prompt)
-        # Construct dynamic response_format model
-        missing_fields_model = self._construct_missing_fields_model(
-            required_fields=response_fields
-        )
-        try:
-            output = self.llm.generate(
-                prompt=prompt,
-                images=base64_images,
-                response_format=missing_fields_model,
-            )
-
-            if self.verbose:
-                # Display the returned populated model
-                logger.info(
-                    "LLM fallback response:\n%s\n\n", output.model_dump_json(indent=2)
-                )
-        except Exception as e:
-            logger.error(f"LLM fallback failed: {e}")
-            return {}
-        
-        fallback_updates = {}
-        output_json = output.model_dump()
-        
-        if self.verbose:
-            logger.info("LLM fallback for report: %s", report_url)
-            logger.info("Output JSON: %s", output_json)
-            logger.info("Missing fields were: %s", response_fields)
-            
-        for field in response_fields:
-            try:
-                fallback_updates[field] = output_json[field]
-            except Exception as e:
-                print(e)
-                fallback_updates[field] = "LLM Fallback failed"
-    
-        return fallback_updates
     
     def _extract_report_info(self, url: str) -> dict:
         """
@@ -1028,7 +926,11 @@ class PFDScraper:
                 if pdf_bytes is None:
                     pdf_bytes = self._fetch_pdf_bytes(report_link)
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=url)
+                fallback_updates = self.llm.call_llm_fallback(
+                    pdf_bytes=pdf_bytes, 
+                    missing_fields=missing_fields,
+                    report_url=url,
+                    verbose = self.verbose)
                 if fallback_updates:
                     if ("date of report" in fallback_updates
                             and fallback_updates["date of report"] != "N/A: Not found"):
@@ -1278,7 +1180,7 @@ class PFDScraper:
                 else:
                     pdf_bytes = None
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
+                fallback_updates = self.llm.call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
                 # Update the dataframe row with any fallback values that were returned.
                 if ("date of report" in fallback_updates
                         and fallback_updates["date of report"] != "N/A: Not found"):

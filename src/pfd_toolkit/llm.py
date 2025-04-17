@@ -1,7 +1,11 @@
 import openai
 import logging
-from typing import List, Optional
-from pydantic import BaseModel
+import base64
+from typing import List, Optional, Dict, Union
+from pydantic import BaseModel, create_model
+from io import BytesIO
+from pdf2image import convert_from_bytes
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -11,7 +15,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class LLM:
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: str = None):
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: Optional[str] = None):
         """Create an LLM object for use within PFD_Toolkit
 
         Args:
@@ -29,7 +33,7 @@ class LLM:
         else:
             self.base_url = openai.base_url
         self.client = openai.Client(api_key=self.api_key, base_url=base_url)
-
+    
     def generate(
         self,
         prompt: str,
@@ -81,6 +85,93 @@ class LLM:
             except Exception as e:
                 logger.error(f"An error occurred while calling the LLM model: {e}")
                 return "Error: LLM Failed."
+
+    # Main method for calling the LLM for missing fields in the Scraper module
+    def call_llm_fallback(
+        self,
+        pdf_bytes: Optional[bytes],
+        missing_fields: Dict[str, str],
+        report_url: Optional[str] = None,
+        verbose: bool = False,
+    ) -> Dict[str, str]:
+        """
+        Use the LLM to extract text from PDF images for missing fields.
+
+        Args:
+            pdf_bytes (bytes): Raw PDF bytes.
+            missing_fields (dict): Mapping of field names to prompt instructions.
+            report_url (str, optional): URL of the report, for logging.
+            verbose (bool): If True, log prompt and output.
+
+        Returns:
+            dict: Extracted values keyed by the original field names.
+        """
+        # 1) Convert PDF bytes to base64 images
+        base64_images: List[str] = []
+        if pdf_bytes:
+            try:
+                imgs = convert_from_bytes(pdf_bytes)
+                for img in imgs:
+                    buf = BytesIO()
+                    img.save(buf, format="JPEG")
+                    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    base64_images.append(b64)
+            except Exception as e:
+                logger.error(f"Error converting PDF to images: {e}")
+
+        # 2) Build the prompt
+        prompt = (
+            "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
+            "Please extract the following section(s):\n"
+        )
+        response_fields: List[str] = []
+        for field, instruction in missing_fields.items():
+            response_fields.append(field)
+            prompt += f"\n{field}: {instruction}\n"
+        prompt += (
+            "\nRespond with nothing else whatsoever. You must not respond in your own 'voice'...\n"
+            'If you are unable to identify the text for any section, respond exactly: "N/A: Not found".\n'
+            "Transcribe redactions as '[REDACTED]'.\n"
+            "Do *not* change section titles. Respond in the specified format.\n"
+        )
+
+        # 3) Create a dynamic pydantic model for the expected keys
+        schema = {fld: (str, ...) for fld in response_fields}
+        MissingModel = create_model("MissingFields", **schema)
+
+        if verbose:
+            logger.info("LLM fallback prompt for %s:\n%s", report_url, prompt)
+
+        # 4) Invoke the LLM
+        try:
+            output = self.generate(
+                prompt=prompt,
+                images=base64_images,
+                response_format=MissingModel,
+            )
+        except Exception as e:
+            logger.error(f"LLM fallback call failed: {e}")
+            return {}
+
+        # 5) Normalize output to dict
+        if isinstance(output, BaseModel):
+            out_json = output.model_dump()
+        elif isinstance(output, dict):
+            out_json = output
+        else:
+            logger.error(f"Unexpected LLM fallback output type: {type(output)}")
+            return {}
+
+        if verbose:
+            logger.info("LLM fallback output for %s: %s", report_url, out_json)
+
+        # 6) Build fallback_updates
+        updates: Dict[str, str] = {}
+        for fld in response_fields:
+            val = out_json.get(fld)
+            updates[fld] = val if val is not None else "LLM Fallback failed"
+        return updates
+
 
 
 # Base prompt template that all prompts will share, with placeholders for field-specific information.
