@@ -1028,7 +1028,7 @@ class PFDScraper:
                 if pdf_bytes is None:
                     pdf_bytes = self._fetch_pdf_bytes(report_link)
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=url)
                 if fallback_updates:
                     if ("date of report" in fallback_updates
                             and fallback_updates["date of report"] != "N/A: Not found"):
@@ -1411,36 +1411,3 @@ class PFDScraper:
         logger.info("Estimated API cost for LLM fallback (model: %s): $%.2f based on %d missing fields.",
                     self.llm.model, total_cost, total_missing_fields)
 
-
-
-# -----------------------------------------------------------------------------------------
-# TESTING
-
-# # Load OpenAI API key
-# load_dotenv("api.env")
-# openai_api_key = os.getenv("OPENAI_API_KEY")
-# llm = LLM(api_key=openai_api_key)
-
-# # Run the scraper! :D
-# scraper = PFDScraper(
-#     llm=llm,
-#     category="all",
-#     date_from="2024-01-10",
-#     date_to="2024-04-19",
-#     html_scraping=True,
-#     pdf_fallback=False,
-#     llm_fallback=False,
-#     # docx_conversion="LibreOffice", # Doesn't currently seem to work; need to debug.
-#     include_time_stamp=False,
-#     delay_range=None,
-#     verbose=False,
-# )
-# scraper.scrape_reports()
-# scraper.estimate_api_costs()
-
-# scraper.run_llm_fallback()
-# scraper.top_up(date_to="2025-03-19")
-# scraper.reports
-# scraper.reports.to_csv("../../data/testreports.csv")
-
-# scraper.get_report_links()
