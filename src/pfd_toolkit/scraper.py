@@ -682,7 +682,7 @@ class PFDScraper:
             __doc__="Missing fields populated with the required information from the PFD report.",
         )
 
-    def _call_llm_fallback(self, pdf_bytes: bytes, missing_fields: dict) -> dict:
+    def _call_llm_fallback(self, pdf_bytes: bytes, missing_fields: dict, report_url: str | None = None) -> dict:
         """
         Helper that converts pdf_bytes to images, builds a prompt based on missing_fields,
         calls the LLM API, and parses the response.
@@ -717,8 +717,8 @@ class PFDScraper:
             "Do *not* change the section title(s) from the above format.\n"
             "Respond in the specified response format\n"
         )
-        if self.verbose:
-            logger.info("LLM prompt:\n\n%s", prompt)
+        #if self.verbose:
+        #    logger.info("LLM prompt:\n\n%s", prompt)
         # Construct dynamic response_format model
         missing_fields_model = self._construct_missing_fields_model(
             required_fields=response_fields
@@ -741,8 +741,12 @@ class PFDScraper:
         
         fallback_updates = {}
         output_json = output.model_dump()
-        print('OUTPUT JSON:\n\n', output_json, '\n\n')
-        print(f'And missing fields are: {response_fields}')
+        
+        if self.verbose:
+            logger.info("LLM fallback for report: %s", report_url)
+            logger.info("Output JSON: %s", output_json)
+            logger.info("Missing fields were: %s", response_fields)
+            
         for field in response_fields:
             try:
                 fallback_updates[field] = output_json[field]
@@ -1011,20 +1015,20 @@ class PFDScraper:
             if self.include_area and area == "N/A: Not found":
                 missing_fields["area"] = "[Area/location of the Coroner. Provide the location itself only.]"
             if self.include_receiver and receiver == "N/A: Not found":
-                missing_fields["receiver"] = "[Name or names of the recipient(s) as provided in the report.]"
+                missing_fields["receiver"] = "[Recipients of the report. Always extract the role & organisation of the recipients, if provided, and *not* individual names -- if no organisational details are provided the name is fine. ]"
             if self.include_investigation and investigation == "N/A: Not found":
                 missing_fields["investigation and inquest"] = "[The text from the Investigation/Inquest section.]"
             if self.include_circumstances and circumstances == "N/A: Not found":
                 missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
             if self.include_concerns and concerns == "N/A: Not found":
-                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section.]"
+                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section. This is sometimes under 'Matters of Concern'.]"
             if missing_fields:
                 # Attempt to use cached PDF bytes or re-fetch if needed
                 pdf_bytes = getattr(self, '_last_pdf_bytes', None)
                 if pdf_bytes is None:
                     pdf_bytes = self._fetch_pdf_bytes(report_link)
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=url)
                 if fallback_updates:
                     if ("date of report" in fallback_updates
                             and fallback_updates["date of report"] != "N/A: Not found"):
@@ -1274,7 +1278,7 @@ class PFDScraper:
                 else:
                     pdf_bytes = None
 
-                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields)
+                fallback_updates = self._call_llm_fallback(pdf_bytes, missing_fields, report_url=url)
                 # Update the dataframe row with any fallback values that were returned.
                 if ("date of report" in fallback_updates
                         and fallback_updates["date of report"] != "N/A: Not found"):
