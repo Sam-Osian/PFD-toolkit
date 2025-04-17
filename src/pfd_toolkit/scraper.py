@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import requests
 from requests.adapters import HTTPAdapter
@@ -10,7 +12,6 @@ from dateutil import parser
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pydantic import create_model, BaseModel
-from typing import Type
 from io import BytesIO
 from urllib.parse import urlparse, unquote
 import base64
@@ -25,7 +26,13 @@ from datetime import datetime
 from tqdm import tqdm
 from concurrent.futures import as_completed
 
-from pfd_toolkit.llm import LLM
+from typing import TYPE_CHECKING, Optional
+
+# Only import LLM if needed
+if TYPE_CHECKING:                           
+    from pfd_toolkit.llm import LLM         
+
+#from pfd_toolkit.llm import LLM
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -52,7 +59,7 @@ class PFDScraper:
     
     def __init__(
         self,
-        llm: LLM,
+        llm: Optional["LLM"] = None, # Quoted LLM so that runtime import not needed
         # Web page logic
         category: str = 'all',
         date_from: str = "2000-01-01",
@@ -82,7 +89,7 @@ class PFDScraper:
         include_concerns: bool = True,
         include_time_stamp: bool = False,
         
-        verbose: bool = True  
+        verbose: bool = False  
     ) -> None:
         """
         Initialises the scraper.
@@ -156,13 +163,8 @@ class PFDScraper:
         self.reports = None # ...So that the user can access them later as an internal attribute
         self.report_links = [] 
         
-        # Use injected LLM client if provided; otherwise, create one from the API key.
-        # This allows the user to pass in their own OpenAI client instance as an alternative to supplying an API key.
-        if self.llm_fallback:
-            assert (
-                self.llm
-            ), "LLM fallback enabled, but neither an API key nor OpenAI client was provided."
-
+        self.llm_model = self.llm.model if self.llm else "None"
+        
         # Define URL templates for different PFD categories.
         # ...Some categories (like 'all' and 'suicide') have unique URL formats, which is why we're specifying them individually
         
@@ -237,6 +239,7 @@ class PFDScraper:
         if self.delay_range is None or self.delay_range == 0:
             self.delay_range = (0, 0)
 
+        
         # -----------------------------------------------------------------------------
         # Error and Warning Handling for Initialisation Parameters
         # -----------------------------------------------------------------------------
@@ -253,6 +256,10 @@ class PFDScraper:
         # If date_from is after date_to
         if self.date_from > self.date_to:
             raise ValueError("date_from must be before date_to.")
+        
+        # If LLM fallback is enabled but no LLM client is provided
+        if self.llm_fallback and not self.llm:
+            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
         
         # If max_workers is set to 0 or a negative number
         if self.max_workers <= 0:
@@ -329,7 +336,7 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         # Log the initialisation parameters for debug if verbose is enabled
         # -----------------------------------------------------------------------------
-
+        
         if verbose:
             logger.info(
                 "\nPFDScraper initialised with parameters:\n "
@@ -341,7 +348,7 @@ class PFDScraper:
                 f"HTML Scraping: {self.html_scraping}\n "
                 f"PDF Fallback: {self.pdf_fallback}\n "
                 f"LLM Fallback: {self.llm_fallback}\n "
-                f"LLM Model: {self.llm.model}\n "
+                f"LLM Model: {self.llm_model}\n "
                 f"Docx Conversion: {self.docx_conversion}\n "
                 f"Include URL: {'Yes' if self.include_url else 'No'}\n "
                 f"Include ID: {'Yes' if self.include_id else 'No'}\n "
@@ -1302,7 +1309,14 @@ class PFDScraper:
         Returns:
             float: The estimated API cost in USD.
         """
-
+        
+        # Check if the LLM client is set
+        if self.llm is None:
+            raise RuntimeError(
+                "estimate_api_costs() needs an LLM client. "
+                "Pass one to the constructor or skip this call."
+            )
+            
         # Use the provided DataFrame or default to self.reports
         if df is None:
             if self.reports is None:
