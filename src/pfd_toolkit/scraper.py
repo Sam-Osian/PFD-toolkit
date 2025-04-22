@@ -61,8 +61,6 @@ class PFDScraper:
         html_scraping: bool = True,
         pdf_fallback: bool = True,
         llm_fallback: bool = False,
-        # Document conversion
-        docx_conversion: str = "None",
         
         # Output configuration
         include_url: bool = True,
@@ -90,7 +88,6 @@ class PFDScraper:
         :param html_scraping: Whether to attempt HTML-based scraping.
         :param pdf_fallback: Whether to fallback to .pdf scraping if missing values remain following HTML scraping (if set).
         :param llm_fallback: Whether to fallback to LLM scraping if missing values remain following previous method(s), if set. OpenAI API key must provided.
-        :param docx_conversion: Conversion method for .docx files; "MicrosoftWord", "LibreOffice", or "None" (default).
         :param include_url: Whether to add a URL column to the output file.
         :param include_id: Whether to add a report ID column to the output file.
         :param include_date: Whether to add a date column to the output file.
@@ -130,8 +127,6 @@ class PFDScraper:
         self.llm_fallback = llm_fallback
         self.llm = llm
 
-        self.docx_conversion = docx_conversion
-        
         self.include_url = include_url
         self.include_id = include_id
         self.include_date = include_date
@@ -257,10 +252,6 @@ class PFDScraper:
         if self.delay_range[1] < self.delay_range[0]:
             raise ValueError("Upper bound of delay_range must be greater than or equal to lower bound.")
         
-        # If docx_conversion is not one of the allowed values
-        if self.docx_conversion not in ["MicrosoftWord", "LibreOffice", "None"]:
-            raise ValueError("docx_conversion must be one of 'MicrosoftWord', 'LibreOffice', or 'None'.")
-        
         # If OpenAI API key or client is not provided when LLM fallback is enabled
         if self.llm_fallback and not self.llm:
             raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
@@ -329,7 +320,6 @@ class PFDScraper:
                 f"PDF Fallback: {self.pdf_fallback}\n "
                 f"LLM Fallback: {self.llm_fallback}\n "
                 f"LLM Model: {self.llm_model}\n "
-                f"Docx Conversion: {self.docx_conversion}\n "
                 f"Include URL: {'Yes' if self.include_url else 'No'}\n "
                 f"Include ID: {'Yes' if self.include_id else 'No'}\n "
                 f"Include Date: {'Yes' if self.include_date else 'No'}\n "
@@ -478,53 +468,10 @@ class PFDScraper:
             return "N/A"
         
         pdf_bytes = None
+        # Flag if the report does not have a .pdf extension and skip
         if ext != ".pdf":
-            logger.info("File %s is not a .pdf (extension %s)", pdf_url, ext)
-            if self.docx_conversion == "MicrosoftWord":
-                logger.info("Attempting conversion using Microsoft Word...")
-                try:
-                    from docx2pdf import convert
-                except ImportError:
-                    logger.error("docx2pdf is not installed. Please install it with 'pip install docx2pdf'.")
-                    return "N/A"
-                try:
-                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
-                        tmp_in.write(file_bytes)
-                        tmp_in.flush()
-                        input_path = tmp_in.name
-                    output_path = input_path.rsplit(ext, 1)[0] + ".pdf"
-                    convert(input_path, output_path)
-                    with open(output_path, "rb") as f:
-                        pdf_bytes = f.read()
-                    os.remove(input_path)
-                    os.remove(output_path)
-                    logger.info("Conversion successful using Microsoft Word! Proceeding with .pdf extraction...")
-                except Exception as e:
-                    logger.error("Conversion using Microsoft Word failed: %s", e)
-                    return "N/A"
-            elif self.docx_conversion == "LibreOffice":
-                logger.info("Attempting conversion using LibreOffice...")
-                try:
-                    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
-                        tmp_in.write(file_bytes)
-                        tmp_in.flush()
-                        input_path = tmp_in.name
-                    output_path = input_path.rsplit(ext, 1)[0] + ".pdf"
-                    subprocess.run(
-                        ["soffice", "--headless", "--convert-to", "pdf", input_path, "--outdir", os.path.dirname(input_path)],
-                        check=True
-                    )
-                    with open(output_path, "rb") as f:
-                        pdf_bytes = f.read()
-                    os.remove(input_path)
-                    os.remove(output_path)
-                    logger.info("Conversion successful using LibreOffice! Proceeding with .pdf extraction...")
-                except Exception as e:
-                    logger.error("Conversion using LibreOffice failed: %s", e)
-                    return "N/A"
-            else:
-                logger.info("docx_conversion is set to 'None'; skipping conversion!")
-                return "N/A"
+            logger.info("File %s is not a .pdf (extension %s). Skipping this file...", pdf_url, ext)
+            return "N/A"
         else:
             pdf_bytes = file_bytes
         
@@ -540,7 +487,7 @@ class PFDScraper:
             pdf_document.close()
         except Exception as e:
             logger.error("Error processing .pdf %s: %s", pdf_url, e)
-            return "N/A"
+            return "N/A: Source file not PDF"
         
         return self._clean_text(text)
     
