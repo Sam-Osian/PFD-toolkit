@@ -101,9 +101,6 @@ dependencies = [
     "wcwidth==0.2.13",
 ]
 
-[project.optional-dependencies]
-docx-conversion = ["docx2pdf"]
-
 [project.urls]
 "Source" = "https://github.com/Sam-Osian/PFD-toolkit"
 "Issues" = "https://github.com/Sam-Osian/PFD-toolkit/issues"
