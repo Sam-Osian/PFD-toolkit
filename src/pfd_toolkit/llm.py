@@ -3,8 +3,7 @@ import logging
 import base64
 from typing import List, Optional, Dict, Union
 from pydantic import BaseModel, create_model
-from io import BytesIO
-from pdf2image import convert_from_bytes
+import pymupdf
 
 
 logger = logging.getLogger(__name__)
@@ -33,6 +32,26 @@ class LLM:
         else:
             self.base_url = openai.base_url
         self.client = openai.Client(api_key=self.api_key, base_url=base_url)
+    
+    def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
+        """
+        Convert PDF bytes into base64‑encoded JPEGs at the given DPI.
+        """
+        # Open the PDF
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+
+        zoom = dpi / 72
+        mat = pymupdf.Matrix(zoom, zoom)
+
+        imgs: list[str] = []
+        for page in doc:
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            img_bytes = pix.tobytes("jpeg")
+            b64 = base64.b64encode(img_bytes).decode("utf-8")
+            imgs.append(b64)
+
+        doc.close()
+        return imgs
     
     def generate(
         self,
@@ -110,14 +129,9 @@ class LLM:
         base64_images: List[str] = []
         if pdf_bytes:
             try:
-                imgs = convert_from_bytes(pdf_bytes)
-                for img in imgs:
-                    buf = BytesIO()
-                    img.save(buf, format="JPEG")
-                    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-                    base64_images.append(b64)
+                base64_images = self._pdf_bytes_to_base64_images(pdf_bytes, dpi=200)
             except Exception as e:
-                logger.error(f"Error converting PDF to images: {e}")
+                logger.error(f"Error converting PDF to images with PyMuPDF: {e}")
 
         # 2) Build the prompt
         prompt = (
