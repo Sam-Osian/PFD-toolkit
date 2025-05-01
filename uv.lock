@@ -1121,6 +1121,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "pytz" },
     { name = "pyzmq" },
+    { name = "ratelimit" },
     { name = "requests" },
     { name = "scipy" },
     { name = "six" },
@@ -1210,6 +1211,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "pytz", specifier = "==2025.1" },
     { name = "pyzmq", specifier = "==26.2.1" },
+    { name = "ratelimit", specifier = ">=2.2.1" },
     { name = "requests", specifier = "==2.32.3" },
     { name = "scipy", specifier = "==1.15.2" },
     { name = "six", specifier = "==1.17.0" },
@@ -1651,6 +1653,12 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/05/14/f4d4fd8bb8988c667845734dd756e9ee65b9a17a010d5f288dfca14a572d/pyzmq-26.2.1-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3fe6e28a8856aea808715f7a4fc11f682b9d29cac5d6262dd8fe4f98edc12d53", size = 758156 },
     { url = "https://files.pythonhosted.org/packages/e3/fe/72e7e166bda3885810bee7b23049133e142f7c80c295bae02c562caeea16/pyzmq-26.2.1-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:bd8fdee945b877aa3bffc6a5a8816deb048dab0544f9df3731ecd0e54d8c84c9", size = 556563 },
 ]
+
+[[package]]
+name = "ratelimit"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ab/38/ff60c8fc9e002d50d48822cc5095deb8ebbc5f91a6b8fdd9731c87a147c9/ratelimit-2.2.1.tar.gz", hash = "sha256:af8a9b64b821529aca09ebaf6d8d279100d766f19e90b5059ac6a718ca6dee42", size = 5251 }
 
 [[package]]
 name = "rdflib"

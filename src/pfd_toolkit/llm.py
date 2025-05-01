@@ -1,9 +1,12 @@
 import openai
 import logging
 import base64
-from typing import List, Optional, Dict, Union
+from typing import List, Optional, Dict, Tuple
 from pydantic import BaseModel, create_model
 import pymupdf
+from ratelimit import limits, RateLimitException
+from ratelimit import sleep_and_retry
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 logger = logging.getLogger(__name__)
@@ -14,25 +17,48 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class LLM:
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: Optional[str] = None):
+    def __init__(
+        self,
+        api_key: str,
+        model: str = "gpt-4o-mini",
+        base_url: Optional[str] = None,
+        rpm_limit: Optional[int] = 300,
+        ):
         """Create an LLM object for use within PFD_Toolkit
 
         Args:
             api_key (str): api key for whatever openai sdk llm service you are using.
             model (str): Model name. Defaults to gpt-4o-mini.
             base_url (str): Set this to redirect openai sdk to a different api service. For example, Fireworks.ai, Groq, Ollama, Text-Generation-Inference. Defaults to None (openai).
+            rpm_limit: Requests per minute (overrides defaults).
         """
 
         self.api_key = api_key
         self.model = model
+        self.base_url = base_url or openai.base_url
+        self.client = openai.Client(api_key=self.api_key, base_url=self.base_url)
+        self.rpm_limit = rpm_limit
 
-        # Set the base_url, if non is provided then we just set self.base_url to the openai default (OpenAI themselves).
-        if base_url:
-            self.base_url = base_url
-        else:
-            self.base_url = openai.base_url
-        self.client = openai.Client(api_key=self.api_key, base_url=base_url)
-    
+        # Build a rate-limited version of the raw generate
+        limiter = limits(calls=self.rpm_limit, period=60)
+        self._safe_generate_impl = sleep_and_retry(limiter)(self._raw_generate)
+
+
+    def _raw_generate(
+        self,
+        messages: List[Dict],
+        temperature: float = 0.0
+    ) -> str:
+        """
+        Low-level single request to the OpenAI chat endpoint.
+        """
+        resp = self.client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            temperature=temperature,
+        )
+        return resp.choices[0].message.content.strip()
+
     def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
         """
         Convert PDF bytes into base64‑encoded JPEGs at the given DPI.
@@ -93,17 +119,44 @@ class LLM:
                 return "Error: LLM Failed."
         else:
             try:
-                # Normal text generation.
-                response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=temperature,
-                )
-                # Extract the cleaned string from the response
-                response_str = response.choices[0].message.content.strip()
-                return response_str
-
+                # Normal text generation via rate-limited helper
+                return self._safe_generate_impl(messages, temperature)
+            except RateLimitException as e:
+                logger.error(f"Rate limit reached: {e}")
+                raise
             except Exception as e:
                 logger.error(f"An error occurred while calling the LLM model: {e}")
                 return "Error: LLM Failed."
+
+
+    def generate_batch(
+            self,
+            prompts: List[str],
+            max_workers: int = 8
+        ) -> List[str]:
+            """
+            Parallel generation of a list of prompts, returning results in order.
+            Each thread goes through the same RPM limiter.
+            """
+            results: List[Optional[str]] = [None] * len(prompts)
+
+            def worker(idx: int, prompt: str) -> Tuple[int, str]:
+                content = [{"type": 'text', "text": prompt}]
+                msgs = [{"role": "user", "content": content}]
+                try:
+                    text = self._safe_generate_impl(msgs)
+                except Exception as e:
+                    text = f"Error: {e}"
+                return idx, text
+
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(worker, i, p) for i, p in enumerate(prompts)]
+                for fut in as_completed(futures):
+                    i, txt = fut.result()
+                    results[i] = txt
+
+            return results
+
 
     # Main method for calling the LLM for missing fields in the Scraper module
     def call_llm_fallback(
