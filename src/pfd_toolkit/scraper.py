@@ -897,62 +897,6 @@ class PFDScraper:
                 if len(concerns) < 30:
                     concerns = 'N/A: Not found'
 
-        # -----------------------------------------------------------------------------
-        #                         LLM Data Extraction Fallback                          
-        # -----------------------------------------------------------------------------
-        
-        # The below will only run if (1) llm_fallback is enabled and (2) one or more elements are missing
-        #   following previous extraction method. This will always run if both `html_scraping` and` 
-        #   `pdf_fallback` are disabled.
-        
-        if self.llm_fallback:
-            missing_fields = {}
-            if self.include_date and date == "N/A: Not found":
-                missing_fields["date of report"] = "[Date of the report, not the death]"
-            if self.include_coroner and coroner == "N/A: Not found":
-                missing_fields["coroner's name"] = "[Name of the coroner. Provide the name only.]"
-            if self.include_area and area == "N/A: Not found":
-                missing_fields["area"] = "[Area/location of the Coroner. Provide the location itself only.]"
-            if self.include_receiver and receiver == "N/A: Not found":
-                missing_fields["receiver"] = "[Recipients of the report. Always extract the role & organisation of the recipients, if provided, and *not* individual names -- if no organisational details are provided the name is fine. ]"
-            if self.include_investigation and investigation == "N/A: Not found":
-                missing_fields["investigation and inquest"] = "[The text from the Investigation/Inquest section.]"
-            if self.include_circumstances and circumstances == "N/A: Not found":
-                missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
-            if self.include_concerns and concerns == "N/A: Not found":
-                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section. This is sometimes under 'Matters of Concern'.]"
-            if missing_fields:
-                # Attempt to use cached PDF bytes or re-fetch if needed
-                pdf_bytes = getattr(self, '_last_pdf_bytes', None)
-                if pdf_bytes is None:
-                    pdf_bytes = self._fetch_pdf_bytes(report_link)
-
-                fallback_updates = self.llm.call_llm_fallback(
-                    pdf_bytes=pdf_bytes, 
-                    missing_fields=missing_fields,
-                    report_url=url,
-                    verbose = self.verbose)
-                if fallback_updates:
-                    if ("date of report" in fallback_updates
-                            and fallback_updates["date of report"] != "N/A: Not found"):
-                        fallback_updates["date of report"] = self._normalise_date(
-                            fallback_updates["date of report"]
-                        )
-                        date = fallback_updates["date of report"]
-                    if self.include_coroner and coroner == "N/A: Not found" and "coroner's name" in fallback_updates:
-                        coroner = fallback_updates["coroner's name"]
-                    if self.include_area and area == "N/A: Not found" and "area" in fallback_updates:
-                        area = fallback_updates["area"]
-                    if self.include_receiver and receiver == "N/A: Not found" and "receiver" in fallback_updates:
-                        receiver = fallback_updates["receiver"]
-                    if self.include_investigation and investigation == "N/A: Not found" and "investigation and inquest" in fallback_updates:
-                        investigation = fallback_updates["investigation and inquest"]
-                    if self.include_circumstances and circumstances == "N/A: Not found" and "circumstances of death" in fallback_updates:
-                        circumstances = fallback_updates["circumstances of death"]
-                    if self.include_concerns and concerns == "N/A: Not found" and "coroner's concerns" in fallback_updates:
-                        concerns = fallback_updates["coroner's concerns"]
-
-
 
         # Return the extracted report information
         report = {}
@@ -977,7 +921,6 @@ class PFDScraper:
         if self.include_time_stamp:
             report["DateScraped"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return report
-
     # -----------------------------------------------------------------------------------------
     # PUBLIC METHODS - These are the two main methods that the user will interact with.
     # -----------------------------------------------------------------------------------------
@@ -1010,6 +953,10 @@ class PFDScraper:
         
         # Create timestamp if parameter is set to True
         reports_df = pd.DataFrame(reports)
+        
+        # Run LLM fallback if set to True
+        if self.llm_fallback:
+            return self.run_llm_fallback(reports_df)
         
         # Save the reports internally in case the user forgets to assign
         self.reports = pd.DataFrame(reports_df)
