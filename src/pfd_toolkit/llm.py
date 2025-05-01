@@ -1,12 +1,12 @@
 import openai
 import logging
 import base64
+import time
 from typing import List, Optional, Dict, Tuple, Type, Union
 from pydantic import BaseModel, create_model
 import pymupdf
-from ratelimit import limits, RateLimitException
-from ratelimit import sleep_and_retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from ratelimit import limits, RateLimitException, sleep_and_retry
 
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ class LLM:
         base_url: Optional[str] = None,
         parallelise: bool=False,
         rpm_limit: Optional[int] = 300,
+        tpm_limit: Optional[int] = 40000,
         max_workers: Optional[int] = None
         ):
         """Create an LLM object for use within PFD_Toolkit
@@ -32,7 +33,9 @@ class LLM:
             api_key (str): api key for whatever openai sdk llm service you are using.
             model (str): Model name. Defaults to gpt-4o-mini.
             base_url (str): Set this to redirect openai sdk to a different api service. For example, Fireworks.ai, Groq, Ollama, Text-Generation-Inference. Defaults to None (openai).
-            rpm_limit: Requests per minute (overrides defaults).
+            parallelise: Whether to enable parallel API calls.
+            rpm_limit: Requests per minute (rate limit)
+            tpm_limit: Tokens per minute (rate limit)
         """
 
         self.api_key = api_key
@@ -41,7 +44,14 @@ class LLM:
         self.client = openai.Client(api_key=self.api_key, base_url=self.base_url)
         self.parallelise = parallelise
         self.rpm_limit = rpm_limit
+        self.tpm_limit = tpm_limit
         
+        # Token bucket for TPM limiting
+        self._bucket_capacity = float(self.tpm_limit)
+        self._bucket_tokens = float(self.tpm_limit)
+        self._bucket_fill_rate = float(self.tpm_limit) / 60.0  # tokens per second
+        self._bucket_last = time.monotonic()
+
         # If user did not supply max_workers, calculate a sensible default
         # (requests/sec * avg_latency)
         avg_latency = 0.5  # seconds per call, tune as you measure
@@ -52,6 +62,28 @@ class LLM:
         limiter = limits(calls=self.rpm_limit, period=60)
         self._safe_generate_impl = sleep_and_retry(limiter)(self._raw_generate)
 
+    def _replenish_bucket(self):
+        now = time.monotonic()
+        elapsed = now - self._bucket_last
+        self._bucket_last = now
+        self._bucket_tokens = min(
+            self._bucket_capacity,
+            self._bucket_tokens + elapsed * self._bucket_fill_rate
+        )
+
+    def _consume_tokens(self, count: int):
+        # Replenish first
+        self._replenish_bucket()
+        if count > self._bucket_tokens:
+            # Need to wait
+            deficit = count - self._bucket_tokens
+            wait_time = deficit / self._bucket_fill_rate
+            logger.debug(f"TPM limit reached, sleeping for {wait_time:.2f}s")
+            time.sleep(wait_time)
+            # refill after sleep
+            self._replenish_bucket()
+        # consume!
+        self._bucket_tokens -= count
 
     def _raw_generate(
         self,
@@ -59,14 +91,23 @@ class LLM:
         temperature: float = 0.0
     ) -> str:
         """
-        Low-level single request to the OpenAI chat endpoint.
+        Low-level single request to the OpenAI chat endpoint with TPM enforcement.
         """
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
         )
+        
+        # Enforce token usage
+        try:
+            usage = resp.usage.total_tokens
+        except Exception:
+            usage = 0
+        if self.tpm_limit:
+            self._consume_tokens(usage)
         return resp.choices[0].message.content.strip()
+
 
     def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
         """
@@ -149,6 +190,18 @@ class LLM:
             Parallel generation of a list of prompts, returning results in order.
             Each thread goes through the same RPM limiter.
             """
+            
+            # If parallelise is off, just do it one-by-one
+            if not self.parallelise:
+                results = []
+                for idx, prompt in enumerate(prompts):
+                    imgs = images_list[idx] if images_list else None
+                    if response_format:
+                        results.append(self.generate(prompt, images=imgs, response_format=response_format))
+                    else:
+                        results.append(self.generate(prompt, images=imgs))
+                return results
+    
             workers = max_workers or self.max_workers or len(prompts)
             results: List[Optional[str]] = [None] * len(prompts)
 

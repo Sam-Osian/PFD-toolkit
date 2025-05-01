@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Dict
 import logging
 import requests
 from requests.adapters import HTTPAdapter
@@ -1176,20 +1177,27 @@ class PFDScraper:
             )
             return idx, updates
 
-        # Spin up the threadpool
+        # Decide parallel vs sequential based on the LLM flag
         results: Dict[int, Dict[str,str]] = {}
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = {
-                executor.submit(process_row, idx, row): idx
-                for idx, row in reports_df.iterrows()
-            }
-            for fut in tqdm(as_completed(futures), total=len(futures), desc="LLM fallback"):
-                idx = futures[fut]
-                try:
-                    _, updates = fut.result()
-                    results[idx] = updates
-                except Exception as e:
-                    logger.error("LLM fallback failed for row %d: %s", idx, e)
+        if self.llm.parallelise:
+            # Spin up the threadpool
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {
+                    executor.submit(process_row, idx, row): idx
+                    for idx, row in reports_df.iterrows()
+                }
+                for fut in tqdm(as_completed(futures), total=len(futures), desc="LLM fallback"):
+                    idx = futures[fut]
+                    try:
+                        _, updates = fut.result()
+                        results[idx] = updates
+                    except Exception as e:
+                        logger.error("LLM fallback failed for row %d: %s", idx, e)
+        else:
+            # Sequential fallback with progress bar
+            for idx, row in tqdm(reports_df.iterrows(), total=len(reports_df), desc="LLM fallback"):
+                _, updates = process_row(idx, row)
+                results[idx] = updates
 
         # Apply the updates back into the DataFrame
         for idx, updates in results.items():
@@ -1212,6 +1220,9 @@ class PFDScraper:
 
         self.reports = reports_df.copy()
         return reports_df
+
+
+
 
 
     def estimate_api_costs(self, df: pd.DataFrame = None) -> float:
