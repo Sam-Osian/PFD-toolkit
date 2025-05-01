@@ -1,7 +1,7 @@
 import openai
 import logging
 import base64
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Type, Union
 from pydantic import BaseModel, create_model
 import pymupdf
 from ratelimit import limits, RateLimitException
@@ -141,8 +141,10 @@ class LLM:
     def generate_batch(
             self,
             prompts: List[str],
+            images_list: Optional[List[List[bytes]]] = None,
+            response_format: Optional[Type[BaseModel]] = None,
             max_workers: Optional[int] = None
-        ) -> List[str]:
+        ) -> List[Union[str, BaseModel]]:
             """
             Parallel generation of a list of prompts, returning results in order.
             Each thread goes through the same RPM limiter.
@@ -150,14 +152,12 @@ class LLM:
             workers = max_workers or self.max_workers or len(prompts)
             results: List[Optional[str]] = [None] * len(prompts)
 
-            def worker(idx: int, prompt: str) -> Tuple[int, str]:
-                content = [{"type": 'text', "text": prompt}]
-                msgs = [{"role": "user", "content": content}]
-                try:
-                    text = self._safe_generate_impl(msgs)
-                except Exception as e:
-                    text = f"Error: {e}"
-                return idx, text
+            def worker(idx, prompt):
+                imgs = images_list[idx] if images_list else None
+                if response_format:
+                    return idx, self.generate(prompt, images=imgs, response_format=response_format)
+                else:
+                    return idx, self.generate(prompt, images=imgs)
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = [executor.submit(worker, i, p) for i, p in enumerate(prompts)]

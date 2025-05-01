@@ -1135,28 +1135,14 @@ class PFDScraper:
         return updated_reports
 
 
-    def run_llm_fallback(self, reports_df: pd.DataFrame = None):
-        """ 
-        Runs the LLM fallback on already scraped reports that have at least one missing field.
-        For each report (row) where any enabled field has the value "N/A: Not found", it will
-        re-fetch the .pdf and update those missing fields.
-        
-        Parameters:
-            reports_df (pd.DataFrame): Optional DataFrame of scraped reports. If not provided,
-                                       self.reports will be used.
-                                       
-        Returns:
-            pd.DataFrame: The updated DataFrame with fallback values filled in.
-        """
-        
+    def run_llm_fallback(self, reports_df: pd.DataFrame = None) -> pd.DataFrame:
         if reports_df is None:
             if self.reports is None:
                 raise ValueError("No scraped reports found. Please run scrape_reports() first.")
             reports_df = self.reports.copy()
-        
-        # Iterate over each report row in the DataFrame with tqdm progress bar
-        
-        for idx, row in tqdm(reports_df.iterrows(), total=len(reports_df), desc="Running LLM Fallback"):
+
+        # Helper that processes one row and returns (idx, updated_fields_dict)
+        def process_row(idx, row):
             missing_fields = {}
             if self.include_date and row.get("Date", "") == "N/A: Not found":
                 missing_fields["date of report"] = "[Date of the report, not the death]"
@@ -1172,36 +1158,58 @@ class PFDScraper:
                 missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
             if self.include_concerns and row.get("MattersOfConcern", "") == "N/A: Not found":
                 missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section.]"
-            
-            if missing_fields:
-                report_url = row.get("URL")
-                if report_url:
-                    pdf_bytes = self._fetch_pdf_bytes(report_url)
-                else:
-                    pdf_bytes = None
 
-                fallback_updates = self.llm.call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
-                # Update the dataframe row with any fallback values that were returned.
-                if ("date of report" in fallback_updates
-                        and fallback_updates["date of report"] != "N/A: Not found"):
-                    fallback_updates["date of report"] = self._normalise_date(
-                        fallback_updates["date of report"]
-                    )
-                    reports_df.at[idx, "Date"] = fallback_updates["date of report"]
-                if "coroner's name" in fallback_updates:
-                    reports_df.at[idx, "CoronerName"] = fallback_updates["coroner's name"]
-                if "area" in fallback_updates:
-                    reports_df.at[idx, "Area"] = fallback_updates["area"]
-                if "receiver" in fallback_updates:
-                    reports_df.at[idx, "Receiver"] = fallback_updates["receiver"]
-                if "investigation and inquest" in fallback_updates:
-                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["investigation and inquest"]
-                if "circumstances of death" in fallback_updates:
-                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["circumstances of death"]
-                if "coroner's concerns" in fallback_updates:
-                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["coroner's concerns"]
-        
-        # Update the internal reports attribute and return the updated DataFrame.
+            if not missing_fields:
+                return idx, {}
+
+            # (Re-)fetch PDF bytes if needed
+            pdf_bytes = None
+            report_url = row.get("URL")
+            if report_url:
+                pdf_bytes = self._fetch_pdf_bytes(report_url)
+
+            updates = self.llm.call_llm_fallback(
+                pdf_bytes=pdf_bytes,
+                missing_fields=missing_fields,
+                report_url=report_url,
+                verbose=self.verbose
+            )
+            return idx, updates
+
+        # Spin up the threadpool
+        results: Dict[int, Dict[str,str]] = {}
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = {
+                executor.submit(process_row, idx, row): idx
+                for idx, row in reports_df.iterrows()
+            }
+            for fut in tqdm(as_completed(futures), total=len(futures), desc="LLM fallback"):
+                idx = futures[fut]
+                try:
+                    _, updates = fut.result()
+                    results[idx] = updates
+                except Exception as e:
+                    logger.error("LLM fallback failed for row %d: %s", idx, e)
+
+        # Apply the updates back into the DataFrame
+        for idx, updates in results.items():
+            if not updates:
+                continue
+            if "date of report" in updates and updates["date of report"] != "N/A: Not found":
+                reports_df.at[idx, "Date"] = self._normalise_date(updates["date of report"])
+            if "coroner's name" in updates:
+                reports_df.at[idx, "CoronerName"] = updates["coroner's name"]
+            if "area" in updates:
+                reports_df.at[idx, "Area"] = updates["area"]
+            if "receiver" in updates:
+                reports_df.at[idx, "Receiver"] = updates["receiver"]
+            if "investigation and inquest" in updates:
+                reports_df.at[idx, "InvestigationAndInquest"] = updates["investigation and inquest"]
+            if "circumstances of death" in updates:
+                reports_df.at[idx, "CircumstancesOfDeath"] = updates["circumstances of death"]
+            if "coroner's concerns" in updates:
+                reports_df.at[idx, "MattersOfConcern"] = updates["coroner's concerns"]
+
         self.reports = reports_df.copy()
         return reports_df
 
