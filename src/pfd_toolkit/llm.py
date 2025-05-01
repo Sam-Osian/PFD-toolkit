@@ -22,7 +22,9 @@ class LLM:
         api_key: str,
         model: str = "gpt-4o-mini",
         base_url: Optional[str] = None,
+        parallelise: bool=False,
         rpm_limit: Optional[int] = 300,
+        max_workers: Optional[int] = None
         ):
         """Create an LLM object for use within PFD_Toolkit
 
@@ -37,7 +39,14 @@ class LLM:
         self.model = model
         self.base_url = base_url or openai.base_url
         self.client = openai.Client(api_key=self.api_key, base_url=self.base_url)
+        self.parallelise = parallelise
         self.rpm_limit = rpm_limit
+        
+        # If user did not supply max_workers, calculate a sensible default
+        # (requests/sec * avg_latency)
+        avg_latency = 0.5  # seconds per call, tune as you measure
+        auto_workers = max(int(self.rpm_limit / 60 * avg_latency), 1)
+        self.max_workers = max_workers or auto_workers
 
         # Build a rate-limited version of the raw generate
         limiter = limits(calls=self.rpm_limit, period=60)
@@ -132,12 +141,13 @@ class LLM:
     def generate_batch(
             self,
             prompts: List[str],
-            max_workers: int = 8
+            max_workers: Optional[int] = None
         ) -> List[str]:
             """
             Parallel generation of a list of prompts, returning results in order.
             Each thread goes through the same RPM limiter.
             """
+            workers = max_workers or self.max_workers or len(prompts)
             results: List[Optional[str]] = [None] * len(prompts)
 
             def worker(idx: int, prompt: str) -> Tuple[int, str]:
@@ -149,7 +159,7 @@ class LLM:
                     text = f"Error: {e}"
                 return idx, text
 
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = [executor.submit(worker, i, p) for i, p in enumerate(prompts)]
                 for fut in as_completed(futures):
                     i, txt = fut.result()
