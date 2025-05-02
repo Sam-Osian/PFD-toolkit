@@ -9,6 +9,7 @@ import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ratelimit import limits, RateLimitException, sleep_and_retry
 import backoff
+from threading import Semaphore, Lock
 
 # Helper to estimate token usage
 
@@ -71,30 +72,36 @@ class LLM:
         self.rpm_limit = rpm_limit
         self.tpm_limit = tpm_limit
 
-        # Token bucket for TPM limiting
+        # Thread-safe token bucket for TPM limiting
         self._bucket_capacity = float(self.tpm_limit)
         self._bucket_tokens = float(self.tpm_limit)
         self._bucket_fill_rate = float(self.tpm_limit) / 60.0  # tokens per second
         self._bucket_last = time.monotonic()
+        self._bucket_lock = Lock()
 
-        # Compute sensible default for workers
+        # Compute sensible default for workers (dynamic token estimate)
         avg_latency = 0.5
-        # assume ~1000 tokens per request
-        est_tokens_per_call = 1000
+        sample_msg = [{"role": "user", "content": [{"type": "text", "text": ""}]}]
+        est_tokens_per_call = estimate_tokens(sample_msg)
         calls_per_min_by_tpm = self.tpm_limit / est_tokens_per_call
         calls_per_sec_allowed = min(self.rpm_limit, calls_per_min_by_tpm) / 60.0
         auto_workers = max(int(calls_per_sec_allowed * avg_latency), 1)
         if not self.parallelise:
             self.max_workers = 1
         else:
+            # cap at auto_workers even if user requests higher
             self.max_workers = min(max_workers or auto_workers, auto_workers)
 
-        # Rate-limit the raw generate calls with backoff on rate-limit errors
+        # Global semaphore to throttle both generate & parse
+        self._sem = Semaphore(self.max_workers)
+
+        # Rate-limit + backoff the raw generate calls
         gen_limiter = limits(calls=self.rpm_limit, period=60)
         @backoff.on_exception(backoff.expo, RateLimitException, max_time=60)
         @sleep_and_retry(gen_limiter)
         def _generate_with_backoff(messages: List[Dict], temperature: float = 0.0) -> str:
-            return self._raw_generate(messages, temperature)
+            with self._sem:
+                return self._raw_generate(messages, temperature)
         self._safe_generate_impl = _generate_with_backoff
 
         # Rate-limit the raw parse endpoint
@@ -103,32 +110,35 @@ class LLM:
             self.client.beta.chat.completions.parse
         )
 
-        # Wrap parse in exponential backoff on RateLimitError
+        # Wrap parse in backoff + semaphore
         @backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
         def _parse_with_backoff(**kwargs):
-            return self._safe_parse(**kwargs)
-
+            with self._sem:
+                return self._safe_parse(**kwargs)
         self._parse_with_backoff = _parse_with_backoff
 
     def _replenish_bucket(self):
-        now = time.monotonic()
-        elapsed = now - self._bucket_last
-        self._bucket_last = now
-        self._bucket_tokens = min(
-            self._bucket_capacity,
-            self._bucket_tokens + elapsed * self._bucket_fill_rate
-        )
+        with self._bucket_lock:
+            now = time.monotonic()
+            elapsed = now - self._bucket_last
+            self._bucket_last = now
+            self._bucket_tokens = min(
+                self._bucket_capacity,
+                self._bucket_tokens + elapsed * self._bucket_fill_rate
+            )
 
     def _consume_tokens(self, count: int):
-        # Replenish first
+        # Thread-safe consume
         self._replenish_bucket()
-        if count > self._bucket_tokens:
-            deficit = count - self._bucket_tokens
-            wait_time = deficit / self._bucket_fill_rate
-            logger.debug(f"TPM limit reached, sleeping for {wait_time:.2f}s")
-            time.sleep(wait_time)
-            self._replenish_bucket()
-        self._bucket_tokens -= count
+        with self._bucket_lock:
+            if count > self._bucket_tokens:
+                deficit = count - self._bucket_tokens
+                wait_time = deficit / self._bucket_fill_rate
+                logger.debug(f"TPM limit reached, sleeping for {wait_time:.2f}s")
+                time.sleep(wait_time)
+                # refill after sleep
+                self._replenish_bucket()
+            self._bucket_tokens -= count
 
     def _raw_generate(
         self,
@@ -146,12 +156,14 @@ class LLM:
             temperature=temperature,
         )
 
-        # 3) Record actual usage
+        # 3) Record actual usage (for future tuning/logging)
         try:
             used = resp.usage.total_tokens
+            logger.debug(f"Actual tokens used: {used}, estimated: {int(estimated)}")
         except Exception:
-            used = 0
-        # Return content
+            pass
+
+        # 4) Return content
         return resp.choices[0].message.content.strip()
 
     def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
@@ -226,9 +238,11 @@ class LLM:
 
         # Parallel
         results: List[BaseModel | str] = [None] * len(prompts)
+
         def _worker(idx: int, prompt: str):
             imgs = images_list[idx] if images_list else None
             messages = _build_messages(prompt, imgs)
+
             if response_format:
                 try:
                     resp = self._parse_with_backoff(
@@ -253,6 +267,7 @@ class LLM:
             for fut in as_completed(futures):
                 i, out = fut.result()
                 results[i] = out
+
         return results
 
     def call_llm_fallback(
