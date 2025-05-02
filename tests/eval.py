@@ -9,7 +9,7 @@ from rapidfuzz import fuzz
 from sentence_transformers import SentenceTransformer  # type: ignore
 
 ###############################################################################
-# Configuration – columns we care about (others are ignored)
+# Constants (it's constant!)
 ###############################################################################
 EVAL_COLS: List[str] = [
     "Date",
@@ -20,6 +20,117 @@ EVAL_COLS: List[str] = [
     "CircumstancesOfDeath",
     "MattersOfConcern",
 ]
+GT_COLS = ["URL", *EVAL_COLS]  # ground‑truth CSV header order
+
+
+###############################################################################
+# Small helpers
+###############################################################################
+
+def _ensure_text(val) -> str:
+    if val is None:
+        return ""
+    if isinstance(val, float) and math.isnan(val):
+        return ""
+    if pd.isna(val):
+        return ""
+    return str(val)
+
+
+###############################################################################
+# ---------------------------  MODE 1 : Annotating   ------------------------ #
+###############################################################################
+
+def init_gt_state(base_df: pd.DataFrame):
+    """Ensure session_state has ground‑truth DF & pointer."""
+    if "gt_df" not in st.session_state:
+        # create blank df with URL + 7 cols
+        gt = pd.DataFrame({c: "" for c in GT_COLS}, index=base_df.index)
+        if "URL" in base_df.columns:
+            gt["URL"] = base_df["URL"].astype(str)
+        st.session_state.gt_df = gt
+        st.session_state.gt_idx = _first_incomplete_row(gt)
+
+
+def _first_incomplete_row(df: pd.DataFrame) -> int:
+    mask_complete = df[EVAL_COLS].apply(lambda r: r.ne("").all(), axis=1)
+    incomplete = mask_complete.idxmin() if not mask_complete.all() else len(df) - 1
+    return int(incomplete)
+
+
+def gt_page(base_df: pd.DataFrame):
+    """Annotating UI"""
+    init_gt_state(base_df)
+    gt_df: pd.DataFrame = st.session_state.gt_df
+
+    # --- Sidebar ----
+    st.sidebar.subheader("Ground‑truth progress CSV")
+    up_file = st.sidebar.file_uploader("Resume progress", type="csv")
+    if up_file:
+        up_df = pd.read_csv(up_file)
+        if set(GT_COLS).issubset(up_df.columns):
+            up_df = up_df.reindex(columns=GT_COLS)
+            st.session_state.gt_df = up_df
+            st.session_state.gt_idx = _first_incomplete_row(up_df)
+            st.rerun()
+        else:
+            st.sidebar.error("CSV missing required columns")
+
+    # --- Main area ----
+    idx = st.session_state.gt_idx
+    total = len(gt_df)
+    st.markdown(f"### Report {idx+1} / {total}")
+
+    url_val = gt_df.at[idx, "URL"] if "URL" in gt_df.columns else ""
+    if url_val:
+        st.markdown(f"**URL:** [{url_val}]({url_val})")
+    else:
+        st.markdown("**URL:** _missing_")
+
+    # dynamic text boxes
+    cols_filled = []
+    for col in EVAL_COLS:
+        text = st.text_area(col, value=_ensure_text(gt_df.at[idx, col]), height=200, key=f"ta_{col}")
+        gt_df.at[idx, col] = text
+        cols_filled.append(bool(text.strip()))
+
+    # completion progress
+    complete_rows = gt_df[EVAL_COLS].apply(lambda r: r.ne("").all(), axis=1).sum()
+    st.progress(complete_rows / total, text=f"Completed {complete_rows} / {total}")
+
+    # nav buttons
+    nav1, nav2, save_col = st.columns([1,1,2])
+    if nav1.button("⬅ Previous", disabled=(idx == 0)):
+        st.session_state.gt_idx = idx - 1
+        st.rerun()
+    if nav2.button("Next ➡", disabled=(idx == total - 1)):
+        st.session_state.gt_idx = idx + 1
+        st.rerun()
+
+    # auto‑jump to first incomplete if we hit end
+    if idx == total - 1 and all(cols_filled):
+        st.toast("All rows complete! 🎉")
+
+    # save progress
+    csv_bytes = gt_df.to_csv(index=False).encode()
+    save_col.download_button(
+        "💾 Save progress CSV",
+        data=csv_bytes,
+        file_name="ground_truth_progress.csv",
+        mime="text/csv",
+    )
+
+
+###############################################################################
+# ---------------------------  MODE 2 : EVALUATION  ------------------------- #
+###############################################################################
+
+@dataclass
+class Comparator:
+    func: Callable[[str, str], float]
+    default_thresh: float
+    def __call__(self, gt, pred):
+        return self.func(_ensure_text(gt), _ensure_text(pred))
 
 ###############################################################################
 # Similarity helpers
@@ -140,20 +251,17 @@ def evaluate_extractions(scraped: pd.DataFrame, labelled: pd.DataFrame, thresh: 
     }
 
 ###############################################################################
-# Streamlit UI with Cell Inspector showing URL
+# ---------------------------  STREAMLIT APP  ------------------------------- #
 ###############################################################################
 
-st.set_page_config(page_title="LLM Extraction Evaluation", page_icon="📊", layout="wide")
+st.set_page_config(page_title="LLM Extraction Tool", page_icon="📊", layout="wide")
 
-st.sidebar.header("📂 Upload your data")
+mode = st.sidebar.radio("Mode", ["Ground‑truthing", "Evaluation"], index=1)
 
-scraped_file = st.sidebar.file_uploader("Scraped reports (CSV/parquet)", type=["csv", "parquet", "pq"])
-labelled_file = st.sidebar.file_uploader("Ground‑truth reports (CSV/parquet)", type=["csv", "parquet", "pq"])
-
-t_thresh = st.sidebar.slider("Success threshold", 0.0, 1.0, 0.85, 0.01)
-
-with st.sidebar.expander("ℹ️ Evaluated columns"):
-    st.markdown(", ".join(EVAL_COLS))
+# shared upload for base/labelled file
+base_file = st.sidebar.file_uploader(
+    "Ground‑truth reports (CSV/parquet)", type=["csv", "parquet", "pq"], key="lbl"
+)
 
 @st.cache_data(show_spinner=False)
 def _load(upload) -> pd.DataFrame:
@@ -161,71 +269,73 @@ def _load(upload) -> pd.DataFrame:
         return pd.read_parquet(upload)
     return pd.read_csv(upload)
 
-st.title("📊 LLM Extraction Evaluation Dashboard")
+if base_file is None:
+    st.info("Upload the ground‑truth (labelled) CSV/parquet to get started.")
+    st.stop()
 
-if scraped_file and labelled_file:
-    scraped_df_full = _load(scraped_file)
-    labelled_df_full = _load(labelled_file)
+base_df = _load(base_file)
 
-    try:
-        with st.spinner("Evaluating …"):
-            report = evaluate_extractions(scraped_df_full, labelled_df_full, thresh=t_thresh)
-    except ValueError as e:
-        st.error(str(e))
+if mode == "Ground‑truthing":
+    gt_page(base_df)
+else:
+    # require scraped file in evaluation mode
+    scraped_file = st.sidebar.file_uploader("Scraped reports (CSV/parquet)", type=["csv", "parquet", "pq"], key="scr")
+    t_thresh = st.sidebar.slider("Success threshold", 0.0, 1.0, 0.85, 0.01)
+
+    if scraped_file is None:
+        st.info("Upload the scraped extraction file to run evaluation.")
         st.stop()
 
-    detail   = report["detail"]
-    summary  = report["summary"]
-    scraped_f = report["scraped_f"]
-    labelled_f = report["labelled_f"]
+    scraped_df_full = _load(scraped_file)
 
-    tabs = st.tabs(["📈 Dashboard", "🔍 Cell Inspector"])
+    # --- evaluation UI (condensed: re‑use previous dashboard) ---
+    report = evaluate_extractions(scraped_df_full, base_df, thresh=t_thresh)
+    detail, summary = report["detail"], report["summary"]
 
-    # ---------------- Dashboard tab ----------------
+
+    # tabbed view
+    tabs = st.tabs(["📊 Dashboard", "🔍 Cell Inspector"])
+
     with tabs[0]:
-        if report["missing_cols"]:
-            st.warning("Missing columns: " + ", ".join(report["missing_cols"]))
-
-        col1, col2, _ = st.columns([1,1,2])
+        col1, col2, _ = st.columns([1, 1, 2])
         col1.metric("Cell accuracy", f"{summary.loc[0,'cell_accuracy']:.2%}")
-        col2.metric("Row accuracy",  f"{summary.loc[0,'row_accuracy']:.2%}")
+        col2.metric("Row accuracy", f"{summary.loc[0,'row_accuracy']:.2%}")
 
         st.subheader("Per‑column accuracy")
         st.dataframe(summary.T.iloc[2:], use_container_width=True, height=200)
 
-        st.subheader("Per‑cell detail (similarity | success)")
+        st.subheader("Per‑cell detail (similarity | success)")
         st.dataframe(detail, use_container_width=True, height=600)
 
         st.download_button("⬇️ Detail CSV", detail.to_csv().encode(), "detail.csv", "text/csv")
         st.download_button("⬇️ Summary CSV", summary.to_csv(index=False).encode(), "summary.csv", "text/csv")
 
-    # ---------------- Cell Inspector tab ----------------
     with tabs[1]:
         st.markdown("### Inspect a specific cell")
-        max_row = len(scraped_f) - 1
-        row_num = st.number_input("Row index", min_value=0, max_value=max_row, value=0, step=1, format="%d")
-        col_choice = st.selectbox("Column", options=EVAL_COLS, index=0)
+        max_row = len(base_df) - 1
+        row_idx = st.number_input("Row index", 0, max_row, 0, 1, format="%d")
+        col_choice = st.selectbox("Column", EVAL_COLS, 0)
 
-        if col_choice not in scraped_f.columns or col_choice not in labelled_f.columns:
-            st.error("Selected column not present in both datasets.")
-        else:
-            gt_val = labelled_f.at[row_num, col_choice]
-            sc_val = scraped_f.at[row_num, col_choice]
-            sim_val = detail.at[row_num, f"{col_choice}|similarity"]
-            success  = detail.at[row_num, f"{col_choice}|success"]
+        if col_choice in base_df.columns and col_choice in scraped_df_full.columns:
+            gt_val = base_df.at[row_idx, col_choice]
+            scr_val = scraped_df_full.at[row_idx, col_choice]
+            sim_val = detail.at[row_idx, f"{col_choice}|similarity"]
+            passed = detail.at[row_idx, f"{col_choice}|success"]
 
-            # URL retrieval (prefer labelled, then scraped)
-            url_val = None
-            if "URL" in labelled_df_full.columns:
-                url_val = labelled_df_full.at[row_num, "URL"]
+            url = None
+            if "URL" in base_df.columns:
+                url = base_df.at[row_idx, "URL"]
             elif "URL" in scraped_df_full.columns:
-                url_val = scraped_df_full.at[row_num, "URL"]
+                url = scraped_df_full.at[row_idx, "URL"]
 
-            st.write(f"**Similarity:** {sim_val:.3f}  |  **Success:** {'✅' if success else '❌'}")
-            if url_val and isinstance(url_val, str) and url_val.strip():
-                st.markdown(f"**Report URL:** [{url_val}]({url_val})")
-            c1, c2 = st.columns(2)
-            with c1:
-                st.text_area("Ground truth", value=_ensure_text(gt_val), height=200)
-            with c2:
-                st.text_area("Scraped", value=_ensure_text(sc_val), height=200)
+            st.write(f"**Similarity:** {sim_val:.3f}   |   **Success:** {'✅' if passed else '❌'}")
+            if url and isinstance(url, str) and url.strip():
+                st.markdown(f"**Report URL:** [{url}]({url})")
+
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.text_area("Ground truth", _ensure_text(gt_val), height=200)
+            with col_b:
+                st.text_area("Scraped", _ensure_text(scr_val), height=200)
+        else:
+            st.error("Selected column not present in both datasets.")
