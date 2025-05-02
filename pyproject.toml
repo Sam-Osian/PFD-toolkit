@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pfd_toolkit"
-version = "0.1.21"
+version = "0.1.22"
 description = "A toolkit for using Prevention of Future Death (PFD) Reports for Research and Policy Projects."
 readme = "README.md"
 license = { file = "LICENCE" }
@@ -25,6 +25,7 @@ dependencies = [
     "annotated-types==0.7.0",
     "anyio==4.8.0",
     "asttokens==3.0.0",
+    "backoff>=2.2.1",
     "beautifulsoup4==4.13.3",
     "certifi==2025.1.31",
     "charset-normalizer==3.4.1",
@@ -84,6 +85,7 @@ dependencies = [
     "python-dotenv==1.0.1",
     "pytz==2025.1",
     "pyzmq==26.2.1",
+    "ratelimit>=2.2.1",
     "requests==2.32.3",
     "scipy==1.15.2",
     "six==1.17.0",
