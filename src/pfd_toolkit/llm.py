@@ -79,15 +79,23 @@ class LLM:
 
         # Compute sensible default for workers
         avg_latency = 0.5
-        auto_workers = max(int(self.rpm_limit / 60 * avg_latency), 1)
+        # assume ~1000 tokens per request
+        est_tokens_per_call = 1000
+        calls_per_min_by_tpm = self.tpm_limit / est_tokens_per_call
+        calls_per_sec_allowed = min(self.rpm_limit, calls_per_min_by_tpm) / 60.0
+        auto_workers = max(int(calls_per_sec_allowed * avg_latency), 1)
         if not self.parallelise:
             self.max_workers = 1
         else:
-            self.max_workers = max_workers or auto_workers
+            self.max_workers = min(max_workers or auto_workers, auto_workers)
 
-        # Rate-limit the raw generate calls
+        # Rate-limit the raw generate calls with backoff on rate-limit errors
         gen_limiter = limits(calls=self.rpm_limit, period=60)
-        self._safe_generate_impl = sleep_and_retry(gen_limiter)(self._raw_generate)
+        @backoff.on_exception(backoff.expo, RateLimitException, max_time=60)
+        @sleep_and_retry(gen_limiter)
+        def _generate_with_backoff(messages: List[Dict], temperature: float = 0.0) -> str:
+            return self._raw_generate(messages, temperature)
+        self._safe_generate_impl = _generate_with_backoff
 
         # Rate-limit the raw parse endpoint
         parse_limiter = limits(calls=self.rpm_limit, period=60)
@@ -148,7 +156,7 @@ class LLM:
 
     def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
         """
-        Convert PDF bytes into base64‑encoded JPEGs at the given DPI.
+        Convert PDF bytes into base64-encoded JPEGs at the given DPI.
         """
         doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
         zoom = dpi / 72
