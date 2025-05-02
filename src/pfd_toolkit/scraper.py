@@ -351,7 +351,7 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         
         self.session = requests.Session()
-        retries = Retry(total=50, backoff_factor=4, status_forcelist=[429, 502, 503, 504])
+        retries = Retry(total=50, backoff_factor=1, status_forcelist=[429, 502, 503, 504])
         adapter = HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)

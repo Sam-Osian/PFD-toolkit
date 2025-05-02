@@ -85,7 +85,12 @@ class LLM:
         est_tokens_per_call = estimate_tokens(sample_msg)
         calls_per_min_by_tpm = self.tpm_limit / est_tokens_per_call
         calls_per_sec_allowed = min(self.rpm_limit, calls_per_min_by_tpm) / 60.0
-        auto_workers = max(int(calls_per_sec_allowed * avg_latency), 1)
+        # auto_workers = max(int(calls_per_sec_allowed * avg_latency), 1)
+        
+        # Mke concurrency more conservative by applying a "safety factor"
+        safety_factor = 0.5 # ...this halves the max workers from the 'sensible default'
+        auto_workers = max(int(calls_per_sec_allowed * avg_latency * safety_factor), 1)
+        
         if not self.parallelise:
             self.max_workers = 1
         else:
