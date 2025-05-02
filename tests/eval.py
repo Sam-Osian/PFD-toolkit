@@ -62,6 +62,7 @@ def _first_incomplete_row(df: pd.DataFrame) -> int:
     return int(incomplete)
 
 
+
 def gt_page(base_df: pd.DataFrame):
     """Annotating UI"""
     init_gt_state(base_df)
@@ -94,9 +95,33 @@ def gt_page(base_df: pd.DataFrame):
     # dynamic text boxes
     cols_filled = []
     for col in EVAL_COLS:
-        text = st.text_area(col, value=_ensure_text(gt_df.at[idx, col]), height=200, key=f"ta_{col}")
-        gt_df.at[idx, col] = text
-        cols_filled.append(bool(text.strip()))
+        if col in ("Date", "CoronerName", "Area"):
+            # single‑line input
+            val = st.text_input(
+                col,
+                value=_ensure_text(gt_df.at[idx, col]),
+                key=f"inp_{col}",
+            )
+        elif col == "Receiver":
+            # small multi‑line (≈ 5 lines)
+            val = st.text_area(
+                col,
+                value=_ensure_text(gt_df.at[idx, col]),
+                height=100,
+                key=f"ta_{col}",
+            )
+        else:
+            # full‑size paragraph box
+            val = st.text_area(
+                col,
+                value=_ensure_text(gt_df.at[idx, col]),
+                height=200,
+                key=f"ta_{col}",
+            )
+
+        gt_df.at[idx, col] = val
+        cols_filled.append(bool(val.strip()))
+
 
     # completion progress
     complete_rows = gt_df[EVAL_COLS].apply(lambda r: r.ne("").all(), axis=1).sum()
@@ -123,6 +148,7 @@ def gt_page(base_df: pd.DataFrame):
         file_name="ground_truth_progress.csv",
         mime="text/csv",
     )
+
 
 
 ###############################################################################
@@ -284,6 +310,34 @@ if base_file is None:
     st.stop()
 
 base_df = _load(base_file)
+
+# ------------------------------------------------------------
+# warn if the newly‑uploaded human file differs from the one in memory
+# ------------------------------------------------------------
+new_sig = hash(
+    pd.util.hash_pandas_object(
+        base_df.reindex(columns=GT_COLS, fill_value="").fillna("").astype(str)
+    ).sum()
+)
+
+sig_in_state = st.session_state.get("gt_signature")
+
+if sig_in_state is not None and sig_in_state != new_sig:
+    st.sidebar.warning(
+        "A different human‑labelled file has been uploaded. "
+        "Continuing will **overwrite any unsaved progress** in the current session."
+    )
+    if st.sidebar.button("Overwrite my in‑memory edits"):
+        st.session_state.pop("gt_df", None)
+        st.session_state.pop("gt_idx", None)
+        st.session_state.gt_signature = new_sig
+    else:
+        st.stop() # abort until the user confirms!
+else:
+    # first load or same file as before
+    st.session_state["gt_signature"] = new_sig
+
+
 
 if mode == "Manual extraction":
     gt_page(base_df)
