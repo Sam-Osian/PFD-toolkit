@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Dict
 import logging
 import requests
 from requests.adapters import HTTPAdapter
@@ -340,7 +341,7 @@ class PFDScraper:
         # -----------------------------------------------------------------------------
         
         self.session = requests.Session()
-        retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
+        retries = Retry(total=50, backoff_factor=1, status_forcelist=[429, 502, 503, 504])
         adapter = HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100)
         self.session.mount("http://", adapter)
         self.session.mount("https://", adapter)
@@ -843,62 +844,6 @@ class PFDScraper:
                 if len(concerns) < 30:
                     concerns = 'N/A: Not found'
 
-        # -----------------------------------------------------------------------------
-        #                         LLM Data Extraction Fallback                          
-        # -----------------------------------------------------------------------------
-        
-        # The below will only run if (1) llm_fallback is enabled and (2) one or more elements are missing
-        #   following previous extraction method. This will always run if both `html_scraping` and` 
-        #   `pdf_fallback` are disabled.
-        
-        if self.llm_fallback:
-            missing_fields = {}
-            if self.include_date and date == "N/A: Not found":
-                missing_fields["date of report"] = "[Date of the report, not the death]"
-            if self.include_coroner and coroner == "N/A: Not found":
-                missing_fields["coroner's name"] = "[Name of the coroner. Provide the name only.]"
-            if self.include_area and area == "N/A: Not found":
-                missing_fields["area"] = "[Area/location of the Coroner. Provide the location itself only.]"
-            if self.include_receiver and receiver == "N/A: Not found":
-                missing_fields["receiver"] = "[Recipients of the report. Always extract the role & organisation of the recipients, if provided, and *not* individual names -- if no organisational details are provided the name is fine. ]"
-            if self.include_investigation and investigation == "N/A: Not found":
-                missing_fields["investigation and inquest"] = "[The text from the Investigation/Inquest section.]"
-            if self.include_circumstances and circumstances == "N/A: Not found":
-                missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
-            if self.include_concerns and concerns == "N/A: Not found":
-                missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section. This is sometimes under 'Matters of Concern'.]"
-            if missing_fields:
-                # Attempt to use cached PDF bytes or re-fetch if needed
-                pdf_bytes = getattr(self, '_last_pdf_bytes', None)
-                if pdf_bytes is None:
-                    pdf_bytes = self._fetch_pdf_bytes(report_link)
-
-                fallback_updates = self.llm.call_llm_fallback(
-                    pdf_bytes=pdf_bytes, 
-                    missing_fields=missing_fields,
-                    report_url=url,
-                    verbose = self.verbose)
-                if fallback_updates:
-                    if ("date of report" in fallback_updates
-                            and fallback_updates["date of report"] != "N/A: Not found"):
-                        fallback_updates["date of report"] = self._normalise_date(
-                            fallback_updates["date of report"]
-                        )
-                        date = fallback_updates["date of report"]
-                    if self.include_coroner and coroner == "N/A: Not found" and "coroner's name" in fallback_updates:
-                        coroner = fallback_updates["coroner's name"]
-                    if self.include_area and area == "N/A: Not found" and "area" in fallback_updates:
-                        area = fallback_updates["area"]
-                    if self.include_receiver and receiver == "N/A: Not found" and "receiver" in fallback_updates:
-                        receiver = fallback_updates["receiver"]
-                    if self.include_investigation and investigation == "N/A: Not found" and "investigation and inquest" in fallback_updates:
-                        investigation = fallback_updates["investigation and inquest"]
-                    if self.include_circumstances and circumstances == "N/A: Not found" and "circumstances of death" in fallback_updates:
-                        circumstances = fallback_updates["circumstances of death"]
-                    if self.include_concerns and concerns == "N/A: Not found" and "coroner's concerns" in fallback_updates:
-                        concerns = fallback_updates["coroner's concerns"]
-
-
 
         # Return the extracted report information
         report = {}
@@ -923,7 +868,6 @@ class PFDScraper:
         if self.include_time_stamp:
             report["DateScraped"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return report
-
     # -----------------------------------------------------------------------------------------
     # PUBLIC METHODS - These are the two main methods that the user will interact with.
     # -----------------------------------------------------------------------------------------
@@ -956,6 +900,10 @@ class PFDScraper:
         
         # Create timestamp if parameter is set to True
         reports_df = pd.DataFrame(reports)
+        
+        # Run LLM fallback if set to True
+        if self.llm_fallback:
+            return self.run_llm_fallback(reports_df)
         
         # Save the reports internally in case the user forgets to assign
         self.reports = pd.DataFrame(reports_df)
@@ -1082,28 +1030,14 @@ class PFDScraper:
         return updated_reports
 
 
-    def run_llm_fallback(self, reports_df: pd.DataFrame = None):
-        """ 
-        Runs the LLM fallback on already scraped reports that have at least one missing field.
-        For each report (row) where any enabled field has the value "N/A: Not found", it will
-        re-fetch the .pdf and update those missing fields.
-        
-        Parameters:
-            reports_df (pd.DataFrame): Optional DataFrame of scraped reports. If not provided,
-                                       self.reports will be used.
-                                       
-        Returns:
-            pd.DataFrame: The updated DataFrame with fallback values filled in.
-        """
-        
+    def run_llm_fallback(self, reports_df: pd.DataFrame = None) -> pd.DataFrame:
         if reports_df is None:
             if self.reports is None:
                 raise ValueError("No scraped reports found. Please run scrape_reports() first.")
             reports_df = self.reports.copy()
-        
-        # Iterate over each report row in the DataFrame with tqdm progress bar
-        
-        for idx, row in tqdm(reports_df.iterrows(), total=len(reports_df), desc="Running LLM Fallback"):
+
+        # Helper that processes one row and returns (idx, updated_fields_dict)
+        def process_row(idx, row):
             missing_fields = {}
             if self.include_date and row.get("Date", "") == "N/A: Not found":
                 missing_fields["date of report"] = "[Date of the report, not the death]"
@@ -1119,38 +1053,70 @@ class PFDScraper:
                 missing_fields["circumstances of death"] = "[The text from the Circumstances of Death section.]"
             if self.include_concerns and row.get("MattersOfConcern", "") == "N/A: Not found":
                 missing_fields["coroner's concerns"] = "[The text from the Coroner's Concerns section.]"
-            
-            if missing_fields:
-                report_url = row.get("URL")
-                if report_url:
-                    pdf_bytes = self._fetch_pdf_bytes(report_url)
-                else:
-                    pdf_bytes = None
 
-                fallback_updates = self.llm.call_llm_fallback(pdf_bytes, missing_fields, report_url=report_url)
-                # Update the dataframe row with any fallback values that were returned.
-                if ("date of report" in fallback_updates
-                        and fallback_updates["date of report"] != "N/A: Not found"):
-                    fallback_updates["date of report"] = self._normalise_date(
-                        fallback_updates["date of report"]
-                    )
-                    reports_df.at[idx, "Date"] = fallback_updates["date of report"]
-                if "coroner's name" in fallback_updates:
-                    reports_df.at[idx, "CoronerName"] = fallback_updates["coroner's name"]
-                if "area" in fallback_updates:
-                    reports_df.at[idx, "Area"] = fallback_updates["area"]
-                if "receiver" in fallback_updates:
-                    reports_df.at[idx, "Receiver"] = fallback_updates["receiver"]
-                if "investigation and inquest" in fallback_updates:
-                    reports_df.at[idx, "InvestigationAndInquest"] = fallback_updates["investigation and inquest"]
-                if "circumstances of death" in fallback_updates:
-                    reports_df.at[idx, "CircumstancesOfDeath"] = fallback_updates["circumstances of death"]
-                if "coroner's concerns" in fallback_updates:
-                    reports_df.at[idx, "MattersOfConcern"] = fallback_updates["coroner's concerns"]
-        
-        # Update the internal reports attribute and return the updated DataFrame.
+            if not missing_fields:
+                return idx, {}
+
+            # (Re-)fetch PDF bytes if needed
+            pdf_bytes = None
+            report_url = row.get("URL")
+            if report_url:
+                pdf_bytes = self._fetch_pdf_bytes(report_url)
+
+            updates = self.llm.call_llm_fallback(
+                pdf_bytes=pdf_bytes,
+                missing_fields=missing_fields,
+                report_url=report_url,
+                verbose=self.verbose
+            )
+            return idx, updates
+
+        # Decide parallel vs sequential based on the LLM flag
+        results: Dict[int, Dict[str,str]] = {}
+        if self.llm.parallelise:
+            # Spin up the threadpool
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures = {
+                    executor.submit(process_row, idx, row): idx
+                    for idx, row in reports_df.iterrows()
+                }
+                for fut in tqdm(as_completed(futures), total=len(futures), desc="LLM fallback"):
+                    idx = futures[fut]
+                    try:
+                        _, updates = fut.result()
+                        results[idx] = updates
+                    except Exception as e:
+                        logger.error("LLM fallback failed for row %d: %s", idx, e)
+        else:
+            # Sequential fallback with progress bar
+            for idx, row in tqdm(reports_df.iterrows(), total=len(reports_df), desc="LLM fallback"):
+                _, updates = process_row(idx, row)
+                results[idx] = updates
+
+        # Apply the updates back into the DataFrame
+        for idx, updates in results.items():
+            if not updates:
+                continue
+            if "date of report" in updates and updates["date of report"] != "N/A: Not found":
+                reports_df.at[idx, "Date"] = self._normalise_date(updates["date of report"])
+            if "coroner's name" in updates:
+                reports_df.at[idx, "CoronerName"] = updates["coroner's name"]
+            if "area" in updates:
+                reports_df.at[idx, "Area"] = updates["area"]
+            if "receiver" in updates:
+                reports_df.at[idx, "Receiver"] = updates["receiver"]
+            if "investigation and inquest" in updates:
+                reports_df.at[idx, "InvestigationAndInquest"] = updates["investigation and inquest"]
+            if "circumstances of death" in updates:
+                reports_df.at[idx, "CircumstancesOfDeath"] = updates["circumstances of death"]
+            if "coroner's concerns" in updates:
+                reports_df.at[idx, "MattersOfConcern"] = updates["coroner's concerns"]
+
         self.reports = reports_df.copy()
         return reports_df
+
+
+
 
 
     def estimate_api_costs(self, df: pd.DataFrame = None) -> float:
