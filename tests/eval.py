@@ -6,12 +6,11 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from rapidfuzz import fuzz
-from sentence_transformers import SentenceTransformer 
+from sentence_transformers import SentenceTransformer  # type: ignore
 
 ###############################################################################
 # Configuration – columns we care about (others are ignored)
 ###############################################################################
-
 EVAL_COLS: List[str] = [
     "Date",
     "CoronerName",
@@ -38,7 +37,6 @@ def _ensure_text(val) -> str:
 
 def _normalise_simple(text: str) -> str:
     import re, unicodedata
-
     text = _ensure_text(text)
     text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
     text = re.sub(r"\s+", " ", text.lower()).strip(" ,.;:\n\t")
@@ -85,7 +83,6 @@ class _Comparators:
             "CircumstancesOfDeath": Comparator(self._compare_long, 0.80),
             "MattersOfConcern": Comparator(self._compare_long, 0.80),
         }
-
     def _compare_long(self, gt: str, pred: str) -> float:
         gt_n, pr_n = _normalise_simple(gt), _normalise_simple(pred)
         fast = _jaccard_5gram(gt_n, pr_n)
@@ -97,36 +94,31 @@ class _Comparators:
         return _cosine(vec_gt, vec_pr)
 
 ###############################################################################
-# Evaluation core
+# Evaluation core – returns filtered frames for cell inspector
 ###############################################################################
 
 @st.cache_data(show_spinner=False)
 def evaluate_extractions(scraped: pd.DataFrame, labelled: pd.DataFrame, thresh: float = 0.85):
-    # Keep only columns we care about and present in both frames
     cols_present = [c for c in EVAL_COLS if c in scraped.columns and c in labelled.columns]
     missing_cols = [c for c in EVAL_COLS if c not in cols_present]
 
-    scraped = scraped[cols_present].copy()
-    labelled = labelled[cols_present].copy()
+    scraped_f = scraped[cols_present].copy()
+    labelled_f = labelled[cols_present].copy()
 
-    # align index length
-    if not scraped.index.equals(labelled.index):
-        scraped = scraped.reset_index(drop=True)
-        labelled = labelled.reset_index(drop=True)
-        if len(scraped) != len(labelled):
-            raise ValueError("DataFrames differ in length even after aligning index.")
+    if not scraped_f.index.equals(labelled_f.index):
+        scraped_f = scraped_f.reset_index(drop=True)
+        labelled_f = labelled_f.reset_index(drop=True)
+        if len(scraped_f) != len(labelled_f):
+            raise ValueError("DataFrames differ in length after index alignment.")
 
     registry = _Comparators()
-
-    sim = pd.DataFrame(index=scraped.index, columns=cols_present, dtype=float)
-    ok  = pd.DataFrame(index=scraped.index, columns=cols_present, dtype=bool)
+    sim = pd.DataFrame(index=scraped_f.index, columns=cols_present, dtype=float)
+    ok  = pd.DataFrame(index=scraped_f.index, columns=cols_present, dtype=bool)
 
     for col in cols_present:
         comp = registry.table[col]
-        s_vals = scraped[col].tolist()
-        l_vals = labelled[col].tolist()
-        sim[col] = [comp(g, p) for g, p in zip(l_vals, s_vals)]
-        ok[col] = sim[col] >= thresh
+        sim[col] = [comp(g, p) for g, p in zip(labelled_f[col], scraped_f[col])]
+        ok[col]  = sim[col] >= thresh
 
     summary = pd.DataFrame({
         "cell_accuracy": ok.to_numpy().mean(),
@@ -143,10 +135,12 @@ def evaluate_extractions(scraped: pd.DataFrame, labelled: pd.DataFrame, thresh: 
         "detail": detail,
         "summary": summary,
         "missing_cols": missing_cols,
+        "scraped_f": scraped_f,
+        "labelled_f": labelled_f,
     }
 
 ###############################################################################
-# Streamlit UI
+# Streamlit UI with Cell Inspector showing URL
 ###############################################################################
 
 st.set_page_config(page_title="LLM Extraction Evaluation", page_icon="📊", layout="wide")
@@ -158,11 +152,8 @@ labelled_file = st.sidebar.file_uploader("Ground‑truth reports (CSV/parquet)",
 
 t_thresh = st.sidebar.slider("Success threshold", 0.0, 1.0, 0.85, 0.01)
 
-with st.sidebar.expander("ℹ️ Eval columns"):
-    st.markdown("**Columns evaluated:** " + ", ".join(EVAL_COLS))
-
-st.title("LLM Extraction Evaluation Dashboard")
-#st.markdown("This dashboard visualises")
+with st.sidebar.expander("ℹ️ Evaluated columns"):
+    st.markdown(", ".join(EVAL_COLS))
 
 @st.cache_data(show_spinner=False)
 def _load(upload) -> pd.DataFrame:
@@ -170,33 +161,71 @@ def _load(upload) -> pd.DataFrame:
         return pd.read_parquet(upload)
     return pd.read_csv(upload)
 
+st.title("📊 LLM Extraction Evaluation Dashboard")
+
 if scraped_file and labelled_file:
-    scraped_df = _load(scraped_file)
-    labelled_df = _load(labelled_file)
+    scraped_df_full = _load(scraped_file)
+    labelled_df_full = _load(labelled_file)
+
     try:
         with st.spinner("Evaluating …"):
-            report = evaluate_extractions(scraped_df, labelled_df, thresh=t_thresh)
+            report = evaluate_extractions(scraped_df_full, labelled_df_full, thresh=t_thresh)
     except ValueError as e:
         st.error(str(e))
         st.stop()
 
-    detail = report["detail"]
-    summary = report["summary"]
+    detail   = report["detail"]
+    summary  = report["summary"]
+    scraped_f = report["scraped_f"]
+    labelled_f = report["labelled_f"]
 
-    if report["missing_cols"]:
-        st.warning("Missing columns in uploaded files: " + ", ".join(report["missing_cols"]))
+    tabs = st.tabs(["📈 Dashboard", "🔍 Cell Inspector"])
 
-    col1, col2, _ = st.columns([1,1,2])
-    col1.metric("Cell accuracy", f"{summary.loc[0,'cell_accuracy']:.2%}")
-    col2.metric("Row accuracy",  f"{summary.loc[0,'row_accuracy']:.2%}")
+    # ---------------- Dashboard tab ----------------
+    with tabs[0]:
+        if report["missing_cols"]:
+            st.warning("Missing columns: " + ", ".join(report["missing_cols"]))
 
-    st.subheader("Per‑column accuracy")
-    st.dataframe(summary.T.iloc[2:], use_container_width=True, height=200)
+        col1, col2, _ = st.columns([1,1,2])
+        col1.metric("Cell accuracy", f"{summary.loc[0,'cell_accuracy']:.2%}")
+        col2.metric("Row accuracy",  f"{summary.loc[0,'row_accuracy']:.2%}")
 
-    st.subheader("Per‑cell detail")
-    st.dataframe(detail, use_container_width=True, height=600)
+        st.subheader("Per‑column accuracy")
+        st.dataframe(summary.T.iloc[2:], use_container_width=True, height=200)
 
-    st.download_button("⬇️ Detail CSV", detail.to_csv().encode(), "detail.csv", "text/csv")
-    st.download_button("⬇️ Summary CSV", summary.to_csv(index=False).encode(), "summary.csv", "text/csv")
-else:
-    st.info("Upload scraped and labelled files to start.")
+        st.subheader("Per‑cell detail (similarity | success)")
+        st.dataframe(detail, use_container_width=True, height=600)
+
+        st.download_button("⬇️ Detail CSV", detail.to_csv().encode(), "detail.csv", "text/csv")
+        st.download_button("⬇️ Summary CSV", summary.to_csv(index=False).encode(), "summary.csv", "text/csv")
+
+    # ---------------- Cell Inspector tab ----------------
+    with tabs[1]:
+        st.markdown("### Inspect a specific cell")
+        max_row = len(scraped_f) - 1
+        row_num = st.number_input("Row index", min_value=0, max_value=max_row, value=0, step=1, format="%d")
+        col_choice = st.selectbox("Column", options=EVAL_COLS, index=0)
+
+        if col_choice not in scraped_f.columns or col_choice not in labelled_f.columns:
+            st.error("Selected column not present in both datasets.")
+        else:
+            gt_val = labelled_f.at[row_num, col_choice]
+            sc_val = scraped_f.at[row_num, col_choice]
+            sim_val = detail.at[row_num, f"{col_choice}|similarity"]
+            success  = detail.at[row_num, f"{col_choice}|success"]
+
+            # URL retrieval (prefer labelled, then scraped)
+            url_val = None
+            if "URL" in labelled_df_full.columns:
+                url_val = labelled_df_full.at[row_num, "URL"]
+            elif "URL" in scraped_df_full.columns:
+                url_val = scraped_df_full.at[row_num, "URL"]
+
+            st.write(f"**Similarity:** {sim_val:.3f}  |  **Success:** {'✅' if success else '❌'}")
+            if url_val and isinstance(url_val, str) and url_val.strip():
+                st.markdown(f"**Report URL:** [{url_val}]({url_val})")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.text_area("Ground truth", value=_ensure_text(gt_val), height=200)
+            with c2:
+                st.text_area("Scraped", value=_ensure_text(sc_val), height=200)
