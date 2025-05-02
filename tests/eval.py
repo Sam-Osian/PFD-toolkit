@@ -42,14 +42,18 @@ def _ensure_text(val) -> str:
 ###############################################################################
 
 def init_gt_state(base_df: pd.DataFrame):
-    """Ensure session_state has ground‑truth DF & pointer."""
+    """Create the editable ground‑truth DataFrame on first load."""
     if "gt_df" not in st.session_state:
-        # create blank df with URL + 7 cols
-        gt = pd.DataFrame({c: "" for c in GT_COLS}, index=base_df.index)
-        if "URL" in base_df.columns:
-            gt["URL"] = base_df["URL"].astype(str)
+        # copy any populated columns from the uploaded CSV
+        gt = pd.DataFrame(index=base_df.index)
+        for col in GT_COLS:
+            if col in base_df.columns:
+                gt[col] = base_df[col].fillna("").astype(str)
+            else:
+                gt[col] = ""                       # blank if absent
         st.session_state.gt_df = gt
         st.session_state.gt_idx = _first_incomplete_row(gt)
+
 
 
 def _first_incomplete_row(df: pd.DataFrame) -> int:
@@ -205,50 +209,58 @@ class _Comparators:
         return _cosine(vec_gt, vec_pr)
 
 ###############################################################################
-# Evaluation core – returns filtered frames for cell inspector
+# Evaluation core
 ###############################################################################
 
 @st.cache_data(show_spinner=False)
 def evaluate_extractions(scraped: pd.DataFrame, labelled: pd.DataFrame, thresh: float = 0.85):
     cols_present = [c for c in EVAL_COLS if c in scraped.columns and c in labelled.columns]
-    missing_cols = [c for c in EVAL_COLS if c not in cols_present]
-
     scraped_f = scraped[cols_present].copy()
     labelled_f = labelled[cols_present].copy()
 
+    # align index
     if not scraped_f.index.equals(labelled_f.index):
         scraped_f = scraped_f.reset_index(drop=True)
         labelled_f = labelled_f.reset_index(drop=True)
-        if len(scraped_f) != len(labelled_f):
-            raise ValueError("DataFrames differ in length after index alignment.")
 
     registry = _Comparators()
     sim = pd.DataFrame(index=scraped_f.index, columns=cols_present, dtype=float)
-    ok  = pd.DataFrame(index=scraped_f.index, columns=cols_present, dtype=bool)
+    ok  = pd.DataFrame(index=scraped_f.index, columns=cols_present, dtype=float)
 
+    skipped = 0
     for col in cols_present:
         comp = registry.table[col]
-        sim[col] = [comp(g, p) for g, p in zip(labelled_f[col], scraped_f[col])]
-        ok[col]  = sim[col] >= thresh
+        sims, oks = [], []
+        for gt, pred in zip(labelled_f[col], scraped_f[col]):
+            if not _ensure_text(gt).strip() or not _ensure_text(pred).strip():
+                sims.append(np.nan)
+                oks.append(np.nan)
+                skipped += 1
+            else:
+                s = comp(gt, pred)
+                sims.append(s)
+                oks.append(float(s >= thresh))
+        sim[col] = sims
+        ok[col]  = oks
 
+    # summary – NaN are ignored by .mean()
     summary = pd.DataFrame({
-        "cell_accuracy": ok.to_numpy().mean(),
-        "row_accuracy": ok.all(axis=1).mean(),
+        "cell_accuracy": ok.mean().mean(),
+        "row_accuracy": ok.apply(lambda r: r.dropna().all() if r.notna().any() else np.nan, axis=1).mean(),
         **{f"col_{c}_accuracy": ok[c].mean() for c in cols_present},
     }, index=[0])
 
-    detail = pd.concat([
-        sim.add_suffix("|similarity"),
-        ok.add_suffix("|success"),
-    ], axis=1)
+    detail = pd.concat(
+        [sim.add_suffix("|similarity"), ok.add_suffix("|success")],
+        axis=1
+    )
 
     return {
         "detail": detail,
         "summary": summary,
-        "missing_cols": missing_cols,
-        "scraped_f": scraped_f,
-        "labelled_f": labelled_f,
+        "skipped": skipped,        
     }
+
 
 ###############################################################################
 # ---------------------------  STREAMLIT APP  ------------------------------- #
@@ -256,30 +268,28 @@ def evaluate_extractions(scraped: pd.DataFrame, labelled: pd.DataFrame, thresh: 
 
 st.set_page_config(page_title="LLM Extraction Tool", page_icon="📊", layout="wide")
 
-mode = st.sidebar.radio("Mode", ["Ground‑truthing", "Evaluation"], index=1)
+mode = st.sidebar.radio("Mode", ["Manual extraction", "Evaluation"], index=1)
 
 # shared upload for base/labelled file
 base_file = st.sidebar.file_uploader(
-    "Ground‑truth reports (CSV/parquet)", type=["csv", "parquet", "pq"], key="lbl"
+    "Human labelled reports (CSV)", type=["csv"], key="lbl"
 )
 
 @st.cache_data(show_spinner=False)
 def _load(upload) -> pd.DataFrame:
-    if upload.name.lower().endswith((".parquet", ".pq")):
-        return pd.read_parquet(upload)
     return pd.read_csv(upload)
 
 if base_file is None:
-    st.info("Upload the ground‑truth (labelled) CSV/parquet to get started.")
+    st.info("First, upload the human annotations CSV. This can be finished or unfinished.")
     st.stop()
 
 base_df = _load(base_file)
 
-if mode == "Ground‑truthing":
+if mode == "Manual extraction":
     gt_page(base_df)
 else:
     # require scraped file in evaluation mode
-    scraped_file = st.sidebar.file_uploader("Scraped reports (CSV/parquet)", type=["csv", "parquet", "pq"], key="scr")
+    scraped_file = st.sidebar.file_uploader("LLM Scraped reports (CSV)", type=["csv"], key="scr")
     t_thresh = st.sidebar.slider("Success threshold", 0.0, 1.0, 0.85, 0.01)
 
     if scraped_file is None:
@@ -291,6 +301,10 @@ else:
     # --- evaluation UI (condensed: re‑use previous dashboard) ---
     report = evaluate_extractions(scraped_df_full, base_df, thresh=t_thresh)
     detail, summary = report["detail"], report["summary"]
+    skipped = report["skipped"]
+
+    if skipped:
+        st.warning(f"{int(skipped)} cell(s) ignored because one or both values were blank.")
 
 
     # tabbed view
@@ -334,8 +348,8 @@ else:
 
             col_a, col_b = st.columns(2)
             with col_a:
-                st.text_area("Ground truth", _ensure_text(gt_val), height=200)
+                st.text_area("Human extracted", _ensure_text(gt_val), height=200, disabled=True)
             with col_b:
-                st.text_area("Scraped", _ensure_text(scr_val), height=200)
+                st.text_area("LLM scraped", _ensure_text(scr_val), height=200, disabled=True)
         else:
             st.error("Selected column not present in both datasets.")
