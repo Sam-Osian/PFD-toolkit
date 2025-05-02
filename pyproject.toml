@@ -25,6 +25,7 @@ dependencies = [
     "annotated-types==0.7.0",
     "anyio==4.8.0",
     "asttokens==3.0.0",
+    "backoff>=2.2.1",
     "beautifulsoup4==4.13.3",
     "certifi==2025.1.31",
     "charset-normalizer==3.4.1",

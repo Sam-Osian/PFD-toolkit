@@ -1,4 +1,5 @@
 import openai
+from openai import RateLimitError
 import logging
 import base64
 import time
@@ -7,6 +8,7 @@ from pydantic import BaseModel, create_model
 import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from ratelimit import limits, RateLimitException, sleep_and_retry
+import backoff
 
 
 logger = logging.getLogger(__name__)
@@ -14,6 +16,15 @@ logging.basicConfig(level=logging.INFO, force=True)
 
 # Set the log level for the 'httpx' library to WARNING to reduce verbosity
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+# Silence the ratelimit package
+logging.getLogger("ratelimit").setLevel(logging.WARNING)
+
+# Disable all logging calls from pfd_toolkit.llm
+#logging.getLogger("pfd_toolkit.llm").disabled = True
+
+# Silence the OpenAI client’s info-level logs
+#logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 class LLM:
@@ -54,13 +65,26 @@ class LLM:
 
         # If user did not supply max_workers, calculate a sensible default
         # (requests/sec * avg_latency)
-        avg_latency = 0.5  # seconds per call, tune as you measure
+        avg_latency = 0.5 
         auto_workers = max(int(self.rpm_limit / 60 * avg_latency), 1)
         self.max_workers = max_workers or auto_workers
 
-        # Build a rate-limited version of the raw generate
-        limiter = limits(calls=self.rpm_limit, period=60)
-        self._safe_generate_impl = sleep_and_retry(limiter)(self._raw_generate)
+        # Rate-limit the raw generate calls
+        gen_limiter = limits(calls=self.rpm_limit, period=60)
+        self._safe_generate_impl = sleep_and_retry(gen_limiter)(self._raw_generate)
+
+        # Rate-limit the raw parse endpoint
+        parse_limiter = limits(calls=self.rpm_limit, period=60)
+        self._safe_parse = sleep_and_retry(parse_limiter)(
+            self.client.beta.chat.completions.parse
+        )
+
+        # Wrap parse in exponential backoff on OpenAI RateLimitError
+        @backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
+        def _parse_with_backoff(**kwargs):
+            return self._safe_parse(**kwargs)
+
+        self._parse_with_backoff = _parse_with_backoff
 
     def _replenish_bucket(self):
         now = time.monotonic()
@@ -90,23 +114,26 @@ class LLM:
         messages: List[Dict],
         temperature: float = 0.0
     ) -> str:
-        """
-        Low-level single request to the OpenAI chat endpoint with TPM enforcement.
-        """
+        # 1) Estimate token usage for this request:
+        #    You can use tiktoken or a rough heuristic; for safety add 10% headroom.
+        estimated = estimate_tokens(messages) * 1.1
+        self._consume_tokens(int(estimated))
+
+        # 2) Now make the call
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
         )
-        
-        # Enforce token usage
+
+        # 3) Record actual usage (so your bucket stays in sync)
         try:
-            usage = resp.usage.total_tokens
+            used = resp.usage.total_tokens
         except Exception:
-            usage = 0
-        if self.tpm_limit:
-            self._consume_tokens(usage)
+            used = 0
+        # if you want, you can credit back the difference between estimated vs. actual
         return resp.choices[0].message.content.strip()
+
 
 
     def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
@@ -153,7 +180,7 @@ class LLM:
         if response_format:
             try:
                 # For guided outputs, you have to use beta.chat.completions.parse to use response_format.
-                response = self.client.beta.chat.completions.parse(
+                response = self._parse_with_backoff(
                     model=self.model,
                     messages=messages,
                     temperature=temperature,
@@ -178,47 +205,96 @@ class LLM:
                 logger.error(f"An error occurred while calling the LLM model: {e}")
                 return "Error: LLM Failed."
 
-
     def generate_batch(
-            self,
-            prompts: List[str],
-            images_list: Optional[List[List[bytes]]] = None,
-            response_format: Optional[Type[BaseModel]] = None,
-            max_workers: Optional[int] = None
-        ) -> List[Union[str, BaseModel]]:
-            """
-            Parallel generation of a list of prompts, returning results in order.
-            Each thread goes through the same RPM limiter.
-            """
-            
-            # If parallelise is off, just do it one-by-one
-            if not self.parallelise:
-                results = []
-                for idx, prompt in enumerate(prompts):
-                    imgs = images_list[idx] if images_list else None
-                    if response_format:
-                        results.append(self.generate(prompt, images=imgs, response_format=response_format))
-                    else:
-                        results.append(self.generate(prompt, images=imgs))
-                return results
-    
-            workers = max_workers or self.max_workers or len(prompts)
-            results: List[Optional[str]] = [None] * len(prompts)
+        self,
+        prompts: List[str],
+        images_list: Optional[List[List[bytes]]] = None,
+        response_format: Optional[Type[BaseModel]] = None,
+        temperature: float = 0.0,
+        max_workers: Optional[int] = None
+    ) -> List[Union[str, BaseModel]]:
+        """
+        Manages parallel (or sequential) generation of a list of prompts, returning
+        either raw strings or validated BaseModel instances in the same order.
+        """
+        # Helper to build messages payload
+        def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
+            content = [{"type": "text", "text": prompt}]
+            if imgs:
+                for b64 in imgs:
+                    content.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                    })
+            return [{"role": "user", "content": content}]
 
-            def worker(idx, prompt):
+        # Single‐threaded (no parallelism)
+        if not self.parallelise:
+            results: List[Union[str, BaseModel]] = []
+            for idx, prompt in enumerate(prompts):
                 imgs = images_list[idx] if images_list else None
-                if response_format:
-                    return idx, self.generate(prompt, images=imgs, response_format=response_format)
-                else:
-                    return idx, self.generate(prompt, images=imgs)
+                messages = _build_messages(prompt, imgs)
 
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                futures = [executor.submit(worker, i, p) for i, p in enumerate(prompts)]
-                for fut in as_completed(futures):
-                    i, txt = fut.result()
-                    results[i] = txt
+                if response_format:
+                    # Pydantic‐driven path
+                    try:
+                        resp = self._parse_with_backoff(
+                            model=self.model,
+                            messages=messages,
+                            temperature=temperature,
+                            response_format=response_format,
+                        )
+                        validated = response_format.model_validate_json(
+                            resp.choices[0].message.content
+                        )
+                        results.append(validated)
+                    except Exception as e:
+                        logger.error(f"Batch pydantic parse failed for item {idx}: {e}")
+                        results.append(f"Error: {e}")
+                else:
+                    # Plain‐text path
+                    txt = self._safe_generate_impl(messages, temperature)
+                    results.append(txt)
 
             return results
+
+        # Parallel branch
+        workers = max_workers or self.max_workers or len(prompts)
+        results: List[Union[str, BaseModel]] = [None] * len(prompts)
+
+        def _worker(idx: int, prompt: str):
+            imgs = images_list[idx] if images_list else None
+            messages = _build_messages(prompt, imgs)
+
+            if response_format:
+                # Pydantic‐driven
+                try:
+                    resp = self._parse_with_backoff(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature,
+                        response_format=response_format,
+                    )
+                    validated = response_format.model_validate_json(
+                        resp.choices[0].message.content
+                    )
+                    return idx, validated
+                except Exception as e:
+                    logger.error(f"Batch pydantic parse failed for item {idx}: {e}")
+                    return idx, f"Error: {e}"
+            else:
+                # Plain‐text
+                txt = self._safe_generate_impl(messages, temperature)
+                return idx, txt
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
+            for fut in as_completed(futures):
+                i, out = fut.result()
+                results[i] = out
+
+        return results
+
 
 
     # Main method for calling the LLM for missing fields in the Scraper module
