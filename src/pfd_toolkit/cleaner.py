@@ -28,6 +28,7 @@ class Cleaner:
         # Input DataFrame containing PFD reports
         reports: pd.DataFrame,
         llm: LLM,
+        
         # Fields to clean
         coroner: bool = True,
         receiver: bool = True,
@@ -35,6 +36,7 @@ class Cleaner:
         investigation_and_inquest: bool = True,
         circumstances_of_death: bool = True,
         matters_of_concern: bool = True,
+        
         # Name of column for each report section; default to the names provided by PFDScraper
         coroner_field: str = "CoronerName",
         area_field: str = "Area",
@@ -42,6 +44,7 @@ class Cleaner:
         investigation_field: str = "InvestigationAndInquest",
         circumstances_field: str = "CircumstancesOfDeath",
         concerns_field: str = "MattersOfConcern",
+        
         # Custom prompts for each field; defaults to None
         coroner_prompt: str = None,
         area_prompt: str = None,
@@ -49,6 +52,7 @@ class Cleaner:
         investigation_prompt: str = None,
         circumstances_prompt: str = None,
         concerns_prompt: str = None,
+        
         verbose: bool = False,
     ) -> None:
         """Create Cleaner object.
@@ -74,7 +78,7 @@ class Cleaner:
             investigation_prompt (str): Investigation prompt override. Defaults to hardcoded version.
             circumstances_prompt (str): Circumstances prompt override. Defaults to hardcoded version.
             concerns_prompt (str): Concerns prompt override. Defaults to hardcoded version.
-            verbose (bool): Whether or not to verbosely run pfd-toolkit. Defaults to False.
+            verbose (bool): Whether or not to verbosely run the Cleaner class. Defaults to False.
         """
 
         self.reports = reports
@@ -170,8 +174,8 @@ class Cleaner:
                 # This case should ideally be caught by __init__ checks, but good to have defence here.
                 logger.warning(f"Column '{column_name}' for field '{config_key}' not found at cleaning time. Skipping.")
                 continue
-            
-            logger.info(f"Preparing batch for column: '{column_name}' (Field: {config_key})")
+            if self.verbose:
+                logger.info(f"Preparing batch for column: '{column_name}' (Field: {config_key})")
 
             # Ensure column is treated as string for processing
             # Handle cases where column might be all NaNs or mixed type before attempting string operations
@@ -205,8 +209,9 @@ class Cleaner:
                 logger.info(f"First prompt for '{column_name}' batch: {prompts_for_batch[0][:250]}...") # Log snippet of first prompt
 
             # Call LLM in batch
-            logger.info(f"Sending {len(prompts_for_batch)} text items to LLM for column '{column_name}'.")
-            # Assuming llm.generate_batch handles internal parallelization and rate limits
+            if self.verbose:
+                logger.info(f"Sending {len(prompts_for_batch)} text items to LLM for column '{column_name}'.")
+            
             cleaned_results_batch = self.llm.generate_batch(prompts=prompts_for_batch) 
 
             if len(cleaned_results_batch) != len(prompts_for_batch):
@@ -215,7 +220,7 @@ class Cleaner:
                     f"Expected {len(prompts_for_batch)}, got {len(cleaned_results_batch)}. "
                     "Skipping update for this column to prevent data corruption."
                 )
-                continue # Important to skip if counts don't match
+                continue # Skip if counts don't match
 
             # Process results and update DataFrame
             modifications_count = 0
@@ -226,7 +231,6 @@ class Cleaner:
                 final_text_to_write = cleaned_text_output # Assume success initially
 
                 # Logic to revert to original if cleaning "failed" or LLM indicated "N/A"
-                # This replaces the old _apply_cleaning logic for individual cells.
                 if isinstance(cleaned_text_output, str):
                     if cleaned_text_output == "N/A: Not found" or \
                        cleaned_text_output.startswith("Error:") or \
@@ -243,8 +247,8 @@ class Cleaner:
                 
                 cleaned_df.loc[df_index, column_name] = final_text_to_write
             
-            logger.info(f"Finished batch cleaning for '{column_name}'. {modifications_count} entries were actively modified by the LLM (excluding reversions).")
+            if self.verbose:
+                logger.info(f"Finished batch cleaning for '{column_name}'. {modifications_count} entr(ies) were actively modified by the LLM.")
         
-        # self.cleaned_reports was the attribute name in the original code
         self.cleaned_reports = cleaned_df 
         return cleaned_df
