@@ -3,6 +3,7 @@
 
 # In-development testing
 data/testreports.csv
+data/testreports_cleaned.csv
 
 # OpenAI API key
 src/pfd_toolkit/api.env

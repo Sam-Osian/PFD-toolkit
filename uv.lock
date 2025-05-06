@@ -1063,7 +1063,7 @@ wheels = [
 
 [[package]]
 name = "pfd-toolkit"
-version = "0.1.21"
+version = "0.1.22"
 source = { editable = "." }
 dependencies = [
     { name = "acres" },
@@ -1149,11 +1149,6 @@ dependencies = [
     { name = "wcwidth" },
 ]
 
-[package.optional-dependencies]
-docx-conversion = [
-    { name = "docx2pdf" },
-]
-
 [package.metadata]
 requires-dist = [
     { name = "acres", specifier = "==0.3.0" },
@@ -1174,7 +1169,6 @@ requires-dist = [
     { name = "decorator", specifier = "==5.2.1" },
     { name = "distro", specifier = "==1.9.0" },
     { name = "docx2pdf", specifier = "==0.1.8" },
-    { name = "docx2pdf", marker = "extra == 'docx-conversion'" },
     { name = "dotenv", specifier = "==0.9.9" },
     { name = "etelemetry", specifier = "==0.3.1" },
     { name = "executing", specifier = "==2.2.0" },
@@ -1239,7 +1233,6 @@ requires-dist = [
     { name = "uvicorn", specifier = "==0.34.0" },
     { name = "wcwidth", specifier = "==0.2.13" },
 ]
-provides-extras = ["docx-conversion"]
 
 [[package]]
 name = "pillow"
