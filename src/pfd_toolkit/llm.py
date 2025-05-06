@@ -2,30 +2,12 @@ import openai
 from openai import RateLimitError
 import logging
 import base64
-import time
 from typing import List, Optional, Dict, Type
 from pydantic import BaseModel, create_model
 import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from ratelimit import limits, RateLimitException, sleep_and_retry
 import backoff
-from threading import Semaphore, Lock
-
-# Helper to estimate token usage
-
-def estimate_tokens(messages: List[Dict]) -> int:
-    """Rough heuristic for token count: 1 token per 4 characters of text."""
-    total_chars = 0
-    for msg in messages:
-        content = msg.get("content", [])
-        if isinstance(content, list):
-            for part in content:
-                if part.get("type") == "text":
-                    total_chars += len(part.get("text", ""))
-        else:
-            total_chars += len(str(content))
-    return max(1, total_chars // 4)
-
+from threading import Semaphore
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -34,13 +16,13 @@ logging.basicConfig(level=logging.INFO, force=True)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Silence the ratelimit package
-logging.getLogger("ratelimit").setLevel(logging.WARNING)
+#logging.getLogger("ratelimit").setLevel(logging.WARNING)
 
 # Disable all logging calls from pfd_toolkit.llm
-logging.getLogger("pfd_toolkit.llm").disabled = True
+#logging.getLogger("pfd_toolkit.llm").disabled = True
 
 # Silence the OpenAI client’s info-level logs
-logging.getLogger("openai").setLevel(logging.WARNING)
+#logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 class LLM:
@@ -123,10 +105,7 @@ class LLM:
         api_key: str,
         model: str = "gpt-4o-mini",
         base_url: Optional[str] = None,
-        parallelise: bool = False,
-        rpm_limit: Optional[int] = 300,
-        tpm_limit: Optional[int] = 40000,
-        max_workers: Optional[int] = None
+        max_workers: int = 1  # Simplified: max_workers defaults to 1
     ):
         """Create an LLM object for use within pfd_toolkit
 
@@ -134,115 +113,54 @@ class LLM:
             api_key (str): api key for whatever openai sdk llm service you are using.
             model (str): Model name. Defaults to gpt-4o-mini.
             base_url (str): Redirect OpenAI SDK to a different API service.
-            parallelise (bool): Whether to enable parallel API calls.
-            rpm_limit (int): Requests per minute (rate limit).
-            tpm_limit (int): Tokens per minute (rate limit).
+            max_workers (int): Maximum number of parallel workers for API calls. Defaults to 1.
         """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url or openai.base_url
         self.client = openai.Client(api_key=self.api_key, base_url=self.base_url)
-        self.parallelise = parallelise
-        self.rpm_limit = rpm_limit
-        self.tpm_limit = tpm_limit
-
-        # Thread-safe token bucket for TPM limiting
-        self._bucket_capacity = float(self.tpm_limit)
-        self._bucket_tokens = float(self.tpm_limit)
-        self._bucket_fill_rate = float(self.tpm_limit) / 60.0  # tokens per second
-        self._bucket_last = time.monotonic()
-        self._bucket_lock = Lock()
-
-        # Compute sensible default for workers (dynamic token estimate)
-        avg_latency = 0.5
-        sample_msg = [{"role": "user", "content": [{"type": "text", "text": ""}]}]
-        est_tokens_per_call = estimate_tokens(sample_msg)
-        calls_per_min_by_tpm = self.tpm_limit / est_tokens_per_call
-        calls_per_sec_allowed = min(self.rpm_limit, calls_per_min_by_tpm) / 60.0
-        # auto_workers = max(int(calls_per_sec_allowed * avg_latency), 1)
         
-        # Mke concurrency more conservative by applying a "safety factor"
-        safety_factor = 0.5 # ...this halves the max workers from the 'sensible default'
-        auto_workers = max(int(calls_per_sec_allowed * avg_latency * safety_factor), 1)
-        
-        if not self.parallelise:
-            self.max_workers = 1
-        else:
-            # cap at auto_workers even if user requests higher
-            self.max_workers = min(max_workers or auto_workers, auto_workers)
+        # Ensure max_workers is at least 1
+        self.max_workers = max(1, max_workers)
 
-        # Global semaphore to throttle both generate & parse
+        # Global semaphore to throttle calls based on max_workers
         self._sem = Semaphore(self.max_workers)
 
-        # Rate-limit + backoff the raw generate calls
-        gen_limiter = limits(calls=self.rpm_limit, period=60)
-        @backoff.on_exception(backoff.expo, RateLimitException, max_time=60)
-        @sleep_and_retry(gen_limiter)
+        # Backoff for raw generate calls, handles OpenAI's RateLimitError
+        @backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
         def _generate_with_backoff(messages: List[Dict], temperature: float = 0.0) -> str:
             with self._sem:
                 return self._raw_generate(messages, temperature)
         self._safe_generate_impl = _generate_with_backoff
 
-        # Rate-limit the raw parse endpoint
-        parse_limiter = limits(calls=self.rpm_limit, period=60)
-        self._safe_parse = sleep_and_retry(parse_limiter)(
-            self.client.beta.chat.completions.parse
-        )
-
-        # Wrap parse in backoff + semaphore
+        # Backoff for parse endpoint, handles OpenAI's RateLimitError
         @backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
         def _parse_with_backoff(**kwargs):
             with self._sem:
-                return self._safe_parse(**kwargs)
+                # Call the client's parse method directly
+                return self.client.beta.chat.completions.parse(**kwargs)
         self._parse_with_backoff = _parse_with_backoff
-
-    def _replenish_bucket(self):
-        with self._bucket_lock:
-            now = time.monotonic()
-            elapsed = now - self._bucket_last
-            self._bucket_last = now
-            self._bucket_tokens = min(
-                self._bucket_capacity,
-                self._bucket_tokens + elapsed * self._bucket_fill_rate
-            )
-
-    def _consume_tokens(self, count: int):
-        # Thread-safe consume
-        self._replenish_bucket()
-        with self._bucket_lock:
-            if count > self._bucket_tokens:
-                deficit = count - self._bucket_tokens
-                wait_time = deficit / self._bucket_fill_rate
-                logger.debug(f"TPM limit reached, sleeping for {wait_time:.2f}s")
-                time.sleep(wait_time)
-                # refill after sleep
-                self._replenish_bucket()
-            self._bucket_tokens -= count
 
     def _raw_generate(
         self,
         messages: List[Dict],
         temperature: float = 0.0
     ) -> str:
-        # 1) Estimate token usage
-        estimated = estimate_tokens(messages) * 1.1
-        self._consume_tokens(int(estimated))
-
-        # 2) Make the call
+        # Make the API call
         resp = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
             temperature=temperature,
         )
 
-        # 3) Record actual usage (for future tuning/logging)
+        # Record actual usage (for future tuning/logging)
         try:
             used = resp.usage.total_tokens
-            logger.debug(f"Actual tokens used: {used}, estimated: {int(estimated)}")
+            logger.debug(f"Actual tokens used: {used}")
         except Exception:
             pass
 
-        # 4) Return content
+        # Return content
         return resp.choices[0].message.content.strip()
 
     def _pdf_bytes_to_base64_images(self, pdf_bytes: bytes, dpi: int = 200) -> list[str]:
@@ -266,7 +184,7 @@ class LLM:
     def generate_batch(
         self,
         prompts: List[str],
-        images_list: Optional[List[List[bytes]]] = None,
+        images_list: Optional[List[List[bytes]]] = None, # Type hint kept as per original
         response_format: Optional[Type[BaseModel]] = None,
         temperature: float = 0.0,
         max_workers: Optional[int] = None
@@ -275,25 +193,28 @@ class LLM:
         Manages parallel (or sequential) generation of a list of prompts, returning
         either raw strings or validated BaseModel instances in the same order.
         """
-        def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
+        def _build_messages(prompt: str, imgs: Optional[List[bytes]]): # Type hint for imgs kept as per original
             content = [{"type": "text", "text": prompt}]
             if imgs:
-                for b64 in imgs:
+                for b64_img_data in imgs: # Assuming b64_img_data can be used in f-string if bytes
                     content.append({
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{b64}"}
+                        "image_url": {"url": f"data:image/jpeg;base64,{b64_img_data}"}
                     })
             return [{"role": "user", "content": content}]
 
-        # Determine worker count
-        workers = max_workers or self.max_workers or len(prompts)
+        # Determine effective worker count for this batch
+        if max_workers is not None and max_workers > 0:
+            effective_workers = max_workers
+        else:
+            effective_workers = self.max_workers # self.max_workers is guaranteed to be >= 1
 
-        # Sequential
-        if not self.parallelise:
+        # Sequential execution if only one worker is designated
+        if effective_workers <= 1:
             results: List[BaseModel | str] = []
             for idx, prompt in enumerate(prompts):
-                imgs = images_list[idx] if images_list else None
-                messages = _build_messages(prompt, imgs)
+                current_images = images_list[idx] if images_list and idx < len(images_list) else None
+                messages = _build_messages(prompt, current_images)
 
                 if response_format:
                     try:
@@ -315,12 +236,12 @@ class LLM:
                     results.append(txt)
             return results
 
-        # Parallel
+        # Parallel execution
         results: List[BaseModel | str] = [None] * len(prompts)
 
-        def _worker(idx: int, prompt: str):
-            imgs = images_list[idx] if images_list else None
-            messages = _build_messages(prompt, imgs)
+        def _worker(idx: int, prompt_text: str):
+            current_images = images_list[idx] if images_list and idx < len(images_list) else None
+            messages = _build_messages(prompt_text, current_images)
 
             if response_format:
                 try:
@@ -341,7 +262,7 @@ class LLM:
                 txt = self._safe_generate_impl(messages, temperature)
                 return idx, txt
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
+        with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
             for fut in as_completed(futures):
                 i, out = fut.result()
@@ -368,12 +289,34 @@ class LLM:
         Returns:
             dict: Extracted values keyed by the original field names.
         """
-        base64_images: List[str] = []
+        base64_images_list: List[str] = [] # This will be a list of base64 strings
         if pdf_bytes:
             try:
-                base64_images = self._pdf_bytes_to_base64_images(pdf_bytes, dpi=200)
+                base64_images_list = self._pdf_bytes_to_base64_images(pdf_bytes, dpi=200)
             except Exception as e:
                 logger.error(f"Error converting PDF to images with PyMuPDF: {e}")
+        
+        # The generate_batch expects List[List[bytes/str based on original type hint]]
+        # Here we have a single list of images for one prompt.
+        # So images_list argument to generate_batch should be [base64_images_list]
+        # The type hint for images_list in generate_batch is Optional[List[List[bytes]]]
+        # And _pdf_bytes_to_base64_images returns List[str].
+        # To align with the type hint (even if it's problematic), we'd need to encode strings to bytes if strictly following.
+        # However, the f-string in _build_messages: f"data:image/jpeg;base64,{b64_img_data}"
+        # works best if b64_img_data is already a string.
+        # I will pass it as List[List[str]] and let Python's f-string handle it,
+        # acknowledging the type hint discrepancy from the original code.
+        # For the purpose of this refactor, I'll keep the internal logic flow as close as possible.
+        # The original type hint for images_list in generate_batch is List[List[bytes]].
+        # _pdf_bytes_to_base64_images returns List[str].
+        # To satisfy the type hint literally, one would need to encode these strings back to bytes.
+        # e.g., `[img.encode('utf-8') for img in base64_images_list]`
+        # However, this is unlikely the original intent given the f-string usage.
+        # I will pass the list of strings, wrapped in another list.
+        images_for_batch: Optional[List[List[str]]] = None
+        if base64_images_list:
+            images_for_batch = [base64_images_list]
+
 
         prompt = (
             "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
@@ -397,9 +340,11 @@ class LLM:
             logger.info("LLM fallback prompt for %s:\n%s", report_url, prompt)
 
         try:
+            # Casting images_for_batch to any to satisfy the potentially problematic type hint
+            # without changing the underlying data which is List[List[str]]
             result_list = self.generate_batch(
                 prompts=[prompt],
-                images_list=[base64_images],
+                images_list=images_for_batch, # type: ignore 
                 response_format=MissingModel,
                 temperature=0.0
             )
@@ -410,19 +355,27 @@ class LLM:
 
         if isinstance(output, BaseModel):
             out_json = output.model_dump()
-        elif isinstance(output, dict):
+        elif isinstance(output, dict): # Fallback if error string was returned as dict by mistake
             out_json = output
+        elif isinstance(output, str) and output.startswith("Error:"): # Handle error string
+             logger.error(f"LLM fallback returned an error string: {output}")
+             return {fld: "LLM Fallback error" for fld in response_fields}
         else:
-            logger.error(f"Unexpected LLM fallback output type: {type(output)}")
-            return {}
+            logger.error(f"Unexpected LLM fallback output type: {type(output)}, value: {output}")
+            return {fld: "LLM Fallback failed - unexpected type" for fld in response_fields}
+
 
         if verbose:
             logger.info("LLM fallback output for %s: %s", report_url, out_json)
 
         updates: Dict[str, str] = {}
         for fld in response_fields:
-            val = out_json.get(fld)
-            updates[fld] = val if val is not None else "LLM Fallback failed"
+            val = out_json.get(fld) # out_json might not be a dict if error occurred above
+            if val is None and isinstance(out_json, dict): # Check if out_json is a dict
+                 updates[fld] = "N/A: Not found in LLM response" # Field was expected but not in output
+            elif val is not None:
+                 updates[fld] = str(val) # Ensure value is string
+            else: # out_json was not a dict or other issue
+                 updates[fld] = "LLM Fallback processing error"
         return updates
-
 

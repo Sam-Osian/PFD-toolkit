@@ -1073,9 +1073,9 @@ class PFDScraper:
 
         # Decide parallel vs sequential based on the LLM flag
         results: Dict[int, Dict[str,str]] = {}
-        if self.llm.parallelise:
+        if self.llm.max_workers > 1:
             # Spin up the threadpool
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            with ThreadPoolExecutor(max_workers=self.llm.max_workers) as executor:
                 futures = {
                     executor.submit(process_row, idx, row): idx
                     for idx, row in reports_df.iterrows()
