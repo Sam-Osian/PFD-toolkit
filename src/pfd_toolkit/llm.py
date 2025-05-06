@@ -55,6 +55,7 @@ class LLM:
     3. **Correct** any misspellings, ensuring the text is in **British English**.
     4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.
     5. **If extraction fails**, return exactly: N/A: Not found (without any additional commentary).
+    6. **Do not** change any content of the string unless it explicitly relates to the above. Do not ever summarise, *nor* edit for conciseness or flow.
 
     Extra instructions:
     {extra_instructions}
@@ -68,11 +69,12 @@ class LLM:
     PROMPT_CONFIG = {
         "Coroner": {
             "field_description": "the name of the Coroner who presided over the inquest",
-            "field_contents_and_rules": "the name of the Coroner and nothing else",
+            "field_contents_and_rules": "this name of the Coroner and nothing else",
             "extra_instructions": (
-                'For example, if the string is "Coroner: Mr. Joe Bloggs", return "Joe Bloggs".\n'
-                'If the string is "Joe Bloggs Senior Coroner for West London", return "Joe Bloggs".\n'
-                'If the string is "Joe Bloggs", just return "Joe Bloggs" (no modification).'
+                'Remove all reference to titles & middle name(s), if present, and replace the first name with an initial.'
+                'For example, if the string is "Mr. Joe E Bloggs", return "J. Bloggs".\n'
+                'If the string is "Joe Bloggs Senior Coroner for West London", return "J. Bloggs".\n'
+                'If the string is "J. Bloggs", just return "J. Bloggs" (no modification).'
             ),
         },
         "Area": {
@@ -97,7 +99,6 @@ class LLM:
             "field_contents_and_rules": "only the details of the investigation and inquest—nothing else",
             "extra_instructions": (
                 "If the string appears to need no cleaning, return it as is."
-                "Change all dates to the format 'YYYY-MM-DD'"
             ),
         },
         "CircumstancesOfDeath": {
@@ -105,16 +106,14 @@ class LLM:
             "field_contents_and_rules": "only the circumstances of death—nothing else",
             "extra_instructions": (
                 "If the string appears to need no cleaning, return it as is."
-                "Change all dates to the format 'YYYY-MM-DD'"
             ),
         },
         "MattersOfConcern": {
             "field_description": "the matters of concern",
             "field_contents_and_rules": "only the matters of concern—nothing else",
             "extra_instructions": (
-                "Remove reference to boiletplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string ending with '...The Matters of Concern are as follows:',"
+                "Remove reference to boiletplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with '...The Matters of Concern are as follows:' (which should also be removed),"
                 "If the string appears to need no cleaning, return it as is."
-                "Change all dates to the format 'YYYY-MM-DD'"
             ),
         },
     }
