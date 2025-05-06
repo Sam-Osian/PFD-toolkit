@@ -248,7 +248,7 @@ class Cleaner:
                 cleaned_df.loc[df_index, column_name] = final_text_to_write
             
             if self.verbose:
-                logger.info(f"Finished batch cleaning for '{column_name}'. {modifications_count} entr(ies) were actively modified by the LLM.")
+                logger.info(f"Finished batch cleaning for '{column_name}'. {modifications_count} entries were actively modified by the LLM.")
         
         self.cleaned_reports = cleaned_df 
         return cleaned_df

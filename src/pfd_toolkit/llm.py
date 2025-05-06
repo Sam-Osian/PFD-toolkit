@@ -112,7 +112,7 @@ class LLM:
             "field_description": "the matters of concern",
             "field_contents_and_rules": "only the matters of concern—nothing else",
             "extra_instructions": (
-                "Remove reference to boiletplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with '...The Matters of Concern are as follows:' (which should also be removed),"
+                "Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with '...The Matters of Concern are as follows:' (which should also be removed),"
                 "If the string appears to need no cleaning, return it as is."
             ),
         },
@@ -128,7 +128,7 @@ class LLM:
         tpm_limit: Optional[int] = 40000,
         max_workers: Optional[int] = None
     ):
-        """Create an LLM object for use within pdf_toolkit
+        """Create an LLM object for use within pfd_toolkit
 
         Args:
             api_key (str): api key for whatever openai sdk llm service you are using.
