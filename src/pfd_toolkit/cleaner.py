@@ -6,8 +6,6 @@ from pfd_toolkit.llm import LLM
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
-# - Sets up logging for the module. The logger is used to record events,
-#   debugging messages, and error messages.
 # -----------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -138,8 +136,8 @@ class Cleaner:
     def _get_prompt_for_field(self, field_name: str) -> str:
         """Generates a complete prompt template for a given PFD report field."""
         # Access PROMPT_CONFIG and BASE_PROMPT from the llm instance
-        config = self.llm.PROMPT_CONFIG[field_name] # Assuming PROMPT_CONFIG is an attribute of LLM instance
-        return self.llm.BASE_PROMPT.format(      # Assuming BASE_PROMPT is an attribute of LLM instance
+        config = self.llm.CLEANER_PROMPT_CONFIG[field_name] 
+        return self.llm.CLEANER_BASE_PROMPT.format( 
             field_description=config["field_description"],
             field_contents_and_rules=config["field_contents_and_rules"],
             extra_instructions=config["extra_instructions"],
@@ -154,8 +152,7 @@ class Cleaner:
         """
         cleaned_df = self.reports.copy() # Work on a copy
         
-        # Define fields to process: (ConfigKey, ProcessFlag, DataFrameColumnName, PromptTemplate)
-        # This structure helps iterate and access relevant attributes for each field.
+        # Define fields to process: (Config Key, Process Flag, DF Column Name, Prompt Template)
         field_processing_config = [
             ("Coroner", self.process_coroner, self.coroner_col_name, self.coroner_prompt_template),
             ("Area", self.process_area, self.area_col_name, self.area_prompt_template),
@@ -171,7 +168,7 @@ class Cleaner:
                 continue
 
             if column_name not in cleaned_df.columns:
-                # This case should ideally be caught by __init__ checks, but good to have defence here.
+                # This case should ideally be caught by __init__ checks, but good to have defence here
                 logger.warning(f"Column '{column_name}' for field '{config_key}' not found at cleaning time. Skipping.")
                 continue
             if self.verbose:

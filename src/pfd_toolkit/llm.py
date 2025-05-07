@@ -28,7 +28,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 class LLM:
     
     # Base prompt template that all prompts will share, with placeholders for field-specific information.
-    BASE_PROMPT = """\
+    CLEANER_BASE_PROMPT = """\
     You are an expert in extracting and cleaning specific information from UK Coronial Prevention of Future Death Reports.
 
     Task:
@@ -45,10 +45,9 @@ class LLM:
     Input Text:
     """
 
-
     # Dictionary holding field-specific configurations for the prompt
     # The placeholders for the above `BASE_PROMPT` will be 'filled in' using the values below...
-    PROMPT_CONFIG = {
+    CLEANER_PROMPT_CONFIG = {
         "Coroner": {
             "field_description": "the name of the Coroner who presided over the inquest",
             "field_contents_and_rules": "this name of the Coroner and nothing else",
@@ -105,7 +104,7 @@ class LLM:
         api_key: str,
         model: str = "gpt-4.1-mini",
         base_url: Optional[str] = None,
-        max_workers: int = 1  # Simplified: max_workers defaults to 1
+        max_workers: int = 1 
     ):
         """Create an LLM object for use within pfd_toolkit
 
@@ -181,10 +180,11 @@ class LLM:
         doc.close()
         return imgs
 
+    #  -- LLM Method for the cleaner.py module --
     def generate_batch(
         self,
         prompts: List[str],
-        images_list: Optional[List[List[bytes]]] = None, # Type hint kept as per original
+        images_list: Optional[List[List[bytes]]] = None,
         response_format: Optional[Type[BaseModel]] = None,
         temperature: float = 0.0,
         max_workers: Optional[int] = None
@@ -193,10 +193,10 @@ class LLM:
         Manages parallel (or sequential) generation of a list of prompts, returning
         either raw strings or validated BaseModel instances in the same order.
         """
-        def _build_messages(prompt: str, imgs: Optional[List[bytes]]): # Type hint for imgs kept as per original
+        def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
             if imgs:
-                for b64_img_data in imgs: # Assuming b64_img_data can be used in f-string if bytes
+                for b64_img_data in imgs: 
                     content.append({
                         "type": "image_url",
                         "image_url": {"url": f"data:image/jpeg;base64,{b64_img_data}"}
@@ -207,7 +207,7 @@ class LLM:
         if max_workers is not None and max_workers > 0:
             effective_workers = max_workers
         else:
-            effective_workers = self.max_workers # self.max_workers is guaranteed to be >= 1
+            effective_workers = self.max_workers 
 
         # Sequential execution if only one worker is designated
         if effective_workers <= 1:
@@ -270,6 +270,7 @@ class LLM:
 
         return results
 
+    # -- LLM method for scraper.py module --
     def call_llm_fallback(
         self,
         pdf_bytes: Optional[bytes],
@@ -295,24 +296,7 @@ class LLM:
                 base64_images_list = self._pdf_bytes_to_base64_images(pdf_bytes, dpi=200)
             except Exception as e:
                 logger.error(f"Error converting PDF to images with PyMuPDF: {e}")
-        
-        # The generate_batch expects List[List[bytes/str based on original type hint]]
-        # Here we have a single list of images for one prompt.
-        # So images_list argument to generate_batch should be [base64_images_list]
-        # The type hint for images_list in generate_batch is Optional[List[List[bytes]]]
-        # And _pdf_bytes_to_base64_images returns List[str].
-        # To align with the type hint (even if it's problematic), we'd need to encode strings to bytes if strictly following.
-        # However, the f-string in _build_messages: f"data:image/jpeg;base64,{b64_img_data}"
-        # works best if b64_img_data is already a string.
-        # I will pass it as List[List[str]] and let Python's f-string handle it,
-        # acknowledging the type hint discrepancy from the original code.
-        # For the purpose of this refactor, I'll keep the internal logic flow as close as possible.
-        # The original type hint for images_list in generate_batch is List[List[bytes]].
-        # _pdf_bytes_to_base64_images returns List[str].
-        # To satisfy the type hint literally, one would need to encode these strings back to bytes.
-        # e.g., `[img.encode('utf-8') for img in base64_images_list]`
-        # However, this is unlikely the original intent given the f-string usage.
-        # I will pass the list of strings, wrapped in another list.
+
         images_for_batch: Optional[List[List[str]]] = None
         if base64_images_list:
             images_for_batch = [base64_images_list]
@@ -378,4 +362,3 @@ class LLM:
             else: # out_json was not a dict or other issue
                  updates[fld] = "LLM Fallback processing error"
         return updates
-
