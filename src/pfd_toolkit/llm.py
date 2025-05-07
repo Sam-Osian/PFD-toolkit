@@ -103,7 +103,7 @@ class LLM:
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-4.1-mini",
         base_url: Optional[str] = None,
         max_workers: int = 1  # Simplified: max_workers defaults to 1
     ):
