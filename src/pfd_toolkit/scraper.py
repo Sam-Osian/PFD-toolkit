@@ -877,7 +877,11 @@ class PFDScraper:
         # If LLM fallback is enabled and an LLM client is configured, apply it
         if self.llm_fallback and self.llm:
             reports_df = self.run_llm_fallback(reports_df if not reports_df.empty else None)
-
+            
+        # Sort dataframe by date column, if this is present
+        if self.include_date == True:
+            reports_df = reports_df.sort_values(by=[self.COL_DATE], ascending=False) # Latest reports at the top
+            
         self.reports = reports_df.copy() # Store the final DataFrame internally
         return reports_df
 
