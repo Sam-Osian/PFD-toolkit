@@ -113,7 +113,7 @@ class LLM:
 
         Args:
             api_key (str): api key for whatever openai sdk llm service you are using.
-            model (str): Model name. Defaults to gpt-4o-mini.
+            model (str): Model name. Defaults to gpt-4.1-mini.
             base_url (str): Redirect OpenAI SDK to a different API service.
             max_workers (int): Maximum number of parallel workers for API calls. Defaults to 1.
         """
