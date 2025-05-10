@@ -57,7 +57,7 @@ class Dataset:
             raise ValueError("date_from must be earlier than or equal to date_to.")
         
         
-    def get_data(self) -> pd.DataFrame:
+    def _get_data(self) -> pd.DataFrame:
         # Retrive data from `data` directory
         with resources.files('pfd_toolkit.data').joinpath('all_reports.csv').open('r') as f:
             reports = pd.read_csv(f)
@@ -69,3 +69,23 @@ class Dataset:
         reports = reports[(reports['Date'] >= self.date_from) & (reports['Date'] <= self.date_to)]
         
         return reports
+
+# Public function to retrieve data
+def load_reports(
+    category: str = 'all',
+    start_date: str = '2000-01-01',
+    end_date: str = '2100-01-01'
+) -> pd.DataFrame:
+    """
+    Quickly load cleaned Prevention of Future Death reports.
+
+    Args:
+        category (str, optional): Filter by category. Defaults to 'all'.
+        start_date (str, optional): Start date in 'YYYY-MM-DD' format. Defaults to '2000-01-01'.
+        end_date (str, optional): End date in 'YYYY-MM-DD' format. Defaults to '2100-01-01'.
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame of PFD reports.
+    """
+    dataset = Dataset(category=category, date_from=start_date, date_to=end_date)
+    return dataset._get_data()
