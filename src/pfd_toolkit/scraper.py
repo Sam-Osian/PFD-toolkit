@@ -965,7 +965,10 @@ class PFDScraper:
             updated_reports_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
         else: # No new valid records were scraped from the new_links...
             updated_reports_df = base_df if base_df is not None else pd.DataFrame() # Return original or empty
-            
+        
+        # Sort updates reports by date
+        updated_reports_df = updated_reports_df.sort_values(by=[self.COL_DATE], ascending=False)
+        
         self.reports = updated_reports_df.copy() # Update internal reports DataFrame
         return updated_reports_df
 
