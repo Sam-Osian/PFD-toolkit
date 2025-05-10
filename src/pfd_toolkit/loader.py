@@ -12,7 +12,13 @@ scraper = PFDScraper()
 
 # Save reports
 #reports = scraper.reports
-#reports.to_csv('../src/pfd_toolkit/data/all_reports.csv')
+#reports.to_csv('data/all_reports.csv', index=False)
 
 
 # -- UPDATE REPORTS -- 
+
+# Read the existing set of reports
+reports = pd.read_csv('data/all_reports.csv')
+
+# Try to 'top up' with new ones
+scraper.top_up(old_reports=reports, date_from="2025-05-09")
