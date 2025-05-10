@@ -1,11 +1,10 @@
-from pfd_toolkit import PFDScraper
 import pandas as pd
 from dateutil import parser as date_parser
 import importlib.resources as resources
 
 
 # -- INITALISE SCRAPER ENGINE --
-scraper = PFDScraper()
+#scraper = PFDScraper()
 
 # -- GET REPORTS --
 # Commented out as we only need to run this once
@@ -20,10 +19,10 @@ scraper = PFDScraper()
 # -- UPDATE REPORTS -- 
 
 # Read the existing set of reports
-reports = pd.read_csv('data/all_reports.csv')
+#reports = pd.read_csv('data/all_reports.csv')
 
 # Try to 'top up' with new ones
-scraper.top_up(old_reports=reports, date_from="2025-05-09")
+#scraper.top_up(old_reports=reports, date_from="2025-05-09")
 
 
 class Dataset:
@@ -62,11 +61,20 @@ class Dataset:
         with resources.files('pfd_toolkit.data').joinpath('all_reports.csv').open('r') as f:
             reports = pd.read_csv(f)
 
+        # -- Date logic --
+        
         # Make Date column into pandas datetime obj
-        reports['Date'] = pd.to_datetime(reports['Date'])
+        reports['Date'] = pd.to_datetime(reports['Date'],
+                                         format='%Y-%m-%d', # YYYY-MM-DD
+                                         errors = 'coerce') # Force errors into NaT (not a time)
+        
+        # Drop rows where date conversion failed (invalid or missing dates)
+        reports = reports.dropna(subset=['Date']).reset_index(drop=True)
         
         # Filter date based on user's specification
         reports = reports[(reports['Date'] >= self.date_from) & (reports['Date'] <= self.date_to)]
+        
+        
         
         return reports
 
