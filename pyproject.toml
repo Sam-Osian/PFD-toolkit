@@ -103,6 +103,10 @@ dependencies = [
     "wcwidth==0.2.13",
 ]
 
+[tool.hatch.build.targets.wheel]
+packages = ["pfd_toolkit"]
+include = ["pfd_toolkit/data/*.csv"]
+
 [project.urls]
 "Source" = "https://github.com/Sam-Osian/PFD-toolkit"
 "Issues" = "https://github.com/Sam-Osian/PFD-toolkit/issues"
