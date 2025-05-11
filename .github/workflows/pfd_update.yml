@@ -58,6 +58,6 @@ jobs:
         if: github.ref == 'refs/heads/main' # ...only run on main branch (failsafe)
         uses: EndBug/add-and-commit@v9
         with:
-          add: pfd_toolkit/data/all_reports.csv
+          add: src/pfd_toolkit/data/all_reports.csv
           default_author: github_actions
           message: "🤖 Weekly PFD data top-up"

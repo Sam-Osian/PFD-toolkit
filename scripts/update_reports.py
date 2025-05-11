@@ -9,7 +9,7 @@ import pandas as pd
 from pfd_toolkit import PFDScraper
 from pathlib import Path
 
-DATA_PATH = Path("../pfd_toolkit/data/all_reports.csv")
+DATA_PATH = Path("/src/pfd_toolkit/data/all_reports.csv")
 
 # -- INITIALISE SCRAPER ENGINE --
 scraper = PFDScraper()
@@ -21,6 +21,10 @@ if DATA_PATH.exists():
 else:
     old_df = None
     old_count = 0
+
+# -- GET LATEST REPORT DATE -- 
+# Come back to this later. I fear that an rrroneous in at least one
+# PFD report could throw this off. Hardcode start date as as 2025-01-01 for now
 
 # -- TOP UP REPORTS -- 
 new_df = scraper.top_up(old_reports=old_df, date_from="2025-01-01")
