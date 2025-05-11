@@ -5,7 +5,7 @@ on:
 
   # Automatically trigger every Monday at 1:00 AM UTC
   schedule:
-    - cron: '0 1 * * 1'  # ...Minute Hour Day Month Weekday (UTC timezone)
+    - cron: '0 1 * * 1'  # ...Format: Minute Hour Day Month Weekday (UTC timezone)
 
 permissions:
   contents: write
@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install UV
-        uses: astral-sh/setup-uv@v5 # @v5 is the version of astrals setup script - best to keep it hardcoded.
+        uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true  # ...caches installed dependencies for faster subsequent runs
           cache-dependency-glob: "uv.lock"  # ...cache is invalidated if uv.lock changes
@@ -33,7 +33,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: "pyproject.toml" # ...get from pyproject.toml
+          python-version-file: "pyproject.toml"
 
       - name: Install Project Dependencies via UV
         run: uv sync --all-extras --dev
@@ -51,11 +51,11 @@ jobs:
           if [ -f "$summary" ]; then
             cat "$summary" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- ℹ️ No new reports found. Nothing to commit." >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ You have commitment issues! (No new reports found)" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Commit & Push Changes
-        if: github.ref == 'refs/heads/main' # ...only run on main branch (failsafe)
+        if: github.ref == 'refs/heads/main' 
         uses: EndBug/add-and-commit@v9
         with:
           add: src/pfd_toolkit/data/all_reports.csv
