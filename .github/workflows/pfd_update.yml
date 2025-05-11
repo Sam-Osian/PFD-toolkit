@@ -1,0 +1,44 @@
+name: Weekly PFD Top-Up
+
+on:
+  workflow_dispatch:  
+
+  # Automatically trigger every Monday at 1:00 AM UTC
+  schedule:
+    - cron: '0 1 * * 1'  # ...Minute Hour Day Month Weekday (UTC timezone)
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository Code
+        uses: actions/checkout@v4
+
+      - name: Install UV
+        uses: astral-sh/setup-uv@v5 # @v5 is the version of astrals setup script - best to keep it hardcoded.
+        with:
+          enable-cache: true  # ...caches installed dependencies for faster subsequent runs
+          cache-dependency-glob: "uv.lock"  # ...cache is invalidated if uv.lock changes
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml" # ...get from pyproject.toml
+
+      - name: Install Project Dependencies via UV
+        run: uv sync --all-extras --dev
+
+
+      - name: Run the PFD Top-Up Script
+        run: |
+          python scripts/update_reports.py 
+
+      - name: Commit & Push Changes
+        uses: EndBug/add-and-commit@v9
+        with:
+          default_author: github_actions
+          message: "🤖 Weekly PFD data top-up"
