@@ -2,30 +2,40 @@
 """
 Helper script for continuously updating the CSV containing all 
 Prevention of Future Death (PFD) reports which is bundled with
-the repo (`..src/pfd_toolkit/data`). 
+the repo (`../pfd_toolkit/data`).
 """
 
-DATA_PATH = "../pfd_toolkit/data/all_reports.csv" # Where the complete set of PFD reports lives
-
-from pfd_toolkit import PFDScraper
 import pandas as pd
+from pfd_toolkit import PFDScraper
+from pathlib import Path
 
-# -- INITALISE SCRAPER ENGINE --
+DATA_PATH = Path("../pfd_toolkit/data/all_reports.csv")
+
+# -- INITIALISE SCRAPER ENGINE --
 scraper = PFDScraper()
 
+# -- LOAD EXISTING REPORTS -- 
+if DATA_PATH.exists():
+    old_df = pd.read_csv(DATA_PATH)
+    old_count = len(old_df)
+else:
+    old_df = None
+    old_count = 0
 
-# -- UPDATE REPORTS -- 
-# Read the existing set of reports
-old_df = pd.read_csv(DATA_PATH)
-
-# 'Top up' with new ones
+# -- TOP UP REPORTS -- 
 new_df = scraper.top_up(old_reports=old_df, date_from="2025-01-01")
 
+if new_df is not None:
+    new_count = len(new_df)
+    added_count = new_count - old_count
 
-# -- PROTECTION LOGIC --
-
-if new_df is not None and (old_df is None or len(new_df) > len(old_df)):
-    new_df.to_csv(DATA_PATH, index=False)
-    print("✅  CSV refreshed – will be committed by the workflow.")
+    if added_count > 0:
+        new_df.to_csv(DATA_PATH, index=False)
+        print(f"✅ CSV refreshed - {added_count} new report(s) added. Total reports: {new_count}.")
+        # Write counts to a file for the workflow summary
+        with open(".github/workflows/update_summary.txt", "w") as f:
+            f.write(f"{added_count} new reports added. Total reports: {new_count}.\n")
+    else:
+        print("No new reports found - nothing to commit.")
 else:
-    print("ℹ️  No new reports found – nothing to commit.")
+    print("No new reports found - nothing to commit.")
