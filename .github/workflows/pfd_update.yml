@@ -15,6 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # Exit if not on main branch
+      - name: Check if on main branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "This workflow is designed to run on main only."
+          exit 0
+
+
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
@@ -38,6 +46,7 @@ jobs:
           python scripts/update_reports.py 
 
       - name: Commit & Push Changes
+        if: github.ref == 'refs/heads/main' # ...only run on main branch (failsafe)
         uses: EndBug/add-and-commit@v9
         with:
           default_author: github_actions
