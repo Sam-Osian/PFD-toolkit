@@ -79,6 +79,7 @@ class PFDScraper:
         max_workers: int = 10, # Maximum number of concurrent threads for scraping
         max_requests: int = 5, # Maximum concurrent requests to the same domain
         delay_range: tuple[int | float, int | float] | None = (1, 2), # Min/max delay (seconds) between requests
+        timeout: int = 60, # Timeout for response requests
         
         # Scraping strategy configuration
         html_scraping: bool = True, # Whether to attempt HTML-based scraping
@@ -128,6 +129,7 @@ class PFDScraper:
         self.max_workers = max_workers
         self.max_requests = max_requests
         self.delay_range = delay_range
+        self.timeout = timeout
         
         # Store scraping strategy flags
         self.html_scraping = html_scraping
@@ -345,7 +347,7 @@ class PFDScraper:
         with self.domain_semaphore: 
             time.sleep(random.uniform(*self.delay_range))  # Introduce a random delay between requests to be polite to the server
             try:
-                response = self.session.get(url)
+                response = self.session.get(url, timeout=self.timeout)
                 response.raise_for_status() # Raise HTTPError for bad responses (4XX or 5XX)
                 if self.verbose:
                     logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
@@ -523,7 +525,7 @@ class PFDScraper:
         
         # Download the file content
         try:
-            response = self.session.get(pdf_url)
+            response = self.session.get(pdf_url, timeout=self.timeout)
             response.raise_for_status()
             file_bytes = response.content
         except requests.RequestException as e:
@@ -653,7 +655,7 @@ class PFDScraper:
         :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
         """
         try:  # Get the HTML page of the report
-            page_response = self.session.get(report_url)
+            page_response = self.session.get(report_url, timeout=self.timeout)
             page_response.raise_for_status()
             soup = BeautifulSoup(page_response.content, 'html.parser')
             
@@ -662,7 +664,7 @@ class PFDScraper:
             if pdf_links:
                 pdf_link = pdf_links[0] # There are often multiple buttons; fortunately the report is always the first one (0 index)
                 # Download the PDF file
-                pdf_response = self.session.get(pdf_link)
+                pdf_response = self.session.get(pdf_link, timeout=self.timeout)
                 pdf_response.raise_for_status()
                 return pdf_response.content # Return PDF content as bytes
             else:
@@ -701,7 +703,7 @@ class PFDScraper:
         
         # Fetch the main HTML report page
         try:
-            response = self.session.get(url)
+            response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
             logger.error("Failed to fetch %s; Error: %s", url, e)
