@@ -9,7 +9,7 @@ import pandas as pd
 from pfd_toolkit import PFDScraper
 from pathlib import Path
 
-DATA_PATH = Path("/pdf_data/all_reports.csv")
+DATA_PATH = Path("./src/pfd_toolkit/data/all_reports.csv")
 
 # -- INITIALISE SCRAPER ENGINE --
 scraper = PFDScraper()

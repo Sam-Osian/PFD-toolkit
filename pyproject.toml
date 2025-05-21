@@ -106,6 +106,7 @@ dependencies = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pfd_toolkit"]
+include = ["src/pfd_toolkit/data/*.csv"]
 
 [project.urls]
 "Source" = "https://github.com/Sam-Osian/PFD-toolkit"
