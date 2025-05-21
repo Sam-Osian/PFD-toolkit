@@ -43,7 +43,7 @@ jobs:
 
       - name: Run the PFD Top-Up Script
         run: |
-          uv run scripts/update_reports.py 
+          uv run python scripts/update_reports.py 
 
       - name: Display Summary in Actions UI
         if: always()
