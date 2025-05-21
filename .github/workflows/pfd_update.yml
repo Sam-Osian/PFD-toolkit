@@ -1,11 +1,13 @@
 name: Weekly PFD Top-Up
 
 on:
-  workflow_dispatch:  
-
-  # Automatically trigger every Monday at 1:00 AM UTC
-  schedule:
-    - cron: '0 1 * * 1'  # ...Format: Minute Hour Day Month Weekday (UTC timezone)
+  # workflow_dispatch:  
+  push:
+    branches:
+      - auto_update
+  # # Automatically trigger every Monday at 1:00 AM UTC
+  # schedule:
+  #   - cron: '0 1 * * 1'  # ...Format: Minute Hour Day Month Weekday (UTC timezone)
 
 permissions:
   contents: write
@@ -15,11 +17,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check if on main branch  # ...exit if not on main branch
-        if: github.ref != 'refs/heads/main'
-        run: |
-          echo "This workflow is designed to run on main only."
-          exit 0
+      # - name: Check if on main branch  # ...exit if not on main branch
+      #   if: github.ref != 'refs/heads/main'
+      #   run: |
+      #     echo "This workflow is designed to run on main only."
+      #     exit 0
 
       - name: Checkout Repository Code
         uses: actions/checkout@v4
@@ -55,7 +57,7 @@ jobs:
           fi
 
       - name: Commit & Push Changes
-        if: github.ref == 'refs/heads/main' 
+        if: github.ref == 'refs/heads/auto_update' 
         uses: EndBug/add-and-commit@v9
         with:
           add: src/pfd_toolkit/data/all_reports.csv
