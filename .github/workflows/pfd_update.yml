@@ -37,13 +37,15 @@ jobs:
         with:
           python-version-file: "pyproject.toml"
 
+      - name: Create virtual environment
+        run: uv venv .venv
+
       - name: Install Project Dependencies via UV
-        run: uv sync --all-extras --dev
+        run: uv sync
 
 
       - name: Run the PFD Top-Up Script
-        run: |
-          uv run python scripts/update_reports.py 
+        run: uv run python scripts/update_reports.py 
 
       - name: Display Summary in Actions UI
         if: always()
