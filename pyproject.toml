@@ -8,6 +8,7 @@ version = "0.1.26"
 description = "A toolkit for using Prevention of Future Death (PFD) Reports for Research and Policy Projects."
 readme = "README.md"
 license = { file = "LICENCE" }
+
 authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
   { name = "Jonathan Pytches", email = "Search-me@on-Linkedin.co.uk" }
@@ -104,8 +105,8 @@ dependencies = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["pfd_toolkit"]
-include = ["pfd_toolkit/data/*.csv"]
+packages = ["src/pfd_toolkit"]
+include = ["src/pfd_toolkit/data/*.csv"]
 
 [project.urls]
 "Source" = "https://github.com/Sam-Osian/PFD-toolkit"
