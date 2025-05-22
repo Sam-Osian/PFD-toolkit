@@ -1,7 +1,7 @@
 name: Weekly PFD Top-Up
 
 on:
-  workflow_dispatch:  
+  workflow_dispatch:
   # Automatically trigger every Monday at 1:00 AM UTC
   schedule:
     - cron: '0 1 * * 1'  # ...Format: Minute Hour Day Month Weekday (UTC timezone)
@@ -23,6 +23,37 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
+      - name: DEBUG-- Inspect CSV immediately after checkout
+        id: inspect_after_checkout 
+        run: |
+          echo "=== Inspecting CSV after checkout ==="
+          TARGET_CSV="src/pfd_toolkit/data/all_reports.csv"
+          echo "Commit SHA being used: ${{ github.sha }}"
+          if [ -f "$TARGET_CSV" ]; then
+            echo "File exists: $TARGET_CSV"
+            echo "Line count (wc -l):"
+            wc -l "$TARGET_CSV"
+            echo "Head of file (first 5 lines):"
+            head -n 5 "$TARGET_CSV"
+            echo "Tail of file (last 5 lines):"
+            tail -n 5 "$TARGET_CSV"
+            echo "MD5sum:"
+            md5sum "$TARGET_CSV"
+            echo "SHA256sum:"
+            sha256sum "$TARGET_CSV"
+          else
+            echo "File NOT FOUND: $TARGET_CSV"
+            echo "Listing directory contents of src/pfd_toolkit/data/:"
+            ls -la src/pfd_toolkit/data/ || echo "Directory src/pfd_toolkit/data/ not found"
+            echo "Listing directory contents of src/pfd_toolkit/:"
+            ls -la src/pfd_toolkit/ || echo "Directory src/pfd_toolkit/ not found"
+            echo "Listing directory contents of src/:"
+            ls -la src/ || echo "Directory src/ not found"
+            echo "Listing current directory (PWD: $(pwd)):"
+            ls -la
+          fi
+          echo "Current working directory: $(pwd)"
+
       - name: Install UV
         uses: astral-sh/setup-uv@v5
         with:
@@ -37,23 +68,48 @@ jobs:
       - name: Install Project Dependencies via UV
         run: uv sync
 
+      - name: DEBUG-- Inspect CSV before Python script runs
+        id: inspect_before_script 
+        run: |
+          echo "=== Inspecting CSV before Python script run (after uv sync) ==="
+          TARGET_CSV="src/pfd_toolkit/data/all_reports.csv"
+          if [ -f "$TARGET_CSV" ]; then
+            echo "File exists: $TARGET_CSV"
+            echo "Line count (wc -l):"
+            wc -l "$TARGET_CSV"
+            echo "MD5sum:"
+            md5sum "$TARGET_CSV"
+            echo "SHA256sum:"
+            sha256sum "$TARGET_CSV"
+          else
+            echo "File NOT FOUND: $TARGET_CSV"
+          fi
+          echo "Python version via uv run:"
+          uv run python -V
+          echo "Pandas version via uv run:"
+          uv run python -c "import pandas; print(f'Pandas version: {pandas.__version__}')"
+
 
       - name: Run the PFD Top-Up Script
-        run: uv run python scripts/update_reports.py 
+        run: |
+          echo "Current working directory before running script: $(pwd)"
+          uv run python scripts/update_reports.py
 
       - name: Display Summary in Actions UI
         if: always()
         run: |
-          summary=".github/workflows/update_summary.txt"
+          summary_file=".github/workflows/update_summary.txt" # Corrected variable name
           echo "### Top-up Summary" >> $GITHUB_STEP_SUMMARY
-          if [ -f "$summary" ]; then
-            cat "$summary" >> $GITHUB_STEP_SUMMARY
+          if [ -f "$summary_file" ]; then # Use corrected variable name
+            cat "$summary_file" >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️ No new reports found" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ Summary file ($summary_file) not found." >> $GITHUB_STEP_SUMMARY
+            echo "Python script output (from previous step) should indicate reason." >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Commit & Push Changes
-        if: github.ref == 'refs/heads/main' 
+        # (Only run if the script indicated changes by creating the summary file)
+        if: github.ref == 'refs/heads/main'
         uses: EndBug/add-and-commit@v9
         with:
           add: src/pfd_toolkit/data/all_reports.csv
