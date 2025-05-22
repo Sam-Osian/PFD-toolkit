@@ -79,6 +79,7 @@ class PFDScraper:
         max_workers: int = 10, # Maximum number of concurrent threads for scraping
         max_requests: int = 5, # Maximum concurrent requests to the same domain
         delay_range: tuple[int | float, int | float] | None = (1, 2), # Min/max delay (seconds) between requests
+        timeout: int = 60, # Timeout for response requests
         
         # Scraping strategy configuration
         html_scraping: bool = True, # Whether to attempt HTML-based scraping
@@ -128,6 +129,7 @@ class PFDScraper:
         self.max_workers = max_workers
         self.max_requests = max_requests
         self.delay_range = delay_range
+        self.timeout = timeout
         
         # Store scraping strategy flags
         self.html_scraping = html_scraping
@@ -345,7 +347,7 @@ class PFDScraper:
         with self.domain_semaphore: 
             time.sleep(random.uniform(*self.delay_range))  # Introduce a random delay between requests to be polite to the server
             try:
-                response = self.session.get(url)
+                response = self.session.get(url, timeout=self.timeout)
                 response.raise_for_status() # Raise HTTPError for bad responses (4XX or 5XX)
                 if self.verbose:
                     logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
@@ -370,7 +372,7 @@ class PFDScraper:
         page = self.start_page 
         
         # Initialise progress bar for fetching pages
-        pbar = tqdm(desc="Fetching pages", unit=" page(s)", leave=False, initial=page)
+        pbar = tqdm(desc="Fetching pages", unit=" page", leave=False, initial=page)
         
         while True:
             # Format the search URL with the current page number and date parameters
@@ -424,18 +426,38 @@ class PFDScraper:
 
     def _normalise_date(self, raw_date_str: str) -> str:
         """
-        Converts a human-readable date string to ISO-8601 format (YYYY-MM-DD).
-        Uses dateutil.parser for robust parsing of various date formats.
+        Converts a human-readable date string to ISO-8601 format (YYYY-MM-DD),
+        attempting to clean known non-date suffixes like "Ref:" before parsing.
 
         :param raw_date_str: The raw date string to parse.
         :return: The date string in "YYYY-MM-DD" format, or the original string if parsing fails.
         """
+        text_being_processed = self._clean_text(raw_date_str).strip()
+        final_text_to_parse = text_being_processed
+
         try:
-            dt = date_parser.parse(raw_date_str, fuzzy=True, dayfirst=True)
-            return dt.strftime("%Y-%m-%d")
-        except Exception as e: # Catches parsing errors (ValueError, TypeError, etc.)
-            logger.warning("Date parse failed for '%s' – keeping raw (%s)", raw_date_str, e)
-            return raw_date_str # Return the original string on failure.
+            # Attempt to isolate date part if "Ref" (case-insensitive) acts as a suffix
+            match = re.match(r"(.+?)(Ref[:\s]|$)", text_being_processed, re.IGNORECASE)
+            if match:
+                potential_date_part = match.group(1).strip()
+                if potential_date_part:
+                    final_text_to_parse = potential_date_part
+            
+            if not final_text_to_parse:
+                if self.verbose:
+                    logger.warning(f"Date string empty after trying to remove 'Ref...' from '{text_being_processed}'. Raw: '{raw_date_str}'. Keeping raw.")
+                return text_being_processed # Return original
+
+            dt = date_parser.parse(final_text_to_parse, fuzzy=True, dayfirst=True)
+            return dt.strftime("%Y-%m-%d") # Return parsed date
+            
+        except Exception as e:
+            if self.verbose:
+                logger.warning(
+                    f"Date parse failed for raw '{raw_date_str}' (processed to '{text_being_processed}', attempted '{final_text_to_parse}') "
+                    f"– keeping raw. Error: {e}"
+                )
+            return text_being_processed # Return original
 
     def _process_extracted_field(self, text: str, strings_to_remove: list[str],
                                  min_len: int | None = None, max_len: int | None = None,
@@ -503,7 +525,7 @@ class PFDScraper:
         
         # Download the file content
         try:
-            response = self.session.get(pdf_url)
+            response = self.session.get(pdf_url, timeout=self.timeout)
             response.raise_for_status()
             file_bytes = response.content
         except requests.RequestException as e:
@@ -633,7 +655,7 @@ class PFDScraper:
         :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
         """
         try:  # Get the HTML page of the report
-            page_response = self.session.get(report_url)
+            page_response = self.session.get(report_url, timeout=self.timeout)
             page_response.raise_for_status()
             soup = BeautifulSoup(page_response.content, 'html.parser')
             
@@ -642,7 +664,7 @@ class PFDScraper:
             if pdf_links:
                 pdf_link = pdf_links[0] # There are often multiple buttons; fortunately the report is always the first one (0 index)
                 # Download the PDF file
-                pdf_response = self.session.get(pdf_link)
+                pdf_response = self.session.get(pdf_link, timeout=self.timeout)
                 pdf_response.raise_for_status()
                 return pdf_response.content # Return PDF content as bytes
             else:
@@ -681,7 +703,7 @@ class PFDScraper:
         
         # Fetch the main HTML report page
         try:
-            response = self.session.get(url)
+            response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
             logger.error("Failed to fetch %s; Error: %s", url, e)
@@ -965,7 +987,10 @@ class PFDScraper:
             updated_reports_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
         else: # No new valid records were scraped from the new_links...
             updated_reports_df = base_df if base_df is not None else pd.DataFrame() # Return original or empty
-            
+        
+        # Sort updates reports by date
+        updated_reports_df = updated_reports_df.sort_values(by=[self.COL_DATE], ascending=False)
+        
         self.reports = updated_reports_df.copy() # Update internal reports DataFrame
         return updated_reports_df
 

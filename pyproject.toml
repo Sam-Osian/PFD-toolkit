@@ -4,10 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pfd_toolkit"
-version = "0.1.24"
+version = "0.1.27"
 description = "A toolkit for using Prevention of Future Death (PFD) Reports for Research and Policy Projects."
 readme = "README.md"
 license = { file = "LICENCE" }
+
 authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
   { name = "Jonathan Pytches", email = "Search-me@on-Linkedin.co.uk" }
@@ -102,6 +103,10 @@ dependencies = [
     "uvicorn==0.34.0",
     "wcwidth==0.2.13",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pfd_toolkit"]
+include = ["src/pfd_toolkit/data/*.csv"]
 
 [project.urls]
 "Source" = "https://github.com/Sam-Osian/PFD-toolkit"
