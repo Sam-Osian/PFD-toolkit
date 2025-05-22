@@ -31,15 +31,49 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class PFDScraper:
     """
-    Web scraper for extracting Prevention of Future Death (PFD) reports
-    from the UK Judiciary website.
+    Web scraper for Prevention of Future Death (PFD) reports from the UK Judiciary.
 
-    This class handles:
-      - Fetching PFD report URLs from search result pages.
-      - Parsing HTML content of individual report pages to extract data.
-      - Implementing a fallback to scrape data from .pdf files if HTML scraping fails for specific fields.
-      - Optionally, implementing a fallback to an LLM (Large Language Model) for extracting data
-        from image-based .pdf files if other scraping methods fail.
+    The PFDScraper class automates the extraction, cleaning, and structuring of PFD reports published by UK coroners.
+    It supports scraping from both HTML pages and linked PDF documents, with optional fallback to a Large Language Model (LLM)
+    for extracting structured information from image-based or irregular reports. The output is a ready-to-use pandas DataFrame
+    suitable for downstream analysis.
+    
+    Main Features:
+        - Bulk discovery and downloading of PFD report URLs from the Judiciary website.
+        - Extraction of metadata and structured sections (coroner, area, circumstances, concerns, etc.) from HTML and/or PDFs.
+        - Automatic handling of date ranges, categories, and parallel requests for scalable scraping.
+        - Intelligent fallbacks: PDF parsing if HTML is insufficient, and LLM-based extraction for complex/unparseable cases.
+        - Output is configurable: select which fields/columns to include in the results DataFrame.
+        - Logging and warnings for suboptimal configurations or website anti-scraping measures.
+        
+    Typical usage example:
+        ```python
+        scraper = PFDScraper(category="suicide", date_from="2020-01-01", date_to="2022-12-31") 
+        reports_df = scraper.scrape_reports()
+        ```
+
+    Args:
+        llm (LLM, optional): An instance of an LLM client, required only if llm_fallback is enabled.
+        category (str): Category of PFD reports to scrape. Defaults to 'all'. Must be one of the supported categories (see documentation).
+        date_from (str): Start date for filtering reports, in YYYY-MM-DD format. Defaults to "2000-01-01".
+        date_to (str): End date for filtering reports, in YYYY-MM-DD format. Defaults to "2030-01-01".
+        max_workers (int): Maximum number of concurrent threads for scraping. Defaults to 10.
+        max_requests (int): Maximum number of simultaneous requests to the same domain. Defaults to 5.
+        delay_range (tuple[float, float], optional): Min/max delay (in seconds) between requests, to avoid bans. Defaults to (1, 2).
+        html_scraping (bool): Whether to scrape data from HTML pages. Defaults to True.
+        pdf_fallback (bool): Whether to scrape data from PDFs if HTML extraction fails. Defaults to True.
+        llm_fallback (bool): Whether to use LLM as a final fallback. Requires `llm` to be set. Defaults to False.
+        include_url (bool): Whether to include the report URL in output. Defaults to True.
+        include_id (bool): Whether to include the PFD report ID. Defaults to True.
+        include_date (bool): Whether to include the report date. Defaults to True.
+        include_coroner (bool): Whether to include the coroner's name. Defaults to True.
+        include_area (bool): Whether to include the coroner's area. Defaults to True.
+        include_receiver (bool): Whether to include the receiver(s) of the report. Defaults to True.
+        include_investigation (bool): Whether to include the 'Investigation and Inquest' section. Defaults to True.
+        include_circumstances (bool): Whether to include the 'Circumstances of Death' section. Defaults to True.
+        include_concerns (bool): Whether to include the 'Matters of Concern' section. Defaults to True.
+        include_time_stamp (bool): Whether to include the scraping timestamp. Defaults to False.
+        verbose (bool): If True, enables verbose logging for debugging.
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
@@ -99,13 +133,7 @@ class PFDScraper:
         
         verbose: bool = False # Whether to print verbose logging output.
     ) -> None:
-        """
-        Initialises the PFDScraper with specified configurations.
 
-        The constructor sets up scraping parameters, date ranges, threading limits,
-        scraping strategies (HTML, PDF, LLM), and output column preferences.
-        It also performs validation on the provided parameters.
-        """
         self.category = category.lower() # Normalise category to lowercase if user specifies otherwise
         
         # Parse date strings into datetime objects (for internal use)
