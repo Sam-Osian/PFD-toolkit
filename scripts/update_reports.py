@@ -18,9 +18,11 @@ scraper = PFDScraper()
 if DATA_PATH.exists():
     old_df = pd.read_csv(DATA_PATH)
     old_count = len(old_df)
+    print(f"DEBUG: Successfully read {DATA_PATH}. Initial old_count (DataFrame rows): {old_count}")
 else:
     old_df = None
     old_count = 0
+    print(f"DEBUG: {DATA_PATH} not found.")
 
 # -- GET LATEST REPORT DATE -- 
 # Come back to this later. I fear that an rrroneous in at least one
@@ -31,7 +33,9 @@ new_df = scraper.top_up(old_reports=old_df, date_from="2025-01-01")
 
 if new_df is not None:
     new_count = len(new_df)
+    print(f"DEBUG: new_df generated. new_count (DataFrame rows): {new_count}")
     added_count = new_count - old_count
+    print(f"DEBUG: calculated added_count: {added_count}")
 
     if added_count > 0:
         new_df.to_csv(DATA_PATH, index=False)

@@ -45,11 +45,11 @@ jobs:
         if: always()
         run: |
           summary=".github/workflows/update_summary.txt"
-          echo "### 📊 PFD Reports Summary" >> $GITHUB_STEP_SUMMARY
+          echo "### Top-up Summary" >> $GITHUB_STEP_SUMMARY
           if [ -f "$summary" ]; then
             cat "$summary" >> $GITHUB_STEP_SUMMARY
           else
-            echo "ℹ️ You have commitment issues! (No new reports found)" >> $GITHUB_STEP_SUMMARY
+            echo "ℹ️ No new reports found" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Commit & Push Changes
