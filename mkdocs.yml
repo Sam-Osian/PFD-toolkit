@@ -16,7 +16,7 @@ theme:
         icon: material/brightness-7
         name: Switch to light mode
 
-  name: readthedocs # mkdocs didn't like 'material'
+  name: material 
   logo: assets/badge-circle.png
   favicon: assets/badge-circle.png
   features:
@@ -54,7 +54,8 @@ plugins:
 
 nav:
   - Home: index.md
-  - Usage: usage.md
+  - Getting started: usage.md
   - Modules:
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
+      - LLM: reference/llm.md
