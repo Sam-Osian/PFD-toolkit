@@ -16,7 +16,7 @@ theme:
         icon: material/brightness-7
         name: Switch to light mode
 
-  name: material
+  name: material 
   logo: assets/badge-circle.png
   favicon: assets/badge-circle.png
   features:
@@ -41,6 +41,7 @@ markdown_extensions:
 
 plugins:
   - search
+  - autorefs
   - mkdocstrings:
       default_handler: python
       handlers:
@@ -48,12 +49,17 @@ plugins:
           paths: ["src"] 
           options:
             show_source: false
+            #show_if_no_docstring: true
+            merge_init_into_class: true
             filters:
               - "!^_" # Exclude private methods
 
 nav:
   - Home: index.md
-  - Usage: usage.md
+  - Getting started: usage.md
+  - Feedback and Contributions: contribute.md
   - Modules:
+      - Data loader: reference/loader.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
+      - LLM: reference/llm.md
