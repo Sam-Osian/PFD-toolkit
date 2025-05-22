@@ -51,7 +51,8 @@ class Dataset:
         # Filter date based on user's specification
         reports = reports[(reports['Date'] >= self.date_from) & (reports['Date'] <= self.date_to)]
         
-        
+        # Organise by date
+        reports = reports.sort_values(by=['Date'], ascending=False)
         
         return reports
 
