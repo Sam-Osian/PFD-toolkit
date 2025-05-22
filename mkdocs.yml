@@ -49,13 +49,17 @@ plugins:
           paths: ["src"] 
           options:
             show_source: false
+            #show_if_no_docstring: true
+            merge_init_into_class: true
             filters:
               - "!^_" # Exclude private methods
 
 nav:
   - Home: index.md
   - Getting started: usage.md
+  - Feedback and Contributions: contribute.md
   - Modules:
+      - Data loader: reference/loader.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
       - LLM: reference/llm.md
