@@ -114,6 +114,6 @@ jobs:
         with:
           add: src/pfd_toolkit/data/all_reports.csv
           default_author: github_actions
-          message: "🤖 Weekly PFD data top-up"
+          message: "🤖 Auto PFD dataset top-up"
           pull: '--rebase --autostash' # ...pull from origin before pushing
           push: true
