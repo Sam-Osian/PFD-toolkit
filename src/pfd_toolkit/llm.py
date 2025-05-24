@@ -152,14 +152,6 @@ class LLM:
         base_url: Optional[str] = None,
         max_workers: int = 1 
     ):
-        """Create an LLM object for use within pfd_toolkit
-
-        Args:
-            api_key (str): api key for whatever openai sdk llm service you are using.
-            model (str): Model name. Defaults to gpt-4o-mini.
-            base_url (str): Redirect OpenAI SDK to a different API service.
-            max_workers (int): Maximum number of parallel workers for API calls. Defaults to 1.
-        """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url or openai.base_url
@@ -240,35 +232,37 @@ class LLM:
         Parameters
         ----------
         prompts : list[str]
-            List of user prompts.
+            List of user prompts—one prompt per model call.
+
         images_list : list[list[bytes]] or None, optional
             For vision models: a parallel list where each inner list
-            contains **base64-encoded** JPEG bytes (one per page or image).
-            Pass *None* to omit images.
-        response_format : pydantic.BaseModel subclass or None, optional
-            If supplied, each response is parsed into that model via the
-            *beta parse* endpoint; otherwise raw strings are returned.
+            holds **base64-encoded** JPEG pages for that prompt.  Use
+            *None* to send no images.
+
+        response_format : type[pydantic.BaseModel] or None, optional
+            If provided, each response is parsed into that model via the
+            *beta/parse* endpoint; otherwise a raw string is returned.
+
         temperature : float, optional
-            Sampling temperature for generation.
+            Sampling temperature.  Defaults to *0.0* (deterministic).
+
         max_workers : int or None, optional
-            Batch-specific thread count.  Defaults to
-            :pyattr:`max_workers` set at construction.
+            Thread count just for this batch.  When *None*, fall back to
+            the instance-wide :pyattr:`max_workers`.
 
         Returns
         -------
-        list[pydantic.BaseModel | str]
+        list[Union[pydantic.BaseModel, str]]
             Results in **the same order** as *prompts*.
 
         Raises
         ------
         openai.RateLimitError
-            Propagated only if the exponential back-off ultimately fails.
-        Exception
-            Any other uncaught SDK exception per individual call.
+            Raised only if the exponential back-off exhausts all retries.
 
         Examples
         --------
-        >>> msgs = ["Summarise:\n" + txt for txt in docs]
+        >>> msgs = ["Summarise:\\n" + txt for txt in docs]
         >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
         """
         
