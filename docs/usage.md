@@ -12,19 +12,20 @@ pip install pfd_toolkit
 
 ## Loading your first dataset
 
-Once installed, you can quickly load a cleaned, up-to-date dataset of Prevention of Future Death (PFD) reports using just a few lines of code:
+The quickest way to get started is by loading a pre-processed dataset. These datasets are updated weekly, meaning you always have access to the latest reports with minimal setup.
 
 ```py
 from pfd_toolkit import load_reports
 
-# Load all processed PFD reports (as a pandas DataFrame)
-df = load_reports(processed=True)
+# Load 'all' PFD reports from April 2025
+reports = load_reports(
+    category='all', 
+    start_date="2025-04-01",
+    end_date="2025-04-30"
+    )
 
-# You can filter by category and date range
-df_suicide = load_reports(
-    processed=True,
-    category='suicide',
-    start_date='2014-01-01',
-    end_date='2025-03-01'
-)
+# Preview reports
+reports.head()
 ```
+
+`load_reports` returns a pandas DataFrame, and so accepts any pandas method.
