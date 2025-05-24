@@ -30,61 +30,69 @@ logging.basicConfig(level=logging.INFO, force=True)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class PFDScraper:
-    """
-    Scrape UK ‘Prevention of Future Death’ (PFD) reports and return a
-    `pandas.DataFrame`.
+    """Scrape UK “Prevention of Future Death” (PFD) reports into a
+    :class:`pandas.DataFrame`.
 
-    The scraper works in three cascading stages:
+    The extractor runs in three cascading layers
+    (`html → pdf → llm`), each independently switchable.
 
-    1.  Attempts to parse structured data from the primary **HTML** page of a report.
-    2.  If HTML parsing is insufficient or disabled, it falls back to extracting
-        text from the linked **PDF** document and parsing sections based on keywords.
-    3.  Optionally, if both HTML and PDF methods fail to retrieve necessary
-        information, it can use a **Vision Large Language Model (LLM)** for extraction,
-        provided an LLM client is configured.
+    1. **HTML scrape** – parse metadata and rich sections directly from
+       the web page.
+    2. **PDF fallback** – download the attached PDF and extract text with
+       *PyMuPDF* for any missing fields.
+    3. **LLM fallback** – delegate unresolved gaps to a Large Language
+       Model supplied via *llm*.
 
-    Each stage is optional and independently switchable.  Scraping runs
-    concurrently with a thread pool and polite throttling.
-        
-    Typical workflow
-        ```python
-        from pfd_toolkit import PFDScraper
-        
-        # Full scrape with HTML → PDF → LLM cascade:
-        scraper = PFDScraper(category="suicide",
-                            date_from="2020-01-01",
-                            date_to="2022-12-31",
-                            llm_fallback=True,
-                            llm=llm_client) # Assuming `llm_client` is previously defined
-        df = scraper.scrape_reports()
+    All three layers are optional and independently switchable.
 
-        # Incremental “top-up” later:
-        newer = scraper.top_up(df)
-        
-        ```
+    Parameters
+    ----------
+    llm : LLM | None
+        Client implementing ``call_llm_fallback()``; required only when
+        *llm_fallback* is *True*.
+    category : str
+        Judiciary category slug (e.g. ``"suicide"``, ``"hospital_deaths"``)
+        or ``"all"``.
+    date_from, date_to : str
+        Inclusive window for the **report date** (format ``YYYY-MM-DD``).
+    max_workers : int
+        Thread-pool size for concurrent scraping.
+    max_requests : int
+        Maximum simultaneous requests per host (enforced with a semaphore).
+    delay_range : tuple[float, float] | None
+        Random delay *(seconds)* before every request.  
+        Use ``None`` to disable (not recommended).
+    timeout : int
+        Per-request timeout in seconds.
+    html_scraping, pdf_fallback, llm_fallback : bool
+        Toggles for the three extraction layers.
+    include_* : bool
+        Flags that control which columns appear in the output DataFrame.
+    verbose : bool
+        Emit debug-level logs when *True*.
 
-    Args:
-        llm (LLM, optional): An instance of an LLM client, required only if llm_fallback is enabled.
-        category (str): Category of PFD reports to scrape. Defaults to 'all'. Must be one of the supported categories (see documentation).
-        date_from (str): Start date for filtering reports, in YYYY-MM-DD format. Defaults to "2000-01-01".
-        date_to (str): End date for filtering reports, in YYYY-MM-DD format. Defaults to "2030-01-01".
-        max_workers (int): Maximum number of concurrent threads for scraping. Defaults to 10.
-        max_requests (int): Maximum number of simultaneous requests to the same domain. Defaults to 5.
-        delay_range (tuple[float, float], optional): Min/max delay (in seconds) between requests, to avoid bans. Defaults to (1, 2).
-        html_scraping (bool): Whether to scrape data from HTML pages. Defaults to True.
-        pdf_fallback (bool): Whether to scrape data from PDFs if HTML extraction fails. Defaults to True.
-        llm_fallback (bool): Whether to use LLM as a final fallback. Requires `llm` to be set. Defaults to False.
-        include_url (bool): Whether to include the report URL in output. Defaults to True.
-        include_id (bool): Whether to include the PFD report ID. Defaults to True.
-        include_date (bool): Whether to include the report date. Defaults to True.
-        include_coroner (bool): Whether to include the coroner's name. Defaults to True.
-        include_area (bool): Whether to include the coroner's area. Defaults to True.
-        include_receiver (bool): Whether to include the receiver(s) of the report. Defaults to True.
-        include_investigation (bool): Whether to include the 'Investigation and Inquest' section. Defaults to True.
-        include_circumstances (bool): Whether to include the 'Circumstances of Death' section. Defaults to True.
-        include_concerns (bool): Whether to include the 'Matters of Concern' section. Defaults to True.
-        include_time_stamp (bool): Whether to include the scraping timestamp. Defaults to False.
-        verbose (bool): If True, enables verbose logging for debugging.
+    Attributes
+    ----------
+    reports : pandas.DataFrame | None
+        Cached result of the last call to :py:meth:`scrape_reports`
+        or :py:meth:`top_up`.
+    report_links : list[str]
+        URLs discovered by :py:meth:`get_report_links`.
+    NOT_FOUND_TEXT : str
+        Placeholder value set when a field cannot be extracted.
+
+    Examples
+    --------
+    >>> from pfd_toolkit import PFDScraper
+    >>> scraper = PFDScraper(category="suicide",
+    ...                      date_from="2020-01-01",
+    ...                      date_to="2022-12-31",
+    ...                      llm_fallback=True,
+    ...                      llm=my_llm_client) # Configured in LLM class
+    >>> df = scraper.scrape_reports()          # full scrape
+    >>> newer_df = scraper.top_up(df)             # later “top-up”
+    >>> added_llm_df = scraper.run_llm_fallback(df)   # apply LLM retro-actively
+
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
@@ -410,6 +418,12 @@ class PFDScraper:
         list[str] | None
             All discovered URLs, or *None* if **no** links were found for
             the given category/date window.
+
+        Examples
+        --------
+        >>> links = scraper.get_report_links()
+        >>> len(links)
+        42
         """
         self.report_links = [] # Reset internal list of report links
         page = self.start_page 
@@ -913,27 +927,27 @@ class PFDScraper:
     # -----------------------------------------------------------------------------------------
          
     def scrape_reports(self) -> pd.DataFrame:
-        """Ask the LLM to fill any cells still set to
-        :pyattr:`NOT_FOUND_TEXT`.
+        """Execute a full scrape with the Class configuration.
 
-        The LLM receives only the missing fields requested via *include_* flags
-        plus the PDF bytes of the report (when available).
-
-        Parameters
-        ----------
-        reports_df :
-            DataFrame to process.  Defaults to :pyattr:`reports`.
+        Workflow
+        --------
+        1. Call :py:meth:`get_report_links`.  
+        2. Extract each report in parallel via
+           :py:meth:`_extract_report_info`.  
+        3. Optionally invoke :py:meth:`run_llm_fallback`.  
+        4. Cache the final DataFrame to :pyattr:`reports`.
 
         Returns
         -------
         pandas.DataFrame
-            Same shape as *reports_df*, updated in place and re-cached to
-            :pyattr:`reports`.
+            One row per report.  Column presence matches the *include_* flags.
+            The DataFrame is empty if nothing was scraped.
 
-        Raises
-        ------
-        ValueError
-            If no LLM client was supplied at construction time.
+        Examples
+        --------
+        >>> df = scraper.scrape_reports()
+        >>> df.columns
+        Index(['URL', 'ID', 'Date', ...], dtype='object')
         """
         
         if not self.report_links: # If links haven't been fetched yet...
@@ -967,18 +981,33 @@ class PFDScraper:
 
 
     def top_up(self, old_reports: pd.DataFrame | None = None, date_from: str | None = None, date_to: str | None = None) -> pd.DataFrame | None:
-        """
-        Adds new PFD reports to an existing DataFrame of reports.
-        It fetches current report links based on the scraper's (potentially updated) date range,
-        filters out links already present in `old_reports` (based on URL or ID),
-        and scrapes the new ones.
+        """Append **new** reports to an existing DataFrame.
 
-        :param old_reports: Optional DataFrame of previously scraped reports. If None, uses `self.reports`.
-        :param date_from: Optional new start date for fetching links (YYYY-MM-DD).
-        :param date_to: Optional new end date for fetching links (YYYY-MM-DD).
-        :return: An updated DataFrame with old and new reports.
-                 Returns the original `base_df` if no new reports are found to scrape.
-                 Returns `None` if no new links are found AND `base_df` was also initially `None`.
+        Any URL (or ID) already present in *old_reports* is skipped.
+
+        Parameters
+        ----------
+        old_reports : pandas.DataFrame | None
+            Existing DataFrame.  Defaults to :pyattr:`reports`.
+        date_from, date_to : str | None
+            Optionally override the scraper’s date window *for this call only*.
+
+        Returns
+        -------
+        pandas.DataFrame | None
+            Updated DataFrame if new reports were added; *None* if no new
+            records were found **and** *old_reports* was *None*.
+
+        Raises
+        ------
+        ValueError
+            If *old_reports* lacks columns required for duplicate checks.
+
+        Examples
+        --------
+        >>> updated = scraper.top_up(df, date_to="2023-01-01")
+        >>> len(updated) - len(df)     # number of new reports
+        3
         """
         logger.info("Attempting to 'top up' the existing reports with new data.")
         
@@ -1055,12 +1084,30 @@ class PFDScraper:
 
 
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
-        """
-        Applies LLM-based data extraction for fields marked as "N/A: Not found" in the provided DataFrame.
-        This method is called by `scrape_reports` if `llm_fallback` is True, or can be called manually.
+        """Ask the LLM to fill cells still set to :pyattr:`NOT_FOUND_TEXT`.
 
-        :param reports_df: Optional DataFrame of scraped reports. If None, uses `self.reports`.
-        :return: The DataFrame with missing fields potentially filled by the LLM.
+        Only the missing fields requested via *include_* flags are sent to
+        the model, along with the report’s PDF bytes (when available).
+
+        Parameters
+        ----------
+        reports_df : pandas.DataFrame | None
+            DataFrame to process.  Defaults to :pyattr:`reports`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Same shape as *reports_df*, updated in place and re-cached to
+            :pyattr:`reports`.
+
+        Raises
+        ------
+        ValueError
+            If no LLM client was supplied at construction time.
+
+        Examples
+        --------
+        >>> updated_df = scraper.run_llm_fallback()
         """
         if not self.llm: # Check if LLM client is configured
              raise ValueError("LLM client (self.llm) not provided. Cannot run LLM fallback.")

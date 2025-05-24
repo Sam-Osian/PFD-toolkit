@@ -48,7 +48,10 @@ plugins:
         python:
           paths: ["src"] 
           options:
+            docstring_style: numpy
+            docstring_section_style: table
             show_source: false
+            separate_signature: true
             #show_if_no_docstring: true
             merge_init_into_class: true
             filters:
