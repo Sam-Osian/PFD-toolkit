@@ -48,7 +48,7 @@ class PFDScraper:
     Parameters
     ----------
     llm : LLM | None
-        Client implementing ``call_llm_fallback()``; required only when
+        Client implementing ``_call_llm_fallback()``; required only when
         *llm_fallback* is *True*.
     category : str
         Judiciary category slug (e.g. ``"suicide"``, ``"hospital_deaths"``)
@@ -1148,7 +1148,7 @@ class PFDScraper:
 
             # Call the LLM client's fallback method
             # Assumes self.llm is not None due to the check at the start of run_llm_fallback -- maybe this needs to change?
-            updates = self.llm.call_llm_fallback( 
+            updates = self.llm._call_llm_fallback( 
                 pdf_bytes=pdf_bytes,
                 missing_fields=missing_fields,
                 report_url=str(report_url) if report_url else "N/A", 

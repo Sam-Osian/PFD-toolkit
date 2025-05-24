@@ -26,6 +26,49 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class LLM:
+    """Wrapper around the OpenAI Python SDK for batch prompting and PDF
+    vision fallback.
+
+    The helper provides:
+
+    * A generic :py:meth:`generate_batch` that supports optional vision
+      inputs and pydantic validation.
+    * A PDF-to-image utility used by
+      :py:meth:`_call_llm_fallback` — the method the scraper invokes when
+      HTML and PDF heuristics fail.
+    * Built-in back-off and host-wide throttling via a semaphore.
+
+    Parameters
+    ----------
+    api_key : str
+        OpenAI (or proxy) API key.
+    model : str, optional
+        Chat model name; defaults to ``"gpt-4.1-mini"``.
+    base_url : str or None, optional
+        Override the OpenAI endpoint (for Azure/OpenRouter etc.).
+    max_workers : int, optional
+        Maximum parallel workers for batch calls and for the global
+        semaphore.
+
+    Attributes
+    ----------
+    CLEANER_BASE_PROMPT : str
+        The shared template used by *Cleaner* to build field-specific
+        prompts.
+    CLEANER_PROMPT_CONFIG : dict
+        Field-level substitution values for the cleaner prompt.
+    _sem : threading.Semaphore
+        Global semaphore that limits concurrent requests to *max_workers*.
+    client : openai.Client
+        Low-level SDK client configured with key and base URL.
+
+    Examples
+    --------
+    >>> llm = LLM(api_key="sk-...", model="gpt-4o-mini", max_workers=4)
+    >>> out = llm.generate_batch(["Hello world"])
+    >>> out[0]
+    'Hello! How can I assist you today?'
+    """  
     
     # Base prompt template that all prompts will share, with placeholders for field-specific information.
     CLEANER_BASE_PROMPT = """\
@@ -192,10 +235,43 @@ class LLM:
         temperature: float = 0.0,
         max_workers: Optional[int] = None
     ) -> List[BaseModel | str]:
+        """Run many prompts either sequentially or in parallel.
+
+        Parameters
+        ----------
+        prompts : list[str]
+            List of user prompts.
+        images_list : list[list[bytes]] or None, optional
+            For vision models: a parallel list where each inner list
+            contains **base64-encoded** JPEG bytes (one per page or image).
+            Pass *None* to omit images.
+        response_format : pydantic.BaseModel subclass or None, optional
+            If supplied, each response is parsed into that model via the
+            *beta parse* endpoint; otherwise raw strings are returned.
+        temperature : float, optional
+            Sampling temperature for generation.
+        max_workers : int or None, optional
+            Batch-specific thread count.  Defaults to
+            :pyattr:`max_workers` set at construction.
+
+        Returns
+        -------
+        list[pydantic.BaseModel | str]
+            Results in **the same order** as *prompts*.
+
+        Raises
+        ------
+        openai.RateLimitError
+            Propagated only if the exponential back-off ultimately fails.
+        Exception
+            Any other uncaught SDK exception per individual call.
+
+        Examples
+        --------
+        >>> msgs = ["Summarise:\n" + txt for txt in docs]
+        >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
         """
-        Manages parallel (or sequential) generation of a list of prompts, returning
-        either raw strings or validated BaseModel instances in the same order.
-        """
+        
         def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
             if imgs:
@@ -274,7 +350,7 @@ class LLM:
         return results
 
     # -- LLM method for scraper.py module --
-    def call_llm_fallback(
+    def _call_llm_fallback(
         self,
         pdf_bytes: Optional[bytes],
         missing_fields: Dict[str, str],
