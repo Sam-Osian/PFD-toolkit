@@ -17,8 +17,44 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 class Cleaner:
-    """
-    LLM-powered cleaning agent for Prevention of Future Death Reports.
+    """Batch-clean PFD report fields with an LLM.
+
+    The cleaner loops over selected columns, builds field-specific prompts,
+    calls :pyattr:`llm.generate_batch`, and writes the returned text back into
+    a copy of the DataFrame.
+
+    Parameters
+    ----------
+    reports : pandas.DataFrame
+        Input DataFrame returned by :pyclass:`~pfd_toolkit.scraper.PFDScraper`
+        or similar.
+    llm : LLM
+        Client that implements ``generate_batch`` and exposes
+        ``CLEANER_BASE_PROMPT`` plus ``CLEANER_PROMPT_CONFIG``.
+    coroner, receiver, area, investigation_and_inquest,\
+    circumstances_of_death, matters_of_concern : bool, optional
+        Flags that decide which columns are processed.
+    *_field : str, optional
+        Column names for each section; defaults follow the PFDScraper
+        convention.
+    *_prompt : str or None, optional
+        Custom prompt templates.  If *None*, a default is assembled from the
+        LLM’s prompt config.
+    verbose : bool, optional
+        Emit info-level logs for each batch when ``True``.
+
+    Attributes
+    ----------
+    cleaned_reports : pandas.DataFrame
+        Result of the last call to :py:meth:`clean_reports`.
+    coroner_prompt_template, area_prompt_template, ... : str
+        Finalised prompt strings actually sent to the model.
+
+    Examples
+    --------
+    >>> cleaner = Cleaner(df, llm, coroner=False, verbose=True)
+    >>> cleaned_df = cleaner.clean_reports()
+    >>> cleaned_df.head()
     """
 
     def __init__(
@@ -55,28 +91,6 @@ class Cleaner:
     ) -> None:
         """Create Cleaner object.
 
-        Args:
-            reports (pd.DataFrame): Input DataFrame containing PFD reports.
-            llm (LLM): The LLM client to use for text cleaning.
-            coroner (bool): Whether or not to clean the coroner field.
-            receiver (bool): Whether or not to clean the receiver field.
-            area (bool): Whether or not to clean the area field.
-            investigation_and_inquest (bool): Whether or not to clean the InvestigationAndInquest field?.
-            circumstances_of_death (bool): Whether or not to clean the CircumstancesOfDeath field.
-            matters_of_concern (bool): Whether or not to clean the MattersOfConcern field.
-            coroner_field (str): Name of the coroner field, defaults to 'CoronerName'.
-            area_field (str): Name of the area field, defaults to 'Area'.
-            receiver_field (str): Name of the receiver field, defaults to 'Receiver'.
-            investigation_field (str): Name of the ingestigation field, defaults to 'InvestigationAndInquest'.
-            circumstances_field (str): Name of the  circumstances of death field, defaults to 'CircumstancesOfDeath'.
-            concerns_field (str): Name of the concerns field, defaults to MattersOfConcern.
-            coroner_prompt (str): Coroner prompt override. Defaults to hardcoded version.
-            area_prompt (str): Area prompt override. Defaults to hardcoded version.
-            receiver_prompt (str): Receiver prompt override. Defaults to hardcoded version.
-            investigation_prompt (str): Investigation prompt override. Defaults to hardcoded version.
-            circumstances_prompt (str): Circumstances prompt override. Defaults to hardcoded version.
-            concerns_prompt (str): Concerns prompt override. Defaults to hardcoded version.
-            verbose (bool): Whether or not to verbosely run the Cleaner class. Defaults to False.
         """
 
         self.reports = reports
@@ -144,11 +158,23 @@ class Cleaner:
         )
 
     def clean_reports(self) -> pd.DataFrame:
-        """
-        Clean the text fields in a DataFrame of Prevention of Future Death Reports
-        using batch LLM calls for each field.
-        Returns:
-            A new DataFrame with the cleaned fields.
+        """Run LLM-based cleaning for the configured columns.
+
+        The method operates **in place on a copy** of
+        :pyattr:`reports`, so the original DataFrame is never mutated.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A new DataFrame in which the selected columns have been
+            replaced by the LLM output (or left unchanged when the model
+            returns an error marker).
+
+        Examples
+        --------
+        >>> cleaned = cleaner.clean_reports()
+        >>> cleaned.equals(df)
+        False
         """
         cleaned_df = self.reports.copy() # Work on a copy
         
