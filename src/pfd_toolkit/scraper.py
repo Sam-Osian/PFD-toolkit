@@ -31,25 +31,36 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class PFDScraper:
     """
-    Web scraper for Prevention of Future Death (PFD) reports from the UK Judiciary.
+    Scrape UK ‘Prevention of Future Death’ (PFD) reports and return a
+    `pandas.DataFrame`.
 
-    The PFDScraper class automates the extraction, cleaning, and structuring of PFD reports published by UK coroners.
-    It supports scraping from both HTML pages and linked PDF documents, with optional fallback to a Large Language Model (LLM)
-    for extracting structured information from image-based or irregular reports. The output is a ready-to-use pandas DataFrame
-    suitable for downstream analysis.
-    
-    Main Features:
-        - Bulk discovery and downloading of PFD report URLs from the Judiciary website.
-        - Extraction of metadata and structured sections (coroner, area, circumstances, concerns, etc.) from HTML and/or PDFs.
-        - Automatic handling of date ranges, categories, and parallel requests for scalable scraping.
-        - Intelligent fallbacks: PDF parsing if HTML is insufficient, and LLM-based extraction for complex/unparseable cases.
-        - Output is configurable: select which fields/columns to include in the results DataFrame.
-        - Logging and warnings for suboptimal configurations or website anti-scraping measures.
+    The scraper works in three cascading stages:
+
+    1.  Attempts to parse structured data from the primary **HTML** page of a report.
+    2.  If HTML parsing is insufficient or disabled, it falls back to extracting
+        text from the linked **PDF** document and parsing sections based on keywords.
+    3.  Optionally, if both HTML and PDF methods fail to retrieve necessary
+        information, it can use a **Vision Large Language Model (LLM)** for extraction,
+        provided an LLM client is configured.
+
+    Each stage is optional and independently switchable.  Scraping runs
+    concurrently with a thread pool and polite throttling.
         
-    Typical usage example:
+    Typical workflow
         ```python
-        scraper = PFDScraper(category="suicide", date_from="2020-01-01", date_to="2022-12-31") 
-        reports_df = scraper.scrape_reports()
+        from pfd_toolkit import PFDScraper
+        
+        # Full scrape with HTML → PDF → LLM cascade:
+        scraper = PFDScraper(category="suicide",
+                            date_from="2020-01-01",
+                            date_to="2022-12-31",
+                            llm_fallback=True,
+                            llm=llm_client) # Assuming `llm_client` is previously defined
+        df = scraper.scrape_reports()
+
+        # Incremental “top-up” later:
+        newer = scraper.top_up(df)
+        
         ```
 
     Args:
@@ -390,11 +401,15 @@ class PFDScraper:
         return [link.get('href') for link in links if link.get('href')] # Extract href values
 
     def get_report_links(self) -> list[str] | None:
-        """
-        Dynamically collects all PFD report links by iterating through search result pages.
-        Stops when a page returns no new links, indicating the end of results.
+        """Discover individual report URLs for the current query.
 
-        :return: A list of all collected PFD report URLs. Returns None if no links are found at all.
+        Pagination continues until a page yields zero new links.
+
+        Returns
+        -------
+        list[str] | None
+            All discovered URLs, or *None* if **no** links were found for
+            the given category/date window.
         """
         self.report_links = [] # Reset internal list of report links
         page = self.start_page 
@@ -898,14 +913,29 @@ class PFDScraper:
     # -----------------------------------------------------------------------------------------
          
     def scrape_reports(self) -> pd.DataFrame:
-        """
-        Scrapes PFD reports based on the current scraper configuration.
-        It first ensures report links are fetched, then extracts information for each link
-        concurrently. If LLM fallback is enabled, it's applied after initial scraping.
+        """Ask the LLM to fill any cells still set to
+        :pyattr:`NOT_FOUND_TEXT`.
 
-        :return: A pandas DataFrame containing the scraped report data.
-                 Returns an empty DataFrame if no reports are found or scraped.
+        The LLM receives only the missing fields requested via *include_* flags
+        plus the PDF bytes of the report (when available).
+
+        Parameters
+        ----------
+        reports_df :
+            DataFrame to process.  Defaults to :pyattr:`reports`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Same shape as *reports_df*, updated in place and re-cached to
+            :pyattr:`reports`.
+
+        Raises
+        ------
+        ValueError
+            If no LLM client was supplied at construction time.
         """
+        
         if not self.report_links: # If links haven't been fetched yet...
             fetched_links = self.get_report_links()
             if fetched_links is None: # No links found by get_report_links...

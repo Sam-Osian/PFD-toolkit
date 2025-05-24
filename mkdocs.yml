@@ -58,7 +58,7 @@ nav:
   - Home: index.md
   - Getting started: usage.md
   - Feedback and Contributions: contribute.md
-  - Modules:
+  - API Reference:
       - Data loader: reference/loader.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
