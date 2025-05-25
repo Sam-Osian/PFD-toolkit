@@ -71,7 +71,7 @@ class Screener:
     >>> # Found 1 report(s) on 'medication errors'.
 
     """
-    # DataFrame column names (as class attributes)
+    # DataFrame column names
     COL_URL = "URL"
     COL_ID = "ID"
     COL_DATE = "Date"
@@ -136,43 +136,42 @@ class Screener:
         Constructs the prompt template based on the user query and match approach.
         """
         base_prompt_template = f"""
-            You are an expert text classification assistant. Your job is to read
-            through the Prevention of Future Death (PFD) report excerpt at the
-            bottom of this message, and decide whether or not it matches a user
-            query.
+You are an expert text classification assistant. Your job is to read
+through the Prevention of Future Death (PFD) report excerpt at the
+bottom of this message, and decide whether or not it matches a user
+query.
 
-            The user's query may be thematic, or it might pertain to a small or
-            subtle inclusion in the report. The user query is:
+The user's query may be thematic, or it might pertain to a small or
+subtle inclusion in the report. The user query is:
 
-            '{current_user_query}'
+'{current_user_query}'
 
-            If the report/excerpt matches this query, you must respond 'Yes'. Else,
-            respond 'No'.
+If the report/excerpt matches this query, even if in part, you must 
+respond 'Yes'. Else, respond 'No'.
 
-            Your response must be a JSON object in which "matches_topic" can be either
-            "Yes" or "No".
-            """
+Your response must be a JSON object in which "matches_topic" can be either
+"Yes" or "No".
+"""
             
-        # Add match approach instructions
+        # Add match approach instructions: strict or liberal
         if self.match_leniency == 'strict':
             base_prompt_template += """
-
-                Your match should be strict.
-                This means that if you are in reasonable doubt as to whether a report
-                matches the user query, you should respond "No".
-                """
+Your match leniency should be strict.
+This means that if you are on the fence as to whether a report
+matches the user query, you should respond "No".
+"""
         elif self.match_leniency == 'liberal':
             base_prompt_template += """
-
-                Your match should be liberal.
-                This means that if you are in reasonable doubt as to whether a report
-                matches the user query, you should respond "Yes".
-                """
-        # Add the placeholder for the report text
+Your match leniency should be liberal.
+This means that if you are on the fence as to whether a report
+matches the user query, you should respond "Yes".
+"""
+                
+        # Add the placeholder for the report text (adding right at the end should support caching!)
         full_template_text = base_prompt_template + """
-        Here is the PFD report excerpt:
+Here is the PFD report excerpt:
 
-        {report_excerpt}"""
+{report_excerpt}"""
 
         if self.verbose:
             logger.debug(f"Building prompt template for user query: '{current_user_query}'. Match approach: {self.match_leniency}.")
@@ -262,15 +261,23 @@ class Screener:
         for index, row in current_reports.iterrows():
             report_parts = []
             # Conditionally include column data based on toggles and existence
-            if self.include_date and self.COL_DATE in row and pd.notna(row[self.COL_DATE]): report_parts.append(str(row[self.COL_DATE]))
-            if self.include_coroner_name and self.COL_CORONER_NAME in row and pd.notna(row[self.COL_CORONER_NAME]): report_parts.append(str(row[self.COL_CORONER_NAME]))
-            if self.include_area and self.COL_AREA in row and pd.notna(row[self.COL_AREA]): report_parts.append(str(row[self.COL_AREA]))
-            if self.include_receiver and self.COL_RECEIVER in row and pd.notna(row[self.COL_RECEIVER]): report_parts.append(str(row[self.COL_RECEIVER]))
-            if self.include_investigation and self.COL_INVESTIGATION in row and pd.notna(row[self.COL_INVESTIGATION]): report_parts.append(str(row[self.COL_INVESTIGATION]))
-            if self.include_circumstances and self.COL_CIRCUMSTANCES in row and pd.notna(row[self.COL_CIRCUMSTANCES]): report_parts.append(str(row[self.COL_CIRCUMSTANCES]))
-            if self.include_concerns and self.COL_CONCERNS in row and pd.notna(row[self.COL_CONCERNS]): report_parts.append(str(row[self.COL_CONCERNS]))
+            # ...also prefix the colname in to make the sections clearer for the LLM
+            if self.include_date and self.COL_DATE in row and pd.notna(row[self.COL_DATE]):
+                report_parts.append(f"{self.COL_DATE}: {str(row[self.COL_DATE])}")
+            if self.include_coroner_name and self.COL_CORONER_NAME in row and pd.notna(row[self.COL_CORONER_NAME]):
+                report_parts.append(f"{self.COL_CORONER_NAME}: {str(row[self.COL_CORONER_NAME])}")
+            if self.include_area and self.COL_AREA in row and pd.notna(row[self.COL_AREA]):
+                report_parts.append(f"{self.COL_AREA}: {str(row[self.COL_AREA])}")
+            if self.include_receiver and self.COL_RECEIVER in row and pd.notna(row[self.COL_RECEIVER]):
+                report_parts.append(f"{self.COL_RECEIVER}: {str(row[self.COL_RECEIVER])}")
+            if self.include_investigation and self.COL_INVESTIGATION in row and pd.notna(row[self.COL_INVESTIGATION]):
+                report_parts.append(f"{self.COL_INVESTIGATION}: {str(row[self.COL_INVESTIGATION])}")
+            if self.include_circumstances and self.COL_CIRCUMSTANCES in row and pd.notna(row[self.COL_CIRCUMSTANCES]):
+                report_parts.append(f"{self.COL_CIRCUMSTANCES}: {str(row[self.COL_CIRCUMSTANCES])}")
+            if self.include_concerns and self.COL_CONCERNS in row and pd.notna(row[self.COL_CONCERNS]):
+                report_parts.append(f"{self.COL_CONCERNS}: {str(row[self.COL_CONCERNS])}")
 
-            report_text = ' '.join(report_parts).strip()
+            report_text = '\n\n'.join(report_parts).strip()
 
             if not report_text:
                 if self.verbose:
