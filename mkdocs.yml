@@ -60,9 +60,10 @@ plugins:
 nav:
   - Home: index.md
   - Getting started: usage.md
-  - Feedback and Contributions: contribute.md
+  - Feedback & contributions: contribute.md
   - API Reference:
       - Data loader: reference/loader.md
+      - Filter: reference/filter.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
       - LLM: reference/llm.md
