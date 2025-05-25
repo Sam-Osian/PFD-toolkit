@@ -26,15 +26,15 @@ As a result, analysing PFD reports is often a slow, manual process—taking mont
 
 PFD Toolkit seeks to overcome these barriers to analysing PFD reports. Features include:
 
-1. **Instant data access:** Load live PFD report data in seconds
+1. Loading live PFD report data in seconds
 
-2. **Data cleaning:** Standardises spelling, grammar, and formatting issues
+2. Correcting spelling, grammar, and formatting issues
 
-3. **AI-powered search:** Query reports and surface cases relevant to your work
+3. Query and surface reports relevant to your work, using our AI-powered search
 
-4. **Thematic analysis:** Uncover trends and recurring themes using AI
+4. Uncover recurring trends & themes using AI
 
-5. **Custom categorisation:** Tag and organise cases by your own themes or sub-themes
+5. Tag and organise reports by your own themes or sub-themes
 
 
 ## Installation

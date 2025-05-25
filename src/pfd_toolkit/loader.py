@@ -1,77 +1,86 @@
-import pandas as pd
-from dateutil import parser as date_parser
+"""pfd_toolkit.data_loader
+=========================
+
+Utility for loading the fully-cleaned **Prevention of Future Death**
+report dataset shipped with *pfd_toolkit*.
+"""
+
+from __future__ import annotations
+
 import importlib.resources as resources
+from typing import Final
 
-class Dataset:
-    """
-    Provides access to fully cleaned and ready-to-use Prevention of Future Death
-    (PFD) reports.
-    """
+import pandas as pd
+from dateutil import parser as _date_parser
 
-    def __init__(
-        self,
-        category: str = 'all',
-        date_from: str = '2000-01-01',
-        date_to: str = '2100-01-01'
-    ) -> None:
-        """Initialises the dataset loader with specified configurations.
+# Path to the embedded CSV
+_DATA_PACKAGE: Final[str] = "pfd_toolkit.data"
+_DATA_FILE: Final[str] = "all_reports.csv"
 
-        Args:
-            category (str, optional): The category of PFD reports. Defaults to 'all'.
-            date_from (str, optional): The start date for filtering PFD reports. Defaults to '2000-01-01'.
-            date_to (str, optional): The end date for filtering PFD reports. Defaults to '2100-01-01'.
-        """
-        
-        self.category = category.lower() # Normalise category to lowercase if user specifies otherwise
-        
-        # Parse date strings into datetime objects (for internal use)
-        self.date_from = date_parser.parse(date_from)
-        self.date_to = date_parser.parse(date_to)
-        
-        # Throw error if date_to is earlier than date_from
-        if self.date_from > self.date_to:
-            raise ValueError("date_from must be earlier than or equal to date_to.")
-        
-        
-    def _get_data(self) -> pd.DataFrame:
-        # Retrive data from `data` directory
-        with resources.files('pfd_toolkit.data').joinpath('all_reports.csv').open('r') as f:
-            reports = pd.read_csv(f)
 
-        # -- Date logic --
-        
-        # Make Date column into pandas datetime obj
-        reports['Date'] = pd.to_datetime(reports['Date'],
-                                         format='%Y-%m-%d', # YYYY-MM-DD
-                                         errors = 'coerce') # Force errors into NaT (not a time)
-        
-        # Drop rows where date conversion failed (invalid or missing dates)
-        reports = reports.dropna(subset=['Date']).reset_index(drop=True)
-        
-        # Filter date based on user's specification
-        reports = reports[(reports['Date'] >= self.date_from) & (reports['Date'] <= self.date_to)]
-        
-        # Organise by date
-        reports = reports.sort_values(by=['Date'], ascending=False)
-        
-        return reports
-
-# Public function to retrieve data
 def load_reports(
-    category: str = 'all',
-    start_date: str = '2000-01-01',
-    end_date: str = '2100-01-01'
+    category: str = "all",
+    start_date: str = "2000-01-01",
+    end_date: str = "2100-01-01",
 ) -> pd.DataFrame:
-    """
-    Quickly load cleaned Prevention of Future Death reports.
+    """Load cleaned PFD reports as a :class:`pandas.DataFrame`.
 
-    Args:
-        category (str, optional): Filter by category. Defaults to 'all'.
-        start_date (str, optional): Start date in 'YYYY-MM-DD' format. Defaults to '2000-01-01'.
-        end_date (str, optional): End date in 'YYYY-MM-DD' format. Defaults to '2100-01-01'.
+    Parameters
+    ----------
+    category : str, optional
+        PFD category slug (e.g. ``"suicide"``) or ``"all"``.
+    start_date, end_date : str, optional
+        Inclusive window for the **report date** in the ``YYYY-MM-DD``
+        format.
 
-    Returns:
-        pd.DataFrame: Filtered DataFrame of PFD reports.
+    Returns
+    -------
+    pandas.DataFrame
+        Reports filtered by date, sorted newest-first.
+
+    Raises
+    ------
+    ValueError
+        If *start_date* is after *end_date*.
+    FileNotFoundError
+        If the bundled CSV cannot be located (i.e. a package-level error).
+
+    Examples
+    --------
+    >>> from pfd_toolkit import load_reports
+    >>> df = load_reports(start_date="2020-01-01", end_date="2022-12-31")
+    >>> df.head()
     """
-    dataset = Dataset(category=category, date_from=start_date, date_to=end_date)
-    return dataset._get_data()
+    # ------------------------------------------------------------------ date
+    date_from = _date_parser.parse(start_date)
+    date_to = _date_parser.parse(end_date)
+    if date_from > date_to:
+        raise ValueError("start_date must be earlier than or equal to end_date")
+
+    # ------------------------------------------------------------ read CSV
+    csv_path = resources.files(_DATA_PACKAGE).joinpath(_DATA_FILE)
+    try:
+        with csv_path.open("r", encoding="utf-8") as fh:
+            reports = pd.read_csv(fh)
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(
+            f"Bundled dataset {_DATA_FILE!r} not found in package "
+            f"{_DATA_PACKAGE!r}"
+        ) from exc
+
+    # ------------------------------------------------------------- cleaning
+    # Parse the Date column, drop rows with invalid dates, and filter window
+    reports["Date"] = pd.to_datetime(
+        reports["Date"], format="%Y-%m-%d", errors="coerce"
+    )
+    reports = (
+        reports.dropna(subset=["Date"])
+        .loc[lambda df: (df["Date"] >= date_from) & (df["Date"] <= date_to)]
+        .sort_values("Date", ascending=False)
+        .reset_index(drop=True)
+    )
+
+    # Category filtering placeholder
+    #_ = category.lower()
+
+    return reports
