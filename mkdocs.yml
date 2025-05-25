@@ -63,7 +63,7 @@ nav:
   - Feedback & contributions: contribute.md
   - API Reference:
       - Data loader: reference/loader.md
-      - Filter: reference/filter.md
+      - Screener: reference/screener.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
       - LLM: reference/llm.md

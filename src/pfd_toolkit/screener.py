@@ -18,7 +18,7 @@ class TopicMatch(BaseModel):
         description="Indicate whether the report text is relevant to the user's query. Must be Yes or No."
     )
 
-class Filter:
+class Screener:
     """
     Classifies a list of report texts against a user-defined topic using an LLM.
 
@@ -65,9 +65,9 @@ class Filter:
     --------
     >>> user_topic = "medication errors"
     >>> llm_client = LLM()
-    >>> report_filter = Filter(llm=llm_client, user_query=user_topic, reports=reports_df)
-    >>> filtered_reports = report_filter.filter_reports()
-    >>> print(f"Found {len(filtered_reports)} report(s) on '{user_topic}'.")
+    >>> screener = Screener(llm=llm_client, user_query=user_topic, reports=reports_df)
+    >>> screened_reports = screener.screen_reports()
+    >>> print(f"Found {len(fscreened_reports)} report(s) on '{user_topic}'.")
     >>> # Found 1 report(s) on 'medication errors'.
 
     """
@@ -124,7 +124,7 @@ class Filter:
         if self.user_query:  
             self.prompt_template = self._build_prompt_template(self.user_query)
         elif self.verbose:
-            logger.debug("Filter initialised without an initial user query. Prompt will be built on first filter_reports call with a query.")
+            logger.debug("Screener initialised without an initial user query. Prompt will be built on first screen_reports call with a query.")
 
         if self.verbose:
             if self.reports is not None:
@@ -180,14 +180,14 @@ class Filter:
         return full_template_text
 
 
-    def filter_reports(self, reports: Optional[pd.DataFrame] = None, user_query: Optional[str] = None) -> pd.DataFrame:
+    def screen_reports(self, reports: Optional[pd.DataFrame] = None, user_query: Optional[str] = None) -> pd.DataFrame:
         """
         Classifies reports in the DataFrame against the user-defined topic using the LLM.
 
         Parameters
         ----------
         reports : pd.DataFrame, optional
-            If provided, this DataFrame will be used for filtering, replacing any
+            If provided, this DataFrame will be used for screening, replacing any
             DataFrame stored in the instance for this call.
         user_query : str, optional
             If provided, this query will be used, overriding any query stored
@@ -202,40 +202,40 @@ class Filter:
         Examples
         --------
         >>> reports_df = pd.DataFrame(data)
-        >>> my_filter = Filter(LLM(), user_query="medication safety", filter_df=True, reports=reports_df)
+        >>> screener = Screener(LLM(), user_query="medication safety", filter_df=True, reports=reports_df)
         >>>
-        >>> # Filter reports with the initial query
-        >>> filtered_df = my_filter.filter_reports()
+        >>> # Screen reports with the initial query
+        >>> filtered_df = screener.screen_reports()
         >>>
-        >>> # Filter the same reports with a new query and add classification column
-        >>> my_filter.filter_df = False     # Modify filter behaviour
-        >>> classified_df = my_filter.filter_reports(user_query="tree safety")
+        >>> # Screen the same reports with a new query and add classification column
+        >>> screener.filter_df = False     # Modify screener behaviour
+        >>> classified_df = screener.screen_reports(user_query="tree safety")
         """
         # Update reports if a new one is provided for this call
         if reports is not None:
             # Use a copy of the provided DataFrame for this operation
             current_reports = reports.copy()
             if self.verbose:
-                logger.debug(f"Using new DataFrame provided to filter_reports (shape: {current_reports.shape}).")
+                logger.debug(f"Using new DataFrame provided to screen_reports (shape: {current_reports.shape}).")
         else:
             # Use the instance's DataFrame (which is already a copy or an empty DF)
             current_reports = self.reports.copy() # Ensure we work with a copy even of the instance's df for this run
             if self.verbose:
-                logger.debug(f"Using instance's DataFrame for filter_reports (shape: {current_reports.shape}).")
+                logger.debug(f"Using instance's DataFrame for screen_reports (shape: {current_reports.shape}).")
 
 
         # Determine the user query for this call
         active_user_query = user_query if user_query is not None else self.user_query
 
         if not active_user_query:
-            logger.error("User query is not set. Cannot filter reports.")
-            raise ValueError("User query must be provided either at initialisation or to filter_reports.")
+            logger.error("User query is not set. Cannot screen reports.")
+            raise ValueError("User query must be provided either at initialisation or to screen_reports.")
 
         # Rebuild prompt if the active query is different from the one used for the current template,
         # or if the template hasn't been built yet.
         if not self.prompt_template or (user_query is not None and user_query != self.user_query):
             if self.verbose and user_query is not None and user_query != self.user_query:
-                logger.debug(f"New user query provided to filter_reports: '{user_query}'. Rebuilding prompt template.")
+                logger.debug(f"New user query provided to screen_reports: '{user_query}'. Rebuilding prompt template.")
             elif self.verbose and not self.prompt_template:
                  logger.debug(f"Prompt template not yet built. Building for query: '{active_user_query}'.")
             self.prompt_template = self._build_prompt_template(active_user_query)
@@ -243,17 +243,17 @@ class Filter:
 
         # --- Pre-flight checks ---
         if self.llm is None:
-            logger.error("LLM client is not initialised. Cannot filter reports.")
+            logger.error("LLM client is not initialised. Cannot screen reports.")
 
         if current_reports.empty:
             if self.verbose:
-                logger.error("Reports DataFrame is empty. Nothing to filter.")
+                logger.error("Reports DataFrame is empty. Nothing to screen.")
 
         if not self.prompt_template: # (Should be built if active_user_query is valid)
-            logger.error("Prompt template not built. This should not happen if user_query is set. Cannot filter reports.")
+            logger.error("Prompt template not built. This should not happen if user_query is set. Cannot screen reports.")
 
         # --- Prepare prompts ---
-        prompts_for_filtering = []
+        prompts_for_screening = []
         report_indices = [] # ...to map results back to original indices
 
         if self.verbose:
@@ -277,22 +277,22 @@ class Filter:
                     logger.debug(f"Report at index {index} resulted in empty text after column selection.")
 
             current_prompt = self.prompt_template.format(report_excerpt=report_text)
-            prompts_for_filtering.append(current_prompt)
+            prompts_for_screening.append(current_prompt)
             report_indices.append(index)
 
-            if self.verbose and len(prompts_for_filtering) <= 2 :
+            if self.verbose and len(prompts_for_screening) <= 2 :
                  logger.debug(f"Full prompt for report index {index}:\n{current_prompt}\n---")
 
-        if not prompts_for_filtering:
+        if not prompts_for_screening:
             if self.verbose:
                 logger.debug("No prompts generated (was the input DataFrame was empty?).")
 
         # --- Call LLM ---
         if self.verbose:
-            logger.debug(f"Sending {len(prompts_for_filtering)} prompts to LLM.generate_batch...")
+            logger.debug(f"Sending {len(prompts_for_screening)} prompts to LLM.generate_batch...")
 
         llm_results = self.llm.generate_batch(
-            prompts=prompts_for_filtering,
+            prompts=prompts_for_screening,
             response_format=TopicMatch,
             temperature=0.0
         )
@@ -336,11 +336,11 @@ class Filter:
                 filtered_df.drop(self.result_col_name, axis=1, inplace=True, errors='ignore')
                 
                 if self.verbose:
-                    logger.debug(f"DataFrame filtered. Original size for this run: {len(current_reports)}, Filtered size: {len(filtered_df)}")
+                    logger.debug(f"DataFrame screened. Original size for this run: {len(current_reports)}, Filtered size: {len(filtered_df)}")
                 return filtered_df
             else:
                 if self.verbose:
-                    logger.warning(f"Cannot filter DataFrame as '{self.result_col_name}' column is missing.")
+                    logger.warning(f"Cannot screen DataFrame as '{self.result_col_name}' column is missing.")
                 return current_reports
         else:
             if self.verbose:

@@ -10,7 +10,7 @@ pip install pfd_toolkit
 
 *Note: The package is not currently on Conda distributions.*
 
-## Loading your first dataset
+## Load your first dataset
 
 The quickest way to get started is by loading a pre-processed dataset. These datasets are updated weekly, meaning you always have access to the latest reports with minimal setup.
 
@@ -29,7 +29,7 @@ reports.head()
 
 `load_reports` returns a pandas DataFrame, and so accepts any pandas method.
 
-## Identify relevant reports
+## Screen for relevant reports
 
 With PFD Toolkit, you can query reports in plain English. This lets you identify reports that match your precise research questions, even when the terminology varies or is incorrectly tagged in the original data.
 
@@ -46,11 +46,11 @@ llm_client = LLM(api_key[XXXXXX], max_workers=30)
 user_query = "Deaths that occurred following ordering medications online"
 
 # Set up the filtering engine
-report_filter = Filter(llm = llm_client,
+screener = Screener(llm = llm_client,
                         reports = reports,
                         user_query = user_query)
 
 # And filter reports!
 # ...`filtered_reports` is still a pandas DataFrame
-filtered_reports = report_filter.filter_reports()
+filtered_reports = screener.screen_reports()
 ```
