@@ -31,16 +31,16 @@ class LLM:
 
     The helper provides:
 
-    * A generic :py:meth:`generate_batch` that supports optional vision
+    * A generic :py:meth:`self.generate_batch()` that optionally supports vision
       inputs and pydantic validation.
     * A PDF-to-image utility used by
-      :py:meth:`_call_llm_fallback` — the method the scraper invokes when
+      :py:meth:`self._call_llm_fallback()` - the method the scraper invokes when
       HTML and PDF heuristics fail.
     * Built-in back-off and host-wide throttling via a semaphore.
 
     Parameters
     ----------
-    api_key : str
+    api_key : str, optional
         OpenAI (or proxy) API key.
     model : str, optional
         Chat model name; defaults to ``"gpt-4.1-mini"``.
@@ -136,7 +136,7 @@ class LLM:
         },
         'MattersOfConcern': {
             'field_description': 'the matters of concern',
-            'field_contents_and_rules': 'only the matters of concern—nothing else',
+            'field_contents_and_rules': 'only the matters of concern, nothing else',
             'extra_instructions': (
                 'Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with "...The Matters of Concern are as follows:" (which should also be removed). '
                 'If the string appears to need no cleaning, return it as is. '
@@ -147,7 +147,7 @@ class LLM:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str] = None,
         model: str = "gpt-4.1-mini",
         base_url: Optional[str] = None,
         max_workers: int = 1 

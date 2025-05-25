@@ -89,9 +89,6 @@ class Cleaner:
         
         verbose: bool = False,
     ) -> None:
-        """Create Cleaner object.
-
-        """
 
         self.reports = reports
         self.llm = llm
@@ -161,7 +158,7 @@ class Cleaner:
         """Run LLM-based cleaning for the configured columns.
 
         The method operates **in place on a copy** of
-        :pyattr:`reports`, so the original DataFrame is never mutated.
+        :pyattr:`self.reports`, so the original DataFrame is never mutated.
 
         Returns
         -------

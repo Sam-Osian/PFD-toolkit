@@ -88,7 +88,7 @@ class PFDScraper:
     ...                      date_from="2020-01-01",
     ...                      date_to="2022-12-31",
     ...                      llm_fallback=True,
-    ...                      llm=my_llm_client) # Configured in LLM class
+    ...                      llm=my_llm_client)         # Configured in LLM class
     >>> df = scraper.scrape_reports()          # full scrape
     >>> newer_df = scraper.top_up(df)             # later “top-up”
     >>> added_llm_df = scraper.run_llm_fallback(df)   # apply LLM retro-actively
@@ -935,7 +935,7 @@ class PFDScraper:
         2. Extract each report in parallel via
            :py:meth:`_extract_report_info`.  
         3. Optionally invoke :py:meth:`run_llm_fallback`.  
-        4. Cache the final DataFrame to :pyattr:`reports`.
+        4. Cache the final DataFrame to :pyattr:`self.reports`.
 
         Returns
         -------
@@ -988,7 +988,7 @@ class PFDScraper:
         Parameters
         ----------
         old_reports : pandas.DataFrame | None
-            Existing DataFrame.  Defaults to :pyattr:`reports`.
+            Existing DataFrame.  Defaults to :pyattr:`self.reports`.
         date_from, date_to : str | None
             Optionally override the scraper’s date window *for this call only*.
 
@@ -1084,7 +1084,7 @@ class PFDScraper:
 
 
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
-        """Ask the LLM to fill cells still set to :pyattr:`NOT_FOUND_TEXT`.
+        """Ask the LLM to fill cells still set to :pyattr:`self.NOT_FOUND_TEXT`.
 
         Only the missing fields requested via *include_* flags are sent to
         the model, along with the report’s PDF bytes (when available).
@@ -1092,13 +1092,13 @@ class PFDScraper:
         Parameters
         ----------
         reports_df : pandas.DataFrame | None
-            DataFrame to process.  Defaults to :pyattr:`reports`.
+            DataFrame to process.  Defaults to :pyattr:`self.reports`.
 
         Returns
         -------
         pandas.DataFrame
             Same shape as *reports_df*, updated in place and re-cached to
-            :pyattr:`reports`.
+            :pyattr:`self.reports`.
 
         Raises
         ------
