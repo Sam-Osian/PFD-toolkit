@@ -18,7 +18,6 @@ class TopicMatch(BaseModel):
         description="Indicate whether the report text is relevant to the user's query. Must be Yes or No."
     )
 
-
 class Filter:
     """
     Classifies a list of report texts against a user-defined topic using an LLM.
@@ -37,14 +36,14 @@ class Filter:
     user_query : str, optional
         The topic string provided by the user. If provided, the prompt template
         is built during initialisation.
-    match_approach : str, optional
+    match_leniency : str, optional
         Either 'strict' or 'liberal'. Determines the LLM's bias when in doubt.
         Defaults to 'strict'.
     filter_df : bool, optional
         If True, the returned DataFrame will be filtered. Defaults to True.
     verbose : bool, optional
         If True, print more detailed logs. Defaults to False.
-    classification_column_name : str, optional
+    result_col_name : str, optional
         The name for the classification column added to the DataFrame.
         Defaults to 'matches_query'.
     include_date : bool, optional
@@ -61,59 +60,6 @@ class Filter:
         Flag to determine if the 'CircumstancesOfDeath' column is included. Defaults to True.
     include_concerns : bool, optional
         Flag to determine if the 'MattersOfConcern' column is included. Defaults to True.
-
-    Attributes
-    ----------
-
-    llm : LLM
-        The LLM client instance.
-    reports : pd.DataFrame
-        The DataFrame containing report data.
-    user_query : Optional[str]
-        The current user query string.
-    prompt_template : Optional[str]
-        The generated prompt template for the LLM.
-    match_approach : str
-        The matching strategy ('strict' or 'liberal').
-    filter_df : bool
-        Flag indicating if the DataFrame should be filtered or if a column should be added.
-    classification_column_name : str
-        Name of the column used for classification results.
-    include_date : bool
-        Whether to include the date column in the LLM prompt.
-    include_coroner_name : bool
-        Whether to include the coroner name column in the LLM prompt.
-    include_area : bool
-        Whether to include the area column in the LLM prompt.
-    include_receiver : bool
-        Whether to include the receiver column in the LLM prompt.
-    include_investigation : bool
-        Whether to include the investigation column in the LLM prompt.
-    include_circumstances : bool
-        Whether to include the circumstances column in the LLM prompt.
-    include_concerns : bool
-        Whether to include the concerns column in the LLM prompt.
-    verbose : bool
-        Flag for verbose logging.
-    COL_URL : str
-        Default column name for report URLs.
-    COL_ID : str
-        Default column name for report IDs.
-    COL_DATE : str
-        Default column name for report dates.
-    COL_CORONER_NAME : str
-        Default column name for coroner names.
-    COL_AREA : str
-        Default column name for coroner areas.
-    COL_RECEIVER : str
-        Default column name for report receivers.
-    COL_INVESTIGATION : str
-        Default column name for investigation/inquest details.
-    COL_CIRCUMSTANCES : str
-        Default column name for circumstances of death.
-    COL_CONCERNS : str
-        Default column name for matters of concern.
-
 
     Examples
     --------
@@ -141,10 +87,10 @@ class Filter:
         llm: Optional[Any] = None,
         reports: Optional[pd.DataFrame] = None,
         user_query: Optional[str] = None,
-        match_approach: str = 'strict',
+        match_leniency: str = 'strict',
         filter_df: bool = True,
         verbose: bool = False,
-        classification_column_name: str = 'matches_query',
+        result_col_name: str = 'matches_query',
         include_date: bool = False,
         include_coroner_name: bool = False,
         include_area: bool = False,
@@ -154,10 +100,10 @@ class Filter:
         include_concerns: bool = True
     ) -> None:
         self.llm = llm
-        self.match_approach = match_approach
+        self.match_leniency = match_leniency
         self.filter_df = filter_df
         self.verbose = verbose
-        self.classification_column_name = classification_column_name
+        self.result_col_name = result_col_name
 
         # Store column inclusion toggles
         self.include_date = include_date
@@ -208,14 +154,14 @@ class Filter:
             """
             
         # Add match approach instructions
-        if self.match_approach == 'strict':
+        if self.match_leniency == 'strict':
             base_prompt_template += """
 
                 Your match should be strict.
                 This means that if you are in reasonable doubt as to whether a report
                 matches the user query, you should respond "No".
                 """
-        elif self.match_approach == 'liberal':
+        elif self.match_leniency == 'liberal':
             base_prompt_template += """
 
                 Your match should be liberal.
@@ -229,7 +175,7 @@ class Filter:
         {report_excerpt}"""
 
         if self.verbose:
-            logger.debug(f"Building prompt template for user query: '{current_user_query}'. Match approach: {self.match_approach}.")
+            logger.debug(f"Building prompt template for user query: '{current_user_query}'. Match approach: {self.match_leniency}.")
             logger.debug(f"Base prompt template created:\n{full_template_text.replace('{report_excerpt}', '[REPORT_TEXT_WILL_GO_HERE]')}")
         return full_template_text
 
@@ -311,7 +257,7 @@ class Filter:
         report_indices = [] # ...to map results back to original indices
 
         if self.verbose:
-            logger.debug(f"Preparing prompts for {len(current_reports)} reports using classification column '{self.classification_column_name}'.")
+            logger.debug(f"Preparing prompts for {len(current_reports)} reports using classification column '{self.result_col_name}'.")
 
         for index, row in current_reports.iterrows():
             report_parts = []
@@ -328,7 +274,7 @@ class Filter:
 
             if not report_text:
                 if self.verbose:
-                    logger.debug(f"Report at index {index} resulted in empty text after column selection. LLM will receive minimal context.")
+                    logger.debug(f"Report at index {index} resulted in empty text after column selection.")
 
             current_prompt = self.prompt_template.format(report_excerpt=report_text)
             prompts_for_filtering.append(current_prompt)
@@ -370,33 +316,33 @@ class Filter:
                 temp_classifications_series.loc[original_report_index] = pd.NA
 
         # Add classification results to the DataFrame being processed for this call
-        current_reports[self.classification_column_name] = temp_classifications_series
+        current_reports[self.result_col_name] = temp_classifications_series
         
         if reports is None: # If we used the instance's reports as the base for current_reports...
             self.reports = current_reports.copy() # ...update the instance's dataframe with the results
 
 
         if self.verbose:
-            if self.classification_column_name in current_reports.columns:
-                logger.debug(f"Added '{self.classification_column_name}' column. Distribution:\n{current_reports[self.classification_column_name].value_counts(dropna=False)}")
+            if self.result_col_name in current_reports.columns:
+                logger.debug(f"Added '{self.result_col_name}' column. Distribution:\n{current_reports[self.result_col_name].value_counts(dropna=False)}")
             else:
-                logger.warning(f"'{self.classification_column_name}' classification column was not added. This was unexpected!")
+                logger.warning(f"'{self.result_col_name}' classification column was not added. This was unexpected!")
 
         # --- Filter DataFrame if requested ---
         if self.filter_df:
-            if self.classification_column_name in current_reports.columns:
-                mask = current_reports[self.classification_column_name] == True
+            if self.result_col_name in current_reports.columns:
+                mask = current_reports[self.result_col_name] == True
                 filtered_df = current_reports[mask].copy()
-                filtered_df.drop(self.classification_column_name, axis=1, inplace=True, errors='ignore')
+                filtered_df.drop(self.result_col_name, axis=1, inplace=True, errors='ignore')
                 
                 if self.verbose:
                     logger.debug(f"DataFrame filtered. Original size for this run: {len(current_reports)}, Filtered size: {len(filtered_df)}")
                 return filtered_df
             else:
                 if self.verbose:
-                    logger.warning(f"Cannot filter DataFrame as '{self.classification_column_name}' column is missing.")
+                    logger.warning(f"Cannot filter DataFrame as '{self.result_col_name}' column is missing.")
                 return current_reports
         else:
             if self.verbose:
-                 logger.debug(f"Returning DataFrame with '{self.classification_column_name}' column (no filtering applied as filter_df is False).")
+                 logger.debug(f"Returning DataFrame with '{self.result_col_name}' column (no filtering applied as filter_df is False).")
             return current_reports
