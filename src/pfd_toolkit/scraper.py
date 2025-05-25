@@ -53,8 +53,12 @@ class PFDScraper:
     category : str
         Judiciary category slug (e.g. ``"suicide"``, ``"hospital_deaths"``)
         or ``"all"``.
-    date_from, date_to : str
-        Inclusive window for the **report date** (format ``YYYY-MM-DD``).
+    start_date : str
+        Inclusive lower bound for the **report date** in the ``YYYY-MM-DD``
+        format.
+    end_date : str
+        Inclusive upper bound for the **report date** in the ``YYYY-MM-DD``
+        format.
     max_workers : int
         Thread-pool size for concurrent scraping.
     max_requests : int
@@ -85,8 +89,8 @@ class PFDScraper:
     --------
     >>> from pfd_toolkit import PFDScraper
     >>> scraper = PFDScraper(category="suicide",
-    ...                      date_from="2020-01-01",
-    ...                      date_to="2022-12-31",
+    ...                      start_date="2020-01-01",
+    ...                      end_date="2022-12-31",
     ...                      llm_fallback=True,
     ...                      llm=my_llm_client)         # Configured in LLM class
     >>> df = scraper.scrape_reports()          # full scrape
@@ -125,8 +129,8 @@ class PFDScraper:
         
         # Web page and search criteria
         category: str = 'all', # Category of PFD reports to scrape
-        date_from: str = "2000-01-01", # Start date for filtering reports (YYYY-MM-DD)
-        date_to: str = "2030-01-01", # End date for filtering reports (YYYY-MM-DD)
+        start_date: str = "2000-01-01", # Start date for filtering reports (YYYY-MM-DD)
+        end_date: str = "2050-01-01", # End date for filtering reports (YYYY-MM-DD)
         
         # Threading and HTTP request configuration
         max_workers: int = 10, # Maximum number of concurrent threads for scraping
@@ -157,17 +161,17 @@ class PFDScraper:
         self.category = category.lower() # Normalise category to lowercase if user specifies otherwise
         
         # Parse date strings into datetime objects (for internal use)
-        self.date_from = date_parser.parse(date_from)
-        self.date_to = date_parser.parse(date_to)
+        self.start_date = date_parser.parse(start_date)
+        self.end_date = date_parser.parse(end_date)
         
         # Store date components for formatting into search URLs
         self.date_params = {
-            "after_day": self.date_from.day,
-            "after_month": self.date_from.month,
-            "after_year": self.date_from.year,
-            "before_day": self.date_to.day,
-            "before_month": self.date_to.month,
-            "before_year": self.date_to.year,
+            "after_day": self.start_date.day,
+            "after_month": self.start_date.month,
+            "after_year": self.start_date.year,
+            "before_day": self.end_date.day,
+            "before_month": self.end_date.month,
+            "before_year": self.end_date.year,
         }
         
         self.start_page = 1 # Pagination always starts from page 1
@@ -282,8 +286,8 @@ class PFDScraper:
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
         
         # Validate date range
-        if self.date_from > self.date_to:
-            raise ValueError("date_from must be before date_to.")
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be before end_date.")
         
         # Validate LLM configuration
         if self.llm_fallback and not self.llm:
@@ -980,7 +984,7 @@ class PFDScraper:
         return reports_df
 
 
-    def top_up(self, old_reports: pd.DataFrame | None = None, date_from: str | None = None, date_to: str | None = None) -> pd.DataFrame | None:
+    def top_up(self, old_reports: pd.DataFrame | None = None, start_date: str | None = None, end_date: str | None = None) -> pd.DataFrame | None:
         """Append **new** reports to an existing DataFrame.
 
         Any URL (or ID) already present in *old_reports* is skipped.
@@ -989,7 +993,7 @@ class PFDScraper:
         ----------
         old_reports : pandas.DataFrame | None
             Existing DataFrame.  Defaults to :pyattr:`self.reports`.
-        date_from, date_to : str | None
+        start_date, end_date : str | None
             Optionally override the scraper’s date window *for this call only*.
 
         Returns
@@ -1005,24 +1009,24 @@ class PFDScraper:
 
         Examples
         --------
-        >>> updated = scraper.top_up(df, date_to="2023-01-01")
+        >>> updated = scraper.top_up(df, end_date="2023-01-01")
         >>> len(updated) - len(df)     # number of new reports
         3
         """
         logger.info("Attempting to 'top up' the existing reports with new data.")
         
         # Update date range if new dates are provided for the top-up
-        if date_from is not None or date_to is not None:
-            new_date_from = date_parser.parse(date_from) if date_from is not None else self.date_from
-            new_date_to = date_parser.parse(date_to) if date_to is not None else self.date_to
-            if new_date_from > new_date_to:
-                raise ValueError("date_from must be before date_to.")
+        if start_date is not None or end_date is not None:
+            new_start_date = date_parser.parse(start_date) if start_date is not None else self.start_date
+            new_end_date = date_parser.parse(end_date) if end_date is not None else self.end_date
+            if new_start_date > new_end_date:
+                raise ValueError("start_date must be before end_date.")
             # Update scraper's internal date range and parameters
-            self.date_from = new_date_from
-            self.date_to = new_date_to
+            self.start_date = new_start_date
+            self.end_date = new_end_date
             self.date_params.update({
-                "after_day": self.date_from.day, "after_month": self.date_from.month, "after_year": self.date_from.year,
-                "before_day": self.date_to.day, "before_month": self.date_to.month, "before_year": self.date_to.year,
+                "after_day": self.start_date.day, "after_month": self.start_date.month, "after_year": self.start_date.year,
+                "before_day": self.end_date.day, "before_month": self.end_date.month, "before_year": self.end_date.year,
             })
 
         # Determine the base DataFrame to top up

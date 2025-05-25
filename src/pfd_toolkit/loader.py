@@ -1,8 +1,7 @@
 """pfd_toolkit.data_loader
 =========================
 
-Utility for loading the fully-cleaned **Prevention of Future Death**
-report dataset shipped with *pfd_toolkit*.
+
 """
 
 from __future__ import annotations
@@ -21,16 +20,20 @@ _DATA_FILE: Final[str] = "all_reports.csv"
 def load_reports(
     category: str = "all",
     start_date: str = "2000-01-01",
-    end_date: str = "2100-01-01",
+    end_date: str = "2050-01-01",
 ) -> pd.DataFrame:
-    """Load cleaned PFD reports as a :class:`pandas.DataFrame`.
+    """Utility for loading the fully-cleaned **Prevention of Future Death**
+    report dataset shipped with *pfd_toolkit* as a :class:`pandas.DataFrame`.
 
     Parameters
     ----------
     category : str, optional
         PFD category slug (e.g. ``"suicide"``) or ``"all"``.
-    start_date, end_date : str, optional
-        Inclusive window for the **report date** in the ``YYYY-MM-DD``
+    start_date : str, optional
+        Inclusive lower bound for the **report date** in the ``YYYY-MM-DD``
+        format.
+    end_date : str, optional
+        Inclusive upper bound for the **report date** in the ``YYYY-MM-DD``
         format.
 
     Returns
