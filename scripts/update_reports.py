@@ -6,13 +6,17 @@ the repo (`../pfd_toolkit/data`).
 """
 
 import pandas as pd
-from pfd_toolkit import PFDScraper
+from pfd_toolkit import PFDScraper, LLM
 from pathlib import Path
+import os
 
 DATA_PATH = Path("./src/pfd_toolkit/data/all_reports.csv")
 
+# -- INITIALISE LLM CLIENT --
+llm_client = LLM(api_key=os.environ["OPENAI_API_KEY"], max_workers=30)
+
 # -- INITIALISE SCRAPER ENGINE --
-scraper = PFDScraper()
+scraper = PFDScraper(llm=llm_client, llm_fallback=True)
 
 # -- LOAD EXISTING REPORTS -- 
 if DATA_PATH.exists():
@@ -29,7 +33,7 @@ else:
 # PFD report could throw this off. Hardcode start date as as 2025-01-01 for now
 
 # -- TOP UP REPORTS -- 
-new_df = scraper.top_up(old_reports=old_df, start_date="2025-01-01")
+new_df = scraper.top_up(old_reports=old_df, start_date="2025-05-01")
 
 if new_df is not None:
     new_count = len(new_df)

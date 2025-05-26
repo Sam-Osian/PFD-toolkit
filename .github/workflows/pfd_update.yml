@@ -91,6 +91,8 @@ jobs:
 
 
       - name: Run the PFD Top-Up Script
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           echo "Current working directory before running script: $(pwd)"
           uv run python scripts/update_reports.py
