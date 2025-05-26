@@ -8,6 +8,7 @@ import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import backoff
 from threading import Semaphore
+from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -285,7 +286,7 @@ class LLM:
         # Sequential execution if only one worker is designated
         if effective_workers <= 1:
             results: List[BaseModel | str] = []
-            for idx, prompt in enumerate(prompts):
+            for idx, prompt in tqdm(enumerate(prompts), total=len(prompts), desc="Sending requests to LLM (sequentially)"):
                 current_images = images_list[idx] if images_list and idx < len(images_list) else None
                 messages = _build_messages(prompt, current_images)
 
@@ -337,7 +338,7 @@ class LLM:
 
         with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
-            for fut in as_completed(futures):
+            for fut in tqdm(as_completed(futures), total=len(prompts), desc="Sending requests to the LLM (in parallel)"):
                 i, out = fut.result()
                 results[i] = out
 
