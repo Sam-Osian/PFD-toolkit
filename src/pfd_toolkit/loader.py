@@ -65,6 +65,9 @@ def load_reports(
     try:
         with csv_path.open("r", encoding="utf-8") as fh:
             reports = pd.read_csv(fh)
+            # Drop any Unnamed columns
+            reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
+
     except FileNotFoundError as exc:
         raise FileNotFoundError(
             f"Bundled dataset {_DATA_FILE!r} not found in package "
