@@ -29,7 +29,7 @@ else:
 # PFD report could throw this off. Hardcode start date as as 2025-01-01 for now
 
 # -- TOP UP REPORTS -- 
-new_df = scraper.top_up(old_reports=old_df, date_from="2025-01-01")
+new_df = scraper.top_up(old_reports=old_df, start_date="2025-01-01")
 
 if new_df is not None:
     new_count = len(new_df)
