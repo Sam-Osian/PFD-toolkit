@@ -37,13 +37,19 @@ if new_df is not None:
     added_count = new_count - old_count
     print(f"DEBUG: calculated added_count: {added_count}")
 
+    # If new report(s) were found
     if added_count > 0:
         new_df.to_csv(DATA_PATH, index=False)
         print(f"✅ CSV refreshed - {added_count} new report(s) added. Total reports: {new_count}.")
         # Write counts to a file for the workflow summary
         with open(".github/workflows/update_summary.txt", "w") as f:
             f.write(f"{added_count} new reports added. Total reports: {new_count}.\n")
+            
+    # If no new report(s) were found
     else:
         print("No new reports found - nothing to commit.")
+        # Note in the workflow summary that no reports were found
+        with open(".github/workflows/update_summary.txt", "w") as f:
+            f.write("No new reports were identified.")
 else:
     print("No new reports found - nothing to commit.")
