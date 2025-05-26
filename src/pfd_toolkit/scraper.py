@@ -18,7 +18,7 @@ import time
 import random
 import threading
 from datetime import datetime
-from tqdm import tqdm
+from tqdm.auto import tqdm 
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -433,7 +433,7 @@ class PFDScraper:
         page = self.start_page 
         
         # Initialise progress bar for fetching pages
-        pbar = tqdm(desc="Fetching pages", unit=" page", leave=False, initial=page)
+        pbar = tqdm(desc="Fetching pages", unit=" page", leave=False, initial=page, position=0)
         
         while True:
             # Format the search URL with the current page number and date parameters
@@ -965,7 +965,7 @@ class PFDScraper:
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all report extraction tasks to the executor & collect with progress bar
             futures = [executor.submit(self._extract_report_info, url) for url in self.report_links]
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports"):
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports", position=0, leave=False):
                 results.append(future.result())
         
         # Filter out any None results (from failed extractions)
@@ -1068,7 +1068,7 @@ class PFDScraper:
 
         # Scrape the new reports
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports"))
+            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports", position=0, leave=True))
         
         new_records = [record for record in new_results if record is not None]
         new_df = pd.DataFrame(new_records) # DataFrame of newly scraped reports
@@ -1156,7 +1156,8 @@ class PFDScraper:
                 pdf_bytes=pdf_bytes,
                 missing_fields=missing_fields,
                 report_url=str(report_url) if report_url else "N/A", 
-                verbose=self.verbose
+                verbose=self.verbose,
+                tqdm_extra_kwargs={"disable": True}
             )
             return idx, updates if updates else {} # Ensure a dict is returned
 
@@ -1172,7 +1173,7 @@ class PFDScraper:
                     executor.submit(process_row, idx, row_series): idx 
                     for idx, row_series in current_reports_df.iterrows()
                 }
-                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="LLM fallback (parallel processing)"):
+                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="LLM fallback (parallel processing)", position=0, leave=True):
                     idx = future_to_idx[future]
                     try:
                         _, updates = future.result() # Get (original_idx, updates_dict).
@@ -1180,7 +1181,7 @@ class PFDScraper:
                     except Exception as e:
                         logger.error(f"LLM fallback failed for row index {idx}: {e}")
         else: # Sequential processing...
-            for idx, row_series in tqdm(current_reports_df.iterrows(), total=len(current_reports_df), desc="LLM fallback (sequential processing)"):
+            for idx, row_series in tqdm(current_reports_df.iterrows(), total=len(current_reports_df), desc="LLM fallback (sequential processing)", position=0, leave=True):
                 try:
                     _, updates = process_row(idx, row_series) 
                     results_map[idx] = updates

@@ -267,7 +267,15 @@ class LLM:
         >>> msgs = ["Summarise:\\n" + txt for txt in docs]
         >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
         """
-        effective_tqdm_kwargs = tqdm_extra_kwargs if tqdm_extra_kwargs is not None else {}
+        effective_tqdm_kwargs = tqdm_extra_kwargs or {}
+       
+        if tqdm_extra_kwargs is None:
+            tqdm_extra_kwargs = {}
+        if len(prompts) == 1 and "disable" not in tqdm_extra_kwargs:
+            tqdm_extra_kwargs["disable"] = True
+        
+        if len(prompts) == 1:
+            effective_tqdm_kwargs["disable"] = True
         
         def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
@@ -355,6 +363,7 @@ class LLM:
         missing_fields: Dict[str, str],
         report_url: Optional[str] = None,
         verbose: bool = False,
+        tqdm_extra_kwargs: Optional[Dict[str, Any]] = None
     ) -> Dict[str, str]:
         """
         Use the LLM to extract text from PDF images for missing fields.
@@ -408,7 +417,8 @@ class LLM:
                 prompts=[prompt],
                 images_list=images_for_batch, # type: ignore 
                 response_format=MissingModel,
-                temperature=0.0
+                temperature=0.0,
+                tqdm_extra_kwargs=tqdm_extra_kwargs
             )
             output = result_list[0]
         except Exception as e:
