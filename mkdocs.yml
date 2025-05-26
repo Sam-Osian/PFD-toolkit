@@ -60,6 +60,7 @@ plugins:
 nav:
   - Home: index.md
   - Getting started: usage.md
+  - Creating an LLM client: llm_setup.md
   - Feedback & contributions: contribute.md
   - API Reference:
       - Data loader: reference/loader.md
