@@ -1,5 +1,9 @@
 # Getting started
 
+This page talks you through an example workflow using PFD Toolkit. It doesn't cover everything: for more, checkout the various pages on the left panel.
+
+---
+
 ## Installation
 
 PFD Toolkit can be installed from pip as `pfd_toolkit`:
@@ -9,6 +13,8 @@ pip install pfd_toolkit
 ```
 
 *Note: The package is not currently on Conda distributions.*
+
+---
 
 ## Load your first dataset
 
@@ -29,21 +35,21 @@ reports.head()
 
 `load_reports` returns a pandas DataFrame, and so accepts any pandas method.
 
+---
+
 ## Screen for relevant reports
 
-With PFD Toolkit, you can query reports in plain English. This lets you identify reports that match your precise research questions, even when the terminology varies or is incorrectly tagged in the original data.
+PFD Toolkit lets you query reports in plain English — no need to know precise keywords or categories. Just describe the cases you care about, and the toolkit will return matching reports.
 
-Instead of filtering by pre-set categories or keywords, simply describe the cases or themes you are interested in, and the toolkit will return a curated dataset of matching reports.
-
-For this code to run, you must first set up an LLM client. Replace "XXXXXX" with your API key.
+Note: Screening and other advanced features use AI models and require you to [set up an LLM client](llm_setup.md).
 
 ```py
 # Set up LLM client
-llm_client = LLM(api_key[XXXXXX], max_workers=30)
+llm_client = LLM(api_key=YOUR-API-KEY) # Replace with actual API key
 
 # Create a user query to filter reports
 # ...this can be as broad or narrow as you like
-user_query = "Deaths that occurred following ordering medications online"
+user_query = "Deaths that occurred in police custody"
 
 # Set up the filtering engine
 screener = Screener(llm = llm_client,
@@ -51,6 +57,5 @@ screener = Screener(llm = llm_client,
                         user_query = user_query)
 
 # And filter reports!
-# ...`filtered_reports` is still a pandas DataFrame
 filtered_reports = screener.screen_reports()
 ```

@@ -4,6 +4,8 @@
 
 *Contributor: John Pytches*
 
+---
+
 ## Background
 
 **PFD Toolkit** is an open-source Python package built to transform the way researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.
@@ -52,4 +54,4 @@ pip install pfd_toolkit
 
 PFD Toolkit is a research-enabling tool, and so we want to engage with the research community as much as possible to make sure this toolkit works for you *(yes, you!)*. 
 
-If you have any feedback, suggestions or want to help develop the toolkit please see our [Feedback and Contributions](contribute.md) page.
+If you have any feedback, suggestions or want to help develop the toolkit please see our [Feedback & contributions](contribute.md) page.
