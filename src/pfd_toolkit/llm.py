@@ -2,12 +2,13 @@ import openai
 from openai import RateLimitError
 import logging
 import base64
-from typing import List, Optional, Dict, Type
+from typing import List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model
 import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import backoff
 from threading import Semaphore
+from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -225,7 +226,8 @@ class LLM:
         images_list: Optional[List[List[bytes]]] = None,
         response_format: Optional[Type[BaseModel]] = None,
         temperature: float = 0.0,
-        max_workers: Optional[int] = None
+        max_workers: Optional[int] = None,
+        tqdm_extra_kwargs: Optional[Dict[str, Any]] = None
     ) -> List[BaseModel | str]:
         """Run many prompts either sequentially or in parallel.
 
@@ -265,6 +267,7 @@ class LLM:
         >>> msgs = ["Summarise:\\n" + txt for txt in docs]
         >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
         """
+        effective_tqdm_kwargs = tqdm_extra_kwargs if tqdm_extra_kwargs is not None else {}
         
         def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
@@ -285,7 +288,8 @@ class LLM:
         # Sequential execution if only one worker is designated
         if effective_workers <= 1:
             results: List[BaseModel | str] = []
-            for idx, prompt in enumerate(prompts):
+            current_desc = effective_tqdm_kwargs.pop('desc', "Sending requests to the LLM (sequentially)")
+            for idx, prompt in tqdm(enumerate(prompts), total=len(prompts), desc=current_desc, **effective_tqdm_kwargs):
                 current_images = images_list[idx] if images_list and idx < len(images_list) else None
                 messages = _build_messages(prompt, current_images)
 
@@ -337,7 +341,8 @@ class LLM:
 
         with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
-            for fut in as_completed(futures):
+            current_desc = effective_tqdm_kwargs.pop('desc', "Sending requests to the LLM (in parallel)") 
+            for fut in tqdm(as_completed(futures), total=len(prompts), desc=current_desc, **effective_tqdm_kwargs):
                 i, out = fut.result()
                 results[i] = out
 
