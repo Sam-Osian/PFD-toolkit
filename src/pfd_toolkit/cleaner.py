@@ -1,6 +1,9 @@
 import logging
 import pandas as pd
-from tqdm import tqdm
+from tqdm.auto import tqdm
+
+import warnings
+from tqdm import TqdmWarning
 
 from pfd_toolkit.llm import LLM
 
@@ -15,6 +18,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 # Silence the OpenAI client’s info-level logs (as in llm.py)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
+warnings.filterwarnings("ignore", category=TqdmWarning)
 
 class Cleaner:
     """Batch-clean PFD report fields with an LLM.
@@ -186,7 +190,8 @@ class Cleaner:
         ]
 
         # Use tqdm for the outer loop over fields
-        for config_key, process_flag, column_name, prompt_template in tqdm(field_processing_config, desc="Processing Fields"):
+        for config_key, process_flag, column_name, prompt_template in \
+            tqdm(field_processing_config, desc="Processing Fields", position=0, leave=True):
             if not process_flag:
                 continue
 
@@ -232,7 +237,14 @@ class Cleaner:
             if self.verbose:
                 logger.info(f"Sending {len(prompts_for_batch)} text items to LLM for column '{column_name}'.")
             
-            cleaned_results_batch = self.llm.generate_batch(prompts=prompts_for_batch) 
+            inner_tqdm_config = {
+            'desc': f"LLM: Cleaning {config_key}", 
+            'position': 1,                        
+            'leave': False}
+            
+            cleaned_results_batch = self.llm.generate_batch(
+                prompts=prompts_for_batch,
+                tqdm_extra_kwargs=inner_tqdm_config)
 
             if len(cleaned_results_batch) != len(prompts_for_batch):
                 logger.error(
