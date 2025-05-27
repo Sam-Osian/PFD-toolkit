@@ -1,8 +1,8 @@
 # Screen reports for relevancy
 
-Natural-language filtering is one of the headline features of PFD Toolkit. The `Screener` class lets you describe a topic in plain English – e.g. “deaths in police custody”, “medication purchased online”, “deaths in A&E” – and have an LLM screen reports, delivering you a curated dataset.
+Natural-language filtering is one of the headline features of PFD Toolkit. The `Screener` class lets you describe a topic in plain English – e.g. “deaths in police custody”, “medication purchased online”, “deaths in A&E” – and have an `LLM` screen reports, delivering you a curated dataset.
 
-You do not have to use `Screener` to benefit from the toolkit. If the built-in category tags are good enough, the `load_reports()` helper will give you a ready-made dataset without any LLM calls. `Screener` is offered for those projects that need something more nuanced than the provided broad category tags.
+You do not have to use `Screener` to benefit from the toolkit. If the built-in category tags are good enough, the `load_reports()` helper will give you a ready-made dataset without any `LLM` calls. `Screener` is offered for those projects that need something more nuanced than the provided broad category tags.
 
 To use the `Screener` you'll need to [set up an LLM client](llm_setup.md).
 
@@ -10,7 +10,7 @@ To use the `Screener` you'll need to [set up an LLM client](llm_setup.md).
 
 ## A minimal example
 
-First, import the necessary modules, load reports and set up an LLM client:
+First, import the necessary modules, load reports and set up an `LLM` client:
 
 ```python
 from pfd_toolkit import load_reports, LLM, Screener
@@ -60,7 +60,7 @@ A keyword filter misses these variants unless you guess every synonym in advance
 ## Additional options
 
 ### Match leniency
-The `match_leniency` flag nudges the LLM when it's unsure whether a report meets your query or not.
+The `match_leniency` flag nudges the `LLM` when it's unsure whether a report meets your query or not.
 
 In "strict" mode (the default), a marginal case is excluded and is not added to your curated list; in "liberal" mode, the benefit of the doubt gears towards inclusion. 
 
@@ -75,7 +75,7 @@ screener = Screener(
 )
 ```
 
-Under the hood, this is what the model sees. For "strict" mode (default):
+Under the hood, this is what the `LLM` sees. For "strict" mode (default):
 
 > Your match leniency should be strict. This means that if you are on the fence as to whether a report matches the user query, you should respond "No".
 
@@ -88,7 +88,7 @@ And for "liberal" mode:
 
 ### Annotation vs. filtering
 
-If `filter_df` is True (the default) `Screener` returns a trimmed DataFrame that contains only the reports the model marked as relevant to your query. 
+If `filter_df` is True (the default) `Screener` returns a trimmed DataFrame that contains only the reports the `LLM` marked as relevant to your query. 
 
 Setting it to False activates annotate mode: every report/row from your original DataFrame is kept, and a boolean column is added denoting whether the report met your query or not. You can also rename this column with `result_col_name`. 
 
@@ -99,19 +99,21 @@ screener = Screener(
     llm=llm_client,
     reports=reports,
     user_query=user_query,
-    filter_df=False,    # <--- annotation instead of filtering via added column
-    result_col_name='custody_match'     # <--- name of added column
+    filter_df=False,    # <--- create annotation column; don't filter out
+    result_col_name='custody_match'     # <--- name of annotation column
 )
 ```
 
 ---
 
 
-### Choosing which columns the LLM sees
+### Choosing which columns the LLM 'sees'
 
-By default the model reads the narrative heavyweight sections of each report: *investigation*, *circumstances* and *concerns*. You can expose or hide any field with `include_*` flags. 
+By default the `LLM` model reads the narrative heavyweight sections of each report: *investigation*, *circumstances* and *concerns*. You can expose or hide any field with `include_*` flags. 
 
-For example, if you are screening based on a specific *cause of death*, then you should consider setting `include_concerns` to False, as including this won't benefit your search. By contrast, if you are searching for a specific concern, then setting `include_investigation` and `include_circumstances` to False may improve accuracy, speed up your code, and lead to cheaper LLM calls.
+For example, if you are screening based on a specific *cause of death*, then you should consider setting `include_concerns` to False, as including this won't benefit your search. 
+
+By contrast, if you are searching for a specific concern, then setting `include_investigation` and `include_circumstances` to False may improve accuracy, speed up your code, and lead to cheaper `LLM` calls.
 
 ```py
 user_query = "Death from insulin overdose due to misprogrammed insulin pumps."
@@ -133,12 +135,13 @@ screener = Screener(
     llm=llm_client,
     reports=reports,
     user_query=user_query,
+
     # Turn off the defaults...
     include_investigation=False,
     include_circumstances=False,
     include_concerns=False,
 
-    include_receiver=True       # <--- Read from receiver section only
+    include_receiver=True       # <--- Read from receiver section
 )
 ```
 
@@ -200,7 +203,7 @@ screener = Screener(
 ## Tips for writing a good user query
 
 
-1. **Stick to one core idea.**  Give the model a single, clear subject: “falls from hospital beds,” “carbon-monoxide poisoning at home.” In general, the shorter the prompt, the less room for misinterpretation.
+1. **Stick to one core idea.**  Give the `LLM` a single, clear subject: “falls from hospital beds,” “carbon-monoxide poisoning at home.” In general, the shorter the prompt, the less room for misinterpretation.
 
 2. **Avoid nested logic.**  Complex clauses like “suicide *and* medication error *but not* in custody” dilute the signal. Run separate screens (suicide; medication error; in custody) and combine or subtract results later with pandas.
 
