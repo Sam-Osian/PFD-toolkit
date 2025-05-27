@@ -9,17 +9,15 @@ PFD Toolkit uses a Large Language Model (LLM) client for advanced features. This
 
 Many toolkit features — like advanced cleaning, screening reports, and assigning themes — depend on AI. These tasks aren’t reliable (or sometimes possible) with rule-based scripts alone.
 
-To use these features, you’ll need to create an **LLM client** and pass it to the `Screener`, `Cleaner`, `Scraper`, or `Categoriser` objects.
+To use these features, you’ll need to create an **LLM client** and pass it to the `Screener`, `Cleaner`, `Scraper`, or `Categoriser` objects. You do *not* need an LLM client to simply load report data (with `load_reports`).
 
-You do *not* need an LLM client to simply load report data (with `load_reports`).
-
-**Not used an LLM via API before?** Don’t worry, setup is simple.
+We appreciate that not everyone using this package will have worked with API keys before, so we've made setup extra simple.
 
 ---
 
 ## Setting up your LLM client
 
-Import the `LLM` class and provide your *API key* ([see below for details](#what-is-an-api-key-why-do-i-need-one)):
+Import the `LLM` class and provide your API key ([see below for details](#what-is-an-api-key-why-do-i-need-one)):
 
 ```py
 from pfd_toolkit import LLM
@@ -27,7 +25,7 @@ from pfd_toolkit import LLM
 llm_client = LLM(api_key=YOUR-API-KEY) # Replace YOUR-API-KEY with actual API key
 ```
 
-Now you can use LLM-powered features! For example, to screen for reports about medication purchased online:
+And that's it — you can now use LLM-powered features! For example, to screen for reports about medication purchased online:
 
 ```py
 from pfd_toolkit import Screener
@@ -42,7 +40,11 @@ online_med_reports = screener.screen_reports()
 
 ```
 
-**Tip:** For security, store your API key in a `.env` file (e.g. `api.env`):
+### Added security
+
+It's important to never share your API key. This means making sure you don't commit your key to GitHub or similar services.
+
+For added security, we recommend storing your API in a `.env` file (e.g. `api.env`) and importing it through `load_dotenv`. For example:
 
 ```py
 # In your .env file (never commit this to GitHub!)
@@ -65,7 +67,7 @@ llm_client = LLM(api_key=openai_api_key)
 
 ---
 
-## What is an API key? Why do I need one?
+## What is an API key?
 
 All LLM features in PFD Toolkit use OpenAI’s servers. An API key is like a secret code that identifies you to OpenAI.
 
@@ -87,20 +89,45 @@ See [OpenAI pricing](https://openai.com/api/pricing/) for more — costs are bas
 
 ## Advanced options
 
-You can customise the client with additional parameters:
+### Speed up your LLM
+
+The LLM client supports parallelisation via the `max_workers` parameter. This controls the number of concurrent tasks the LLM can complete at once (each row/report is its own 'task'). For most workflows, set `max_workers` between 10-30.
+
 
 ```py
 llm_client = LLM(
     api_key=openai_api_key,
-    model="gpt-4.1",           # Use another named model if you prefer. We use gpt-4.1-mini by default.
-    base_url="https://...",   # For custom endpoints (e.g. Azure, OpenRouter)
-    max_workers=30            # Controls parallelism
+    max_workers=30      # <--- increase parallelisation
 )
 ```
 
-Performance tips:
+OpenAI does impose [rate limits](https://platform.openai.com/docs/guides/rate-limits), however, so setting `max_workers` to an extremely high value may result in errors or slowdowns. 
 
- - For most workflows, set `max_workers` between 10-30.
+PFD Toolkit tries to handle rate limit errors by briefly pausing the script once a rate limit has been exceeded. However, it's still good practice to set the parameter to a reasonable value to avoid errors.
 
- - Higher values process more reports at once, but increase the risk of OpenAI rate limits. The toolkit contains retry logic, but you may still want to lower this if you see errors or slowdowns.
+---
+
+### Change the model
+
+By default, the LLM client will use `gpt-4.1-mini`. Our testing found that this offered the best balance between cost, speed and accuracy. However, you can change this to any supported [OpenAI model](https://platform.openai.com/docs/models).
+
+```py
+llm_client = LLM(
+    api_key=openai_api_key,
+    model="o4-mini"     # <--- change model to o4-mini
+)
+```
+
+---
+
+### Use a custom endpoint
+
+You can redirect the LLM to any custom endpoint (e.g. Azure, OpenRouter), provided they support the OpenAI SDK.
+
+```py
+llm_client = LLM(
+    api_key=openai_api_key,
+    base_url="https://...",   # <--- Set custom endpoints
+)
+```
 
