@@ -60,11 +60,15 @@ plugins:
 nav:
   - Home: index.md
   - Getting started: usage.md
+  - Loading reports: loader.md
   - Creating an LLM client: llm_setup.md
-  - Feedback & contributions: contribute.md
+  - Screening relevant reports: screener.md
   - API Reference:
       - Data loader: reference/loader.md
       - Screener: reference/screener.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
       - LLM: reference/llm.md
+  - Extra:
+      - Changelog: changelog.md
+      - Feedback & contributions: contribute.md
