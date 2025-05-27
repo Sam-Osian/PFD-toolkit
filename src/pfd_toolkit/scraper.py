@@ -18,7 +18,8 @@ import time
 import random
 import threading
 from datetime import datetime
-from tqdm import tqdm
+from tqdm.auto import tqdm 
+from pfd_toolkit import LLM
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -30,16 +31,73 @@ logging.basicConfig(level=logging.INFO, force=True)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class PFDScraper:
-    """
-    Web scraper for extracting Prevention of Future Death (PFD) reports
-    from the UK Judiciary website.
+    """Scrape UK “Prevention of Future Death” (PFD) reports into a
+    :class:`pandas.DataFrame`.
 
-    This class handles:
-      - Fetching PFD report URLs from search result pages.
-      - Parsing HTML content of individual report pages to extract data.
-      - Implementing a fallback to scrape data from .pdf files if HTML scraping fails for specific fields.
-      - Optionally, implementing a fallback to an LLM (Large Language Model) for extracting data
-        from image-based .pdf files if other scraping methods fail.
+    The extractor runs in three cascading layers
+    (`html → pdf → llm`), each independently switchable.
+
+    1. **HTML scrape** – parse metadata and rich sections directly from
+       the web page.
+    2. **PDF fallback** – download the attached PDF and extract text with
+       *PyMuPDF* for any missing fields.
+    3. **LLM fallback** – delegate unresolved gaps to a Large Language
+       Model supplied via *llm*.
+
+    All three layers are optional and independently switchable.
+
+    Parameters
+    ----------
+    llm : LLM | None
+        Client implementing ``_call_llm_fallback()``; required only when
+        *llm_fallback* is *True*.
+    category : str
+        Judiciary category slug (e.g. ``"suicide"``, ``"hospital_deaths"``)
+        or ``"all"``.
+    start_date : str
+        Inclusive lower bound for the **report date** in the ``YYYY-MM-DD``
+        format.
+    end_date : str
+        Inclusive upper bound for the **report date** in the ``YYYY-MM-DD``
+        format.
+    max_workers : int
+        Thread-pool size for concurrent scraping.
+    max_requests : int
+        Maximum simultaneous requests per host (enforced with a semaphore).
+    delay_range : tuple[float, float] | None
+        Random delay *(seconds)* before every request.  
+        Use ``None`` to disable (not recommended).
+    timeout : int
+        Per-request timeout in seconds.
+    html_scraping, pdf_fallback, llm_fallback : bool
+        Toggles for the three extraction layers.
+    include_* : bool
+        Flags that control which columns appear in the output DataFrame.
+    verbose : bool
+        Emit debug-level logs when *True*.
+
+    Attributes
+    ----------
+    reports : pandas.DataFrame | None
+        Cached result of the last call to :py:meth:`scrape_reports`
+        or :py:meth:`top_up`.
+    report_links : list[str]
+        URLs discovered by :py:meth:`get_report_links`.
+    NOT_FOUND_TEXT : str
+        Placeholder value set when a field cannot be extracted.
+
+    Examples
+    --------
+    >>> from pfd_toolkit import PFDScraper
+    >>> scraper = PFDScraper(category="suicide",
+    ...                      start_date="2020-01-01",
+    ...                      end_date="2022-12-31",
+    ...                      llm_fallback=True,
+    ...                      llm=my_llm_client)         # Configured in LLM class
+    >>> df = scraper.scrape_reports()          # full scrape
+    >>> newer_df = scraper.top_up(df)             # later “top-up”
+    >>> added_llm_df = scraper.run_llm_fallback(df)   # apply LLM retro-actively
+
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
@@ -72,13 +130,14 @@ class PFDScraper:
         
         # Web page and search criteria
         category: str = 'all', # Category of PFD reports to scrape
-        date_from: str = "2000-01-01", # Start date for filtering reports (YYYY-MM-DD)
-        date_to: str = "2030-01-01", # End date for filtering reports (YYYY-MM-DD)
+        start_date: str = "2000-01-01", # Start date for filtering reports (YYYY-MM-DD)
+        end_date: str = "2050-01-01", # End date for filtering reports (YYYY-MM-DD)
         
         # Threading and HTTP request configuration
         max_workers: int = 10, # Maximum number of concurrent threads for scraping
         max_requests: int = 5, # Maximum concurrent requests to the same domain
         delay_range: tuple[int | float, int | float] | None = (1, 2), # Min/max delay (seconds) between requests
+        timeout: int = 60, # Timeout for response requests
         
         # Scraping strategy configuration
         html_scraping: bool = True, # Whether to attempt HTML-based scraping
@@ -99,27 +158,21 @@ class PFDScraper:
         
         verbose: bool = False # Whether to print verbose logging output.
     ) -> None:
-        """
-        Initialises the PFDScraper with specified configurations.
 
-        The constructor sets up scraping parameters, date ranges, threading limits,
-        scraping strategies (HTML, PDF, LLM), and output column preferences.
-        It also performs validation on the provided parameters.
-        """
         self.category = category.lower() # Normalise category to lowercase if user specifies otherwise
         
         # Parse date strings into datetime objects (for internal use)
-        self.date_from = date_parser.parse(date_from)
-        self.date_to = date_parser.parse(date_to)
+        self.start_date = date_parser.parse(start_date)
+        self.end_date = date_parser.parse(end_date)
         
         # Store date components for formatting into search URLs
         self.date_params = {
-            "after_day": self.date_from.day,
-            "after_month": self.date_from.month,
-            "after_year": self.date_from.year,
-            "before_day": self.date_to.day,
-            "before_month": self.date_to.month,
-            "before_year": self.date_to.year,
+            "after_day": self.start_date.day,
+            "after_month": self.start_date.month,
+            "after_year": self.start_date.year,
+            "before_day": self.end_date.day,
+            "before_month": self.end_date.month,
+            "before_year": self.end_date.year,
         }
         
         self.start_page = 1 # Pagination always starts from page 1
@@ -128,6 +181,7 @@ class PFDScraper:
         self.max_workers = max_workers
         self.max_requests = max_requests
         self.delay_range = delay_range
+        self.timeout = timeout
         
         # Store scraping strategy flags
         self.html_scraping = html_scraping
@@ -233,8 +287,8 @@ class PFDScraper:
             raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
         
         # Validate date range
-        if self.date_from > self.date_to:
-            raise ValueError("date_from must be before date_to.")
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be before end_date.")
         
         # Validate LLM configuration
         if self.llm_fallback and not self.llm:
@@ -345,7 +399,7 @@ class PFDScraper:
         with self.domain_semaphore: 
             time.sleep(random.uniform(*self.delay_range))  # Introduce a random delay between requests to be polite to the server
             try:
-                response = self.session.get(url)
+                response = self.session.get(url, timeout=self.timeout)
                 response.raise_for_status() # Raise HTTPError for bad responses (4XX or 5XX)
                 if self.verbose:
                     logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
@@ -360,17 +414,27 @@ class PFDScraper:
         return [link.get('href') for link in links if link.get('href')] # Extract href values
 
     def get_report_links(self) -> list[str] | None:
-        """
-        Dynamically collects all PFD report links by iterating through search result pages.
-        Stops when a page returns no new links, indicating the end of results.
+        """Discover individual report URLs for the current query.
 
-        :return: A list of all collected PFD report URLs. Returns None if no links are found at all.
+        Pagination continues until a page yields zero new links.
+
+        Returns
+        -------
+        list[str] | None
+            All discovered URLs, or *None* if **no** links were found for
+            the given category/date window.
+
+        Examples
+        --------
+        >>> links = scraper.get_report_links()
+        >>> len(links)
+        42
         """
         self.report_links = [] # Reset internal list of report links
         page = self.start_page 
         
         # Initialise progress bar for fetching pages
-        pbar = tqdm(desc="Fetching pages", unit=" page(s)", leave=False, initial=page)
+        pbar = tqdm(desc="Fetching pages", unit=" page", leave=False, initial=page, position=0)
         
         while True:
             # Format the search URL with the current page number and date parameters
@@ -424,18 +488,38 @@ class PFDScraper:
 
     def _normalise_date(self, raw_date_str: str) -> str:
         """
-        Converts a human-readable date string to ISO-8601 format (YYYY-MM-DD).
-        Uses dateutil.parser for robust parsing of various date formats.
+        Converts a human-readable date string to ISO-8601 format (YYYY-MM-DD),
+        attempting to clean known non-date suffixes like "Ref:" before parsing.
 
         :param raw_date_str: The raw date string to parse.
         :return: The date string in "YYYY-MM-DD" format, or the original string if parsing fails.
         """
+        text_being_processed = self._clean_text(raw_date_str).strip()
+        final_text_to_parse = text_being_processed
+
         try:
-            dt = date_parser.parse(raw_date_str, fuzzy=True, dayfirst=True)
-            return dt.strftime("%Y-%m-%d")
-        except Exception as e: # Catches parsing errors (ValueError, TypeError, etc.)
-            logger.warning("Date parse failed for '%s' – keeping raw (%s)", raw_date_str, e)
-            return raw_date_str # Return the original string on failure.
+            # Attempt to isolate date part if "Ref" (case-insensitive) acts as a suffix
+            match = re.match(r"(.+?)(Ref[:\s]|$)", text_being_processed, re.IGNORECASE)
+            if match:
+                potential_date_part = match.group(1).strip()
+                if potential_date_part:
+                    final_text_to_parse = potential_date_part
+            
+            if not final_text_to_parse:
+                if self.verbose:
+                    logger.warning(f"Date string empty after trying to remove 'Ref...' from '{text_being_processed}'. Raw: '{raw_date_str}'. Keeping raw.")
+                return text_being_processed # Return original
+
+            dt = date_parser.parse(final_text_to_parse, fuzzy=True, dayfirst=True)
+            return dt.strftime("%Y-%m-%d") # Return parsed date
+            
+        except Exception as e:
+            if self.verbose:
+                logger.warning(
+                    f"Date parse failed for raw '{raw_date_str}' (processed to '{text_being_processed}', attempted '{final_text_to_parse}') "
+                    f"– keeping raw. Error: {e}"
+                )
+            return text_being_processed # Return original
 
     def _process_extracted_field(self, text: str, strings_to_remove: list[str],
                                  min_len: int | None = None, max_len: int | None = None,
@@ -503,7 +587,7 @@ class PFDScraper:
         
         # Download the file content
         try:
-            response = self.session.get(pdf_url)
+            response = self.session.get(pdf_url, timeout=self.timeout)
             response.raise_for_status()
             file_bytes = response.content
         except requests.RequestException as e:
@@ -633,7 +717,7 @@ class PFDScraper:
         :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
         """
         try:  # Get the HTML page of the report
-            page_response = self.session.get(report_url)
+            page_response = self.session.get(report_url, timeout=self.timeout)
             page_response.raise_for_status()
             soup = BeautifulSoup(page_response.content, 'html.parser')
             
@@ -642,7 +726,7 @@ class PFDScraper:
             if pdf_links:
                 pdf_link = pdf_links[0] # There are often multiple buttons; fortunately the report is always the first one (0 index)
                 # Download the PDF file
-                pdf_response = self.session.get(pdf_link)
+                pdf_response = self.session.get(pdf_link, timeout=self.timeout)
                 pdf_response.raise_for_status()
                 return pdf_response.content # Return PDF content as bytes
             else:
@@ -681,7 +765,7 @@ class PFDScraper:
         
         # Fetch the main HTML report page
         try:
-            response = self.session.get(url)
+            response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
             logger.error("Failed to fetch %s; Error: %s", url, e)
@@ -848,14 +932,29 @@ class PFDScraper:
     # -----------------------------------------------------------------------------------------
          
     def scrape_reports(self) -> pd.DataFrame:
-        """
-        Scrapes PFD reports based on the current scraper configuration.
-        It first ensures report links are fetched, then extracts information for each link
-        concurrently. If LLM fallback is enabled, it's applied after initial scraping.
+        """Execute a full scrape with the Class configuration.
 
-        :return: A pandas DataFrame containing the scraped report data.
-                 Returns an empty DataFrame if no reports are found or scraped.
+        Workflow
+        --------
+        1. Call :py:meth:`get_report_links`.  
+        2. Extract each report in parallel via
+           :py:meth:`_extract_report_info`.  
+        3. Optionally invoke :py:meth:`run_llm_fallback`.  
+        4. Cache the final DataFrame to :pyattr:`self.reports`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            One row per report.  Column presence matches the *include_* flags.
+            The DataFrame is empty if nothing was scraped.
+
+        Examples
+        --------
+        >>> df = scraper.scrape_reports()
+        >>> df.columns
+        Index(['URL', 'ID', 'Date', ...], dtype='object')
         """
+        
         if not self.report_links: # If links haven't been fetched yet...
             fetched_links = self.get_report_links()
             if fetched_links is None: # No links found by get_report_links...
@@ -867,7 +966,7 @@ class PFDScraper:
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             # Submit all report extraction tasks to the executor & collect with progress bar
             futures = [executor.submit(self._extract_report_info, url) for url in self.report_links]
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports"):
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports", position=0, leave=False):
                 results.append(future.result())
         
         # Filter out any None results (from failed extractions)
@@ -886,34 +985,49 @@ class PFDScraper:
         return reports_df
 
 
-    def top_up(self, old_reports: pd.DataFrame | None = None, date_from: str | None = None, date_to: str | None = None) -> pd.DataFrame | None:
-        """
-        Adds new PFD reports to an existing DataFrame of reports.
-        It fetches current report links based on the scraper's (potentially updated) date range,
-        filters out links already present in `old_reports` (based on URL or ID),
-        and scrapes the new ones.
+    def top_up(self, old_reports: pd.DataFrame | None = None, start_date: str | None = None, end_date: str | None = None) -> pd.DataFrame | None:
+        """Append **new** reports to an existing DataFrame.
 
-        :param old_reports: Optional DataFrame of previously scraped reports. If None, uses `self.reports`.
-        :param date_from: Optional new start date for fetching links (YYYY-MM-DD).
-        :param date_to: Optional new end date for fetching links (YYYY-MM-DD).
-        :return: An updated DataFrame with old and new reports.
-                 Returns the original `base_df` if no new reports are found to scrape.
-                 Returns `None` if no new links are found AND `base_df` was also initially `None`.
+        Any URL (or ID) already present in *old_reports* is skipped.
+
+        Parameters
+        ----------
+        old_reports : pandas.DataFrame | None
+            Existing DataFrame.  Defaults to :pyattr:`self.reports`.
+        start_date, end_date : str | None
+            Optionally override the scraper’s date window *for this call only*.
+
+        Returns
+        -------
+        pandas.DataFrame | None
+            Updated DataFrame if new reports were added; *None* if no new
+            records were found **and** *old_reports* was *None*.
+
+        Raises
+        ------
+        ValueError
+            If *old_reports* lacks columns required for duplicate checks.
+
+        Examples
+        --------
+        >>> updated = scraper.top_up(df, end_date="2023-01-01")
+        >>> len(updated) - len(df)     # number of new reports
+        3
         """
         logger.info("Attempting to 'top up' the existing reports with new data.")
         
         # Update date range if new dates are provided for the top-up
-        if date_from is not None or date_to is not None:
-            new_date_from = date_parser.parse(date_from) if date_from is not None else self.date_from
-            new_date_to = date_parser.parse(date_to) if date_to is not None else self.date_to
-            if new_date_from > new_date_to:
-                raise ValueError("date_from must be before date_to.")
+        if start_date is not None or end_date is not None:
+            new_start_date = date_parser.parse(start_date) if start_date is not None else self.start_date
+            new_end_date = date_parser.parse(end_date) if end_date is not None else self.end_date
+            if new_start_date > new_end_date:
+                raise ValueError("start_date must be before end_date.")
             # Update scraper's internal date range and parameters
-            self.date_from = new_date_from
-            self.date_to = new_date_to
+            self.start_date = new_start_date
+            self.end_date = new_end_date
             self.date_params.update({
-                "after_day": self.date_from.day, "after_month": self.date_from.month, "after_year": self.date_from.year,
-                "before_day": self.date_to.day, "before_month": self.date_to.month, "before_year": self.date_to.year,
+                "after_day": self.start_date.day, "after_month": self.start_date.month, "after_year": self.start_date.year,
+                "before_day": self.end_date.day, "before_month": self.end_date.month, "before_year": self.end_date.year,
             })
 
         # Determine the base DataFrame to top up
@@ -955,7 +1069,7 @@ class PFDScraper:
 
         # Scrape the new reports
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports"))
+            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports", position=0, leave=True))
         
         new_records = [record for record in new_results if record is not None]
         new_df = pd.DataFrame(new_records) # DataFrame of newly scraped reports
@@ -965,18 +1079,40 @@ class PFDScraper:
             updated_reports_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
         else: # No new valid records were scraped from the new_links...
             updated_reports_df = base_df if base_df is not None else pd.DataFrame() # Return original or empty
-            
+        
+        # Sort updates reports by date
+        if self.include_date == True:
+            updated_reports_df = updated_reports_df.sort_values(by=[self.COL_DATE], ascending=False)
+        
         self.reports = updated_reports_df.copy() # Update internal reports DataFrame
         return updated_reports_df
 
 
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
-        """
-        Applies LLM-based data extraction for fields marked as "N/A: Not found" in the provided DataFrame.
-        This method is called by `scrape_reports` if `llm_fallback` is True, or can be called manually.
+        """Ask the LLM to fill cells still set to :pyattr:`self.NOT_FOUND_TEXT`.
 
-        :param reports_df: Optional DataFrame of scraped reports. If None, uses `self.reports`.
-        :return: The DataFrame with missing fields potentially filled by the LLM.
+        Only the missing fields requested via *include_* flags are sent to
+        the model, along with the report’s PDF bytes (when available).
+
+        Parameters
+        ----------
+        reports_df : pandas.DataFrame | None
+            DataFrame to process.  Defaults to :pyattr:`self.reports`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Same shape as *reports_df*, updated in place and re-cached to
+            :pyattr:`self.reports`.
+
+        Raises
+        ------
+        ValueError
+            If no LLM client was supplied at construction time.
+
+        Examples
+        --------
+        >>> updated_df = scraper.run_llm_fallback()
         """
         if not self.llm: # Check if LLM client is configured
              raise ValueError("LLM client (self.llm) not provided. Cannot run LLM fallback.")
@@ -1017,11 +1153,12 @@ class PFDScraper:
 
             # Call the LLM client's fallback method
             # Assumes self.llm is not None due to the check at the start of run_llm_fallback -- maybe this needs to change?
-            updates = self.llm.call_llm_fallback( 
+            updates = self.llm._call_llm_fallback( 
                 pdf_bytes=pdf_bytes,
                 missing_fields=missing_fields,
                 report_url=str(report_url) if report_url else "N/A", 
-                verbose=self.verbose
+                verbose=self.verbose,
+                tqdm_extra_kwargs={"disable": True}
             )
             return idx, updates if updates else {} # Ensure a dict is returned
 
@@ -1037,7 +1174,7 @@ class PFDScraper:
                     executor.submit(process_row, idx, row_series): idx 
                     for idx, row_series in current_reports_df.iterrows()
                 }
-                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="LLM fallback (parallel processing)"):
+                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="LLM fallback (parallel processing)", position=0, leave=True):
                     idx = future_to_idx[future]
                     try:
                         _, updates = future.result() # Get (original_idx, updates_dict).
@@ -1045,7 +1182,7 @@ class PFDScraper:
                     except Exception as e:
                         logger.error(f"LLM fallback failed for row index {idx}: {e}")
         else: # Sequential processing...
-            for idx, row_series in tqdm(current_reports_df.iterrows(), total=len(current_reports_df), desc="LLM fallback (sequential processing)"):
+            for idx, row_series in tqdm(current_reports_df.iterrows(), total=len(current_reports_df), desc="LLM fallback (sequential processing)", position=0, leave=True):
                 try:
                     _, updates = process_row(idx, row_series) 
                     results_map[idx] = updates

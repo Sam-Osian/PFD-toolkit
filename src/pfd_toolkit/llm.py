@@ -2,12 +2,13 @@ import openai
 from openai import RateLimitError
 import logging
 import base64
-from typing import List, Optional, Dict, Type
+from typing import List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model
 import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import backoff
 from threading import Semaphore
+from tqdm.auto import tqdm
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -26,6 +27,49 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class LLM:
+    """Wrapper around the OpenAI Python SDK for batch prompting and PDF
+    vision fallback.
+
+    The helper provides:
+
+    * A generic :py:meth:`self.generate_batch()` that optionally supports vision
+      inputs and pydantic validation.
+    * A PDF-to-image utility used by
+      :py:meth:`self._call_llm_fallback()` - the method the scraper invokes when
+      HTML and PDF heuristics fail.
+    * Built-in back-off and host-wide throttling via a semaphore.
+
+    Parameters
+    ----------
+    api_key : str, optional
+        OpenAI (or proxy) API key.
+    model : str, optional
+        Chat model name; defaults to ``"gpt-4.1-mini"``.
+    base_url : str or None, optional
+        Override the OpenAI endpoint (for Azure/OpenRouter etc.).
+    max_workers : int, optional
+        Maximum parallel workers for batch calls and for the global
+        semaphore.
+
+    Attributes
+    ----------
+    CLEANER_BASE_PROMPT : str
+        The shared template used by *Cleaner* to build field-specific
+        prompts.
+    CLEANER_PROMPT_CONFIG : dict
+        Field-level substitution values for the cleaner prompt.
+    _sem : threading.Semaphore
+        Global semaphore that limits concurrent requests to *max_workers*.
+    client : openai.Client
+        Low-level SDK client configured with key and base URL.
+
+    Examples
+    --------
+    >>> llm = LLM(api_key="sk-...", model="gpt-4o-mini", max_workers=4)
+    >>> out = llm.generate_batch(["Hello world"])
+    >>> out[0]
+    'Hello! How can I assist you today?'
+    """  
     
     # Base prompt template that all prompts will share, with placeholders for field-specific information.
     CLEANER_BASE_PROMPT = """\
@@ -93,7 +137,7 @@ class LLM:
         },
         'MattersOfConcern': {
             'field_description': 'the matters of concern',
-            'field_contents_and_rules': 'only the matters of concern—nothing else',
+            'field_contents_and_rules': 'only the matters of concern, nothing else',
             'extra_instructions': (
                 'Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with "...The Matters of Concern are as follows:" (which should also be removed). '
                 'If the string appears to need no cleaning, return it as is. '
@@ -104,19 +148,11 @@ class LLM:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: Optional[str] = None,
         model: str = "gpt-4.1-mini",
         base_url: Optional[str] = None,
         max_workers: int = 1 
     ):
-        """Create an LLM object for use within pfd_toolkit
-
-        Args:
-            api_key (str): api key for whatever openai sdk llm service you are using.
-            model (str): Model name. Defaults to gpt-4.1-mini.
-            base_url (str): Redirect OpenAI SDK to a different API service.
-            max_workers (int): Maximum number of parallel workers for API calls. Defaults to 1.
-        """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url or openai.base_url
@@ -190,12 +226,57 @@ class LLM:
         images_list: Optional[List[List[bytes]]] = None,
         response_format: Optional[Type[BaseModel]] = None,
         temperature: float = 0.0,
-        max_workers: Optional[int] = None
+        max_workers: Optional[int] = None,
+        tqdm_extra_kwargs: Optional[Dict[str, Any]] = None
     ) -> List[BaseModel | str]:
+        """Run many prompts either sequentially or in parallel.
+
+        Parameters
+        ----------
+        prompts : list[str]
+            List of user prompts—one prompt per model call.
+
+        images_list : list[list[bytes]] or None, optional
+            For vision models: a parallel list where each inner list
+            holds **base64-encoded** JPEG pages for that prompt.  Use
+            *None* to send no images.
+
+        response_format : type[pydantic.BaseModel] or None, optional
+            If provided, each response is parsed into that model via the
+            *beta/parse* endpoint; otherwise a raw string is returned.
+
+        temperature : float, optional
+            Sampling temperature.  Defaults to *0.0* (deterministic).
+
+        max_workers : int or None, optional
+            Thread count just for this batch.  When *None*, fall back to
+            the instance-wide :pyattr:`max_workers`.
+
+        Returns
+        -------
+        list[Union[pydantic.BaseModel, str]]
+            Results in **the same order** as *prompts*.
+
+        Raises
+        ------
+        openai.RateLimitError
+            Raised only if the exponential back-off exhausts all retries.
+
+        Examples
+        --------
+        >>> msgs = ["Summarise:\\n" + txt for txt in docs]
+        >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
         """
-        Manages parallel (or sequential) generation of a list of prompts, returning
-        either raw strings or validated BaseModel instances in the same order.
-        """
+        effective_tqdm_kwargs = tqdm_extra_kwargs or {}
+       
+        if tqdm_extra_kwargs is None:
+            tqdm_extra_kwargs = {}
+        if len(prompts) == 1 and "disable" not in tqdm_extra_kwargs:
+            tqdm_extra_kwargs["disable"] = True
+        
+        if len(prompts) == 1:
+            effective_tqdm_kwargs["disable"] = True
+        
         def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
             if imgs:
@@ -215,7 +296,8 @@ class LLM:
         # Sequential execution if only one worker is designated
         if effective_workers <= 1:
             results: List[BaseModel | str] = []
-            for idx, prompt in enumerate(prompts):
+            current_desc = effective_tqdm_kwargs.pop('desc', "Sending requests to the LLM (sequentially)")
+            for idx, prompt in tqdm(enumerate(prompts), total=len(prompts), desc=current_desc, **effective_tqdm_kwargs):
                 current_images = images_list[idx] if images_list and idx < len(images_list) else None
                 messages = _build_messages(prompt, current_images)
 
@@ -267,19 +349,21 @@ class LLM:
 
         with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
-            for fut in as_completed(futures):
+            current_desc = effective_tqdm_kwargs.pop('desc', "Sending requests to the LLM (in parallel)") 
+            for fut in tqdm(as_completed(futures), total=len(prompts), desc=current_desc, **effective_tqdm_kwargs):
                 i, out = fut.result()
                 results[i] = out
 
         return results
 
     # -- LLM method for scraper.py module --
-    def call_llm_fallback(
+    def _call_llm_fallback(
         self,
         pdf_bytes: Optional[bytes],
         missing_fields: Dict[str, str],
         report_url: Optional[str] = None,
         verbose: bool = False,
+        tqdm_extra_kwargs: Optional[Dict[str, Any]] = None
     ) -> Dict[str, str]:
         """
         Use the LLM to extract text from PDF images for missing fields.
@@ -333,7 +417,8 @@ class LLM:
                 prompts=[prompt],
                 images_list=images_for_batch, # type: ignore 
                 response_format=MissingModel,
-                temperature=0.0
+                temperature=0.0,
+                tqdm_extra_kwargs=tqdm_extra_kwargs
             )
             output = result_list[0]
         except Exception as e:
