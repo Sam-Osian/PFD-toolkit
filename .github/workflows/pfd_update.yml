@@ -109,12 +109,17 @@ jobs:
             echo "Python script output (from previous step) should indicate reason." >> $GITHUB_STEP_SUMMARY
           fi
 
+      - name: Update report count in docs
+        run: uv run python scripts/update_report_count.py
+  
       - name: Commit & Push Changes
         # (Only run if the script indicated changes by creating the summary file)
         if: github.ref == 'refs/heads/main'
         uses: EndBug/add-and-commit@v9
         with:
-          add: src/pfd_toolkit/data/all_reports.csv
+          add: |
+            src/pfd_toolkit/data/all_reports.csv
+            docs/index.md
           default_author: github_actions
           message: "🤖 Auto PFD dataset top-up"
           pull: '--rebase --autostash' # ...pull from origin before pushing
