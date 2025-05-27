@@ -48,7 +48,7 @@ class Screener:
         Defaults to 'matches_query'.
     include_date : bool, optional
         Flag to determine if the 'Date' column is included. Defaults to False.
-    include_coroner_name : bool, optional
+    include_coroner : bool, optional
         Flag to determine if the 'CoronerName' column is included. Defaults to False.
     include_area : bool, optional
         Flag to determine if the 'Area' column is included. Defaults to False.
@@ -92,7 +92,7 @@ class Screener:
         verbose: bool = False,
         result_col_name: str = 'matches_query',
         include_date: bool = False,
-        include_coroner_name: bool = False,
+        include_coroner: bool = False,
         include_area: bool = False,
         include_receiver: bool = False,
         include_investigation: bool = True,
@@ -107,7 +107,7 @@ class Screener:
 
         # Store column inclusion toggles
         self.include_date = include_date
-        self.include_coroner_name = include_coroner_name
+        self.include_coroner = include_coroner
         self.include_area = include_area
         self.include_receiver = include_receiver
         self.include_investigation = include_investigation
@@ -264,7 +264,7 @@ Here is the PFD report excerpt:
             # ...also prefix the colname in to make the sections clearer for the LLM
             if self.include_date and self.COL_DATE in row and pd.notna(row[self.COL_DATE]):
                 report_parts.append(f"{self.COL_DATE}: {str(row[self.COL_DATE])}")
-            if self.include_coroner_name and self.COL_CORONER_NAME in row and pd.notna(row[self.COL_CORONER_NAME]):
+            if self.include_coroner and self.COL_CORONER_NAME in row and pd.notna(row[self.COL_CORONER_NAME]):
                 report_parts.append(f"{self.COL_CORONER_NAME}: {str(row[self.COL_CORONER_NAME])}")
             if self.include_area and self.COL_AREA in row and pd.notna(row[self.COL_AREA]):
                 report_parts.append(f"{self.COL_AREA}: {str(row[self.COL_AREA])}")
