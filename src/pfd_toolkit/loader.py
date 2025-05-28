@@ -70,8 +70,7 @@ def load_reports(
 
     except FileNotFoundError as exc:
         raise FileNotFoundError(
-            f"Bundled dataset {_DATA_FILE!r} not found in package "
-            f"{_DATA_PACKAGE!r}"
+            f"Bundled dataset {_DATA_FILE!r} not found in package " f"{_DATA_PACKAGE!r}"
         ) from exc
 
     # ------------------------------------------------------------- cleaning
@@ -87,6 +86,6 @@ def load_reports(
     )
 
     # Category filtering placeholder
-    #_ = category.lower()
+    # _ = category.lower()
 
     return reports
