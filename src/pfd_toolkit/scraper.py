@@ -16,7 +16,7 @@ from tqdm.auto import tqdm
 import requests
 from itertools import count
 
-from .config import GeneralConfig, ScraperConfig
+from .config import GeneralConfig, ScraperConfig, HtmlFieldConfig, PdfSectionConfig
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -737,6 +737,7 @@ class PFDScraper:
         ext = os.path.splitext(path)[1].lower()
         if self.verbose:
             logger.debug(f"Processing .pdf {pdf_url}.")
+            
         try:
             response = self.cfg.session.get(pdf_url, timeout=self.timeout)
             response.raise_for_status()
@@ -745,6 +746,7 @@ class PFDScraper:
             logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
             return self.NOT_FOUND_TEXT
         pdf_bytes_to_process: bytes | None = None
+        
         if ext != ".pdf":
             logger.info("File %s is not a .pdf (extension %s). Skipping this file...", pdf_url, ext)
             return self.NOT_FOUND_TEXT
@@ -753,6 +755,7 @@ class PFDScraper:
         if pdf_bytes_to_process is None:
             return "N/A: Source file not PDF"
         self._last_pdf_bytes = pdf_bytes_to_process
+        
         try:
             pdf_buffer = BytesIO(pdf_bytes_to_process)
             pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
@@ -854,80 +857,64 @@ class PFDScraper:
 
     def _extract_fields_from_html(self, soup: BeautifulSoup, fields: dict[str, str]) -> None:
         """
-        Extract configured fields from the HTML content and update the fields dict in-place.
-        Driven by the _FIELD_HTML_CONFIG table.
+        Extract configured fields from HTML, driven by a list of HtmlFieldConfig
+        defined in self.cfg.html_fields.
         """
-        if self.verbose:
-            logger.debug("Extracting data from HTML for URL.")
-        for key, para_keys, sec_keys, rem_strs, min_len, max_len, is_date in ScraperConfig._FIELD_HTML_CONFIG:
-            # Skip fields not enabled by the include_* flag
-            if not getattr(self, f"include_{key}"):
+        for cfg in self.cfg.html_fields:  # HtmlFieldConfig instances
+            if not getattr(self, f"include_{cfg.key}"):
                 continue
 
-            # Choose extraction method: section (strong headers) or paragraph
-            if sec_keys:
-                raw = self._extract_html_section_text(soup, sec_keys)
+            # Pick paragraph vs section extraction
+            if cfg.sec_keys:
+                raw = self._extract_html_section_text(soup, cfg.sec_keys)
             else:
-                raw = self._extract_html_paragraph_text(soup, para_keys)
+                raw = self._extract_html_paragraph_text(soup, cfg.para_keys or [])
 
-            # Special-case 'id' to regex-match the Ref: pattern
-            # (Sometimes report id's are prefixed by the string "Ref: ")
-            if key == "id" and raw != self.NOT_FOUND_TEXT:
-                match = self._id_pattern.search(raw)
-                fields[key] = match.group(1) if match else self.NOT_FOUND_TEXT
+            # If it's the report ID, we do a special regex match
+            if cfg.key == "id" and raw != self.NOT_FOUND_TEXT:
+                m = self._id_pattern.search(raw)
+                fields["id"] = m.group(1) if m else self.NOT_FOUND_TEXT
             else:
-                # Apply cleaning, optional date normalisation, and length checks
-                fields[key] = self._process_extracted_field(
+                fields[cfg.key] = self._process_extracted_field(
                     raw,
-                    rem_strs or [],
-                    min_len=min_len,
-                    max_len=max_len,
-                    is_date=is_date
+                    cfg.rem_strs,
+                    min_len=cfg.min_len,
+                    max_len=cfg.max_len,
+                    is_date=cfg.is_date,
                 )
 
     def _apply_pdf_fallback(self, pdf_text: str, fields: dict[str, str]) -> None:
-        """Use PDF text to fill any missing fields in the fields dict (in-place)."""
-        # Skip if no PDF content available
-        if pdf_text == self.NOT_FOUND_TEXT or pdf_text == "N/A: Source file not PDF":
-            return
-        # Determine if any field that PDF can supply is missing
-        fields_to_fill = ["coroner", "area", "receiver", "investigation", "circumstances", "concerns"]
-        if not any(fields.get(key) == self.NOT_FOUND_TEXT for key in fields_to_fill):
-            return
-        if self.verbose:
-            logger.debug("Initiating .pdf fallback because one or more fields are missing.")
-        if "coroner" in fields and fields["coroner"] == self.NOT_FOUND_TEXT:
-            raw = self._extract_pdf_section(pdf_text, start_keywords=["I am", "CORONER"], end_keywords=["CORONER'S LEGAL POWERS", "paragraph 7"])
-            if raw != self.NOT_FOUND_TEXT:
-                coroner_clean = raw.replace("I am", "").replace("CORONER'S LEGAL POWERS", "").replace("CORONER", "").replace("paragraph 7", "").strip()
-                coroner_clean = self._clean_text(coroner_clean)
-                fields["coroner"] = coroner_clean if coroner_clean else self.NOT_FOUND_TEXT
-        if "area" in fields and fields["area"] == self.NOT_FOUND_TEXT:
-            raw = self._extract_pdf_section(pdf_text, start_keywords=["area of"], end_keywords=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"])
-            if raw != self.NOT_FOUND_TEXT:
-                area_clean = raw.replace("area of", "").replace("CORONER'S", "").replace("CORONER", "").replace("CORONERS", "").replace("paragraph 7", "").strip()
-                area_clean = self._clean_text(area_clean)
-                fields["area"] = area_clean if area_clean else self.NOT_FOUND_TEXT
-        if "receiver" in fields and fields["receiver"] == self.NOT_FOUND_TEXT:
-            raw = self._extract_pdf_section(pdf_text, start_keywords=[" SENT ", "SENT TO:"], end_keywords=["CORONER", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"])
-            if raw != self.NOT_FOUND_TEXT:
-                temp_receiver = self._clean_text(raw).replace("TO:", "").strip()
-                fields["receiver"] = temp_receiver if len(temp_receiver) >= 5 else self.NOT_FOUND_TEXT
-        if "investigation" in fields and fields["investigation"] == self.NOT_FOUND_TEXT:
-            raw = self._extract_pdf_section(pdf_text, start_keywords=["INVESTIGATION and INQUEST", "3 INQUEST"], end_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"])
-            if raw != self.NOT_FOUND_TEXT:
-                temp_invest = self._clean_text(raw)
-                fields["investigation"] = temp_invest if len(temp_invest) >= 30 else self.NOT_FOUND_TEXT
-        if "circumstances" in fields and fields["circumstances"] == self.NOT_FOUND_TEXT:
-            raw = self._extract_pdf_section(pdf_text, start_keywords=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF"], end_keywords=["CORONER'S CONCERNS", "CORONER CONCERNS", "CORONERS CONCERNS", "as follows"])
-            if raw != self.NOT_FOUND_TEXT:
-                temp_circ = self._clean_text(raw)
-                fields["circumstances"] = temp_circ if len(temp_circ) >= 30 else self.NOT_FOUND_TEXT
-        if "concerns" in fields and fields["concerns"] == self.NOT_FOUND_TEXT:
-            raw = self._extract_pdf_section(pdf_text, start_keywords=["CORONER'S CONCERNS", "as follows"], end_keywords=["ACTION SHOULD BE TAKEN"])
-            if raw != self.NOT_FOUND_TEXT:
-                temp_concerns = self._clean_text(raw)
-                fields["concerns"] = temp_concerns if len(temp_concerns) >= 30 else self.NOT_FOUND_TEXT
+        """
+        Fill missing fields from PDF text based on PdfSectionConfig
+        instances found in self.cfg.pdf_sections.
+        """
+        missing = {k for k, v in fields.items() if v == self.NOT_FOUND_TEXT}
+
+        for cfg in self.cfg.pdf_sections:  # PdfSectionConfig instances
+            if cfg.key not in missing or not getattr(self, f"include_{cfg.key}"):
+                continue
+
+            raw = self._extract_pdf_section(
+                pdf_text,
+                start_keywords=cfg.start_keys,
+                end_keywords=cfg.end_keys,
+            )
+            if raw == self.NOT_FOUND_TEXT:
+                continue
+
+            # strip out remove-strs, normalise whitespace/apostrophes
+            cleaned = self._clean_text(raw)
+            for rem in cfg.rem_strs:
+                cleaned = cleaned.replace(rem, "")
+            cleaned = cleaned.strip()
+
+            # enforce length constraints
+            if (cfg.min_len is not None and len(cleaned) < cfg.min_len) or \
+               (cfg.max_len is not None and len(cleaned) > cfg.max_len):
+                continue
+
+            fields[cfg.key] = cleaned or self.NOT_FOUND_TEXT
+
 
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
         """Assemble a single report's data into a dictionary based on included fields."""
@@ -956,7 +943,7 @@ class PFDScraper:
 
     def _extract_report_info(self, url: str) -> dict[str, Any] | None:
         """
-        Extracts metadata and section text from a single PFD report page (given by URL).
+        Extracts text from a single PFD report page (given by URL).
 
         The process involves:
           1. Fetching and parsing the HTML of the report page.
