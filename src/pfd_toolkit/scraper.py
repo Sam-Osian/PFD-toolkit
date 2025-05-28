@@ -207,6 +207,7 @@ class PFDScraper:
         self.reports: pd.DataFrame | None = None
         self.report_links: list[str] = []
         self._last_pdf_bytes: bytes | None = None
+        self._pdf_cache: Dict[str, bytes] = {}
         
         # Store LLM model name if LLM client is provided
         self.llm_model = self.llm.model if self.llm else "None"
@@ -722,19 +723,25 @@ class PFDScraper:
         :param report_url: The URL of the HTML page containing the link to the PDF report.
         :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
         """
+        # First, check if we already downloaded this PDF...
         try:
-            page_response = self.cfg.session.get(report_url, timeout=self.timeout)
-            page_response.raise_for_status()
-            soup = BeautifulSoup(page_response.content, 'html.parser')
-            pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
-            if pdf_links:
-                pdf_link = pdf_links[0]
-                pdf_response = self.cfg.session.get(pdf_link, timeout=self.timeout)
-                pdf_response.raise_for_status()
-                return pdf_response.content
-            else:
-                logger.error("No PDF link found for report at %s", report_url)
-                return None
+            soup = BeautifulSoup(self.cfg.session.get(report_url, timeout=self.timeout).content,
+                                 'html.parser')
+            pdf_link = next((a['href'] for a in soup.find_all('a', class_='govuk-button')
+                             if a.get('href')), None)
+        except Exception:
+            return None
+
+        if pdf_link in self._pdf_cache:
+            return self._pdf_cache[pdf_link]
+
+        # ...Otherwise fetch, cache, and return:
+        try:
+            pdf_response = self.cfg.session.get(pdf_link, timeout=self.timeout)
+            pdf_response.raise_for_status()
+            content = pdf_response.content
+            self._pdf_cache[pdf_link] = content
+            return content
         except Exception as e:
             logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
             return None
@@ -768,6 +775,8 @@ class PFDScraper:
             return self.NOT_FOUND_TEXT
         else:
             pdf_bytes_to_process = file_bytes
+            self._pdf_cache[pdf_url] = pdf_bytes_to_process
+            
         if pdf_bytes_to_process is None:
             return "N/A: Source file not PDF"
         self._last_pdf_bytes = pdf_bytes_to_process
@@ -850,19 +859,18 @@ class PFDScraper:
     # Utilities: text-cleaning & assembly
     # ──────────────────────────────────────────────────────────────────────────
 
-
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
         """Handles the mechanics of scraping PFD reports for all given URLs using multithreading, 
         returning a list of result dicts."""
-        results: list[dict[str, Any] | None] = []
-        
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(self._extract_report_info, url) for url in urls]
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports", position=0, leave=False):
-                results.append(future.result())
-        report_dicts = [r for r in results if r is not None]
-        
-        return report_dicts
+            raw_results = list(tqdm(
+                executor.map(self._extract_report_info, urls),
+                total=len(urls),
+                desc="Scraping reports",
+                position=0, leave=False
+            ))
+        # filter out any None failures
+        return [r for r in raw_results if r is not None]
 
     @staticmethod
     def _normalise_apostrophes(text: str) -> str:
