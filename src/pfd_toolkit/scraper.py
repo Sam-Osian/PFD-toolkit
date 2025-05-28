@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from typing import Dict, List, Tuple, Any
 import logging
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 import pymupdf
 import pandas as pd
@@ -14,11 +11,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, unquote
 from io import BytesIO
 import os
-import time
-import random
-import threading
 from datetime import datetime
 from tqdm.auto import tqdm 
+import requests
+
+from .config import GeneralConfig, ScraperConfig
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -95,86 +92,31 @@ class PFDScraper:
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
-    NOT_FOUND_TEXT = "N/A: Not found"  # Standard text for missing data fields
+    NOT_FOUND_TEXT = GeneralConfig.NOT_FOUND_TEXT 
 
     # DataFrame column names
-    COL_URL = "URL"
-    COL_ID = "ID"
-    COL_DATE = "Date"
-    COL_CORONER_NAME = "CoronerName"
-    COL_AREA = "Area"
-    COL_RECEIVER = "Receiver"
-    COL_INVESTIGATION = "InvestigationAndInquest"
-    COL_CIRCUMSTANCES = "CircumstancesOfDeath"
-    COL_CONCERNS = "MattersOfConcern"
-    COL_DATE_SCRAPED = "DateScraped"
+    COL_URL = GeneralConfig.COL_URL
+    COL_ID = GeneralConfig.COL_ID
+    COL_DATE = GeneralConfig.COL_DATE
+    COL_CORONER_NAME = GeneralConfig.COL_CORONER_NAME
+    COL_AREA = GeneralConfig.COL_AREA
+    COL_RECEIVER = GeneralConfig.COL_RECEIVER
+    COL_INVESTIGATION = GeneralConfig.COL_INVESTIGATION
+    COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
+    COL_CONCERNS = GeneralConfig.COL_CONCERNS
+    COL_DATE_SCRAPED = GeneralConfig.COL_DATE_SCRAPED
 
     # Keys used for LLM interaction when requesting missing fields
-    LLM_KEY_DATE = "date of report"
-    LLM_KEY_CORONER = "coroner's name"
-    LLM_KEY_AREA = "area"
-    LLM_KEY_RECEIVER = "receiver"
-    LLM_KEY_INVESTIGATION = "investigation and inquest"
-    LLM_KEY_CIRCUMSTANCES = "circumstances of death"
-    LLM_KEY_CONCERNS = "coroner's concerns"
+    LLM_KEY_DATE = ScraperConfig.LLM_KEY_DATE
+    LLM_KEY_CORONER = ScraperConfig.LLM_KEY_CORONER
+    LLM_KEY_AREA = ScraperConfig.LLM_KEY_AREA
+    LLM_KEY_RECEIVER = ScraperConfig.LLM_KEY_RECEIVER
+    LLM_KEY_INVESTIGATION = ScraperConfig.LLM_KEY_INVESTIGATION
+    LLM_KEY_CIRCUMSTANCES = ScraperConfig.LLM_KEY_CIRCUMSTANCES
+    LLM_KEY_CONCERNS = ScraperConfig.LLM_KEY_CONCERNS
 
     # URL templates for different PFD categories on the judiciary.uk website
-    CATEGORY_TEMPLATES = {
-        "all": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type&post_type=pfd&order=relevance"
-               "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-               "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "suicide": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=suicide-from-2015&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths&post_type=pfd&order=relevance"
-                                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths&post_type=pfd&order=relevance"
-                                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths&post_type=pfd&order=relevance"
-                     "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                     "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015&post_type=pfd&order=relevance"
-                       "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                       "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths&post_type=pfd&order=relevance"
-                                      "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                                      "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards&post_type=pfd&order=relevance"
-                              "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                              "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths&post_type=pfd&order=relevance"
-                            "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                            "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths&post_type=pfd&order=relevance"
-                         "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                         "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths&post_type=pfd&order=relevance"
-                  "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                  "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths&post_type=pfd&order=relevance"
-                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths&post_type=pfd&order=relevance"
-                              "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                              "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards&post_type=pfd&order=relevance"
-                 "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                 "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-        "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths&post_type=pfd&order=relevance"
-                 "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                 "&before-day={before_day}&before-month={before_month}&before-year={before_year}"
-    }
+    CATEGORY_TEMPLATES = ScraperConfig.CATEGORY_TEMPLATES
 
     def __init__(
         self,
@@ -203,8 +145,17 @@ class PFDScraper:
         include_circumstances: bool = True,
         include_concerns: bool = True,
         include_time_stamp: bool = False,
-        verbose: bool = False
+        verbose: bool = False,
+
     ) -> None:
+
+        # Centralised network configuration (replaces the ad-hoc wiring)
+        self.cfg = ScraperConfig(
+            max_workers=max_workers,
+            max_requests=max_requests,
+            delay_range=delay_range,
+            timeout=timeout,
+        )
         
         self.category = category.lower()
         
@@ -226,10 +177,10 @@ class PFDScraper:
         self.start_page = 1
         
         # Store threading and request parameters
-        self.max_workers = max_workers
-        self.max_requests = max_requests
-        self.delay_range = delay_range
-        self.timeout = timeout
+        self.max_workers = self.cfg.max_workers
+        self.max_requests = self.cfg.max_requests
+        self.delay_range = self.cfg.delay_range
+        self.timeout = self.cfg.timeout
         
         # Store scraping strategy flags
         self.html_scraping = html_scraping
@@ -251,9 +202,6 @@ class PFDScraper:
         
         self.verbose = verbose
         
-        # Semaphore to limit concurrent requests per domain
-        self.domain_semaphore = threading.Semaphore(self.max_requests)
-        
         # Initialise storage for results and links
         self.reports: pd.DataFrame | None = None
         self.report_links: list[str] = []
@@ -273,9 +221,6 @@ class PFDScraper:
         # Validate param
         self._validate_init_params()
         self._warn_if_suboptimal_config()
-        
-        # Set up requests Session with retry logic
-        self._configure_session()
         
         # Pre-compile regex for extracting report IDs (e.g. "2025-0296")
         self._id_pattern = re.compile(r'(\d{4}-\d{4})')
@@ -369,14 +314,6 @@ class PFDScraper:
         if self.delay_range[1] > 5:
             logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).\n")
 
-    def _configure_session(self) -> None:
-        """Initialise the requests Session with retry logic for robust HTTP requests."""
-        self.session = requests.Session()
-        retries = Retry(total=30, connect=10, backoff_factor=1, status_forcelist=[429, 502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retries, pool_connections=100, pool_maxsize=100)
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-
     # -----------------------------------------------------------------------------
     # Link fetching logic: Methods for discovering report URLs from search pages
     # -----------------------------------------------------------------------------
@@ -390,10 +327,10 @@ class PFDScraper:
         :return: A list of href strings, each being a URL to a PFD report page.
                  Returns an empty list if the page fetch fails or no links are found.
         """
-        with self.domain_semaphore:
-            time.sleep(random.uniform(*self.delay_range))
+        with self.cfg.domain_semaphore:
+            self.cfg.apply_random_delay()
             try:
-                response = self.session.get(url, timeout=self.timeout)
+                response = self.cfg.session.get(url, timeout=self.timeout)
                 response.raise_for_status()
                 if self.verbose:
                     logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
@@ -816,7 +753,7 @@ class PFDScraper:
         if self.verbose:
             logger.debug(f"Processing .pdf {pdf_url}.")
         try:
-            response = self.session.get(pdf_url, timeout=self.timeout)
+            response = self.cfg.session.get(pdf_url, timeout=self.timeout)
             response.raise_for_status()
             file_bytes = response.content
         except requests.RequestException as e:
@@ -918,7 +855,7 @@ class PFDScraper:
     def _fetch_report_page(self, url: str) -> BeautifulSoup | None:
         """Fetch the HTML content of a report page and return a BeautifulSoup object, or None on failure."""
         try:
-            response = self.session.get(url, timeout=self.timeout)
+            response = self.cfg.session.get(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
             logger.error("Failed to fetch %s; Error: %s", url, e)
@@ -1103,13 +1040,13 @@ class PFDScraper:
         :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
         """
         try:
-            page_response = self.session.get(report_url, timeout=self.timeout)
+            page_response = self.cfg.session.get(report_url, timeout=self.timeout)
             page_response.raise_for_status()
             soup = BeautifulSoup(page_response.content, 'html.parser')
             pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
             if pdf_links:
                 pdf_link = pdf_links[0]
-                pdf_response = self.session.get(pdf_link, timeout=self.timeout)
+                pdf_response = self.cfg.session.get(pdf_link, timeout=self.timeout)
                 pdf_response.raise_for_status()
                 return pdf_response.content
             else:
