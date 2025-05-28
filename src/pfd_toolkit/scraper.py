@@ -14,6 +14,7 @@ import os
 from datetime import datetime
 from tqdm.auto import tqdm 
 import requests
+from itertools import count
 
 from .config import GeneralConfig, ScraperConfig
 
@@ -157,7 +158,7 @@ class PFDScraper:
             timeout=timeout,
         )
         
-        self.category = category.lower()
+        self.category = category
         
         # Parse date strings into datetime objects
         self.start_date = date_parser.parse(start_date)
@@ -211,8 +212,7 @@ class PFDScraper:
         self.llm_model = self.llm.model if self.llm else "None"
         
         # Configure url template
-        self.page_template: str = ""
-        self._configure_url_template()
+        self.page_template = self.cfg.url_template(self.category)
         
         # Normalise delay_range if set to 0 or None
         if self.delay_range is None or self.delay_range == 0:
@@ -222,8 +222,8 @@ class PFDScraper:
         self._validate_init_params()
         self._warn_if_suboptimal_config()
         
-        # Pre-compile regex for extracting report IDs (e.g. "2025-0296")
-        self._id_pattern = re.compile(r'(\d{4}-\d{4})')
+        # Pre-compile regex for extracting report IDs
+        self._id_pattern = GeneralConfig.ID_PATTERN
         
         # Configuration for dynamically building the list of required columns in top_up()
         self._COLUMN_CONFIG: List[Tuple[bool, str]] = [
@@ -264,13 +264,6 @@ class PFDScraper:
     # -----------------------------------------------------------------------------
     # Initialisation and configuration helper methods
     # -----------------------------------------------------------------------------
-    def _configure_url_template(self) -> None:
-        """Configure the search page URL template based on the selected category."""
-        if self.category in self.CATEGORY_TEMPLATES:
-            self.page_template = self.CATEGORY_TEMPLATES[self.category]
-        else:
-            valid_options = ", ".join(sorted(self.CATEGORY_TEMPLATES.keys()))
-            raise ValueError(f"Unknown category '{self.category}'. Valid options are: {valid_options}")
 
     def _validate_init_params(self) -> None:
         """Validate initialisation parameters and raise errors for invalid configs."""
@@ -358,23 +351,15 @@ class PFDScraper:
             the given category/date window.
         """
         self.report_links = []
-        page = self.start_page
-        pbar = tqdm(desc="Fetching pages", unit=" page", leave=False, initial=page, position=0)
-        
-        while True:
+        pbar = tqdm(desc="Fetching pages", unit="page", leave=False)
+        for page in count(self.start_page):
             page_url = self.page_template.format(page=page, **self.date_params)
-            href_values = self._get_report_href_values(page_url)
-            # Break the loop when no new URLs are found 
-            if not href_values:
+            hrefs = self._get_report_href_values(page_url)
+            if not hrefs:
                 break
-            self.report_links.extend(href_values)
-            page += 1
+            self.report_links.extend(hrefs)
             pbar.update(1)
-            if self.verbose:
-                logger.info("Scraped %d links from %s", len(href_values), page_url)
         pbar.close()
-        if not self.report_links:
-            return None
         
         logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
@@ -704,7 +689,7 @@ class PFDScraper:
         """
         Helper function to process a raw extracted text field. It performs several steps:
         1. Returns `NOT_FOUND_TEXT` if the input is already `NOT_FOUND_TEXT`.
-        2. Removes specified leading substrings (e.g., "Date of report:").
+        2. Removes specified leading substrings (e.g. "Date of report:").
         3. Strips leading/trailing whitespace.
         4. Applies general text cleaning (apostrophes, multiple spaces via `_clean_text`).
         5. If `is_date` is True, normalises the text to "YYYY-MM-DD" format.
@@ -868,47 +853,37 @@ class PFDScraper:
         return pdf_links[0] if pdf_links else None
 
     def _extract_fields_from_html(self, soup: BeautifulSoup, fields: dict[str, str]) -> None:
-        """Extract configured fields from the HTML content and update the fields dict in-place."""
+        """
+        Extract configured fields from the HTML content and update the fields dict in-place.
+        Driven by the _FIELD_HTML_CONFIG table.
+        """
         if self.verbose:
-            logger.debug(f"Extracting data from HTML for URL.")
-        if self.include_id:
-            ref_text = self._extract_html_paragraph_text(soup, ["Ref:"])
-            if ref_text != self.NOT_FOUND_TEXT:
-                match = self._id_pattern.search(ref_text)
-                fields["id"] = match.group(1) if match else self.NOT_FOUND_TEXT
-        if self.include_date:
-            date_raw = self._extract_html_paragraph_text(soup, ["Date of report:"])
-            fields["date"] = self._process_extracted_field(date_raw, ["Date of report:"], is_date=True)
-        if self.include_receiver:
-            receiver_raw = self._extract_html_paragraph_text(soup, ["This report is being sent to:", "Sent to:"])
-            fields["receiver"] = self._process_extracted_field(receiver_raw,
-                                                               ["This report is being sent to:", "Sent to:", "TO:"],
-                                                               min_len=5, max_len=20)
-        if self.include_coroner:
-            coroner_raw = self._extract_html_paragraph_text(soup, ["Coroners name:", "Coroner name:", "Coroner's name:"])
-            fields["coroner"] = self._process_extracted_field(coroner_raw,
-                                                              ["Coroners name:", "Coroner name:", "Coroner's name:"],
-                                                              min_len=5, max_len=20)
-        if self.include_area:
-            area_raw = self._extract_html_paragraph_text(soup, ["Coroners Area:", "Coroner Area:", "Coroner's Area:"])
-            fields["area"] = self._process_extracted_field(area_raw,
-                                                           ["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
-                                                           min_len=4, max_len=40)
-        if self.include_investigation:
-            investigation_raw = self._extract_html_section_text(soup, ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"])
-            fields["investigation"] = self._process_extracted_field(investigation_raw,
-                                                                    ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"],
-                                                                    min_len=30)
-        if self.include_circumstances:
-            circumstances_raw = self._extract_html_section_text(soup, ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"])
-            fields["circumstances"] = self._process_extracted_field(circumstances_raw,
-                                                                     ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"],
-                                                                     min_len=30)
-        if self.include_concerns:
-            concerns_raw = self._extract_html_section_text(soup, ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"])
-            fields["concerns"] = self._process_extracted_field(concerns_raw,
-                                                               ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"],
-                                                               min_len=30)
+            logger.debug("Extracting data from HTML for URL.")
+        for key, para_keys, sec_keys, rem_strs, min_len, max_len, is_date in ScraperConfig._FIELD_HTML_CONFIG:
+            # Skip fields not enabled by the include_* flag
+            if not getattr(self, f"include_{key}"):
+                continue
+
+            # Choose extraction method: section (strong headers) or paragraph
+            if sec_keys:
+                raw = self._extract_html_section_text(soup, sec_keys)
+            else:
+                raw = self._extract_html_paragraph_text(soup, para_keys)
+
+            # Special-case 'id' to regex-match the Ref: pattern
+            # (Sometimes report id's are prefixed by the string "Ref: ")
+            if key == "id" and raw != self.NOT_FOUND_TEXT:
+                match = self._id_pattern.search(raw)
+                fields[key] = match.group(1) if match else self.NOT_FOUND_TEXT
+            else:
+                # Apply cleaning, optional date normalisation, and length checks
+                fields[key] = self._process_extracted_field(
+                    raw,
+                    rem_strs or [],
+                    min_len=min_len,
+                    max_len=max_len,
+                    is_date=is_date
+                )
 
     def _apply_pdf_fallback(self, pdf_text: str, fields: dict[str, str]) -> None:
         """Use PDF text to fill any missing fields in the fields dict (in-place)."""

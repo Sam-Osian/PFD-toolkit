@@ -19,6 +19,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Tuple
+import re
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -47,6 +48,8 @@ class GeneralConfig:
     COL_CIRCUMSTANCES = "CircumstancesOfDeath"
     COL_CONCERNS = "MattersOfConcern"
     COL_DATE_SCRAPED = "DateScraped"
+    
+    ID_PATTERN = re.compile(r'(\d{4}-\d{4})')
 
 
 # --------------------------------------------------------------------------- #
@@ -146,6 +149,34 @@ class ScraperConfig:
                  "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
                  "&before-day={before_day}&before-month={before_month}&before-year={before_year}"
     }
+    
+    # -----------------------------------------------------------------------------
+    # Configuration table for HTML-based field extraction
+    #
+    # This sets the HTML extraction strategy. Metadata sections work on 'para' html 
+    #      tags, longer sections work on 'section' html tags.
+    #
+    # Columns:
+    #   key       - the dictionary key under which to store this field
+    #   para_keys - list of paragraph keywords to search for (None if using section)
+    #   sec_keys  - list of section-header keywords to search for (None if using paragraph)
+    #   rem_strs  - substrings to strip from the raw text before cleaning
+    #   min_len   - minimum acceptable length of the cleaned text (None = no minimum)
+    #   max_len   - maximum acceptable length of the cleaned text (None = no maximum)
+    #   is_date   - whether to run the cleaned text through the date normaliser
+    # -----------------------------------------------------------------------------
+    _FIELD_HTML_CONFIG = [
+        # key           para_keys                                    sec_keys                                           rem_strs                                                    min_len  max_len  is_date
+        ("id",          ["Ref:"],                                    None,                                              ["Ref:"],                                                   None,     None,    False),
+        ("date",        ["Date of report:"],                         None,                                              ["Date of report:"],                                        None,     None,    True),
+        ("receiver",    ["This report is being sent to:", "Sent to:"], None,                                             ["This report is being sent to:", "Sent to:", "TO:"],       5,        20,      False),
+        ("coroner",     ["Coroners name:", "Coroner name:", "Coroner's name:"], None,                                         ["Coroners name:", "Coroner name:", "Coroner's name:"],    5,        20,      False),
+        ("area",        ["Coroners Area:", "Coroner Area:", "Coroner's Area:"],      None,                                         ["Coroners Area:", "Coroner Area:", "Coroner's Area:"],      4,        40,      False),
+        ("investigation", None,                                        ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"], ["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"], 30, None,    False),
+        ("circumstances", None,                                       ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"], ["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"], 30, None,    False),
+        ("concerns",     None,                                        ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"],         ["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"],       30, None,    False),
+    ]
+
 
     # Keys sent to / returned from the LLM
     LLM_KEY_DATE: str = "date of report"
