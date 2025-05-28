@@ -261,81 +261,9 @@ class PFDScraper:
             self.LLM_KEY_CONCERNS: self.COL_CONCERNS,
         }
 
-    # -----------------------------------------------------------------------------
-    # Initialisation and configuration helper methods
-    # -----------------------------------------------------------------------------
-
-    def _validate_init_params(self) -> None:
-        """Validate initialisation parameters and raise errors for invalid configs."""
-        if self.start_date > self.end_date:
-            raise ValueError("start_date must be before end_date.")
-        if self.llm_fallback and not self.llm:
-            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
-        if self.max_workers <= 0:
-            raise ValueError("max_workers must be a positive integer.")
-        if self.max_requests <= 0:
-            raise ValueError("max_requests must be a positive integer.")
-        if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, (int, float)) for i in self.delay_range):
-            raise ValueError("delay_range must be a tuple of two numbers (int or float) - e.g. (1, 2) or (1.5, 2.5). If you are attempting to disable delays, set to (0,0).")
-        if self.delay_range[1] < self.delay_range[0]:
-            raise ValueError("Upper bound of delay_range must be greater than or equal to lower bound.")
-        if not (self.html_scraping or self.pdf_fallback or self.llm_fallback):
-            raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
-        if not any([self.include_id, self.include_date, self.include_coroner, self.include_area, self.include_receiver, self.include_investigation, self.include_circumstances, self.include_concerns]):
-            raise ValueError("At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.\n")
-
-    def _warn_if_suboptimal_config(self) -> None:
-        """Log warnings for configurations that might lead to suboptimal scraping."""
-        if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.\n")
-        if not self.html_scraping and self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.\n")
-        if not self.html_scraping and not self.pdf_fallback and self.llm_fallback:
-            logger.warning("Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.\n")
-        if self.max_workers > 50:
-            logger.warning("max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.\n")
-        if self.max_workers < 10:
-            logger.warning("max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.\n")
-        if self.max_requests > 10:
-            logger.warning("max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.\n")
-        if self.max_requests < 3:
-            logger.warning("max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.\n")
-        if self.delay_range == (0, 0):
-            logger.warning("delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).\n")
-        elif self.delay_range[0] < 0.5 and self.delay_range[1] != 0:
-            logger.warning("delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).\n")
-        if self.delay_range[1] > 5:
-            logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).\n")
-
-    # -----------------------------------------------------------------------------
-    # Link fetching logic: Methods for discovering report URLs from search pages
-    # -----------------------------------------------------------------------------
-    def _get_report_href_values(self, url: str) -> list[str]:
-        """
-        Parses through a **single page** of PFD search results and extracts individual report URLs via href values.
-        
-        Applies a random delay and uses a semaphore to limit concurrent requests.
-
-        :param url: The URL of the search results page to scrape.
-        :return: A list of href strings, each being a URL to a PFD report page.
-                 Returns an empty list if the page fetch fails or no links are found.
-        """
-        with self.cfg.domain_semaphore:
-            self.cfg.apply_random_delay()
-            try:
-                response = self.cfg.session.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                if self.verbose:
-                    logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
-                    
-            except requests.RequestException as e:
-                if self.verbose:
-                    logger.error("Failed to fetch page: %s; Error: %s", url, e)
-                return []
-            
-        soup = BeautifulSoup(response.text, 'html.parser')
-        links = soup.find_all('a', class_='card__link')
-        return [link.get('href') for link in links if link.get('href')]
+    # ──────────────────────────────────────────────────────────────────────────
+    # Public API
+    # ──────────────────────────────────────────────────────────────────────────
 
     def get_report_links(self) -> list[str] | None:
         """Discover individual report URLs for the current query, across all pages.
@@ -364,9 +292,7 @@ class PFDScraper:
         logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
 
-    # -----------------------------------------------------------------------------------------
-    # PUBLIC METHODS: The user interface for the scraper
-    # -----------------------------------------------------------------------------------------
+
     def scrape_reports(self) -> pd.DataFrame:
         """Execute a full scrape with the Class configuration.
 
@@ -410,116 +336,8 @@ class PFDScraper:
         self.reports = reports_df.copy()
         
         return reports_df
-
-    def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
-        """Handles the mechanics of scraping PFD reports for all given URLs using multithreading, 
-        returning a list of result dicts."""
-        results: list[dict[str, Any] | None] = []
-        
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(self._extract_report_info, url) for url in urls]
-            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports", position=0, leave=False):
-                results.append(future.result())
-        report_dicts = [r for r in results if r is not None]
-        
-        return report_dicts
-
-    def top_up(self, old_reports: pd.DataFrame | None = None, start_date: str | None = None, end_date: str | None = None) -> pd.DataFrame | None:
-        """Checks to see if there are any unscraped PFD reports within Class instance parameters.
-        
-        If so, it reruns the scraper and appends new reports to  
-        :pyattr:`self.reports` under Class instance parameters.
-
-        Any URL (or ID) already present in *old_reports* is skipped.
-        
-        Optionally, you can override the *start_date* and *end_date*
-        parameters from `self`.
-
-        Parameters
-        ----------
-        old_reports : pandas.DataFrame | None
-            Existing DataFrame.  Defaults to :pyattr:`self.reports`.
-        start_date, end_date : str | None
-            Optionally override the scraper’s date window *for this call only*.
-
-        Returns
-        -------
-        pandas.DataFrame | None
-            Updated DataFrame if new reports were added; *None* if no new
-            records were found **and** *old_reports* was *None*.
-
-        Raises
-        ------
-        ValueError
-            If *old_reports* lacks columns required for duplicate checks.
-
-        Examples
-        --------
-        >>> updated = scraper.top_up(df, end_date="2023-01-01")
-        >>> len(updated) - len(df)     # number of new reports
-        3
-        """
-        logger.info("Attempting to 'top up' the existing reports with new data.")
-        
-        # Update date range for this top_up if new dates provided
-        if start_date is not None or end_date is not None:
-            new_start_date = date_parser.parse(start_date) if start_date is not None else self.start_date
-            new_end_date = date_parser.parse(end_date) if end_date is not None else self.end_date
-            if new_start_date > new_end_date:
-                raise ValueError("start_date must be before end_date.")
-            self.start_date = new_start_date
-            self.end_date = new_end_date
-            self.date_params.update({
-                "after_day": self.start_date.day,
-                "after_month": self.start_date.month,
-                "after_year": self.start_date.year,
-                "before_day": self.end_date.day,
-                "before_month": self.end_date.month,
-                "before_year": self.end_date.year,
-            })
-            
-        # If provided, update provided DataFrame. Else, update the internal attribute
-        base_df = old_reports if old_reports is not None else self.reports
-        # Ensure base_df has required columns for duplicate checking
-        if base_df is not None:
-            required_columns = [col_name for include_flag, col_name in self._COLUMN_CONFIG if include_flag]
-            missing_cols = [col for col in required_columns if col not in base_df.columns]
-            if missing_cols:
-                raise ValueError(f"Required columns missing from the provided DataFrame: {missing_cols}")
-            
-        # Determine unique key for identifying existing/duplicate reports: URL or ID
-        if self.include_url:
-            unique_key = self.COL_URL
-        elif self.include_id:
-            unique_key = self.COL_ID
-        else:
-            logger.error("No unique identifier available for duplicate checking.\nEnsure include_url or include_id was set to True in instance initialisation.")
-            return None
-        existing_identifiers = set(base_df[unique_key].tolist()) if base_df is not None and unique_key in base_df.columns else set()
-        
-        # Fetch updated list of report links within current date range
-        updated_links = self.get_report_links()
-        if updated_links is None:
-            updated_links = []
-        new_links = [link for link in updated_links if link not in existing_identifiers]
-        logger.info("Top-up: %d new report(s) found; %d duplicate(s) which won't be added", len(new_links), len(updated_links) - len(new_links))
-        if not new_links:
-            return None if base_df is None and old_reports is None else base_df
-        
-        # Scrape details for new links
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports", position=0, leave=True))
-        new_records = [record for record in new_results if record is not None]
-        if new_records:
-            new_df = pd.DataFrame(new_records)
-            updated_reports_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
-        else:
-            updated_reports_df = base_df if base_df is not None else pd.DataFrame()
-        if self.include_date:
-            updated_reports_df = updated_reports_df.sort_values(by=[self.COL_DATE], ascending=False)
-        self.reports = updated_reports_df.copy()
-        return updated_reports_df
-
+    
+    
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
         """Ask the LLM to fill cells still set to :pyattr:`self.NOT_FOUND_TEXT`.
 
@@ -627,10 +445,425 @@ class PFDScraper:
                         current_reports_df.at[idx, df_col_name] = value_from_llm
         self.reports = current_reports_df.copy()
         return current_reports_df
+    
+    
+    def top_up(self, old_reports: pd.DataFrame | None = None, start_date: str | None = None, end_date: str | None = None) -> pd.DataFrame | None:
+        """Checks to see if there are any unscraped PFD reports within Class instance parameters.
+        
+        If so, it reruns the scraper and appends new reports to  
+        :pyattr:`self.reports` under Class instance parameters.
 
-    # -----------------------------------------------------------------------------
-    # Text processing helper functions
-    # -----------------------------------------------------------------------------
+        Any URL (or ID) already present in *old_reports* is skipped.
+        
+        Optionally, you can override the *start_date* and *end_date*
+        parameters from `self`.
+
+        Parameters
+        ----------
+        old_reports : pandas.DataFrame | None
+            Existing DataFrame.  Defaults to :pyattr:`self.reports`.
+        start_date, end_date : str | None
+            Optionally override the scraper’s date window *for this call only*.
+
+        Returns
+        -------
+        pandas.DataFrame | None
+            Updated DataFrame if new reports were added; *None* if no new
+            records were found **and** *old_reports* was *None*.
+
+        Raises
+        ------
+        ValueError
+            If *old_reports* lacks columns required for duplicate checks.
+
+        Examples
+        --------
+        >>> updated = scraper.top_up(df, end_date="2023-01-01")
+        >>> len(updated) - len(df)     # number of new reports
+        3
+        """
+        logger.info("Attempting to 'top up' the existing reports with new data.")
+        
+        # Update date range for this top_up if new dates provided
+        if start_date is not None or end_date is not None:
+            new_start_date = date_parser.parse(start_date) if start_date is not None else self.start_date
+            new_end_date = date_parser.parse(end_date) if end_date is not None else self.end_date
+            if new_start_date > new_end_date:
+                raise ValueError("start_date must be before end_date.")
+            self.start_date = new_start_date
+            self.end_date = new_end_date
+            self.date_params.update({
+                "after_day": self.start_date.day,
+                "after_month": self.start_date.month,
+                "after_year": self.start_date.year,
+                "before_day": self.end_date.day,
+                "before_month": self.end_date.month,
+                "before_year": self.end_date.year,
+            })
+            
+        # If provided, update provided DataFrame. Else, update the internal attribute
+        base_df = old_reports if old_reports is not None else self.reports
+        # Ensure base_df has required columns for duplicate checking
+        if base_df is not None:
+            required_columns = [col_name for include_flag, col_name in self._COLUMN_CONFIG if include_flag]
+            missing_cols = [col for col in required_columns if col not in base_df.columns]
+            if missing_cols:
+                raise ValueError(f"Required columns missing from the provided DataFrame: {missing_cols}")
+            
+        # Determine unique key for identifying existing/duplicate reports: URL or ID
+        if self.include_url:
+            unique_key = self.COL_URL
+        elif self.include_id:
+            unique_key = self.COL_ID
+        else:
+            logger.error("No unique identifier available for duplicate checking.\nEnsure include_url or include_id was set to True in instance initialisation.")
+            return None
+        existing_identifiers = set(base_df[unique_key].tolist()) if base_df is not None and unique_key in base_df.columns else set()
+        
+        # Fetch updated list of report links within current date range
+        updated_links = self.get_report_links()
+        if updated_links is None:
+            updated_links = []
+        new_links = [link for link in updated_links if link not in existing_identifiers]
+        logger.info("Top-up: %d new report(s) found; %d duplicate(s) which won't be added", len(new_links), len(updated_links) - len(new_links))
+        if not new_links:
+            return None if base_df is None and old_reports is None else base_df
+        
+        # Scrape details for new links
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports", position=0, leave=True))
+        new_records = [record for record in new_results if record is not None]
+        if new_records:
+            new_df = pd.DataFrame(new_records)
+            updated_reports_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
+        else:
+            updated_reports_df = base_df if base_df is not None else pd.DataFrame()
+        if self.include_date:
+            updated_reports_df = updated_reports_df.sort_values(by=[self.COL_DATE], ascending=False)
+        self.reports = updated_reports_df.copy()
+        return updated_reports_df
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Initialisation validation & warnings
+    # ─────────────────────────────────────────────────────────────────────────
+
+    def _validate_init_params(self) -> None:
+        """Validate initialisation parameters and raise errors for invalid configs."""
+        if self.start_date > self.end_date:
+            raise ValueError("start_date must be before end_date.")
+        if self.llm_fallback and not self.llm:
+            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
+        if self.max_workers <= 0:
+            raise ValueError("max_workers must be a positive integer.")
+        if self.max_requests <= 0:
+            raise ValueError("max_requests must be a positive integer.")
+        if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, (int, float)) for i in self.delay_range):
+            raise ValueError("delay_range must be a tuple of two numbers (int or float) - e.g. (1, 2) or (1.5, 2.5). If you are attempting to disable delays, set to (0,0).")
+        if self.delay_range[1] < self.delay_range[0]:
+            raise ValueError("Upper bound of delay_range must be greater than or equal to lower bound.")
+        if not (self.html_scraping or self.pdf_fallback or self.llm_fallback):
+            raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
+        if not any([self.include_id, self.include_date, self.include_coroner, self.include_area, self.include_receiver, self.include_investigation, self.include_circumstances, self.include_concerns]):
+            raise ValueError("At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.\n")
+
+    def _warn_if_suboptimal_config(self) -> None:
+        """Log warnings for configurations that might lead to suboptimal scraping."""
+        if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
+            logger.warning("Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.\n")
+        if not self.html_scraping and self.pdf_fallback and not self.llm_fallback:
+            logger.warning("Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.\n")
+        if not self.html_scraping and not self.pdf_fallback and self.llm_fallback:
+            logger.warning("Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.\n")
+        if self.max_workers > 50:
+            logger.warning("max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.\n")
+        if self.max_workers < 10:
+            logger.warning("max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.\n")
+        if self.max_requests > 10:
+            logger.warning("max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.\n")
+        if self.max_requests < 3:
+            logger.warning("max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.\n")
+        if self.delay_range == (0, 0):
+            logger.warning("delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).\n")
+        elif self.delay_range[0] < 0.5 and self.delay_range[1] != 0:
+            logger.warning("delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).\n")
+        if self.delay_range[1] > 5:
+            logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).\n")
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Link-fetching
+    # ──────────────────────────────────────────────────────────────────────────
+    def _get_report_href_values(self, url: str) -> list[str]:
+        """
+        Parses through a **single page** of PFD search results and extracts individual report URLs via href values.
+        
+        Applies a random delay and uses a semaphore to limit concurrent requests.
+
+        :param url: The URL of the search results page to scrape.
+        :return: A list of href strings, each being a URL to a PFD report page.
+                 Returns an empty list if the page fetch fails or no links are found.
+        """
+        with self.cfg.domain_semaphore:
+            self.cfg.apply_random_delay()
+            try:
+                response = self.cfg.session.get(url, timeout=self.timeout)
+                response.raise_for_status()
+                if self.verbose:
+                    logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
+                    
+            except requests.RequestException as e:
+                if self.verbose:
+                    logger.error("Failed to fetch page: %s; Error: %s", url, e)
+                return []
+            
+        soup = BeautifulSoup(response.text, 'html.parser')
+        links = soup.find_all('a', class_='card__link')
+        return [link.get('href') for link in links if link.get('href')]
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # HTML Extraction
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _fetch_report_page(self, url: str) -> BeautifulSoup | None:
+        """Fetch the HTML content of a report page and return a BeautifulSoup object, or None on failure."""
+        try:
+            response = self.cfg.session.get(url, timeout=self.timeout)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            logger.error("Failed to fetch %s; Error: %s", url, e)
+            return None
+        return BeautifulSoup(response.content, 'html.parser')
+
+    def _extract_html_paragraph_text(self, soup: BeautifulSoup, keywords: list[str]) -> str:
+        """
+        Extracts text from the first `<p>` (paragraph) element in HTML that contains any of the provided keywords.
+        This is typically used for extracting metadata fields.
+
+        :param soup: A BeautifulSoup object representing the parsed HTML page.
+        :param keywords: A list of keywords to search for within paragraph tags.
+        :return: The cleaned text content of the found paragraph, or `NOT_FOUND_TEXT`.
+        """
+        for keyword in keywords:
+            # Find a <p> tag whose text contains the keyword.
+            element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
+            if element:
+                return self._clean_text(element.get_text())
+        return self.NOT_FOUND_TEXT
+
+
+    def _extract_html_section_text(self, soup: BeautifulSoup, header_keywords: list[str]) -> str:
+        """
+        Extracts a block of text from HTML following a header.
+        It looks for a `<strong>` tag (assumed to be a section header) containing one of the `header_keywords`.
+        If found, it collects text from all subsequent sibling elements until the next header or end of parent.
+
+        :param soup: A BeautifulSoup object representing the parsed HTML page.
+        :param header_keywords: A list of keyword variations to identify the section header.
+        :return: The cleaned, concatenated text of the section, or `NOT_FOUND_TEXT`.
+        """
+        for strong_tag in soup.find_all('strong'):
+            header_text = strong_tag.get_text(strip=True)
+            if any(keyword.lower() in header_text.lower() for keyword in header_keywords):
+                content_parts: list[str] = []
+                for sibling in strong_tag.next_siblings:
+                    if isinstance(sibling, str):
+                        text = sibling.strip()
+                        if text:
+                            content_parts.append(text)
+                    else:
+                        text = sibling.get_text(separator=" ", strip=True)
+                        if text:
+                            content_parts.append(text)
+                if content_parts:
+                    return self._clean_text(" ".join(content_parts))
+        return self.NOT_FOUND_TEXT
+
+    def _extract_fields_from_html(self, soup: BeautifulSoup, fields: dict[str, str]) -> None:
+        """
+        Extract configured fields from HTML, driven by a list of HtmlFieldConfig
+        defined in self.cfg.html_fields.
+        """
+        for cfg in self.cfg.html_fields:  # HtmlFieldConfig instances
+            if not getattr(self, f"include_{cfg.key}"):
+                continue
+
+            # Pick paragraph vs section extraction
+            if cfg.sec_keys:
+                raw = self._extract_html_section_text(soup, cfg.sec_keys)
+            else:
+                raw = self._extract_html_paragraph_text(soup, cfg.para_keys or [])
+
+            # If it's the report ID, we do a special regex match
+            if cfg.key == "id" and raw != self.NOT_FOUND_TEXT:
+                m = self._id_pattern.search(raw)
+                fields["id"] = m.group(1) if m else self.NOT_FOUND_TEXT
+            else:
+                fields[cfg.key] = self._process_extracted_field(
+                    raw,
+                    cfg.rem_strs,
+                    min_len=cfg.min_len,
+                    max_len=cfg.max_len,
+                    is_date=cfg.is_date,
+                )
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # PDF Extraction
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _get_pdf_link(self, soup: BeautifulSoup) -> str | None:
+        """Extract the first PDF link from a report's HTML page, or None if not found."""
+        pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
+        return pdf_links[0] if pdf_links else None
+
+    def _fetch_pdf_bytes(self, report_url: str) -> bytes | None:
+        """
+        Fetches the PDF file content as bytes from a report's HTML page.
+        It first finds the PDF download link on the HTML page, then downloads the PDF.
+
+        :param report_url: The URL of the HTML page containing the link to the PDF report.
+        :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
+        """
+        try:
+            page_response = self.cfg.session.get(report_url, timeout=self.timeout)
+            page_response.raise_for_status()
+            soup = BeautifulSoup(page_response.content, 'html.parser')
+            pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
+            if pdf_links:
+                pdf_link = pdf_links[0]
+                pdf_response = self.cfg.session.get(pdf_link, timeout=self.timeout)
+                pdf_response.raise_for_status()
+                return pdf_response.content
+            else:
+                logger.error("No PDF link found for report at %s", report_url)
+                return None
+        except Exception as e:
+            logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
+            return None
+    
+    def _extract_text_from_pdf(self, pdf_url: str) -> str:
+        """
+        Downloads a PDF from a URL and extracts all text content from it.
+        Caches the downloaded PDF bytes if LLM fallback is enabled.
+
+        :param pdf_url: The URL of the .pdf file.
+        :return: The cleaned, concatenated text from all pages of the PDF.
+                 Returns `NOT_FOUND_TEXT` or a specific error message ("N/A: Source file not PDF") on failure.
+        """
+        parsed_url = urlparse(pdf_url)
+        path = unquote(parsed_url.path)
+        ext = os.path.splitext(path)[1].lower()
+        if self.verbose:
+            logger.debug(f"Processing .pdf {pdf_url}.")
+            
+        try:
+            response = self.cfg.session.get(pdf_url, timeout=self.timeout)
+            response.raise_for_status()
+            file_bytes = response.content
+        except requests.RequestException as e:
+            logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
+            return self.NOT_FOUND_TEXT
+        pdf_bytes_to_process: bytes | None = None
+        
+        if ext != ".pdf":
+            logger.info("File %s is not a .pdf (extension %s). Skipping this file...", pdf_url, ext)
+            return self.NOT_FOUND_TEXT
+        else:
+            pdf_bytes_to_process = file_bytes
+        if pdf_bytes_to_process is None:
+            return "N/A: Source file not PDF"
+        self._last_pdf_bytes = pdf_bytes_to_process
+        
+        try:
+            pdf_buffer = BytesIO(pdf_bytes_to_process)
+            pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
+            text = "".join(page.get_text() for page in pdf_document)
+            pdf_document.close()
+        except Exception as e:
+            logger.error("Error processing .pdf %s: %s", pdf_url, e)
+            return "N/A: Source file not PDF"
+        return self._clean_text(text)
+
+
+    def _apply_pdf_fallback(self, pdf_text: str, fields: dict[str, str]) -> None:
+        """
+        Fill missing fields from PDF text based on PdfSectionConfig
+        instances found in self.cfg.pdf_sections.
+        """
+        missing = {k for k, v in fields.items() if v == self.NOT_FOUND_TEXT}
+
+        for cfg in self.cfg.pdf_sections:  # PdfSectionConfig instances
+            if cfg.key not in missing or not getattr(self, f"include_{cfg.key}"):
+                continue
+
+            raw = self._extract_pdf_section(
+                pdf_text,
+                start_keywords=cfg.start_keys,
+                end_keywords=cfg.end_keys,
+            )
+            if raw == self.NOT_FOUND_TEXT:
+                continue
+
+            # Strip out remove-strs, normalise whitespace/apostrophes
+            cleaned = self._clean_text(raw)
+            for rem in cfg.rem_strs:
+                cleaned = cleaned.replace(rem, "")
+            cleaned = cleaned.strip()
+
+            # Enforce length constraints
+            if (cfg.min_len is not None and len(cleaned) < cfg.min_len) or \
+               (cfg.max_len is not None and len(cleaned) > cfg.max_len):
+                continue
+
+            fields[cfg.key] = cleaned or self.NOT_FOUND_TEXT
+
+    def _extract_pdf_section(self, text: str, start_keywords: list[str], end_keywords: list[str]) -> str:
+        """
+        Extracts a section of text from a larger body of PDF text based on start and end keywords.
+        The search for keywords is case-insensitive.
+
+        :param text: The full text from which to extract the section.
+        :param start_keywords: A list of possible keywords that mark the beginning of the section.
+        :param end_keywords: A list of possible keywords that mark the end of the section.
+        :return: The cleaned text of the extracted section. If no start keyword is found, or if a start
+                 is found but no end keyword, it may return part of the text or `NOT_FOUND_TEXT`.
+        """
+        lower_text = text.lower()
+        for start_kw in start_keywords:
+            start_kw_lower = start_kw.lower()
+            start_index = lower_text.find(start_kw_lower)
+            if start_index != -1:
+                section_start_offset = start_index + len(start_kw_lower)
+                end_indices_found: list[int] = []
+                for end_kw in end_keywords:
+                    end_kw_lower = end_kw.lower()
+                    end_index = lower_text.find(end_kw_lower, section_start_offset)
+                    if end_index != -1:
+                        end_indices_found.append(end_index)
+                if end_indices_found:
+                    section_end_offset = min(end_indices_found)
+                    extracted_section_text = text[section_start_offset:section_end_offset]
+                else:
+                    extracted_section_text = text[section_start_offset:]
+                return extracted_section_text
+        return self.NOT_FOUND_TEXT
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Utilities: text-cleaning & assembly
+    # ──────────────────────────────────────────────────────────────────────────
+
+
+    def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
+        """Handles the mechanics of scraping PFD reports for all given URLs using multithreading, 
+        returning a list of result dicts."""
+        results: list[dict[str, Any] | None] = []
+        
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = [executor.submit(self._extract_report_info, url) for url in urls]
+            for future in tqdm(as_completed(futures), total=len(futures), desc="Scraping reports", position=0, leave=False):
+                results.append(future.result())
+        report_dicts = [r for r in results if r is not None]
+        
+        return report_dicts
+
     @staticmethod
     def _normalise_apostrophes(text: str) -> str:
         """
@@ -720,200 +953,11 @@ class PFDScraper:
             return self.NOT_FOUND_TEXT
         return processed_text
 
-    # -----------------------------------------------------------------------------
-    # PDF and HTML content extraction logic
-    # -----------------------------------------------------------------------------
-    def _extract_text_from_pdf(self, pdf_url: str) -> str:
-        """
-        Downloads a PDF from a URL and extracts all text content from it.
-        Caches the downloaded PDF bytes if LLM fallback is enabled.
 
-        :param pdf_url: The URL of the .pdf file.
-        :return: The cleaned, concatenated text from all pages of the PDF.
-                 Returns `NOT_FOUND_TEXT` or a specific error message ("N/A: Source file not PDF") on failure.
-        """
-        parsed_url = urlparse(pdf_url)
-        path = unquote(parsed_url.path)
-        ext = os.path.splitext(path)[1].lower()
-        if self.verbose:
-            logger.debug(f"Processing .pdf {pdf_url}.")
-            
-        try:
-            response = self.cfg.session.get(pdf_url, timeout=self.timeout)
-            response.raise_for_status()
-            file_bytes = response.content
-        except requests.RequestException as e:
-            logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
-            return self.NOT_FOUND_TEXT
-        pdf_bytes_to_process: bytes | None = None
-        
-        if ext != ".pdf":
-            logger.info("File %s is not a .pdf (extension %s). Skipping this file...", pdf_url, ext)
-            return self.NOT_FOUND_TEXT
-        else:
-            pdf_bytes_to_process = file_bytes
-        if pdf_bytes_to_process is None:
-            return "N/A: Source file not PDF"
-        self._last_pdf_bytes = pdf_bytes_to_process
-        
-        try:
-            pdf_buffer = BytesIO(pdf_bytes_to_process)
-            pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
-            text = "".join(page.get_text() for page in pdf_document)
-            pdf_document.close()
-        except Exception as e:
-            logger.error("Error processing .pdf %s: %s", pdf_url, e)
-            return "N/A: Source file not PDF"
-        return self._clean_text(text)
 
-    def _extract_html_paragraph_text(self, soup: BeautifulSoup, keywords: list[str]) -> str:
-        """
-        Extracts text from the first `<p>` (paragraph) element in HTML that contains any of the provided keywords.
-        This is typically used for extracting metadata fields.
 
-        :param soup: A BeautifulSoup object representing the parsed HTML page.
-        :param keywords: A list of keywords to search for within paragraph tags.
-        :return: The cleaned text content of the found paragraph, or `NOT_FOUND_TEXT`.
-        """
-        for keyword in keywords:
-            # Find a <p> tag whose text contains the keyword.
-            element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
-            if element:
-                return self._clean_text(element.get_text())
-        return self.NOT_FOUND_TEXT
 
-    def _extract_html_section_text(self, soup: BeautifulSoup, header_keywords: list[str]) -> str:
-        """
-        Extracts a block of text from HTML following a header.
-        It looks for a `<strong>` tag (assumed to be a section header) containing one of the `header_keywords`.
-        If found, it collects text from all subsequent sibling elements until the next header or end of parent.
 
-        :param soup: A BeautifulSoup object representing the parsed HTML page.
-        :param header_keywords: A list of keyword variations to identify the section header.
-        :return: The cleaned, concatenated text of the section, or `NOT_FOUND_TEXT`.
-        """
-        for strong_tag in soup.find_all('strong'):
-            header_text = strong_tag.get_text(strip=True)
-            if any(keyword.lower() in header_text.lower() for keyword in header_keywords):
-                content_parts: list[str] = []
-                for sibling in strong_tag.next_siblings:
-                    if isinstance(sibling, str):
-                        text = sibling.strip()
-                        if text:
-                            content_parts.append(text)
-                    else:
-                        text = sibling.get_text(separator=" ", strip=True)
-                        if text:
-                            content_parts.append(text)
-                if content_parts:
-                    return self._clean_text(" ".join(content_parts))
-        return self.NOT_FOUND_TEXT
-
-    def _extract_pdf_section(self, text: str, start_keywords: list[str], end_keywords: list[str]) -> str:
-        """
-        Extracts a section of text from a larger body of PDF text based on start and end keywords.
-        The search for keywords is case-insensitive.
-
-        :param text: The full text from which to extract the section.
-        :param start_keywords: A list of possible keywords that mark the beginning of the section.
-        :param end_keywords: A list of possible keywords that mark the end of the section.
-        :return: The cleaned text of the extracted section. If no start keyword is found, or if a start
-                 is found but no end keyword, it may return part of the text or `NOT_FOUND_TEXT`.
-        """
-        lower_text = text.lower()
-        for start_kw in start_keywords:
-            start_kw_lower = start_kw.lower()
-            start_index = lower_text.find(start_kw_lower)
-            if start_index != -1:
-                section_start_offset = start_index + len(start_kw_lower)
-                end_indices_found: list[int] = []
-                for end_kw in end_keywords:
-                    end_kw_lower = end_kw.lower()
-                    end_index = lower_text.find(end_kw_lower, section_start_offset)
-                    if end_index != -1:
-                        end_indices_found.append(end_index)
-                if end_indices_found:
-                    section_end_offset = min(end_indices_found)
-                    extracted_section_text = text[section_start_offset:section_end_offset]
-                else:
-                    extracted_section_text = text[section_start_offset:]
-                return extracted_section_text
-        return self.NOT_FOUND_TEXT
-
-    def _fetch_report_page(self, url: str) -> BeautifulSoup | None:
-        """Fetch the HTML content of a report page and return a BeautifulSoup object, or None on failure."""
-        try:
-            response = self.cfg.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            logger.error("Failed to fetch %s; Error: %s", url, e)
-            return None
-        return BeautifulSoup(response.content, 'html.parser')
-
-    def _get_pdf_link(self, soup: BeautifulSoup) -> str | None:
-        """Extract the first PDF link from a report's HTML page, or None if not found."""
-        pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
-        return pdf_links[0] if pdf_links else None
-
-    def _extract_fields_from_html(self, soup: BeautifulSoup, fields: dict[str, str]) -> None:
-        """
-        Extract configured fields from HTML, driven by a list of HtmlFieldConfig
-        defined in self.cfg.html_fields.
-        """
-        for cfg in self.cfg.html_fields:  # HtmlFieldConfig instances
-            if not getattr(self, f"include_{cfg.key}"):
-                continue
-
-            # Pick paragraph vs section extraction
-            if cfg.sec_keys:
-                raw = self._extract_html_section_text(soup, cfg.sec_keys)
-            else:
-                raw = self._extract_html_paragraph_text(soup, cfg.para_keys or [])
-
-            # If it's the report ID, we do a special regex match
-            if cfg.key == "id" and raw != self.NOT_FOUND_TEXT:
-                m = self._id_pattern.search(raw)
-                fields["id"] = m.group(1) if m else self.NOT_FOUND_TEXT
-            else:
-                fields[cfg.key] = self._process_extracted_field(
-                    raw,
-                    cfg.rem_strs,
-                    min_len=cfg.min_len,
-                    max_len=cfg.max_len,
-                    is_date=cfg.is_date,
-                )
-
-    def _apply_pdf_fallback(self, pdf_text: str, fields: dict[str, str]) -> None:
-        """
-        Fill missing fields from PDF text based on PdfSectionConfig
-        instances found in self.cfg.pdf_sections.
-        """
-        missing = {k for k, v in fields.items() if v == self.NOT_FOUND_TEXT}
-
-        for cfg in self.cfg.pdf_sections:  # PdfSectionConfig instances
-            if cfg.key not in missing or not getattr(self, f"include_{cfg.key}"):
-                continue
-
-            raw = self._extract_pdf_section(
-                pdf_text,
-                start_keywords=cfg.start_keys,
-                end_keywords=cfg.end_keys,
-            )
-            if raw == self.NOT_FOUND_TEXT:
-                continue
-
-            # strip out remove-strs, normalise whitespace/apostrophes
-            cleaned = self._clean_text(raw)
-            for rem in cfg.rem_strs:
-                cleaned = cleaned.replace(rem, "")
-            cleaned = cleaned.strip()
-
-            # enforce length constraints
-            if (cfg.min_len is not None and len(cleaned) < cfg.min_len) or \
-               (cfg.max_len is not None and len(cleaned) > cfg.max_len):
-                continue
-
-            fields[cfg.key] = cleaned or self.NOT_FOUND_TEXT
 
 
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
@@ -992,28 +1036,3 @@ class PFDScraper:
         # Assemble result dictionary
         report = self._assemble_report(url, fields)
         return report
-
-    def _fetch_pdf_bytes(self, report_url: str) -> bytes | None:
-        """
-        Fetches the PDF file content as bytes from a report's HTML page.
-        It first finds the PDF download link on the HTML page, then downloads the PDF.
-
-        :param report_url: The URL of the HTML page containing the link to the PDF report.
-        :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
-        """
-        try:
-            page_response = self.cfg.session.get(report_url, timeout=self.timeout)
-            page_response.raise_for_status()
-            soup = BeautifulSoup(page_response.content, 'html.parser')
-            pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
-            if pdf_links:
-                pdf_link = pdf_links[0]
-                pdf_response = self.cfg.session.get(pdf_link, timeout=self.timeout)
-                pdf_response.raise_for_status()
-                return pdf_response.content
-            else:
-                logger.error("No PDF link found for report at %s", report_url)
-                return None
-        except Exception as e:
-            logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
-            return None
