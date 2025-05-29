@@ -12,7 +12,7 @@ from urllib.parse import urlparse, unquote
 from io import BytesIO
 import os
 from datetime import datetime
-from tqdm.auto import tqdm 
+from tqdm.auto import tqdm
 import requests
 from itertools import count
 
@@ -21,7 +21,8 @@ from .config import GeneralConfig, ScraperConfig, HtmlFieldConfig, PdfSectionCon
 # -----------------------------------------------------------------------------
 # Logging Configuration:
 # -----------------------------------------------------------------------------
-logger = logging.getLogger(__name__) 
+logger = logging.getLogger(__name__)
+
 
 class PFDScraper:
     """Scrape UK “Prevention of Future Death” (PFD) reports into a
@@ -58,7 +59,7 @@ class PFDScraper:
     max_requests : int
         Maximum simultaneous requests per host (enforced with a semaphore).
     delay_range : tuple[float, float] | None
-        Random delay *(seconds)* before every request.  
+        Random delay *(seconds)* before every request.
         Use ``None`` to disable (not recommended).
     timeout : int
         Per-request timeout in seconds.
@@ -93,7 +94,7 @@ class PFDScraper:
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
-    NOT_FOUND_TEXT = GeneralConfig.NOT_FOUND_TEXT 
+    NOT_FOUND_TEXT = GeneralConfig.NOT_FOUND_TEXT
 
     # DataFrame column names
     COL_URL = GeneralConfig.COL_URL
@@ -123,7 +124,7 @@ class PFDScraper:
         self,
         llm: "LLM" = None,
         # Web page and search criteria
-        category: str = 'all',
+        category: str = "all",
         start_date: str = "2000-01-01",
         end_date: str = "2050-01-01",
         # Threading and HTTP request configuration
@@ -147,7 +148,6 @@ class PFDScraper:
         include_concerns: bool = True,
         include_time_stamp: bool = False,
         verbose: bool = False,
-
     ) -> None:
 
         # Centralised network configuration (replaces the ad-hoc wiring)
@@ -157,13 +157,13 @@ class PFDScraper:
             delay_range=delay_range,
             timeout=timeout,
         )
-        
+
         self.category = category
-        
+
         # Parse date strings into datetime objects
         self.start_date = date_parser.parse(start_date)
         self.end_date = date_parser.parse(end_date)
-        
+
         # Store date components for formatting into search URLs
         self.date_params = {
             "after_day": self.start_date.day,
@@ -173,22 +173,22 @@ class PFDScraper:
             "before_month": self.end_date.month,
             "before_year": self.end_date.year,
         }
-        
+
         # Hardcode in always starting from page 1
         self.start_page = 1
-        
+
         # Store threading and request parameters
         self.max_workers = self.cfg.max_workers
         self.max_requests = self.cfg.max_requests
         self.delay_range = self.cfg.delay_range
         self.timeout = self.cfg.timeout
-        
+
         # Store scraping strategy flags
         self.html_scraping = html_scraping
         self.pdf_fallback = pdf_fallback
         self.llm_fallback = llm_fallback
         self.llm = llm
-        
+
         # Store output column inclusion flags
         self.include_url = include_url
         self.include_id = include_id
@@ -200,32 +200,32 @@ class PFDScraper:
         self.include_circumstances = include_circumstances
         self.include_concerns = include_concerns
         self.include_time_stamp = include_time_stamp
-        
+
         self.verbose = verbose
-        
+
         # Initialise storage for results and links
         self.reports: pd.DataFrame | None = None
         self.report_links: list[str] = []
         self._last_pdf_bytes: bytes | None = None
         self._pdf_cache: Dict[str, bytes] = {}
-        
+
         # Store LLM model name if LLM client is provided
         self.llm_model = self.llm.model if self.llm else "None"
-        
+
         # Configure url template
         self.page_template = self.cfg.url_template(self.category)
-        
+
         # Normalise delay_range if set to 0 or None
         if self.delay_range is None or self.delay_range == 0:
             self.delay_range = (0, 0)
-        
+
         # Validate param
         self._validate_init_params()
         self._warn_if_suboptimal_config()
-        
+
         # Pre-compile regex for extracting report IDs
         self._id_pattern = GeneralConfig.ID_PATTERN
-        
+
         # Configuration for dynamically building the list of required columns in top_up()
         self._COLUMN_CONFIG: List[Tuple[bool, str]] = [
             (self.include_url, self.COL_URL),
@@ -239,18 +239,53 @@ class PFDScraper:
             (self.include_concerns, self.COL_CONCERNS),
             (self.include_time_stamp, self.COL_DATE_SCRAPED),
         ]
-        
+
         # Configuration for identifying missing fields for LLM fallback
         self._LLM_FIELD_CONFIG: List[Tuple[bool, str, str, str]] = [
-            (self.include_date, self.COL_DATE, self.LLM_KEY_DATE, "[Date of the report, not the death]"),
-            (self.include_coroner, self.COL_CORONER_NAME, self.LLM_KEY_CORONER, "[Name of the coroner. Provide the name only.]"),
-            (self.include_area, self.COL_AREA, self.LLM_KEY_AREA, "[Area/location of the Coroner. Provide the location itself only.]"),
-            (self.include_receiver, self.COL_RECEIVER, self.LLM_KEY_RECEIVER, "[Name or names of the recipient(s) as provided in the report.]"),
-            (self.include_investigation, self.COL_INVESTIGATION, self.LLM_KEY_INVESTIGATION, "[The text from the Investigation/Inquest section.]"),
-            (self.include_circumstances, self.COL_CIRCUMSTANCES, self.LLM_KEY_CIRCUMSTANCES, "[The text from the Circumstances of Death section.]"),
-            (self.include_concerns, self.COL_CONCERNS, self.LLM_KEY_CONCERNS, "[The text from the Coroner's Concerns section.]"),
+            (
+                self.include_date,
+                self.COL_DATE,
+                self.LLM_KEY_DATE,
+                "[Date of the report, not the death]",
+            ),
+            (
+                self.include_coroner,
+                self.COL_CORONER_NAME,
+                self.LLM_KEY_CORONER,
+                "[Name of the coroner. Provide the name only.]",
+            ),
+            (
+                self.include_area,
+                self.COL_AREA,
+                self.LLM_KEY_AREA,
+                "[Area/location of the Coroner. Provide the location itself only.]",
+            ),
+            (
+                self.include_receiver,
+                self.COL_RECEIVER,
+                self.LLM_KEY_RECEIVER,
+                "[Name or names of the recipient(s) as provided in the report.]",
+            ),
+            (
+                self.include_investigation,
+                self.COL_INVESTIGATION,
+                self.LLM_KEY_INVESTIGATION,
+                "[The text from the Investigation/Inquest section.]",
+            ),
+            (
+                self.include_circumstances,
+                self.COL_CIRCUMSTANCES,
+                self.LLM_KEY_CIRCUMSTANCES,
+                "[The text from the Circumstances of Death section.]",
+            ),
+            (
+                self.include_concerns,
+                self.COL_CONCERNS,
+                self.LLM_KEY_CONCERNS,
+                "[The text from the Coroner's Concerns section.]",
+            ),
         ]
-        
+
         # Mapping from LLM response keys back to DataFrame column names
         self._LLM_TO_DF_MAPPING: Dict[str, str] = {
             self.LLM_KEY_DATE: self.COL_DATE,
@@ -268,7 +303,7 @@ class PFDScraper:
 
     def get_report_links(self) -> list[str] | None:
         """Discover individual report URLs for the current query, across all pages.
-        
+
         Iterates through _get_report_href_values (which collects URLs for a single page).
 
         Pagination continues until a page yields zero new links.
@@ -289,20 +324,19 @@ class PFDScraper:
             self.report_links.extend(hrefs)
             pbar.update(1)
         pbar.close()
-        
+
         logger.info("Total collected report links: %d", len(self.report_links))
         return self.report_links
-
 
     def scrape_reports(self) -> pd.DataFrame:
         """Execute a full scrape with the Class configuration.
 
         Workflow
         --------
-        1. Call :py:meth:`get_report_links`.  
+        1. Call :py:meth:`get_report_links`.
         2. Extract each report in parallel via
-           :py:meth:`_extract_report_info`.  
-        3. Optionally invoke :py:meth:`run_llm_fallback`.  
+           :py:meth:`_extract_report_info`.
+        3. Optionally invoke :py:meth:`run_llm_fallback`.
         4. Cache the final DataFrame to :pyattr:`self.reports`.
 
         Returns
@@ -323,22 +357,23 @@ class PFDScraper:
             if fetched_links is None:
                 self.reports = pd.DataFrame()
                 return self.reports
-            
+
         report_data = self._scrape_report_details(self.report_links)
         reports_df = pd.DataFrame(report_data)
-        
+
         # Run the LLM fallback if enabled
         if self.llm_fallback and self.llm:
-            reports_df = self.run_llm_fallback(reports_df if not reports_df.empty else None)
-        
+            reports_df = self.run_llm_fallback(
+                reports_df if not reports_df.empty else None
+            )
+
         # Output the timestamp of scraping completion for each report, if enabled
         if self.include_date:
             reports_df = reports_df.sort_values(by=[self.COL_DATE], ascending=False)
         self.reports = reports_df.copy()
-        
+
         return reports_df
-    
-    
+
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
         """Ask the LLM to fill cells still set to :pyattr:`self.NOT_FOUND_TEXT`.
 
@@ -367,12 +402,16 @@ class PFDScraper:
         """
         # Make sure llm param is set
         if not self.llm:
-            raise ValueError("LLM client (self.llm) not provided. Cannot run LLM fallback.")
-        
+            raise ValueError(
+                "LLM client (self.llm) not provided. Cannot run LLM fallback."
+            )
+
         current_reports_df: pd.DataFrame
         if reports_df is None:
             if self.reports is None:
-                raise ValueError("No scraped reports found (reports_df is None and self.reports is None). Please run scrape_reports() first or provide a DataFrame.")
+                raise ValueError(
+                    "No scraped reports found (reports_df is None and self.reports is None). Please run scrape_reports() first or provide a DataFrame."
+                )
             current_reports_df = self.reports.copy()
         else:
             current_reports_df = reports_df.copy()
@@ -384,10 +423,18 @@ class PFDScraper:
         def _process_row(idx: int, row_data: pd.Series) -> tuple[int, dict[str, str]]:
             """Identifies missing fields for a given row and calls LLM for them."""
             missing_fields: dict[str, str] = {}
-            
+
             # Build dictionary of fields needing LLM extraction based on _LLM_FIELD_CONFIG
-            for include_flag, df_col_name, llm_key, llm_prompt in self._LLM_FIELD_CONFIG:
-                if include_flag and row_data.get(df_col_name, "") == self.NOT_FOUND_TEXT:
+            for (
+                include_flag,
+                df_col_name,
+                llm_key,
+                llm_prompt,
+            ) in self._LLM_FIELD_CONFIG:
+                if (
+                    include_flag
+                    and row_data.get(df_col_name, "") == self.NOT_FOUND_TEXT
+                ):
                     missing_fields[llm_key] = llm_prompt
             if not missing_fields:
                 return idx, {}
@@ -396,28 +443,38 @@ class PFDScraper:
             if report_url:
                 pdf_bytes = self._fetch_pdf_bytes(report_url)
             if not pdf_bytes and self.verbose:
-                logger.warning(f"Could not obtain PDF bytes for URL {report_url} (row {idx}). LLM fallback for this row might be impaired.")
-                
+                logger.warning(
+                    f"Could not obtain PDF bytes for URL {report_url} (row {idx}). LLM fallback for this row might be impaired."
+                )
+
             # Call the LLM client's fallback method
             updates = self.llm._call_llm_fallback(
                 pdf_bytes=pdf_bytes,
                 missing_fields=missing_fields,
                 report_url=str(report_url) if report_url else "N/A",
                 verbose=self.verbose,
-                tqdm_extra_kwargs={"disable": True}
+                tqdm_extra_kwargs={"disable": True},
             )
             return idx, updates if updates else {}
 
         # --- Process rows for LLM fallback  ---
         results_map: Dict[int, Dict[str, str]] = {}
-        use_parallel = self.llm and hasattr(self.llm, 'max_workers') and self.llm.max_workers > 1
+        use_parallel = (
+            self.llm and hasattr(self.llm, "max_workers") and self.llm.max_workers > 1
+        )
         if use_parallel:
             with ThreadPoolExecutor(max_workers=self.llm.max_workers) as executor:
                 future_to_idx = {
                     executor.submit(_process_row, idx, row_series): idx
                     for idx, row_series in current_reports_df.iterrows()
                 }
-                for future in tqdm(as_completed(future_to_idx), total=len(future_to_idx), desc="LLM fallback (parallel processing)", position=0, leave=True):
+                for future in tqdm(
+                    as_completed(future_to_idx),
+                    total=len(future_to_idx),
+                    desc="LLM fallback (parallel processing)",
+                    position=0,
+                    leave=True,
+                ):
                     idx = future_to_idx[future]
                     try:
                         _, updates = future.result()
@@ -425,13 +482,19 @@ class PFDScraper:
                     except Exception as e:
                         logger.error(f"LLM fallback failed for row index {idx}: {e}")
         else:
-            for idx, row_series in tqdm(current_reports_df.iterrows(), total=len(current_reports_df), desc="LLM fallback (sequential processing)", position=0, leave=True):
+            for idx, row_series in tqdm(
+                current_reports_df.iterrows(),
+                total=len(current_reports_df),
+                desc="LLM fallback (sequential processing)",
+                position=0,
+                leave=True,
+            ):
                 try:
                     _, updates = _process_row(idx, row_series)
                     results_map[idx] = updates
                 except Exception as e:
                     logger.error(f"LLM fallback failed for row index {idx}: {e}")
-                    
+
         # Apply updates from LLM to the DataFrame
         for idx, updates_dict in results_map.items():
             if not updates_dict:
@@ -441,21 +504,27 @@ class PFDScraper:
                 if df_col_name:
                     if llm_key == self.LLM_KEY_DATE:
                         if value_from_llm != self.NOT_FOUND_TEXT:
-                            current_reports_df.at[idx, df_col_name] = self._normalise_date(value_from_llm)
+                            current_reports_df.at[idx, df_col_name] = (
+                                self._normalise_date(value_from_llm)
+                            )
                     else:
                         current_reports_df.at[idx, df_col_name] = value_from_llm
         self.reports = current_reports_df.copy()
         return current_reports_df
-    
-    
-    def top_up(self, old_reports: pd.DataFrame | None = None, start_date: str | None = None, end_date: str | None = None) -> pd.DataFrame | None:
+
+    def top_up(
+        self,
+        old_reports: pd.DataFrame | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> pd.DataFrame | None:
         """Checks to see if there are any unscraped PFD reports within Class instance parameters.
-        
-        If so, it reruns the scraper and appends new reports to  
+
+        If so, it reruns the scraper and appends new reports to
         :pyattr:`self.reports` under Class instance parameters.
 
         Any URL (or ID) already present in *old_reports* is skipped.
-        
+
         Optionally, you can override the *start_date* and *end_date*
         parameters from `self`.
 
@@ -484,63 +553,103 @@ class PFDScraper:
         3
         """
         logger.info("Attempting to 'top up' the existing reports with new data.")
-        
+
         # Update date range for this top_up if new dates provided
         if start_date is not None or end_date is not None:
-            new_start_date = date_parser.parse(start_date) if start_date is not None else self.start_date
-            new_end_date = date_parser.parse(end_date) if end_date is not None else self.end_date
+            new_start_date = (
+                date_parser.parse(start_date)
+                if start_date is not None
+                else self.start_date
+            )
+            new_end_date = (
+                date_parser.parse(end_date) if end_date is not None else self.end_date
+            )
             if new_start_date > new_end_date:
                 raise ValueError("start_date must be before end_date.")
             self.start_date = new_start_date
             self.end_date = new_end_date
-            self.date_params.update({
-                "after_day": self.start_date.day,
-                "after_month": self.start_date.month,
-                "after_year": self.start_date.year,
-                "before_day": self.end_date.day,
-                "before_month": self.end_date.month,
-                "before_year": self.end_date.year,
-            })
-            
+            self.date_params.update(
+                {
+                    "after_day": self.start_date.day,
+                    "after_month": self.start_date.month,
+                    "after_year": self.start_date.year,
+                    "before_day": self.end_date.day,
+                    "before_month": self.end_date.month,
+                    "before_year": self.end_date.year,
+                }
+            )
+
         # If provided, update provided DataFrame. Else, update the internal attribute
         base_df = old_reports if old_reports is not None else self.reports
         # Ensure base_df has required columns for duplicate checking
         if base_df is not None:
-            required_columns = [col_name for include_flag, col_name in self._COLUMN_CONFIG if include_flag]
-            missing_cols = [col for col in required_columns if col not in base_df.columns]
+            required_columns = [
+                col_name
+                for include_flag, col_name in self._COLUMN_CONFIG
+                if include_flag
+            ]
+            missing_cols = [
+                col for col in required_columns if col not in base_df.columns
+            ]
             if missing_cols:
-                raise ValueError(f"Required columns missing from the provided DataFrame: {missing_cols}")
-            
+                raise ValueError(
+                    f"Required columns missing from the provided DataFrame: {missing_cols}"
+                )
+
         # Determine unique key for identifying existing/duplicate reports: URL or ID
         if self.include_url:
             unique_key = self.COL_URL
         elif self.include_id:
             unique_key = self.COL_ID
         else:
-            logger.error("No unique identifier available for duplicate checking.\nEnsure include_url or include_id was set to True in instance initialisation.")
+            logger.error(
+                "No unique identifier available for duplicate checking.\nEnsure include_url or include_id was set to True in instance initialisation."
+            )
             return None
-        existing_identifiers = set(base_df[unique_key].tolist()) if base_df is not None and unique_key in base_df.columns else set()
-        
+        existing_identifiers = (
+            set(base_df[unique_key].tolist())
+            if base_df is not None and unique_key in base_df.columns
+            else set()
+        )
+
         # Fetch updated list of report links within current date range
         updated_links = self.get_report_links()
         if updated_links is None:
             updated_links = []
         new_links = [link for link in updated_links if link not in existing_identifiers]
-        logger.info("Top-up: %d new report(s) found; %d duplicate(s) which won't be added", len(new_links), len(updated_links) - len(new_links))
+        logger.info(
+            "Top-up: %d new report(s) found; %d duplicate(s) which won't be added",
+            len(new_links),
+            len(updated_links) - len(new_links),
+        )
         if not new_links:
             return None if base_df is None and old_reports is None else base_df
-        
+
         # Scrape details for new links
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(tqdm(executor.map(self._extract_report_info, new_links), total=len(new_links), desc="Topping up reports", position=0, leave=True))
+            new_results = list(
+                tqdm(
+                    executor.map(self._extract_report_info, new_links),
+                    total=len(new_links),
+                    desc="Topping up reports",
+                    position=0,
+                    leave=True,
+                )
+            )
         new_records = [record for record in new_results if record is not None]
         if new_records:
             new_df = pd.DataFrame(new_records)
-            updated_reports_df = pd.concat([base_df, new_df], ignore_index=True) if base_df is not None else new_df
+            updated_reports_df = (
+                pd.concat([base_df, new_df], ignore_index=True)
+                if base_df is not None
+                else new_df
+            )
         else:
             updated_reports_df = base_df if base_df is not None else pd.DataFrame()
         if self.include_date:
-            updated_reports_df = updated_reports_df.sort_values(by=[self.COL_DATE], ascending=False)
+            updated_reports_df = updated_reports_df.sort_values(
+                by=[self.COL_DATE], ascending=False
+            )
         self.reports = updated_reports_df.copy()
         return updated_reports_df
 
@@ -553,42 +662,87 @@ class PFDScraper:
         if self.start_date > self.end_date:
             raise ValueError("start_date must be before end_date.")
         if self.llm_fallback and not self.llm:
-            raise ValueError("LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/.")
+            raise ValueError(
+                "LLM Client must be provided if LLM fallback is enabled. \nPlease create an instance of the LLM class and pass this in the llm parameter. \nGet an API key from https://platform.openai.com/."
+            )
         if self.max_workers <= 0:
             raise ValueError("max_workers must be a positive integer.")
         if self.max_requests <= 0:
             raise ValueError("max_requests must be a positive integer.")
-        if not isinstance(self.delay_range, tuple) or len(self.delay_range) != 2 or not all(isinstance(i, (int, float)) for i in self.delay_range):
-            raise ValueError("delay_range must be a tuple of two numbers (int or float) - e.g. (1, 2) or (1.5, 2.5). If you are attempting to disable delays, set to (0,0).")
+        if (
+            not isinstance(self.delay_range, tuple)
+            or len(self.delay_range) != 2
+            or not all(isinstance(i, (int, float)) for i in self.delay_range)
+        ):
+            raise ValueError(
+                "delay_range must be a tuple of two numbers (int or float) - e.g. (1, 2) or (1.5, 2.5). If you are attempting to disable delays, set to (0,0)."
+            )
         if self.delay_range[1] < self.delay_range[0]:
-            raise ValueError("Upper bound of delay_range must be greater than or equal to lower bound.")
+            raise ValueError(
+                "Upper bound of delay_range must be greater than or equal to lower bound."
+            )
         if not (self.html_scraping or self.pdf_fallback or self.llm_fallback):
-            raise ValueError("At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled.")
-        if not any([self.include_id, self.include_date, self.include_coroner, self.include_area, self.include_receiver, self.include_investigation, self.include_circumstances, self.include_concerns]):
-            raise ValueError("At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.\n")
+            raise ValueError(
+                "At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled."
+            )
+        if not any(
+            [
+                self.include_id,
+                self.include_date,
+                self.include_coroner,
+                self.include_area,
+                self.include_receiver,
+                self.include_investigation,
+                self.include_circumstances,
+                self.include_concerns,
+            ]
+        ):
+            raise ValueError(
+                "At least one field must be included in the output. Please set one or more of the following to True:\n 'include_id', 'include_date', 'include_coroner', 'include_area', 'include_receiver', 'include_investigation', 'include_circumstances', 'include_concerns'.\n"
+            )
 
     def _warn_if_suboptimal_config(self) -> None:
         """Log warnings for configurations that might lead to suboptimal scraping."""
         if self.html_scraping and not self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.\n")
+            logger.warning(
+                "Only HTML scraping is enabled. \nConsider enabling .pdf or LLM fallback for more complete data extraction.\n"
+            )
         if not self.html_scraping and self.pdf_fallback and not self.llm_fallback:
-            logger.warning("Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.\n")
+            logger.warning(
+                "Only .pdf fallback is enabled. \nConsider enabling HTML scraping or LLM fallback for more complete data extraction.\n"
+            )
         if not self.html_scraping and not self.pdf_fallback and self.llm_fallback:
-            logger.warning("Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.\n")
+            logger.warning(
+                "Only LLM fallback is enabled. \nWhile this is a high-performance option, large API costs may be incurred, especially for large requests. \nConsider enabling HTML scraping or .pdf fallback for more cost-effective data extraction.\n"
+            )
         if self.max_workers > 50:
-            logger.warning("max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.\n")
+            logger.warning(
+                "max_workers is set to a high value (>50). \nDepending on your system, this may cause performance issues. It could also trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 10 and 50.\n"
+            )
         if self.max_workers < 10:
-            logger.warning("max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.\n")
+            logger.warning(
+                "max_workers is set to a low value (<10). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 10 and 50.\n"
+            )
         if self.max_requests > 10:
-            logger.warning("max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.\n")
+            logger.warning(
+                "max_requests is set to a high value (>10). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to between 3 and 10.\n"
+            )
         if self.max_requests < 3:
-            logger.warning("max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.\n")
+            logger.warning(
+                "max_requests is set to a low value (<3). \nThis may result in slower scraping speeds. Consider increasing the value for faster performance. \nWe recommend setting to between 3 and 10.\n"
+            )
         if self.delay_range == (0, 0):
-            logger.warning("delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).\n")
+            logger.warning(
+                "delay_range has been disabled. \nThis will disable delays between requests. This may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. \nWe recommend setting to (1,2).\n"
+            )
         elif self.delay_range[0] < 0.5 and self.delay_range[1] != 0:
-            logger.warning("delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).\n")
+            logger.warning(
+                "delay_range is set to a low value (<0.5 seconds). \nThis may trigger anti-scraping measures by the host, leading to temporary or permanent IP bans. We recommend setting to between (1, 2).\n"
+            )
         if self.delay_range[1] > 5:
-            logger.warning("delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).\n")
+            logger.warning(
+                "delay_range is set to a high value (>5 seconds). \nThis may result in slower scraping speeds. Consider decreasing the value for faster performance. We recommend setting to between (1, 2).\n"
+            )
 
     # ──────────────────────────────────────────────────────────────────────────
     # Link-fetching
@@ -596,7 +750,7 @@ class PFDScraper:
     def _get_report_href_values(self, url: str) -> list[str]:
         """
         Parses through a **single page** of PFD search results and extracts individual report URLs via href values.
-        
+
         Applies a random delay and uses a semaphore to limit concurrent requests.
 
         :param url: The URL of the search results page to scrape.
@@ -610,15 +764,15 @@ class PFDScraper:
                 response.raise_for_status()
                 if self.verbose:
                     logger.debug(f"Fetched URL: {url} (Status: {response.status_code})")
-                    
+
             except requests.RequestException as e:
                 if self.verbose:
                     logger.error("Failed to fetch page: %s; Error: %s", url, e)
                 return []
-            
-        soup = BeautifulSoup(response.text, 'html.parser')
-        links = soup.find_all('a', class_='card__link')
-        return [link.get('href') for link in links if link.get('href')]
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        links = soup.find_all("a", class_="card__link")
+        return [link.get("href") for link in links if link.get("href")]
 
     # ──────────────────────────────────────────────────────────────────────────
     # HTML Extraction
@@ -632,9 +786,11 @@ class PFDScraper:
         except requests.RequestException as e:
             logger.error("Failed to fetch %s; Error: %s", url, e)
             return None
-        return BeautifulSoup(response.content, 'html.parser')
+        return BeautifulSoup(response.content, "html.parser")
 
-    def _extract_html_paragraph_text(self, soup: BeautifulSoup, keywords: list[str]) -> str:
+    def _extract_html_paragraph_text(
+        self, soup: BeautifulSoup, keywords: list[str]
+    ) -> str:
         """
         Extracts text from the first `<p>` (paragraph) element in HTML that contains any of the provided keywords.
         This is typically used for extracting metadata fields.
@@ -645,13 +801,17 @@ class PFDScraper:
         """
         for keyword in keywords:
             # Find a <p> tag whose text contains the keyword.
-            element = soup.find(lambda tag: tag.name == 'p' and keyword in tag.get_text(), recursive=True)
+            element = soup.find(
+                lambda tag: tag.name == "p" and keyword in tag.get_text(),
+                recursive=True,
+            )
             if element:
                 return self._clean_text(element.get_text())
         return self.NOT_FOUND_TEXT
 
-
-    def _extract_html_section_text(self, soup: BeautifulSoup, header_keywords: list[str]) -> str:
+    def _extract_html_section_text(
+        self, soup: BeautifulSoup, header_keywords: list[str]
+    ) -> str:
         """
         Extracts a block of text from HTML following a header.
         It looks for a `<strong>` tag (assumed to be a section header) containing one of the `header_keywords`.
@@ -661,9 +821,11 @@ class PFDScraper:
         :param header_keywords: A list of keyword variations to identify the section header.
         :return: The cleaned, concatenated text of the section, or `NOT_FOUND_TEXT`.
         """
-        for strong_tag in soup.find_all('strong'):
+        for strong_tag in soup.find_all("strong"):
             header_text = strong_tag.get_text(strip=True)
-            if any(keyword.lower() in header_text.lower() for keyword in header_keywords):
+            if any(
+                keyword.lower() in header_text.lower() for keyword in header_keywords
+            ):
                 content_parts: list[str] = []
                 for sibling in strong_tag.next_siblings:
                     if isinstance(sibling, str):
@@ -678,7 +840,9 @@ class PFDScraper:
                     return self._clean_text(" ".join(content_parts))
         return self.NOT_FOUND_TEXT
 
-    def _extract_fields_from_html(self, soup: BeautifulSoup, fields: dict[str, str]) -> None:
+    def _extract_fields_from_html(
+        self, soup: BeautifulSoup, fields: dict[str, str]
+    ) -> None:
         """
         Extract configured fields from HTML, driven by a list of HtmlFieldConfig
         defined in self.cfg.html_fields.
@@ -712,7 +876,11 @@ class PFDScraper:
 
     def _get_pdf_link(self, soup: BeautifulSoup) -> str | None:
         """Extract the first PDF link from a report's HTML page, or None if not found."""
-        pdf_links = [a['href'] for a in soup.find_all('a', class_='govuk-button') if a.get('href')]
+        pdf_links = [
+            a["href"]
+            for a in soup.find_all("a", class_="govuk-button")
+            if a.get("href")
+        ]
         return pdf_links[0] if pdf_links else None
 
     def _fetch_pdf_bytes(self, report_url: str) -> bytes | None:
@@ -725,10 +893,18 @@ class PFDScraper:
         """
         # First, check if we already downloaded this PDF...
         try:
-            soup = BeautifulSoup(self.cfg.session.get(report_url, timeout=self.timeout).content,
-                                 'html.parser')
-            pdf_link = next((a['href'] for a in soup.find_all('a', class_='govuk-button')
-                             if a.get('href')), None)
+            soup = BeautifulSoup(
+                self.cfg.session.get(report_url, timeout=self.timeout).content,
+                "html.parser",
+            )
+            pdf_link = next(
+                (
+                    a["href"]
+                    for a in soup.find_all("a", class_="govuk-button")
+                    if a.get("href")
+                ),
+                None,
+            )
         except Exception:
             return None
 
@@ -745,7 +921,7 @@ class PFDScraper:
         except Exception as e:
             logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
             return None
-    
+
     def _extract_text_from_pdf(self, pdf_url: str) -> str:
         """
         Downloads a PDF from a URL and extracts all text content from it.
@@ -760,7 +936,7 @@ class PFDScraper:
         ext = os.path.splitext(path)[1].lower()
         if self.verbose:
             logger.debug(f"Processing .pdf {pdf_url}.")
-            
+
         try:
             response = self.cfg.session.get(pdf_url, timeout=self.timeout)
             response.raise_for_status()
@@ -769,18 +945,22 @@ class PFDScraper:
             logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
             return self.NOT_FOUND_TEXT
         pdf_bytes_to_process: bytes | None = None
-        
+
         if ext != ".pdf":
-            logger.info("File %s is not a .pdf (extension %s). Skipping this file...", pdf_url, ext)
+            logger.info(
+                "File %s is not a .pdf (extension %s). Skipping this file...",
+                pdf_url,
+                ext,
+            )
             return self.NOT_FOUND_TEXT
         else:
             pdf_bytes_to_process = file_bytes
             self._pdf_cache[pdf_url] = pdf_bytes_to_process
-            
+
         if pdf_bytes_to_process is None:
             return "N/A: Source file not PDF"
         self._last_pdf_bytes = pdf_bytes_to_process
-        
+
         try:
             pdf_buffer = BytesIO(pdf_bytes_to_process)
             pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
@@ -790,7 +970,6 @@ class PFDScraper:
             logger.error("Error processing .pdf %s: %s", pdf_url, e)
             return "N/A: Source file not PDF"
         return self._clean_text(text)
-
 
     def _apply_pdf_fallback(self, pdf_text: str, fields: dict[str, str]) -> None:
         """
@@ -818,13 +997,16 @@ class PFDScraper:
             cleaned = cleaned.strip()
 
             # Enforce length constraints
-            if (cfg.min_len is not None and len(cleaned) < cfg.min_len) or \
-               (cfg.max_len is not None and len(cleaned) > cfg.max_len):
+            if (cfg.min_len is not None and len(cleaned) < cfg.min_len) or (
+                cfg.max_len is not None and len(cleaned) > cfg.max_len
+            ):
                 continue
 
             fields[cfg.key] = cleaned or self.NOT_FOUND_TEXT
 
-    def _extract_pdf_section(self, text: str, start_keywords: list[str], end_keywords: list[str]) -> str:
+    def _extract_pdf_section(
+        self, text: str, start_keywords: list[str], end_keywords: list[str]
+    ) -> str:
         """
         Extracts a section of text from a larger body of PDF text based on start and end keywords.
         The search for keywords is case-insensitive.
@@ -849,7 +1031,9 @@ class PFDScraper:
                         end_indices_found.append(end_index)
                 if end_indices_found:
                     section_end_offset = min(end_indices_found)
-                    extracted_section_text = text[section_start_offset:section_end_offset]
+                    extracted_section_text = text[
+                        section_start_offset:section_end_offset
+                    ]
                 else:
                     extracted_section_text = text[section_start_offset:]
                 return extracted_section_text
@@ -860,15 +1044,18 @@ class PFDScraper:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
-        """Handles the mechanics of scraping PFD reports for all given URLs using multithreading, 
+        """Handles the mechanics of scraping PFD reports for all given URLs using multithreading,
         returning a list of result dicts."""
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            raw_results = list(tqdm(
-                executor.map(self._extract_report_info, urls),
-                total=len(urls),
-                desc="Scraping reports",
-                position=0, leave=False
-            ))
+            raw_results = list(
+                tqdm(
+                    executor.map(self._extract_report_info, urls),
+                    total=len(urls),
+                    desc="Scraping reports",
+                    position=0,
+                    leave=False,
+                )
+            )
         # filter out any None failures
         return [r for r in raw_results if r is not None]
 
@@ -912,7 +1099,9 @@ class PFDScraper:
                     final_text_to_parse = potential_date_part
             if not final_text_to_parse:
                 if self.verbose:
-                    logger.warning(f"Date string empty after trying to remove 'Ref...' from '{text_being_processed}'. Raw: '{raw_date_str}'. Keeping raw.")
+                    logger.warning(
+                        f"Date string empty after trying to remove 'Ref...' from '{text_being_processed}'. Raw: '{raw_date_str}'. Keeping raw."
+                    )
                 return text_being_processed
             dt = date_parser.parse(final_text_to_parse, fuzzy=True, dayfirst=True)
             return dt.strftime("%Y-%m-%d")
@@ -924,9 +1113,14 @@ class PFDScraper:
                 )
             return text_being_processed
 
-    def _process_extracted_field(self, text: str, strings_to_remove: list[str],
-                                 min_len: int | None = None, max_len: int | None = None,
-                                 is_date: bool = False) -> str:
+    def _process_extracted_field(
+        self,
+        text: str,
+        strings_to_remove: list[str],
+        min_len: int | None = None,
+        max_len: int | None = None,
+        is_date: bool = False,
+    ) -> str:
         """
         Helper function to process a raw extracted text field. It performs several steps:
         1. Returns `NOT_FOUND_TEXT` if the input is already `NOT_FOUND_TEXT`.
@@ -961,13 +1155,6 @@ class PFDScraper:
             return self.NOT_FOUND_TEXT
         return processed_text
 
-
-
-
-
-
-
-
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
         """Assemble a single report's data into a dictionary based on included fields."""
         report: dict[str, Any] = {}
@@ -984,9 +1171,13 @@ class PFDScraper:
         if self.include_receiver:
             report[self.COL_RECEIVER] = fields.get("receiver", self.NOT_FOUND_TEXT)
         if self.include_investigation:
-            report[self.COL_INVESTIGATION] = fields.get("investigation", self.NOT_FOUND_TEXT)
+            report[self.COL_INVESTIGATION] = fields.get(
+                "investigation", self.NOT_FOUND_TEXT
+            )
         if self.include_circumstances:
-            report[self.COL_CIRCUMSTANCES] = fields.get("circumstances", self.NOT_FOUND_TEXT)
+            report[self.COL_CIRCUMSTANCES] = fields.get(
+                "circumstances", self.NOT_FOUND_TEXT
+            )
         if self.include_concerns:
             report[self.COL_CONCERNS] = fields.get("concerns", self.NOT_FOUND_TEXT)
         if self.include_time_stamp:
@@ -1019,7 +1210,7 @@ class PFDScraper:
             "area": self.NOT_FOUND_TEXT,
             "investigation": self.NOT_FOUND_TEXT,
             "circumstances": self.NOT_FOUND_TEXT,
-            "concerns": self.NOT_FOUND_TEXT
+            "concerns": self.NOT_FOUND_TEXT,
         }
         # Fetch HTML page
         soup = self._fetch_report_page(url)
@@ -1036,10 +1227,25 @@ class PFDScraper:
         if self.html_scraping:
             self._extract_fields_from_html(soup, fields)
         # Use PDF fallback if enabled and PDF text is available
-        if self.pdf_fallback and pdf_text not in (self.NOT_FOUND_TEXT, "N/A: Source file not PDF"):
-            if any(fields[key] == self.NOT_FOUND_TEXT for key in ["coroner", "area", "receiver", "investigation", "circumstances", "concerns"]):
+        if self.pdf_fallback and pdf_text not in (
+            self.NOT_FOUND_TEXT,
+            "N/A: Source file not PDF",
+        ):
+            if any(
+                fields[key] == self.NOT_FOUND_TEXT
+                for key in [
+                    "coroner",
+                    "area",
+                    "receiver",
+                    "investigation",
+                    "circumstances",
+                    "concerns",
+                ]
+            ):
                 if self.verbose:
-                    logger.debug(f"Initiating .pdf fallback for URL: {url} because one or more fields are missing.")
+                    logger.debug(
+                        f"Initiating .pdf fallback for URL: {url} because one or more fields are missing."
+                    )
                 self._apply_pdf_fallback(pdf_text, fields)
         # Assemble result dictionary
         report = self._assemble_report(url, fields)
