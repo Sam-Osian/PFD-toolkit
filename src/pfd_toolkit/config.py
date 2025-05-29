@@ -4,7 +4,7 @@ Central configuration for pfd_toolkit. This module contains two classes:
 * `GeneralConfig` – constants that are useful package-wide
 * `ScraperConfig` – network, retry, throttling and LLM-prompt settings
   that the `PFDScraper` class will import and use internally
-  
+
 'Why does this exist?'
 The intention is to keep the other modules as lean as possible to improve readability
 and maintainability.
@@ -48,8 +48,8 @@ class GeneralConfig:
     COL_CIRCUMSTANCES = "CircumstancesOfDeath"
     COL_CONCERNS = "MattersOfConcern"
     COL_DATE_SCRAPED = "DateScraped"
-    
-    ID_PATTERN = re.compile(r'(\d{4}-\d{4})')
+
+    ID_PATTERN = re.compile(r"(\d{4}-\d{4})")
 
 
 # --------------------------------------------------------------------------- #
@@ -69,13 +69,14 @@ class HtmlFieldConfig:
       max_len   - maximum acceptable length after cleaning (None = no maximum)
       is_date   - whether to run the cleaned text through the date normaliser
     """
-    key:       str
+
+    key: str
     para_keys: Optional[List[str]]
-    sec_keys:  Optional[List[str]]
-    rem_strs:  List[str]
-    min_len:   Optional[int]
-    max_len:   Optional[int]
-    is_date:   bool
+    sec_keys: Optional[List[str]]
+    rem_strs: List[str]
+    min_len: Optional[int]
+    max_len: Optional[int]
+    is_date: bool
 
 
 @dataclass(frozen=True)
@@ -89,13 +90,13 @@ class PdfSectionConfig:
       min_len    – minimum acceptable length after cleaning (None = no minimum)
       max_len    – maximum acceptable length after cleaning (None = no maximum)
     """
-    key:        str
-    start_keys: List[str]
-    end_keys:   List[str]
-    rem_strs:   List[str]
-    min_len:    Optional[int]
-    max_len:    Optional[int]
 
+    key: str
+    start_keys: List[str]
+    end_keys: List[str]
+    rem_strs: List[str]
+    min_len: Optional[int]
+    max_len: Optional[int]
 
 
 # --------------------------------------------------------------------------- #
@@ -108,162 +109,229 @@ class ScraperConfig:
     PFDScraper relies on (category templates, LLM keys & prompts).
     """
 
-    max_workers:    int                    = 10
-    max_requests:   int                    = 5
-    delay_range:    Tuple[float, float]    = (1.0, 2.0)
-    timeout:        int                    = 60
-    retries_total:  int                    = 30
-    retries_connect:int                    = 10
-    backoff_factor: float                  = 1.0
-    status_forcelist: Tuple[int, ...]      = (429, 502, 503, 504)
+    max_workers: int = 10
+    max_requests: int = 5
+    delay_range: Tuple[float, float] = (1.0, 2.0)
+    timeout: int = 60
+    retries_total: int = 30
+    retries_connect: int = 10
+    backoff_factor: float = 1.0
+    status_forcelist: Tuple[int, ...] = (429, 502, 503, 504)
 
     # Static scraper strings
     # URL templates for every judiciary.uk category
     CATEGORY_TEMPLATES = {
         "all": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type&post_type=pfd&order=relevance"
-               "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-               "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-               
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "suicide": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=suicide-from-2015&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                   
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "accident_work_safety": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=accident-at-work-and-health-and-safety-related-deaths&post_type=pfd&order=relevance"
-                                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                                
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "alcohol_drug_medication": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=alcohol-drug-and-medication-related-deaths&post_type=pfd&order=relevance"
-                                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                                   
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "care_home": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=care-home-health-related-deaths&post_type=pfd&order=relevance"
-                     "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                     "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                     
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "child_death": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=child-death-from-2015&post_type=pfd&order=relevance"
-                       "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                       "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                       
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "community_health_emergency": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=community-health-care-and-emergency-services-related-deaths&post_type=pfd&order=relevance"
-                                      "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                                      "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                                      
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "emergency_services": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=emergency-services-related-deaths-2019-onwards&post_type=pfd&order=relevance"
-                              "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                              "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                              
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "hospital_deaths": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=hospital-death-clinical-procedures-and-medical-management-related-deaths&post_type=pfd&order=relevance"
-                            "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                            "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                            
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "mental_health": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=mental-health-related-deaths&post_type=pfd&order=relevance"
-                         "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                         "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                         
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "police": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=police-related-deaths&post_type=pfd&order=relevance"
-                  "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                  "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                  
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "product": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=product-related-deaths&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                   
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "railway": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=railway-related-deaths&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                   
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "road": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=road-highways-safety-related-deaths&post_type=pfd&order=relevance"
-                "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "service_personnel": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=service-personnel-related-deaths&post_type=pfd&order=relevance"
-                              "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                              "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                              
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "custody": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=state-custody-related-deaths&post_type=pfd&order=relevance"
-                   "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                   "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                   
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "wales": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=wales-prevention-of-future-deaths-reports-2019-onwards&post_type=pfd&order=relevance"
-                 "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                 "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
-                 
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
         "other": "https://www.judiciary.uk/page/{page}/?s&pfd_report_type=other-related-deaths&post_type=pfd&order=relevance"
-                 "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
-                 "&before-day={before_day}&before-month={before_month}&before-year={before_year}"
+        "&after-day={after_day}&after-month={after_month}&after-year={after_year}"
+        "&before-day={before_day}&before-month={before_month}&before-year={before_year}",
     }
-    
-    
+
     # HTML extraction logic config
-    html_fields: List[HtmlFieldConfig] = field(default_factory=lambda: [
-        HtmlFieldConfig("id",
-                        para_keys=["Ref:"], sec_keys=None,
-                        rem_strs=["Ref:"], min_len=None, max_len=None,
-                        is_date=False),
-        HtmlFieldConfig("date",
-                        para_keys=["Date of report:"], sec_keys=None,
-                        rem_strs=["Date of report:"], min_len=None, max_len=None,
-                        is_date=True),
-        HtmlFieldConfig("receiver",
-                        para_keys=["This report is being sent to:", "Sent to:"], sec_keys=None,
-                        rem_strs=["This report is being sent to:", "Sent to:", "TO:"], min_len=5, max_len=20,
-                        is_date=False),
-        HtmlFieldConfig("coroner",
-                        para_keys=["Coroners name:", "Coroner name:", "Coroner's name:"], sec_keys=None,
-                        rem_strs=["Coroners name:", "Coroner name:", "Coroner's name:"], min_len=5, max_len=20,
-                        is_date=False),
-        HtmlFieldConfig("area",
-                        para_keys=["Coroners Area:", "Coroner Area:", "Coroner's Area:"], sec_keys=None,
-                        rem_strs=["Coroners Area:", "Coroner Area:", "Coroner's Area:"], min_len=4, max_len=40,
-                        is_date=False),
-        HtmlFieldConfig("investigation",
-                        para_keys=None,
-                        sec_keys=["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"],
-                        rem_strs=["INVESTIGATION and INQUEST", "INVESTIGATION & INQUEST", "3 INQUEST"],
-                        min_len=30, max_len=None, is_date=False),
-        HtmlFieldConfig("circumstances",
-                        para_keys=None,
-                        sec_keys=["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"],
-                        rem_strs=["CIRCUMSTANCES OF THE DEATH", "CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF"],
-                        min_len=30, max_len=None, is_date=False),
-        HtmlFieldConfig("concerns",
-                        para_keys=None,
-                        sec_keys=["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"],
-                        rem_strs=["CORONER'S CONCERNS", "CORONERS CONCERNS", "CORONER CONCERNS"],
-                        min_len=30, max_len=None, is_date=False),
-    ])
+    html_fields: List[HtmlFieldConfig] = field(
+        default_factory=lambda: [
+            HtmlFieldConfig(
+                "id",
+                para_keys=["Ref:"],
+                sec_keys=None,
+                rem_strs=["Ref:"],
+                min_len=None,
+                max_len=None,
+                is_date=False,
+            ),
+            HtmlFieldConfig(
+                "date",
+                para_keys=["Date of report:"],
+                sec_keys=None,
+                rem_strs=["Date of report:"],
+                min_len=None,
+                max_len=None,
+                is_date=True,
+            ),
+            HtmlFieldConfig(
+                "receiver",
+                para_keys=["This report is being sent to:", "Sent to:"],
+                sec_keys=None,
+                rem_strs=["This report is being sent to:", "Sent to:", "TO:"],
+                min_len=5,
+                max_len=20,
+                is_date=False,
+            ),
+            HtmlFieldConfig(
+                "coroner",
+                para_keys=["Coroners name:", "Coroner name:", "Coroner's name:"],
+                sec_keys=None,
+                rem_strs=["Coroners name:", "Coroner name:", "Coroner's name:"],
+                min_len=5,
+                max_len=20,
+                is_date=False,
+            ),
+            HtmlFieldConfig(
+                "area",
+                para_keys=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
+                sec_keys=None,
+                rem_strs=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
+                min_len=4,
+                max_len=40,
+                is_date=False,
+            ),
+            HtmlFieldConfig(
+                "investigation",
+                para_keys=None,
+                sec_keys=[
+                    "INVESTIGATION and INQUEST",
+                    "INVESTIGATION & INQUEST",
+                    "3 INQUEST",
+                ],
+                rem_strs=[
+                    "INVESTIGATION and INQUEST",
+                    "INVESTIGATION & INQUEST",
+                    "3 INQUEST",
+                ],
+                min_len=30,
+                max_len=None,
+                is_date=False,
+            ),
+            HtmlFieldConfig(
+                "circumstances",
+                para_keys=None,
+                sec_keys=[
+                    "CIRCUMSTANCES OF THE DEATH",
+                    "CIRCUMSTANCES OF DEATH",
+                    "CIRCUMSTANCES OF",
+                ],
+                rem_strs=[
+                    "CIRCUMSTANCES OF THE DEATH",
+                    "CIRCUMSTANCES OF DEATH",
+                    "CIRCUMSTANCES OF",
+                ],
+                min_len=30,
+                max_len=None,
+                is_date=False,
+            ),
+            HtmlFieldConfig(
+                "concerns",
+                para_keys=None,
+                sec_keys=[
+                    "CORONER'S CONCERNS",
+                    "CORONERS CONCERNS",
+                    "CORONER CONCERNS",
+                ],
+                rem_strs=[
+                    "CORONER'S CONCERNS",
+                    "CORONERS CONCERNS",
+                    "CORONER CONCERNS",
+                ],
+                min_len=30,
+                max_len=None,
+                is_date=False,
+            ),
+        ]
+    )
 
     # PDF extraction logic config
-    pdf_sections: List[PdfSectionConfig] = field(default_factory=lambda: [
-        PdfSectionConfig("coroner",
-                         start_keys=["I am", "CORONER"],
-                         end_keys=["CORONER'S LEGAL POWERS", "paragraph 7"],
-                         rem_strs=["I am", "CORONER", "CORONER'S LEGAL POWERS", "paragraph 7"],
-                         min_len=5, max_len=20),
-        PdfSectionConfig("area",
-                         start_keys=["area of"],
-                         end_keys=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"],
-                         rem_strs=["area of", "CORONER'S", "CORONER", "CORONERS", "paragraph 7"],
-                         min_len=4, max_len=40),
-        PdfSectionConfig("receiver",
-                         start_keys=[" SENT ", "SENT TO:"],
-                         end_keys=["CORONER", "CIRCUMSTANCES"],
-                         rem_strs=["TO:"],
-                         min_len=5, max_len=None),
-        PdfSectionConfig("investigation",
-                         start_keys=["INVESTIGATION and INQUEST", "3 INQUEST"],
-                         end_keys=["CIRCUMSTANCES"],
-                         rem_strs=[], min_len=30, max_len=None),
-        PdfSectionConfig("circumstances",
-                         start_keys=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH"],
-                         end_keys=["CORONER'S CONCERNS", "as follows"],
-                         rem_strs=[], min_len=30, max_len=None),
-        PdfSectionConfig("concerns",
-                         start_keys=["CORONER'S CONCERNS", "as follows"],
-                         end_keys=["ACTION SHOULD BE TAKEN"],
-                         rem_strs=[], min_len=30, max_len=None),
-    ])
-
+    pdf_sections: List[PdfSectionConfig] = field(
+        default_factory=lambda: [
+            PdfSectionConfig(
+                "coroner",
+                start_keys=["I am", "CORONER"],
+                end_keys=["CORONER'S LEGAL POWERS", "paragraph 7"],
+                rem_strs=["I am", "CORONER", "CORONER'S LEGAL POWERS", "paragraph 7"],
+                min_len=5,
+                max_len=20,
+            ),
+            PdfSectionConfig(
+                "area",
+                start_keys=["area of"],
+                end_keys=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"],
+                rem_strs=["area of", "CORONER'S", "CORONER", "CORONERS", "paragraph 7"],
+                min_len=4,
+                max_len=40,
+            ),
+            PdfSectionConfig(
+                "receiver",
+                start_keys=[" SENT ", "SENT TO:"],
+                end_keys=["CORONER", "CIRCUMSTANCES"],
+                rem_strs=["TO:"],
+                min_len=5,
+                max_len=None,
+            ),
+            PdfSectionConfig(
+                "investigation",
+                start_keys=["INVESTIGATION and INQUEST", "3 INQUEST"],
+                end_keys=["CIRCUMSTANCES"],
+                rem_strs=[],
+                min_len=30,
+                max_len=None,
+            ),
+            PdfSectionConfig(
+                "circumstances",
+                start_keys=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH"],
+                end_keys=["CORONER'S CONCERNS", "as follows"],
+                rem_strs=[],
+                min_len=30,
+                max_len=None,
+            ),
+            PdfSectionConfig(
+                "concerns",
+                start_keys=["CORONER'S CONCERNS", "as follows"],
+                end_keys=["ACTION SHOULD BE TAKEN"],
+                rem_strs=[],
+                min_len=30,
+                max_len=None,
+            ),
+        ]
+    )
 
     # Keys sent to / returned from the LLM
     LLM_KEY_DATE: str = "date of report"
@@ -305,7 +373,9 @@ class ScraperConfig:
             return self.CATEGORY_TEMPLATES[category.lower()]
         except KeyError as exc:
             valid = ", ".join(sorted(self.CATEGORY_TEMPLATES))
-            raise ValueError(f"Unknown category '{category}'. Valid options are: {valid}") from exc
+            raise ValueError(
+                f"Unknown category '{category}'. Valid options are: {valid}"
+            ) from exc
 
     def apply_random_delay(self) -> None:
         """Sleep for a random interval, honouring the configured delay range."""

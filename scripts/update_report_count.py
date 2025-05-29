@@ -16,7 +16,7 @@ count = len(df)
 # Replace {{NUM_REPORTS}} in docs/index.md
 with open(md_path, "r", encoding="utf-8") as f:
     text = f.read()
-    
+
 text = text.replace("{{NUM_REPORTS}}", str(count))
 
 with open(md_path, "w", encoding="utf-8") as f:
