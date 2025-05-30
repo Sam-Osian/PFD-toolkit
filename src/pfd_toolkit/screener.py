@@ -142,29 +142,30 @@ class Screener:
         Constructs the prompt template based on the user query and match approach.
         """
         base_prompt_template = f"""
-You are an expert text classification assistant. Your job is to read
-through the Prevention of Future Death (PFD) report excerpt at the
-bottom of this message, and decide whether or not it matches a user
-query.
+        
+You are an expert text classification assistant. Your task is to read
+the following excerpt from a Prevention of Future Death (PFD) report and
+decide whether it matches the user's query.
 
-The user's query may be thematic, or it might pertain to a small or
-subtle inclusion in the report. The user query is:
+A query may refer to a theme, a specific detail, or require two or more 
+elements to be present (e.g. "hospital-acquired infection deaths" requires 
+evidence of **both** an infection and that it was acquired in hospital).
 
-'{current_user_query}'
+**Instructions:**
+- Only respond 'Yes' if **all** elements of the user query are clearly present in the report.
+- If any required element is missing or there is not enough information, respond 'No'.
+- Your response must be a JSON object in which "matches_topic" can be either "Yes" or "No".
 
-If the report/excerpt matches this query, even if in part, you must 
-respond 'Yes'. Else, respond 'No'.
+**User query:** '{current_user_query}'
 
-Your response must be a JSON object in which "matches_topic" can be either
-"Yes" or "No".
 """
 
-        # Add match approach instructions: strict or liberal
+        # Add match approach instructions: strict, liberal or none
         if self.match_leniency == "strict":
             base_prompt_template += """
 Your match leniency should be strict.
-This means that if you are on the fence as to whether a report
-matches the user query, you should respond "No".
+This means that if you are not entirely sure whether a report
+matches the user query, you **must** respond "No".
 """
         elif self.match_leniency == "liberal":
             base_prompt_template += """
