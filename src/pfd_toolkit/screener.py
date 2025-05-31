@@ -141,24 +141,18 @@ class Screener:
         """
         Constructs the prompt template based on the user query and match approach.
         """
-        base_prompt_template = f"""
-        
-You are an expert text classification assistant. Your task is to read
-the following excerpt from a Prevention of Future Death (PFD) report and
-decide whether it matches the user's query.
-
-A query may refer to a theme, a specific detail, or require two or more 
-elements to be present (e.g. "hospital-acquired infection deaths" requires 
-evidence of **both** an infection and that it was acquired in hospital).
-
-**Instructions:**
-- Only respond 'Yes' if **all** elements of the user query are clearly present in the report.
-- If any required element is missing or there is not enough information, respond 'No'.
-- Your response must be a JSON object in which "matches_topic" can be either "Yes" or "No".
-
-**User query:** '{current_user_query}'
-
-"""
+        base_prompt_template = (
+    "You are an expert text classification assistant. Your task is to read "
+    "the following excerpt from a Prevention of Future Death (PFD) report and "
+    "decide whether it matches the user's query. \n\n"
+    
+    "**Instructions:** \n"
+    "- Only respond 'Yes' if **all** elements of the user query are clearly present in the report. \n"
+    "- If any required element is missing or there is not enough information, respond 'No'. \n"
+    "- Make sure any user query related to the deceased is concerned with them *only*, not other persons.\n"
+    "- Your response must be a JSON object in which 'matches_topic' can be either 'Yes' or 'No'. \n\n"
+    f"**User query:** \n'{current_user_query}'"
+)
 
         # Add match approach instructions: strict, liberal or none
         if self.match_leniency == "strict":
@@ -193,7 +187,9 @@ Here is the PFD report excerpt:
         return full_template_text
 
     def screen_reports(
-        self, reports: Optional[pd.DataFrame] = None, user_query: Optional[str] = None
+        self, reports: Optional[pd.DataFrame] = None, 
+        user_query: Optional[str] = None,
+        result_col_name: Optional[str] = None
     ) -> pd.DataFrame:
         """
         Classifies reports in the DataFrame against the user-defined topic using the LLM.
@@ -271,6 +267,9 @@ Here is the PFD report excerpt:
                 )
             self.prompt_template = self._build_prompt_template(active_user_query)
             self.user_query = active_user_query
+
+        # Determine the result column name for this call
+        self.result_col_name = result_col_name if result_col_name is not None else self.result_col_name
 
         # --- Pre-flight checks ---
         if self.llm is None:
