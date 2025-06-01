@@ -149,6 +149,7 @@ class Screener:
     "**Instructions:** \n"
     "- Only respond 'Yes' if **all** elements of the user query are clearly present in the report. \n"
     "- If any required element is missing or there is not enough information, respond 'No'. \n"
+    "- You may not infer or make judgements; the evidence must be clear."
     "- Make sure any user query related to the deceased is concerned with them *only*, not other persons.\n"
     "- Your response must be a JSON object in which 'matches_topic' can be either 'Yes' or 'No'. \n\n"
     f"**User query:** \n'{current_user_query}'"
