@@ -303,28 +303,28 @@ Here is the PFD report excerpt:
                 and self.COL_DATE in row
                 and pd.notna(row[self.COL_DATE])
             ):
-                report_parts.append(f"{self.COL_DATE}: {str(row[self.COL_DATE])}")
+                report_parts.append(f"The date of the report: {str(row[self.COL_DATE])}")
             if (
                 self.include_coroner
                 and self.COL_CORONER_NAME in row
                 and pd.notna(row[self.COL_CORONER_NAME])
             ):
                 report_parts.append(
-                    f"{self.COL_CORONER_NAME}: {str(row[self.COL_CORONER_NAME])}"
+                    f"The name of the coroner: {str(row[self.COL_CORONER_NAME])}"
                 )
             if (
                 self.include_area
                 and self.COL_AREA in row
                 and pd.notna(row[self.COL_AREA])
             ):
-                report_parts.append(f"{self.COL_AREA}: {str(row[self.COL_AREA])}")
+                report_parts.append(f"The area where the investigation took place: {str(row[self.COL_AREA])}")
             if (
                 self.include_receiver
                 and self.COL_RECEIVER in row
                 and pd.notna(row[self.COL_RECEIVER])
             ):
                 report_parts.append(
-                    f"{self.COL_RECEIVER}: {str(row[self.COL_RECEIVER])}"
+                    f"The recipients of the report: {str(row[self.COL_RECEIVER])}"
                 )
             if (
                 self.include_investigation
@@ -332,7 +332,7 @@ Here is the PFD report excerpt:
                 and pd.notna(row[self.COL_INVESTIGATION])
             ):
                 report_parts.append(
-                    f"{self.COL_INVESTIGATION}: {str(row[self.COL_INVESTIGATION])}"
+                    f"The Investigation & Inquest section:\n {str(row[self.COL_INVESTIGATION])}"
                 )
             if (
                 self.include_circumstances
@@ -340,7 +340,7 @@ Here is the PFD report excerpt:
                 and pd.notna(row[self.COL_CIRCUMSTANCES])
             ):
                 report_parts.append(
-                    f"{self.COL_CIRCUMSTANCES}: {str(row[self.COL_CIRCUMSTANCES])}"
+                    f"The Circumstances of Death section:\n {str(row[self.COL_CIRCUMSTANCES])}"
                 )
             if (
                 self.include_concerns
@@ -348,7 +348,7 @@ Here is the PFD report excerpt:
                 and pd.notna(row[self.COL_CONCERNS])
             ):
                 report_parts.append(
-                    f"{self.COL_CONCERNS}: {str(row[self.COL_CONCERNS])}"
+                    f"The Matters of Concern section: {str(row[self.COL_CONCERNS])}"
                 )
 
             report_text = "\n\n".join(report_parts).strip()
