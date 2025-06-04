@@ -5,17 +5,17 @@ import logging
 from bs4 import BeautifulSoup
 import pandas as pd
 from dateutil import parser as date_parser
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from tqdm.auto import tqdm
 import requests
 from itertools import count
 
 from .html_extractor import HtmlExtractor
 from .pdf_extractor import PdfExtractor
-from .text_utils import normalise_date
 
-from .config import GeneralConfig, ScraperConfig
+from .llm_extractor import run_llm_fallback as _run_llm_fallback
+from ..llm import LLM
+from ..config import GeneralConfig, ScraperConfig
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -121,7 +121,7 @@ class PFDScraper:
 
     def __init__(
         self,
-        llm: "LLM" = None,
+        llm: LLM | None = None,
         # Web page and search criteria
         category: str = "all",
         start_date: str = "2000-01-01",
@@ -429,7 +429,6 @@ class PFDScraper:
                 "LLM client (self.llm) not provided. Cannot run LLM fallback."
             )
 
-        current_reports_df: pd.DataFrame
         if reports_df is None:
             if self.reports is None:
                 raise ValueError(
@@ -438,102 +437,21 @@ class PFDScraper:
             current_reports_df = self.reports.copy()
         else:
             current_reports_df = reports_df.copy()
-        if current_reports_df.empty:
-            logger.info("Report DataFrame is empty. Skipping LLM fallback.")
-            return current_reports_df
-
-        # Helper function to process a single row for LLM fallback
-        def _process_row(idx: int, row_data: pd.Series) -> tuple[int, dict[str, str]]:
-            """Identifies missing fields for a given row and calls LLM for them."""
-            missing_fields: dict[str, str] = {}
-
-            # Build dictionary of fields needing LLM extraction based on _LLM_FIELD_CONFIG
-            for (
-                include_flag,
-                df_col_name,
-                llm_key,
-                llm_prompt,
-            ) in self._LLM_FIELD_CONFIG:
-                if (
-                    include_flag
-                    and row_data.get(df_col_name, "") == self.NOT_FOUND_TEXT
-                ):
-                    missing_fields[llm_key] = llm_prompt
-            if not missing_fields:
-                return idx, {}
-            pdf_bytes: bytes | None = None
-            report_url = row_data.get(self.COL_URL)
-            if report_url:
-                pdf_bytes = self._pdf_extractor.fetch_pdf_bytes(report_url)
-            if not pdf_bytes and self.verbose:
-                logger.warning(
-                    f"Could not obtain PDF bytes for URL {report_url} (row {idx}). LLM fallback for this row might be impaired."
-                )
-
-            # Call the LLM client's fallback method
-            updates = self.llm._call_llm_fallback(
-                pdf_bytes=pdf_bytes,
-                missing_fields=missing_fields,
-                report_url=str(report_url) if report_url else "N/A",
-                verbose=self.verbose,
-                tqdm_extra_kwargs={"disable": True},
-            )
-            return idx, updates if updates else {}
-
-        # Process rows for LLM fallback
-        results_map: Dict[int, Dict[str, str]] = {}
-        use_parallel = (
-            self.llm and hasattr(self.llm, "max_workers") and self.llm.max_workers > 1
+            
+        updated_df = _run_llm_fallback(
+            current_reports_df,
+            llm=self.llm,
+            pdf_extractor=self._pdf_extractor,
+            llm_field_config=self._LLM_FIELD_CONFIG,
+            llm_to_df_mapping=self._LLM_TO_DF_MAPPING,
+            col_url=self.COL_URL,
+            not_found_text=self.NOT_FOUND_TEXT,
+            llm_key_date=self.LLM_KEY_DATE,
+            verbose=self.verbose,
         )
-        if use_parallel:
-            with ThreadPoolExecutor(max_workers=self.llm.max_workers) as executor:
-                future_to_idx = {
-                    executor.submit(_process_row, idx, row_series): idx
-                    for idx, row_series in current_reports_df.iterrows()
-                }
-                for future in tqdm(
-                    as_completed(future_to_idx),
-                    total=len(future_to_idx),
-                    desc="Running LLM fallback",
-                    position=0,
-                    leave=True,
-                ):
-                    idx = future_to_idx[future]
-                    try:
-                        _, updates = future.result()
-                        results_map[idx] = updates
-                    except Exception as e:
-                        logger.error(f"LLM fallback failed for row index {idx}: {e}")
-        else:
-            for idx, row_series in tqdm(
-                current_reports_df.iterrows(),
-                total=len(current_reports_df),
-                desc="LLM fallback (sequential processing)",
-                position=0,
-                leave=True,
-            ):
-                try:
-                    _, updates = _process_row(idx, row_series)
-                    results_map[idx] = updates
-                except Exception as e:
-                    logger.error(f"LLM fallback failed for row index {idx}: {e}")
-
-        # Apply updates from LLM to the DataFrame
-        for idx, updates_dict in results_map.items():
-            if not updates_dict:
-                continue
-            for llm_key, value_from_llm in updates_dict.items():
-                df_col_name = self._LLM_TO_DF_MAPPING.get(llm_key)
-                if df_col_name:
-                    if llm_key == self.LLM_KEY_DATE:
-                        if value_from_llm != self.NOT_FOUND_TEXT:
-                            current_reports_df.at[idx, df_col_name] = (
-                                normalise_date(value_from_llm, verbose=self.verbose)
-                            )
-                    else:
-                        current_reports_df.at[idx, df_col_name] = value_from_llm
-        self.reports = current_reports_df.copy()
-        return current_reports_df
+        
+        self.reports = updated_df.copy()
+        return updated_df
 
     def top_up(
         self,

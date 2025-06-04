@@ -6,9 +6,126 @@ from typing import Dict
 from bs4 import BeautifulSoup
 import requests
 
-from .text_utils import clean_text, process_extracted_field
+from dataclasses import dataclass
+from typing import List, Optional
+
+from ..text_utils import clean_text, process_extracted_field
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class HtmlFieldConfig:
+    """Configuration for extracting a single field from HTML."""
+
+    key: str
+    para_keys: Optional[List[str]]
+    sec_keys: Optional[List[str]]
+    rem_strs: List[str]
+    min_len: Optional[int]
+    max_len: Optional[int]
+    is_date: bool
+
+
+DEFAULT_HTML_FIELDS: List[HtmlFieldConfig] = [
+    HtmlFieldConfig(
+        "id",
+        para_keys=["Ref:"],
+        sec_keys=None,
+        rem_strs=["Ref:"],
+        min_len=None,
+        max_len=None,
+        is_date=False,
+    ),
+    HtmlFieldConfig(
+        "date",
+        para_keys=["Date of report:"],
+        sec_keys=None,
+        rem_strs=["Date of report:"],
+        min_len=None,
+        max_len=None,
+        is_date=True,
+    ),
+    HtmlFieldConfig(
+        "receiver",
+        para_keys=["This report is being sent to:", "Sent to:"],
+        sec_keys=None,
+        rem_strs=["This report is being sent to:", "Sent to:", "TO:"],
+        min_len=5,
+        max_len=20,
+        is_date=False,
+    ),
+    HtmlFieldConfig(
+        "coroner",
+        para_keys=["Coroners name:", "Coroner name:", "Coroner's name:"],
+        sec_keys=None,
+        rem_strs=["Coroners name:", "Coroner name:", "Coroner's name:"],
+        min_len=5,
+        max_len=20,
+        is_date=False,
+    ),
+    HtmlFieldConfig(
+        "area",
+        para_keys=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
+        sec_keys=None,
+        rem_strs=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
+        min_len=4,
+        max_len=40,
+        is_date=False,
+    ),
+    HtmlFieldConfig(
+        "investigation",
+        para_keys=None,
+        sec_keys=[
+            "INVESTIGATION and INQUEST",
+            "INVESTIGATION & INQUEST",
+            "3 INQUEST",
+        ],
+        rem_strs=[
+            "INVESTIGATION and INQUEST",
+            "INVESTIGATION & INQUEST",
+            "3 INQUEST",
+        ],
+        min_len=30,
+        max_len=None,
+        is_date=False,
+    ),
+    HtmlFieldConfig(
+        "circumstances",
+        para_keys=None,
+        sec_keys=[
+            "CIRCUMSTANCES OF THE DEATH",
+            "CIRCUMSTANCES OF DEATH",
+            "CIRCUMSTANCES OF",
+        ],
+        rem_strs=[
+            "CIRCUMSTANCES OF THE DEATH",
+            "CIRCUMSTANCES OF DEATH",
+            "CIRCUMSTANCES OF",
+        ],
+        min_len=30,
+        max_len=None,
+        is_date=False,
+    ),
+    HtmlFieldConfig(
+        "concerns",
+        para_keys=None,
+        sec_keys=[
+            "CORONER'S CONCERNS",
+            "CORONERS CONCERNS",
+            "CORONER CONCERNS",
+        ],
+        rem_strs=[
+            "CORONER'S CONCERNS",
+            "CORONERS CONCERNS",
+            "CORONER CONCERNS",
+        ],
+        min_len=30,
+        max_len=None,
+        is_date=False,
+    ),
+]
+
 
 
 class HtmlExtractor:

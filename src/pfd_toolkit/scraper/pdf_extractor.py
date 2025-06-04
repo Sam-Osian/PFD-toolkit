@@ -10,10 +10,76 @@ from bs4 import BeautifulSoup
 import requests
 import pymupdf
 
-from .text_utils import clean_text
+from dataclasses import dataclass
+from typing import List, Optional
+
+from ..text_utils import clean_text
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass(frozen=True)
+class PdfSectionConfig:
+    """Configuration for extracting a single section from PDF text."""
+
+    key: str
+    start_keys: List[str]
+    end_keys: List[str]
+    rem_strs: List[str]
+    min_len: Optional[int]
+    max_len: Optional[int]
+
+
+DEFAULT_PDF_SECTIONS: List[PdfSectionConfig] = [
+    PdfSectionConfig(
+        "coroner",
+        start_keys=["I am", "CORONER"], # ...the beginning of the string to extract
+        end_keys=["CORONER'S LEGAL POWERS", "paragraph 7"], # ...the end of the string to extract
+        rem_strs=["I am", "CORONER", "CORONER'S LEGAL POWERS", "paragraph 7"], # ...remove these strings from final extraction
+        min_len=5, # ...replace with missing if less than 5
+        max_len=20, # ...replace with missing if greater than 20
+    ),
+    PdfSectionConfig(
+        "area",
+        start_keys=["area of"],
+        end_keys=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"],
+        rem_strs=["area of", "CORONER'S", "CORONER", "CORONERS", "paragraph 7"],
+        min_len=4,
+        max_len=40,
+    ),
+    PdfSectionConfig(
+        "receiver",
+        start_keys=[" SENT ", "SENT TO:"],
+        end_keys=["CORONER", "CIRCUMSTANCES"],
+        rem_strs=["TO:"],
+        min_len=5,
+        max_len=None,
+    ),
+    PdfSectionConfig(
+        "investigation",
+        start_keys=["INVESTIGATION and INQUEST", "3 INQUEST"],
+        end_keys=["CIRCUMSTANCES"],
+        rem_strs=[],
+        min_len=30,
+        max_len=None,
+    ),
+    PdfSectionConfig(
+        "circumstances",
+        start_keys=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH"],
+        end_keys=["CORONER'S CONCERNS", "as follows"],
+        rem_strs=[],
+        min_len=30,
+        max_len=None,
+    ),
+    PdfSectionConfig(
+        "concerns",
+        start_keys=["CORONER'S CONCERNS", "as follows"],
+        end_keys=["ACTION SHOULD BE TAKEN"],
+        rem_strs=[],
+        min_len=30,
+        max_len=None,
+    ),
+]
 
 class PdfExtractor:
     """Utility class encapsulating PDF scraping helpers."""

@@ -18,12 +18,14 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple
 import re
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from .scraper.html_extractor import HtmlFieldConfig, DEFAULT_HTML_FIELDS
+from .scraper.pdf_extractor import PdfSectionConfig, DEFAULT_PDF_SECTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -54,51 +56,9 @@ class GeneralConfig:
 
 # --------------------------------------------------------------------------- #
 # HTML & PDF extraction logic row types
-# The _FIELD_HTML_CONFIG and _FIELD_PDF_CONFIG attributes in ScraperConfig
-# refer to these
+# Configuration classes now live in pfd_toolkit.scraper.html_extractor and
+# pfd_toolkit.scraper.pdf_extractor
 # --------------------------------------------------------------------------- #
-@dataclass(frozen=True)
-class HtmlFieldConfig:
-    """
-    Defines how to extract a single field from HTML:
-      key       - the internal name for this field (matches dict key and DataFrame column)
-      para_keys - list of keywords to look for in <p> tags (if present)
-      sec_keys  - list of keywords in <strong> or header tags to define a section (if para_keys is None)
-      rem_strs  - substrings to strip from the raw text before cleaning
-      min_len   - minimum acceptable length after cleaning (None = no minimum)
-      max_len   - maximum acceptable length after cleaning (None = no maximum)
-      is_date   - whether to run the cleaned text through the date normaliser
-    """
-
-    key: str
-    para_keys: Optional[List[str]]
-    sec_keys: Optional[List[str]]
-    rem_strs: List[str]
-    min_len: Optional[int]
-    max_len: Optional[int]
-    is_date: bool
-
-
-@dataclass(frozen=True)
-class PdfSectionConfig:
-    """
-    Defines how to extract a single field from PDF text fallback:
-      key        – the internal name for this field (matches dict key and DataFrame column)
-      start_keys – list of phrases that mark the start of the desired section
-      end_keys   – list of phrases that mark the end of the desired section
-      rem_strs   – substrings to strip from the extracted raw section before cleaning
-      min_len    – minimum acceptable length after cleaning (None = no minimum)
-      max_len    – maximum acceptable length after cleaning (None = no maximum)
-    """
-
-    key: str
-    start_keys: List[str]
-    end_keys: List[str]
-    rem_strs: List[str]
-    min_len: Optional[int]
-    max_len: Optional[int]
-
-
 # --------------------------------------------------------------------------- #
 # Scraper-specific configuration & helpers
 # --------------------------------------------------------------------------- #
@@ -178,160 +138,10 @@ class ScraperConfig:
     }
 
     # HTML extraction logic config
-    html_fields: List[HtmlFieldConfig] = field(
-        default_factory=lambda: [
-            HtmlFieldConfig(
-                "id",
-                para_keys=["Ref:"],
-                sec_keys=None,
-                rem_strs=["Ref:"],
-                min_len=None,
-                max_len=None,
-                is_date=False,
-            ),
-            HtmlFieldConfig(
-                "date",
-                para_keys=["Date of report:"],
-                sec_keys=None,
-                rem_strs=["Date of report:"],
-                min_len=None,
-                max_len=None,
-                is_date=True,
-            ),
-            HtmlFieldConfig(
-                "receiver",
-                para_keys=["This report is being sent to:", "Sent to:"],
-                sec_keys=None,
-                rem_strs=["This report is being sent to:", "Sent to:", "TO:"],
-                min_len=5,
-                max_len=20,
-                is_date=False,
-            ),
-            HtmlFieldConfig(
-                "coroner",
-                para_keys=["Coroners name:", "Coroner name:", "Coroner's name:"],
-                sec_keys=None,
-                rem_strs=["Coroners name:", "Coroner name:", "Coroner's name:"],
-                min_len=5,
-                max_len=20,
-                is_date=False,
-            ),
-            HtmlFieldConfig(
-                "area",
-                para_keys=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
-                sec_keys=None,
-                rem_strs=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
-                min_len=4,
-                max_len=40,
-                is_date=False,
-            ),
-            HtmlFieldConfig(
-                "investigation",
-                para_keys=None,
-                sec_keys=[
-                    "INVESTIGATION and INQUEST",
-                    "INVESTIGATION & INQUEST",
-                    "3 INQUEST",
-                ],
-                rem_strs=[
-                    "INVESTIGATION and INQUEST",
-                    "INVESTIGATION & INQUEST",
-                    "3 INQUEST",
-                ],
-                min_len=30,
-                max_len=None,
-                is_date=False,
-            ),
-            HtmlFieldConfig(
-                "circumstances",
-                para_keys=None,
-                sec_keys=[
-                    "CIRCUMSTANCES OF THE DEATH",
-                    "CIRCUMSTANCES OF DEATH",
-                    "CIRCUMSTANCES OF",
-                ],
-                rem_strs=[
-                    "CIRCUMSTANCES OF THE DEATH",
-                    "CIRCUMSTANCES OF DEATH",
-                    "CIRCUMSTANCES OF",
-                ],
-                min_len=30,
-                max_len=None,
-                is_date=False,
-            ),
-            HtmlFieldConfig(
-                "concerns",
-                para_keys=None,
-                sec_keys=[
-                    "CORONER'S CONCERNS",
-                    "CORONERS CONCERNS",
-                    "CORONER CONCERNS",
-                ],
-                rem_strs=[
-                    "CORONER'S CONCERNS",
-                    "CORONERS CONCERNS",
-                    "CORONER CONCERNS",
-                ],
-                min_len=30,
-                max_len=None,
-                is_date=False,
-            ),
-        ]
-    )
+    html_fields: List[HtmlFieldConfig] = field(default_factory=lambda: DEFAULT_HTML_FIELDS.copy())
 
     # PDF extraction logic config
-    pdf_sections: List[PdfSectionConfig] = field(
-        default_factory=lambda: [
-            PdfSectionConfig(
-                "coroner",
-                start_keys=["I am", "CORONER"],
-                end_keys=["CORONER'S LEGAL POWERS", "paragraph 7"],
-                rem_strs=["I am", "CORONER", "CORONER'S LEGAL POWERS", "paragraph 7"],
-                min_len=5,
-                max_len=20,
-            ),
-            PdfSectionConfig(
-                "area",
-                start_keys=["area of"],
-                end_keys=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"],
-                rem_strs=["area of", "CORONER'S", "CORONER", "CORONERS", "paragraph 7"],
-                min_len=4,
-                max_len=40,
-            ),
-            PdfSectionConfig(
-                "receiver",
-                start_keys=[" SENT ", "SENT TO:"],
-                end_keys=["CORONER", "CIRCUMSTANCES"],
-                rem_strs=["TO:"],
-                min_len=5,
-                max_len=None,
-            ),
-            PdfSectionConfig(
-                "investigation",
-                start_keys=["INVESTIGATION and INQUEST", "3 INQUEST"],
-                end_keys=["CIRCUMSTANCES"],
-                rem_strs=[],
-                min_len=30,
-                max_len=None,
-            ),
-            PdfSectionConfig(
-                "circumstances",
-                start_keys=["CIRCUMSTANCES OF DEATH", "CIRCUMSTANCES OF THE DEATH"],
-                end_keys=["CORONER'S CONCERNS", "as follows"],
-                rem_strs=[],
-                min_len=30,
-                max_len=None,
-            ),
-            PdfSectionConfig(
-                "concerns",
-                start_keys=["CORONER'S CONCERNS", "as follows"],
-                end_keys=["ACTION SHOULD BE TAKEN"],
-                rem_strs=[],
-                min_len=30,
-                max_len=None,
-            ),
-        ]
-    )
+    pdf_sections: List[PdfSectionConfig] = field(default_factory=lambda: DEFAULT_PDF_SECTIONS.copy())
 
     # Keys sent to / returned from the LLM
     LLM_KEY_DATE: str = "date of report"
