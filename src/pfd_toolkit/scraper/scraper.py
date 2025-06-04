@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from tqdm.auto import tqdm
 import requests
 from itertools import count
+from datetime import datetime
 
 from .html_extractor import HtmlExtractor
 from .pdf_extractor import PdfExtractor
@@ -224,6 +225,7 @@ class PFDScraper:
         self._id_pattern = GeneralConfig.ID_PATTERN
 
         # Configuration for dynamically building the list of required columns in top_up()
+        # ...flags controlling which columns appear in the output:
         self._COLUMN_CONFIG: List[Tuple[bool, str]] = [
             (self.include_url, self.COL_URL),
             (self.include_id, self.COL_ID),
@@ -237,7 +239,7 @@ class PFDScraper:
             (self.include_time_stamp, self.COL_DATE_SCRAPED),
         ]
 
-        # Configuration for identifying missing fields for LLM fallback
+        # Prompts for missing fields passed to the LLM
         self._LLM_FIELD_CONFIG: List[Tuple[bool, str, str, str]] = [
             (
                 self.include_date,
@@ -283,7 +285,7 @@ class PFDScraper:
             ),
         ]
 
-        # Mapping from LLM response keys back to DataFrame column names
+        # Mapping used when writing LLM results to the DataFrame
         self._LLM_TO_DF_MAPPING: Dict[str, str] = {
             self.LLM_KEY_DATE: self.COL_DATE,
             self.LLM_KEY_CORONER: self.COL_CORONER_NAME,
@@ -340,6 +342,7 @@ class PFDScraper:
         self.report_links = []
         pbar = tqdm(desc="Fetching pages", unit="page", leave=False)
         for page in count(self.start_page):
+            # Build the search page URL
             page_url = self.page_template.format(page=page, **self.date_params)
             hrefs = self._get_report_href_values(page_url)
             if not hrefs:
@@ -438,6 +441,7 @@ class PFDScraper:
         else:
             current_reports_df = reports_df.copy()
             
+        # Delegate missing values to the language model
         updated_df = _run_llm_fallback(
             current_reports_df,
             llm=self.llm,
@@ -713,6 +717,7 @@ class PFDScraper:
 
         soup = BeautifulSoup(response.text, "html.parser")
         links = soup.find_all("a", class_="card__link")
+        # Return the URLs found on this page
         return [link.get("href") for link in links if link.get("href")]
 
 
@@ -723,6 +728,7 @@ class PFDScraper:
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
         """Handles the mechanics of scraping PFD reports for all given URLs using multithreading,
         returning a list of result dicts."""
+        # Use a thread pool to fetch each report
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             raw_results = list(
                 tqdm(
@@ -738,6 +744,7 @@ class PFDScraper:
 
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
         """Assemble a single report's data into a dictionary based on included fields."""
+        # Prepare the final record using inclusion flags
         report: dict[str, Any] = {}
         if self.include_url:
             report[self.COL_URL] = url
@@ -812,7 +819,7 @@ class PFDScraper:
             self.NOT_FOUND_TEXT,
             "N/A: Source file not PDF",
         ):
-            if any(
+            if any( # ...only trigger when one of the main fields is missing
                 fields[key] == self.NOT_FOUND_TEXT
                 for key in [
                     "coroner",

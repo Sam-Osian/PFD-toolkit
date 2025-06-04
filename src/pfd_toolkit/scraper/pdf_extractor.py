@@ -29,15 +29,19 @@ class PdfSectionConfig:
     min_len: Optional[int]
     max_len: Optional[int]
 
+# Default keyword patterns for PDF extraction
+# ...We take word 'sandwiches' through specifying the start and end strings/keys.
+#    From here, we remove extracted string snippets, & set min_len & max_len 
+#    values for validation.
 
 DEFAULT_PDF_SECTIONS: List[PdfSectionConfig] = [
     PdfSectionConfig(
         "coroner",
-        start_keys=["I am", "CORONER"], # ...the beginning of the string to extract
-        end_keys=["CORONER'S LEGAL POWERS", "paragraph 7"], # ...the end of the string to extract
-        rem_strs=["I am", "CORONER", "CORONER'S LEGAL POWERS", "paragraph 7"], # ...remove these strings from final extraction
-        min_len=5, # ...replace with missing if less than 5
-        max_len=20, # ...replace with missing if greater than 20
+        start_keys=["I am", "CORONER"],
+        end_keys=["CORONER'S LEGAL POWERS", "paragraph 7"], 
+        rem_strs=["I am", "CORONER", "CORONER'S LEGAL POWERS", "paragraph 7"],
+        min_len=5,
+        max_len=20,
     ),
     PdfSectionConfig(
         "area",
@@ -91,6 +95,7 @@ class PdfExtractor:
         not_found_text: str,
         verbose: bool = False,
     ) -> None:
+        # Cache configuration and downloaded files
         self.cfg = cfg
         self.timeout = timeout
         self.not_found_text = not_found_text
@@ -102,6 +107,7 @@ class PdfExtractor:
     # Basic helpers
     # ------------------------------------------------------------------
     def get_pdf_link(self, soup: BeautifulSoup) -> str | None:
+        """Grab the first download link on the page"""
         pdf_links = [
             a["href"]
             for a in soup.find_all("a", class_="govuk-button")
@@ -110,7 +116,7 @@ class PdfExtractor:
         return pdf_links[0] if pdf_links else None
 
     def fetch_pdf_bytes(self, report_url: str) -> bytes | None:
-        """Return the PDF bytes for a report page if available."""
+        """Download the report page and locate the PDF link"""
         try:
             soup = BeautifulSoup(
                 self.cfg.session.get(report_url, timeout=self.timeout).content,
@@ -127,6 +133,7 @@ class PdfExtractor:
             return None
 
         if pdf_link in self._pdf_cache:
+            # Use cached bytes if available
             return self._pdf_cache[pdf_link]
 
         try:
@@ -168,11 +175,13 @@ class PdfExtractor:
             )
             return self.not_found_text
         else:
+            # Use extracted bytes if file is PDF
             pdf_bytes_to_process = file_bytes
             self._pdf_cache[pdf_url] = pdf_bytes_to_process
 
         if pdf_bytes_to_process is None:
             return "N/A: Source file not PDF"
+        # Keep the last processed bytes for debugging
         self._last_pdf_bytes = pdf_bytes_to_process
 
         try:
@@ -186,6 +195,7 @@ class PdfExtractor:
         return clean_text(text)
 
     def extract_pdf_section(self, text: str, start_keywords: list[str], end_keywords: list[str]) -> str:
+        """Locate the text between the start and end keywords"""
         lower_text = text.lower()
         for start_kw in start_keywords:
             start_kw_lower = start_kw.lower()
@@ -207,6 +217,7 @@ class PdfExtractor:
         return self.not_found_text
 
     def apply_pdf_fallback(self, pdf_text: str, fields: Dict[str, str], include_flags: Dict[str, bool]) -> None:
+        # Only attempt sections that are missing
         missing = {k for k, v in fields.items() if v == self.not_found_text}
         for cfg in self.cfg.pdf_sections:
             if cfg.key not in missing or not include_flags.get(cfg.key, False):
@@ -226,4 +237,5 @@ class PdfExtractor:
                 cfg.max_len is not None and len(cleaned) > cfg.max_len
             ):
                 continue
+            # Update fields dict with extracted section
             fields[cfg.key] = cleaned or self.not_found_text

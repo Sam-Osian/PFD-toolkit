@@ -26,7 +26,10 @@ class HtmlFieldConfig:
     max_len: Optional[int]
     is_date: bool
 
-
+# Default patterns used when scraping from HTML
+# ...the script looks at either paragraph (para) or section (sec) tags
+#    based on provided strings that act as 'keys'. min_length and 
+#    max_length provide data validation.
 DEFAULT_HTML_FIELDS: List[HtmlFieldConfig] = [
     HtmlFieldConfig(
         "id",
@@ -146,7 +149,7 @@ class HtmlExtractor:
         self.verbose = verbose
 
     def fetch_report_page(self, url: str) -> BeautifulSoup | None:
-        """Fetch and parse a report HTML page."""
+        """Fetch and parse a report HTML page and convert to BeautifulSoup"""
         try:
             response = self.cfg.session.get(url, timeout=self.timeout)
             response.raise_for_status()
@@ -156,6 +159,7 @@ class HtmlExtractor:
         return BeautifulSoup(response.content, "html.parser")
 
     def extract_html_paragraph_text(self, soup: BeautifulSoup, keywords: list[str]) -> str:
+        """Scan <p> tags for provided keywords"""
         for keyword in keywords:
             element = soup.find(lambda tag: tag.name == "p" and keyword in tag.get_text(), recursive=True)
             if element:
@@ -163,6 +167,7 @@ class HtmlExtractor:
         return self.not_found_text
 
     def extract_html_section_text(self, soup: BeautifulSoup, header_keywords: list[str]) -> str:
+        """Look for section headers in <strong> tags"""
         for strong_tag in soup.find_all("strong"):
             header_text = strong_tag.get_text(strip=True)
             if any(keyword.lower() in header_text.lower() for keyword in header_keywords):
@@ -187,15 +192,18 @@ class HtmlExtractor:
         include_flags: Dict[str, bool],
     ) -> None:
         """Populate *fields* dict with data extracted from HTML."""
+        # Iterate through configured fields
         for cfg in self.cfg.html_fields:
             if not include_flags.get(cfg.key, False):
                 continue
-
+            
             if cfg.sec_keys:
                 raw = self.extract_html_section_text(soup, cfg.sec_keys)
             else:
                 raw = self.extract_html_paragraph_text(soup, cfg.para_keys or [])
-
+                
+            # Special handling for the report reference number
+            # ...which requires unique format validation
             if cfg.key == "id" and raw != self.not_found_text:
                 m = self.id_pattern.search(raw)
                 fields["id"] = m.group(1) if m else self.not_found_text

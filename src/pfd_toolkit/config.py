@@ -56,9 +56,10 @@ class GeneralConfig:
 
 # --------------------------------------------------------------------------- #
 # HTML & PDF extraction logic row types
-# Configuration classes now live in pfd_toolkit.scraper.html_extractor and
+# Configuration classes live in pfd_toolkit.scraper.html_extractor and
 # pfd_toolkit.scraper.pdf_extractor
 # --------------------------------------------------------------------------- #
+
 # --------------------------------------------------------------------------- #
 # Scraper-specific configuration & helpers
 # --------------------------------------------------------------------------- #

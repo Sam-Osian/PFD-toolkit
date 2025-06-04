@@ -26,11 +26,13 @@ def run_llm_fallback(
 ) -> pd.DataFrame:
     """Apply LLM fallback extraction to a DataFrame of reports."""
 
+    # Skip early if there are no rows
     if df.empty:
         logger.info("Report DataFrame is empty. Skipping LLM fallback.")
         return df
 
     def _process_row(idx: int, row_data: pd.Series) -> Tuple[int, Dict[str, str]]:
+        # Build dict of fields still missing
         missing_fields: Dict[str, str] = {}
         for include_flag, df_col_name, llm_key, llm_prompt in llm_field_config:
             if include_flag and row_data.get(df_col_name, "") == not_found_text:
@@ -59,8 +61,10 @@ def run_llm_fallback(
         return idx, updates if updates else {}
 
     results_map: Dict[int, Dict[str, str]] = {}
+    # Use threads when the LLM client supports it
     use_parallel = llm and hasattr(llm, "max_workers") and llm.max_workers > 1
     if use_parallel:
+        # Process rows concurrently
         with ThreadPoolExecutor(max_workers=llm.max_workers) as executor:
             future_to_idx = {
                 executor.submit(_process_row, idx, row): idx
@@ -80,6 +84,7 @@ def run_llm_fallback(
                 except Exception as e:
                     logger.error("LLM fallback failed for row index %s: %s", idx, e)
     else:
+        # Fallback to sequential processing
         for idx, row in tqdm(
             df.iterrows(),
             total=len(df),
@@ -93,6 +98,7 @@ def run_llm_fallback(
             except Exception as e:
                 logger.error("LLM fallback failed for row index %s: %s", idx, e)
 
+    # Write LLM results back into the DataFrame
     for idx, updates_dict in results_map.items():
         if not updates_dict:
             continue
