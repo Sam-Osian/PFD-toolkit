@@ -145,13 +145,19 @@ class PdfExtractor:
         ext = os.path.splitext(path)[1].lower()
         if self.verbose:
             logger.debug(f"Processing .pdf {pdf_url}.")
-        try:
-            response = self.cfg.session.get(pdf_url, timeout=self.timeout)
-            response.raise_for_status()
-            file_bytes = response.content
-        except requests.RequestException as e:
-            logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
-            return self.not_found_text
+        file_bytes: bytes | None = None
+        
+        if pdf_url in self._pdf_cache:
+            file_bytes = self._pdf_cache[pdf_url]
+        else:
+            try:
+                response = self.cfg.session.get(pdf_url, timeout=self.timeout)
+                response.raise_for_status()
+                file_bytes = response.content
+                self._pdf_cache[pdf_url] = file_bytes
+            except requests.RequestException as e:
+                logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
+                return self.not_found_text
 
         pdf_bytes_to_process: bytes | None = None
         if ext != ".pdf":
