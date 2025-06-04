@@ -3,20 +3,19 @@ from __future__ import annotations
 from typing import Dict, List, Tuple, Any
 import logging
 from bs4 import BeautifulSoup
-import pymupdf
 import pandas as pd
-import re
 from dateutil import parser as date_parser
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlparse, unquote
-from io import BytesIO
-import os
 from datetime import datetime
 from tqdm.auto import tqdm
 import requests
 from itertools import count
 
-from .config import GeneralConfig, ScraperConfig, HtmlFieldConfig, PdfSectionConfig
+from .html_extractor import HtmlExtractor
+from .pdf_extractor import PdfExtractor
+from .text_utils import normalise_date
+
+from .config import GeneralConfig, ScraperConfig
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -150,7 +149,7 @@ class PFDScraper:
         verbose: bool = False,
     ) -> None:
 
-        # Centralised network configuration (replaces the ad-hoc wiring)
+        # Network configuration 
         self.cfg = ScraperConfig(
             max_workers=max_workers,
             max_requests=max_requests,
@@ -206,8 +205,6 @@ class PFDScraper:
         # Initialise storage for results and links
         self.reports: pd.DataFrame | None = None
         self.report_links: list[str] = []
-        self._last_pdf_bytes: bytes | None = None
-        self._pdf_cache: Dict[str, bytes] = {}
 
         # Store LLM model name if LLM client is provided
         self.llm_model = self.llm.model if self.llm else "None"
@@ -295,6 +292,32 @@ class PFDScraper:
             self.LLM_KEY_INVESTIGATION: self.COL_INVESTIGATION,
             self.LLM_KEY_CIRCUMSTANCES: self.COL_CIRCUMSTANCES,
             self.LLM_KEY_CONCERNS: self.COL_CONCERNS,
+        }
+
+        # Helper extractors
+        self._html_extractor = HtmlExtractor(
+            self.cfg,
+            timeout=self.timeout,
+            id_pattern=self._id_pattern,
+            not_found_text=self.NOT_FOUND_TEXT,
+            verbose=self.verbose,
+        )
+        self._pdf_extractor = PdfExtractor(
+            self.cfg,
+            timeout=self.timeout,
+            not_found_text=self.NOT_FOUND_TEXT,
+            verbose=self.verbose,
+        )
+
+        self._include_flags: Dict[str, bool] = {
+            "id": self.include_id,
+            "date": self.include_date,
+            "coroner": self.include_coroner,
+            "area": self.include_area,
+            "receiver": self.include_receiver,
+            "investigation": self.include_investigation,
+            "circumstances": self.include_circumstances,
+            "concerns": self.include_concerns,
         }
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -410,7 +433,7 @@ class PFDScraper:
         if reports_df is None:
             if self.reports is None:
                 raise ValueError(
-                    "No scraped reports found (reports_df is None and self.reports is None). Please run scrape_reports() first or provide a DataFrame."
+                    "No scraped reports found (reports_df is None and self.reports is None). Please run scrape_reports() first or provide a suitable DataFrame."
                 )
             current_reports_df = self.reports.copy()
         else:
@@ -419,7 +442,7 @@ class PFDScraper:
             logger.info("Report DataFrame is empty. Skipping LLM fallback.")
             return current_reports_df
 
-        # --- Helper function to process a single row for LLM fallback ---
+        # Helper function to process a single row for LLM fallback
         def _process_row(idx: int, row_data: pd.Series) -> tuple[int, dict[str, str]]:
             """Identifies missing fields for a given row and calls LLM for them."""
             missing_fields: dict[str, str] = {}
@@ -441,7 +464,7 @@ class PFDScraper:
             pdf_bytes: bytes | None = None
             report_url = row_data.get(self.COL_URL)
             if report_url:
-                pdf_bytes = self._fetch_pdf_bytes(report_url)
+                pdf_bytes = self._pdf_extractor.fetch_pdf_bytes(report_url)
             if not pdf_bytes and self.verbose:
                 logger.warning(
                     f"Could not obtain PDF bytes for URL {report_url} (row {idx}). LLM fallback for this row might be impaired."
@@ -457,7 +480,7 @@ class PFDScraper:
             )
             return idx, updates if updates else {}
 
-        # --- Process rows for LLM fallback  ---
+        # Process rows for LLM fallback
         results_map: Dict[int, Dict[str, str]] = {}
         use_parallel = (
             self.llm and hasattr(self.llm, "max_workers") and self.llm.max_workers > 1
@@ -471,7 +494,7 @@ class PFDScraper:
                 for future in tqdm(
                     as_completed(future_to_idx),
                     total=len(future_to_idx),
-                    desc="LLM fallback (parallel processing)",
+                    desc="Running LLM fallback",
                     position=0,
                     leave=True,
                 ):
@@ -505,7 +528,7 @@ class PFDScraper:
                     if llm_key == self.LLM_KEY_DATE:
                         if value_from_llm != self.NOT_FOUND_TEXT:
                             current_reports_df.at[idx, df_col_name] = (
-                                self._normalise_date(value_from_llm)
+                                normalise_date(value_from_llm, verbose=self.verbose)
                             )
                     else:
                         current_reports_df.at[idx, df_col_name] = value_from_llm
@@ -774,270 +797,6 @@ class PFDScraper:
         links = soup.find_all("a", class_="card__link")
         return [link.get("href") for link in links if link.get("href")]
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # HTML Extraction
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def _fetch_report_page(self, url: str) -> BeautifulSoup | None:
-        """Fetch the HTML content of a report page and return a BeautifulSoup object, or None on failure."""
-        try:
-            response = self.cfg.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            logger.error("Failed to fetch %s; Error: %s", url, e)
-            return None
-        return BeautifulSoup(response.content, "html.parser")
-
-    def _extract_html_paragraph_text(
-        self, soup: BeautifulSoup, keywords: list[str]
-    ) -> str:
-        """
-        Extracts text from the first `<p>` (paragraph) element in HTML that contains any of the provided keywords.
-        This is typically used for extracting metadata fields.
-
-        :param soup: A BeautifulSoup object representing the parsed HTML page.
-        :param keywords: A list of keywords to search for within paragraph tags.
-        :return: The cleaned text content of the found paragraph, or `NOT_FOUND_TEXT`.
-        """
-        for keyword in keywords:
-            # Find a <p> tag whose text contains the keyword.
-            element = soup.find(
-                lambda tag: tag.name == "p" and keyword in tag.get_text(),
-                recursive=True,
-            )
-            if element:
-                return self._clean_text(element.get_text())
-        return self.NOT_FOUND_TEXT
-
-    def _extract_html_section_text(
-        self, soup: BeautifulSoup, header_keywords: list[str]
-    ) -> str:
-        """
-        Extracts a block of text from HTML following a header.
-        It looks for a `<strong>` tag (assumed to be a section header) containing one of the `header_keywords`.
-        If found, it collects text from all subsequent sibling elements until the next header or end of parent.
-
-        :param soup: A BeautifulSoup object representing the parsed HTML page.
-        :param header_keywords: A list of keyword variations to identify the section header.
-        :return: The cleaned, concatenated text of the section, or `NOT_FOUND_TEXT`.
-        """
-        for strong_tag in soup.find_all("strong"):
-            header_text = strong_tag.get_text(strip=True)
-            if any(
-                keyword.lower() in header_text.lower() for keyword in header_keywords
-            ):
-                content_parts: list[str] = []
-                for sibling in strong_tag.next_siblings:
-                    if isinstance(sibling, str):
-                        text = sibling.strip()
-                        if text:
-                            content_parts.append(text)
-                    else:
-                        text = sibling.get_text(separator=" ", strip=True)
-                        if text:
-                            content_parts.append(text)
-                if content_parts:
-                    return self._clean_text(" ".join(content_parts))
-        return self.NOT_FOUND_TEXT
-
-    def _extract_fields_from_html(
-        self, soup: BeautifulSoup, fields: dict[str, str]
-    ) -> None:
-        """
-        Extract configured fields from HTML, driven by a list of HtmlFieldConfig
-        defined in self.cfg.html_fields.
-        """
-        for cfg in self.cfg.html_fields:  # HtmlFieldConfig instances
-            if not getattr(self, f"include_{cfg.key}"):
-                continue
-
-            # Pick paragraph vs section extraction
-            if cfg.sec_keys:
-                raw = self._extract_html_section_text(soup, cfg.sec_keys)
-            else:
-                raw = self._extract_html_paragraph_text(soup, cfg.para_keys or [])
-
-            # If it's the report ID, we do a special regex match
-            if cfg.key == "id" and raw != self.NOT_FOUND_TEXT:
-                m = self._id_pattern.search(raw)
-                fields["id"] = m.group(1) if m else self.NOT_FOUND_TEXT
-            else:
-                fields[cfg.key] = self._process_extracted_field(
-                    raw,
-                    cfg.rem_strs,
-                    min_len=cfg.min_len,
-                    max_len=cfg.max_len,
-                    is_date=cfg.is_date,
-                )
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # PDF Extraction
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def _get_pdf_link(self, soup: BeautifulSoup) -> str | None:
-        """Extract the first PDF link from a report's HTML page, or None if not found."""
-        pdf_links = [
-            a["href"]
-            for a in soup.find_all("a", class_="govuk-button")
-            if a.get("href")
-        ]
-        return pdf_links[0] if pdf_links else None
-
-    def _fetch_pdf_bytes(self, report_url: str) -> bytes | None:
-        """
-        Fetches the PDF file content as bytes from a report's HTML page.
-        It first finds the PDF download link on the HTML page, then downloads the PDF.
-
-        :param report_url: The URL of the HTML page containing the link to the PDF report.
-        :return: The PDF content as bytes, or None if fetching fails or no PDF link is found.
-        """
-        # First, check if we already downloaded this PDF...
-        try:
-            soup = BeautifulSoup(
-                self.cfg.session.get(report_url, timeout=self.timeout).content,
-                "html.parser",
-            )
-            pdf_link = next(
-                (
-                    a["href"]
-                    for a in soup.find_all("a", class_="govuk-button")
-                    if a.get("href")
-                ),
-                None,
-            )
-        except Exception:
-            return None
-
-        if pdf_link in self._pdf_cache:
-            return self._pdf_cache[pdf_link]
-
-        # ...Otherwise fetch, cache, and return:
-        try:
-            pdf_response = self.cfg.session.get(pdf_link, timeout=self.timeout)
-            pdf_response.raise_for_status()
-            content = pdf_response.content
-            self._pdf_cache[pdf_link] = content
-            return content
-        except Exception as e:
-            logger.error("Failed to fetch PDF for report at %s: %s", report_url, e)
-            return None
-
-    def _extract_text_from_pdf(self, pdf_url: str) -> str:
-        """
-        Downloads a PDF from a URL and extracts all text content from it.
-        Caches the downloaded PDF bytes if LLM fallback is enabled.
-
-        :param pdf_url: The URL of the .pdf file.
-        :return: The cleaned, concatenated text from all pages of the PDF.
-                 Returns `NOT_FOUND_TEXT` or a specific error message ("N/A: Source file not PDF") on failure.
-        """
-        parsed_url = urlparse(pdf_url)
-        path = unquote(parsed_url.path)
-        ext = os.path.splitext(path)[1].lower()
-        if self.verbose:
-            logger.debug(f"Processing .pdf {pdf_url}.")
-
-        try:
-            response = self.cfg.session.get(pdf_url, timeout=self.timeout)
-            response.raise_for_status()
-            file_bytes = response.content
-        except requests.RequestException as e:
-            logger.error("Failed to fetch file: %s; Error: %s", pdf_url, e)
-            return self.NOT_FOUND_TEXT
-        pdf_bytes_to_process: bytes | None = None
-
-        if ext != ".pdf":
-            logger.info(
-                "File %s is not a .pdf (extension %s). Skipping this file...",
-                pdf_url,
-                ext,
-            )
-            return self.NOT_FOUND_TEXT
-        else:
-            pdf_bytes_to_process = file_bytes
-            self._pdf_cache[pdf_url] = pdf_bytes_to_process
-
-        if pdf_bytes_to_process is None:
-            return "N/A: Source file not PDF"
-        self._last_pdf_bytes = pdf_bytes_to_process
-
-        try:
-            pdf_buffer = BytesIO(pdf_bytes_to_process)
-            pdf_document = pymupdf.open(stream=pdf_buffer, filetype="pdf")
-            text = "".join(page.get_text() for page in pdf_document)
-            pdf_document.close()
-        except Exception as e:
-            logger.error("Error processing .pdf %s: %s", pdf_url, e)
-            return "N/A: Source file not PDF"
-        return self._clean_text(text)
-
-    def _apply_pdf_fallback(self, pdf_text: str, fields: dict[str, str]) -> None:
-        """
-        Fill missing fields from PDF text based on PdfSectionConfig
-        instances found in self.cfg.pdf_sections.
-        """
-        missing = {k for k, v in fields.items() if v == self.NOT_FOUND_TEXT}
-
-        for cfg in self.cfg.pdf_sections:  # PdfSectionConfig instances
-            if cfg.key not in missing or not getattr(self, f"include_{cfg.key}"):
-                continue
-
-            raw = self._extract_pdf_section(
-                pdf_text,
-                start_keywords=cfg.start_keys,
-                end_keywords=cfg.end_keys,
-            )
-            if raw == self.NOT_FOUND_TEXT:
-                continue
-
-            # Strip out remove-strs, normalise whitespace/apostrophes
-            cleaned = self._clean_text(raw)
-            for rem in cfg.rem_strs:
-                cleaned = cleaned.replace(rem, "")
-            cleaned = cleaned.strip()
-
-            # Enforce length constraints
-            if (cfg.min_len is not None and len(cleaned) < cfg.min_len) or (
-                cfg.max_len is not None and len(cleaned) > cfg.max_len
-            ):
-                continue
-
-            fields[cfg.key] = cleaned or self.NOT_FOUND_TEXT
-
-    def _extract_pdf_section(
-        self, text: str, start_keywords: list[str], end_keywords: list[str]
-    ) -> str:
-        """
-        Extracts a section of text from a larger body of PDF text based on start and end keywords.
-        The search for keywords is case-insensitive.
-
-        :param text: The full text from which to extract the section.
-        :param start_keywords: A list of possible keywords that mark the beginning of the section.
-        :param end_keywords: A list of possible keywords that mark the end of the section.
-        :return: The cleaned text of the extracted section. If no start keyword is found, or if a start
-                 is found but no end keyword, it may return part of the text or `NOT_FOUND_TEXT`.
-        """
-        lower_text = text.lower()
-        for start_kw in start_keywords:
-            start_kw_lower = start_kw.lower()
-            start_index = lower_text.find(start_kw_lower)
-            if start_index != -1:
-                section_start_offset = start_index + len(start_kw_lower)
-                end_indices_found: list[int] = []
-                for end_kw in end_keywords:
-                    end_kw_lower = end_kw.lower()
-                    end_index = lower_text.find(end_kw_lower, section_start_offset)
-                    if end_index != -1:
-                        end_indices_found.append(end_index)
-                if end_indices_found:
-                    section_end_offset = min(end_indices_found)
-                    extracted_section_text = text[
-                        section_start_offset:section_end_offset
-                    ]
-                else:
-                    extracted_section_text = text[section_start_offset:]
-                return extracted_section_text
-        return self.NOT_FOUND_TEXT
 
     # ──────────────────────────────────────────────────────────────────────────
     # Utilities: text-cleaning & assembly
@@ -1058,102 +817,6 @@ class PFDScraper:
             )
         # filter out any None failures
         return [r for r in raw_results if r is not None]
-
-    @staticmethod
-    def _normalise_apostrophes(text: str) -> str:
-        """
-        Replaces typographic (curly) apostrophes with standard (straight) apostrophes.
-        This helps in standardising text for consistent processing.
-
-        :param text: The input string.
-        :return: The string with normalised apostrophes.
-        """
-        return text.replace("’", "'").replace("‘", "'")
-
-    def _clean_text(self, text: str) -> str:
-        """
-        Cleans text by normalising apostrophes and collapsing multiple whitespace characters
-        (including newlines, tabs) into single spaces, and stripping leading/trailing whitespace.
-
-        :param text: The input string.
-        :return: The cleaned string.
-        """
-        normalised_apostrophes = self._normalise_apostrophes(text)
-        return " ".join(normalised_apostrophes.split())
-
-    def _normalise_date(self, raw_date_str: str) -> str:
-        """
-        Converts a human-readable date string to ISO-8601 format (YYYY-MM-DD),
-        attempting to clean known non-date suffixes like "Ref:" before parsing.
-
-        :param raw_date_str: The raw date string to parse.
-        :return: The date string in "YYYY-MM-DD" format, or the original string if parsing fails.
-        """
-        text_being_processed = self._clean_text(raw_date_str).strip()
-        final_text_to_parse = text_being_processed
-        try:
-            match = re.match(r"(.+?)(Ref[:\s]|$)", text_being_processed, re.IGNORECASE)
-            if match:
-                potential_date_part = match.group(1).strip()
-                if potential_date_part:
-                    final_text_to_parse = potential_date_part
-            if not final_text_to_parse:
-                if self.verbose:
-                    logger.warning(
-                        f"Date string empty after trying to remove 'Ref...' from '{text_being_processed}'. Raw: '{raw_date_str}'. Keeping raw."
-                    )
-                return text_being_processed
-            dt = date_parser.parse(final_text_to_parse, fuzzy=True, dayfirst=True)
-            return dt.strftime("%Y-%m-%d")
-        except Exception as e:
-            if self.verbose:
-                logger.warning(
-                    f"Date parse failed for raw '{raw_date_str}' (processed to '{text_being_processed}', attempted '{final_text_to_parse}') "
-                    f"– keeping raw. Error: {e}"
-                )
-            return text_being_processed
-
-    def _process_extracted_field(
-        self,
-        text: str,
-        strings_to_remove: list[str],
-        min_len: int | None = None,
-        max_len: int | None = None,
-        is_date: bool = False,
-    ) -> str:
-        """
-        Helper function to process a raw extracted text field. It performs several steps:
-        1. Returns `NOT_FOUND_TEXT` if the input is already `NOT_FOUND_TEXT`.
-        2. Removes specified leading substrings (e.g. "Date of report:").
-        3. Strips leading/trailing whitespace.
-        4. Applies general text cleaning (apostrophes, multiple spaces via `_clean_text`).
-        5. If `is_date` is True, normalises the text to "YYYY-MM-DD" format.
-        6. Validates the length of the processed text against `min_len` and `max_len`.
-           If length checks fail, or if text becomes empty and `min_len` > 0, returns `NOT_FOUND_TEXT`.
-
-        :param text: The raw extracted text.
-        :param strings_to_remove: A list of substrings to remove from the beginning of the text.
-        :param min_len: Optional minimum length for the final text.
-        :param max_len: Optional maximum length for the final text.
-        :param is_date: Boolean flag indicating if the field is a date.
-        :return: The processed and validated text, or `NOT_FOUND_TEXT`.
-        """
-        if text == self.NOT_FOUND_TEXT:
-            return self.NOT_FOUND_TEXT
-        processed_text = text
-        for s_to_remove in strings_to_remove:
-            processed_text = processed_text.replace(s_to_remove, "")
-        processed_text = processed_text.strip()
-        processed_text = self._clean_text(processed_text)
-        if is_date:
-            return self._normalise_date(processed_text)
-        if not processed_text and min_len is not None and min_len > 0:
-            return self.NOT_FOUND_TEXT
-        if min_len is not None and len(processed_text) < min_len:
-            return self.NOT_FOUND_TEXT
-        if max_len is not None and len(processed_text) > max_len:
-            return self.NOT_FOUND_TEXT
-        return processed_text
 
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
         """Assemble a single report's data into a dictionary based on included fields."""
@@ -1213,19 +876,19 @@ class PFDScraper:
             "concerns": self.NOT_FOUND_TEXT,
         }
         # Fetch HTML page
-        soup = self._fetch_report_page(url)
+        soup = self._html_extractor.fetch_report_page(url)
         if soup is None:
             return None
         # Find PDF download link
-        pdf_link = self._get_pdf_link(soup)
+        pdf_link = self._pdf_extractor.get_pdf_link(soup)
         if not pdf_link:
             logger.error("No .pdf links found on %s", url)
             return None
         # Download and extract PDF text
-        pdf_text = self._extract_text_from_pdf(pdf_link)
+        pdf_text = self._pdf_extractor.extract_text_from_pdf(pdf_link)
         # Extract fields from HTML if enabled
         if self.html_scraping:
-            self._extract_fields_from_html(soup, fields)
+            self._html_extractor.extract_fields_from_html(soup, fields, self._include_flags)
         # Use PDF fallback if enabled and PDF text is available
         if self.pdf_fallback and pdf_text not in (
             self.NOT_FOUND_TEXT,
@@ -1246,7 +909,7 @@ class PFDScraper:
                     logger.debug(
                         f"Initiating .pdf fallback for URL: {url} because one or more fields are missing."
                     )
-                self._apply_pdf_fallback(pdf_text, fields)
+                self._pdf_extractor.apply_pdf_fallback(pdf_text, fields, self._include_flags)
         # Assemble result dictionary
         report = self._assemble_report(url, fields)
         return report
