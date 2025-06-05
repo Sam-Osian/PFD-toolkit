@@ -29,4 +29,4 @@ def test_extract_pdf_section():
     extractor = PdfExtractor(ScraperConfig(), timeout=1, not_found_text='N/A')
     sample = 'start text KEY1 middle KEY2 end'
     result = extractor.extract_pdf_section(sample, ['KEY1'], ['KEY2'])
-    assert result.strip() == ' middle '
+    assert result.strip() == 'middle'

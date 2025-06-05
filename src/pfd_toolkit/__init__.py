@@ -1,3 +1,13 @@
+import warnings
+
+# Suppress PyMuPDF SWIG-related DeprecationWarnings
+warnings.filterwarnings(
+    "ignore",
+    message=r"builtin type .* has no __module__ attribute",
+    category=DeprecationWarning,
+)
+
+
 # The below lets users run `from pfd_toolkit import PFDScraper` instead of `from pfd_toolkit.scraper import PFDScraper`
 # Same for the other modules
 from pfd_toolkit.scraper import (
