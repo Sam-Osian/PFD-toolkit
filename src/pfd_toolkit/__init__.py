@@ -1,9 +1,10 @@
 import warnings
 
-# Suppress PyMuPDF SWIG-related DeprecationWarnings
+# Suppress PyMuPDF SWIG-related DeprecationWarnings from SwigPyPacked and
+# swigvarlink objects only
 warnings.filterwarnings(
     "ignore",
-    message=r"builtin type .* has no __module__ attribute",
+    message=r"builtin type (SwigPyPacked|swigvarlink|SwigPyObject) has no __module__ attribute",
     category=DeprecationWarning,
 )
 

@@ -12,6 +12,6 @@ if str(SRC) not in sys.path:
 # ...we don't call these objects, so the warnings are benign
 warnings.filterwarnings(
     "ignore",
-    message=r"builtin type .* has no __module__ attribute",
+    message=r"builtin type (SwigPyPacked|swigvarlink|SwigPyObject) has no __module__ attribute",
     category=DeprecationWarning,
 )
