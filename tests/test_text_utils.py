@@ -45,3 +45,24 @@ def test_process_extracted_field_min_len():
         min_len=10,
     )
     assert result == "N/A"
+
+
+def test_process_extracted_field_max_len():
+    text = "This text is definitely too long"
+    result = text_utils.process_extracted_field(
+        text,
+        [],
+        "N/A",
+        max_len=10,
+    )
+    assert result == "N/A"
+
+
+def test_process_extracted_field_not_found_passthrough():
+    result = text_utils.process_extracted_field(
+        "N/A",
+        [],
+        "N/A",
+        min_len=1,
+    )
+    assert result == "N/A"
