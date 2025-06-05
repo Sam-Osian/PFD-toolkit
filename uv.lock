@@ -1386,7 +1386,6 @@ dependencies = [
     { name = "pymdown-extensions" },
     { name = "pymupdf" },
     { name = "pyparsing" },
-    { name = "pytest" },
     { name = "python-dateutil" },
     { name = "python-dotenv" },
     { name = "pytz" },
@@ -1407,6 +1406,11 @@ dependencies = [
     { name = "urllib3" },
     { name = "uvicorn" },
     { name = "wcwidth" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -1477,7 +1481,6 @@ requires-dist = [
     { name = "pymdown-extensions", specifier = ">=10.15" },
     { name = "pymupdf", specifier = "==1.25.3" },
     { name = "pyparsing", specifier = "==3.2.1" },
-    { name = "pytest", specifier = ">=8.4.0" },
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
     { name = "python-dotenv", specifier = "==1.0.1" },
     { name = "pytz", specifier = "==2025.1" },
@@ -1499,6 +1502,9 @@ requires-dist = [
     { name = "uvicorn", specifier = "==0.34.0" },
     { name = "wcwidth", specifier = "==0.2.13" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=8.4.0" }]
 
 [[package]]
 name = "pillow"

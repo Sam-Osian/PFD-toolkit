@@ -87,7 +87,6 @@ dependencies = [
     "pymdown-extensions>=10.15",
     "pymupdf==1.25.3",
     "pyparsing==3.2.1",
-    "pytest>=8.4.0",
     "python-dateutil==2.9.0.post0",
     "python-dotenv==1.0.1",
     "pytz==2025.1",
@@ -113,6 +112,11 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/pfd_toolkit"]
 include = ["src/pfd_toolkit/data/*.csv"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+]
 
 [project.urls]
 "Source" = "https://github.com/Sam-Osian/PFD-toolkit"
