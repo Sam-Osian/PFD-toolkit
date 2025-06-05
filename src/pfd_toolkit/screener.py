@@ -351,6 +351,7 @@ Here is the PFD report excerpt:
                 )
 
             report_text = "\n\n".join(report_parts).strip()
+            report_text = " ".join(report_text.split())
 
             if not report_text:
                 if self.verbose:
