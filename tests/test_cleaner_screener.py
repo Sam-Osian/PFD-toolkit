@@ -1,0 +1,52 @@
+import pandas as pd
+from pfd_toolkit.cleaner import Cleaner
+from pfd_toolkit.screener import Screener, TopicMatch
+
+
+class DummyLLM:
+    CLEANER_BASE_PROMPT = "{field_description}{field_contents_and_rules}{extra_instructions}"
+    CLEANER_PROMPT_CONFIG = {
+        "Coroner": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
+        "Area": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
+        "Receiver": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
+        "InvestigationAndInquest": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
+        "CircumstancesOfDeath": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
+        "MattersOfConcern": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
+    }
+
+    def __init__(self, keywords=None):
+        self.keywords = [k.lower() for k in (keywords or [])]
+
+    def generate_batch(self, prompts, response_format=None, **kwargs):
+        outputs = []
+        for p in prompts:
+            text = p.split("\n")[-1]
+            if response_format is None:
+                outputs.append(text.upper())
+            else:
+                match = any(kw in p.lower() for kw in self.keywords)
+                val = "Yes" if match else "No"
+                outputs.append(response_format(matches_topic=val))
+        return outputs
+
+
+def test_cleaner_basic():
+    df = pd.DataFrame({"CoronerName": ["john doe"], "Area": ["area"], "Receiver": ["x"],
+                       "InvestigationAndInquest": ["inv"], "CircumstancesOfDeath": ["circ"],
+                       "MattersOfConcern": ["conc"]})
+    cleaner = Cleaner(df, DummyLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned["CoronerName"].iloc[0] == "JOHN DOE"
+
+
+def test_screener_basic():
+    data = {
+        "InvestigationAndInquest": ["Contains needle text"],
+        "CircumstancesOfDeath": ["other"],
+        "MattersOfConcern": ["something"]
+    }
+    df = pd.DataFrame(data)
+    llm = DummyLLM(keywords=["needle"])
+    screener = Screener(llm=llm, reports=df, user_query="needle")
+    filtered = screener.screen_reports()
+    assert len(filtered) == 1
