@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 from pfd_toolkit.cleaner import Cleaner
 from pfd_toolkit.screener import Screener, TopicMatch
 
@@ -24,7 +25,7 @@ class DummyLLM:
             if response_format is None:
                 outputs.append(text.upper())
             else:
-                match = any(kw in p.lower() for kw in self.keywords)
+                match = any(kw in text.lower() for kw in self.keywords)
                 val = "Yes" if match else "No"
                 outputs.append(response_format(matches_topic=val))
         return outputs
@@ -39,6 +40,12 @@ def test_cleaner_basic():
     assert cleaned["CoronerName"].iloc[0] == "JOHN DOE"
 
 
+def test_cleaner_missing_column_error():
+    df = pd.DataFrame({"CoronerName": ["x"]})
+    with pytest.raises(ValueError):
+        Cleaner(df, DummyLLM(), area=True)
+
+
 def test_screener_basic():
     data = {
         "InvestigationAndInquest": ["Contains needle text"],
@@ -50,3 +57,17 @@ def test_screener_basic():
     screener = Screener(llm=llm, reports=df, user_query="needle")
     filtered = screener.screen_reports()
     assert len(filtered) == 1
+
+
+def test_screener_add_column_no_filter():
+    data = {
+        "InvestigationAndInquest": ["foo"],
+        "CircumstancesOfDeath": ["bar"],
+        "MattersOfConcern": ["baz"],
+    }
+    df = pd.DataFrame(data)
+    llm = DummyLLM(keywords=["zzz"])  # no match
+    screener = Screener(llm=llm, reports=df, user_query="zzz", filter_df=False)
+    result = screener.screen_reports()
+    assert screener.result_col_name in result.columns
+    assert result[screener.result_col_name].iloc[0] is False

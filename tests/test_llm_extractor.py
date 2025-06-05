@@ -59,3 +59,25 @@ def test_run_llm_fallback_basic():
     assert result["Date"].iloc[0] == "2024-05-01"
     assert result["Receiver"].iloc[0] == "VAL-receiver"
     assert llm.called_with[0][1] == {"date": "prompt-date", "receiver": "prompt-receiver"}
+
+
+def test_run_llm_fallback_empty_df():
+    df = pd.DataFrame(columns=["URL", "Date"])
+    llm = DummyLLM()
+    pdf_extractor = DummyPdfExtractor()
+
+    result = run_llm_fallback(
+        df,
+        llm=llm,
+        pdf_extractor=pdf_extractor,
+        llm_field_config=[],
+        llm_to_df_mapping={},
+        col_url="URL",
+        not_found_text="N/A",
+        llm_key_date="date",
+        verbose=False,
+    )
+
+    assert result.empty
+    assert llm.called_with == []
+    assert pdf_extractor.called_urls == []

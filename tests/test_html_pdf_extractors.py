@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
-from pfd_toolkit.scraper.html_extractor import HtmlExtractor, HtmlFieldConfig
+from pfd_toolkit.scraper.html_extractor import HtmlExtractor
 from pfd_toolkit.scraper.pdf_extractor import PdfExtractor
-from pfd_toolkit.config import ScraperConfig
+from pfd_toolkit.config import ScraperConfig, GeneralConfig
 
 
 def make_html_extractor():
@@ -30,3 +30,30 @@ def test_extract_pdf_section():
     sample = 'start text KEY1 middle KEY2 end'
     result = extractor.extract_pdf_section(sample, ['KEY1'], ['KEY2'])
     assert result.strip() == 'middle'
+
+
+def test_extract_fields_from_html_id_and_date():
+    cfg = ScraperConfig()
+    extractor = HtmlExtractor(cfg, timeout=1, id_pattern=GeneralConfig.ID_PATTERN, not_found_text="N/A")
+    html = """
+        <p>Ref: 2024-1234</p>
+        <p>Date of report: 1 May 2024</p>
+    """
+    soup = BeautifulSoup(html, 'html.parser')
+    fields = {}
+    flags = {f.key: True for f in cfg.html_fields}
+    extractor.extract_fields_from_html(soup, fields, flags)
+    assert fields['id'] == '2024-1234'
+    assert fields['date'] == '2024-05-01'
+
+
+def test_apply_pdf_fallback_updates_fields():
+    cfg = ScraperConfig()
+    extractor = PdfExtractor(cfg, timeout=1, not_found_text='N/A')
+    pdf_text = (
+        "INVESTIGATION and INQUEST some investigation text that is quite long and clearly exceeds thirty characters CIRCUMSTANCES "
+    )
+    fields = {'investigation': 'N/A'}
+    flags = {'investigation': True}
+    extractor.apply_pdf_fallback(pdf_text, fields, flags)
+    assert fields['investigation'].startswith('some investigation text')
