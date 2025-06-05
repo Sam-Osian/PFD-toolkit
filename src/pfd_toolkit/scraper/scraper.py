@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from dateutil import parser as date_parser
 from concurrent.futures import ThreadPoolExecutor
-from tqdm.auto import tqdm
+from tqdm import tqdm
 import requests
 from itertools import count
 from datetime import datetime

@@ -8,7 +8,7 @@ import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import backoff
 from threading import Semaphore
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
@@ -269,15 +269,9 @@ class LLM:
         >>> msgs = ["Summarise:\\n" + txt for txt in docs]
         >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
         """
-        effective_tqdm_kwargs = tqdm_extra_kwargs or {}
-
-        if tqdm_extra_kwargs is None:
-            tqdm_extra_kwargs = {}
-        if len(prompts) == 1 and "disable" not in tqdm_extra_kwargs:
-            tqdm_extra_kwargs["disable"] = True
-
+        tqdm_kwargs = dict(tqdm_extra_kwargs or {})
         if len(prompts) == 1:
-            effective_tqdm_kwargs["disable"] = True
+            tqdm_kwargs.setdefault("disable", True)
 
         def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
@@ -302,14 +296,15 @@ class LLM:
         # Sequential execution if only one worker is designated
         if effective_workers <= 1:
             results: List[BaseModel | str] = []
-            current_desc = effective_tqdm_kwargs.pop(
+            seq_kwargs = dict(tqdm_kwargs)
+            current_desc = seq_kwargs.pop(
                 "desc", "Sending requests to the LLM (sequentially)"
             )
             for idx, prompt in tqdm(
                 enumerate(prompts),
                 total=len(prompts),
                 desc=current_desc,
-                **effective_tqdm_kwargs,
+                **seq_kwargs,
             ):
                 current_images = (
                     images_list[idx] if images_list and idx < len(images_list) else None
@@ -366,14 +361,15 @@ class LLM:
 
         with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
-            current_desc = effective_tqdm_kwargs.pop(
+            par_kwargs = dict(tqdm_kwargs)
+            current_desc = par_kwargs.pop(
                 "desc", "Sending requests to the LLM (in parallel)"
             )
             for fut in tqdm(
                 as_completed(futures),
                 total=len(prompts),
                 desc=current_desc,
-                **effective_tqdm_kwargs,
+                **par_kwargs,
             ):
                 i, out = fut.result()
                 results[i] = out

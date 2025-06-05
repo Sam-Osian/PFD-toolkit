@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Tuple
 
 import pandas as pd
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 from ..text_utils import normalise_date
 

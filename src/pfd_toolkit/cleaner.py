@@ -1,6 +1,6 @@
 import logging
 import pandas as pd
-from tqdm.auto import tqdm
+from tqdm import tqdm
 
 import warnings
 from tqdm import TqdmWarning
