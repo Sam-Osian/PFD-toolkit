@@ -1,6 +1,7 @@
 import pandas as pd
 from pydantic import BaseModel
 from pfd_toolkit.extractor import Extractor
+from pfd_toolkit.config import GeneralConfig
 
 class DummyLLM:
     def __init__(self, values=None):
@@ -53,3 +54,19 @@ def test_extractor_empty_df():
     result = extractor.extract_features()
     assert result.empty
     assert llm.called == 0
+
+
+def test_extractor_not_found_handling():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(values={"age": GeneralConfig.NOT_FOUND_TEXT, "ethnicity": "B"})
+    extractor = Extractor(
+        llm=llm,
+        feature_model=DemoModel,
+        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
+        reports=df,
+        include_investigation=True,
+    )
+    result = extractor.extract_features()
+    assert result["age"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
+    assert result["ethnicity"].iloc[0] == "B"
+    assert llm.called == 1

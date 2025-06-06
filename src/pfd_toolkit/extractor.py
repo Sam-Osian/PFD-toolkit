@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Type, Union
 
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, create_model
 
 from .llm import LLM
 from .config import GeneralConfig
@@ -29,9 +29,6 @@ class Extractor:
     reports : pandas.DataFrame, optional
         DataFrame of PFD reports. If provided, it will be copied and stored
         on the instance.
-    result_columns : dict[str, str] or None, optional
-        Mapping of feature names to DataFrame column names. If omitted, the
-        feature names themselves are used as column names.
     include_date, include_coroner, include_area, include_receiver,
     include_investigation, include_circumstances, include_concerns : bool, optional
         Flags controlling which existing report columns are included in the text
@@ -57,7 +54,6 @@ class Extractor:
         feature_model: Type[BaseModel],
         feature_instructions: Dict[str, str],
         reports: Optional[pd.DataFrame] = None,
-        result_columns: Optional[Dict[str, str]] = None,
         include_date: bool = False,
         include_coroner: bool = False,
         include_area: bool = False,
@@ -70,7 +66,6 @@ class Extractor:
         self.llm = llm
         self.feature_model = feature_model
         self.feature_instructions = feature_instructions
-        self.result_columns = result_columns or {k: k for k in feature_instructions}
         self.include_date = include_date
         self.include_coroner = include_coroner
         self.include_area = include_area
@@ -83,6 +78,7 @@ class Extractor:
         self.reports: pd.DataFrame = reports.copy() if reports is not None else pd.DataFrame()
 
         self.prompt_template = self._build_prompt_template()
+        self._llm_model = self._build_llm_model()
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -110,6 +106,34 @@ Here is the report excerpt:
         return template.strip()
 
     # ------------------------------------------------------------------
+    def _build_llm_model(self) -> Type[BaseModel]:
+        """Create an internal Pydantic model allowing missing features.
+
+        This helper builds a new model identical to ``feature_model`` but with
+        each field accepting either the original type or ``str``.  This ensures
+        that the LLM can return :data:`GeneralConfig.NOT_FOUND_TEXT` for any
+        field regardless of its declared type.  The implementation is compatible
+        with both Pydantic v1 and v2 field representations.
+        """
+        # Determine where field definitions are stored across Pydantic versions
+        base_fields = getattr(self.feature_model, "__fields__", None)
+        if not base_fields:
+            base_fields = getattr(self.feature_model, "model_fields", {})
+
+        fields = {}
+        for name, field in base_fields.items():
+            # ``outer_type_`` exists on Pydantic v1 ``ModelField`` objects.
+            field_type = getattr(field, "outer_type_", None)
+            if field_type is None:
+                # Pydantic v2 ``FieldInfo`` exposes ``annotation`` instead.
+                field_type = getattr(field, "annotation", None)
+            alias = getattr(field, "alias", name)
+            union_type = Union[field_type, str]
+            fields[name] = (union_type, Field(..., alias=alias))
+
+        return create_model("ExtractorLLMModel", **fields)
+
+    # ------------------------------------------------------------------
     def extract_features(self, reports: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """Run feature extraction for the given reports."""
         df = reports.copy() if reports is not None else self.reports.copy()
@@ -117,9 +141,9 @@ Here is the report excerpt:
             return df
 
         # ensure result columns exist
-        for feat, col in self.result_columns.items():
-            if col not in df.columns:
-                df[col] = GeneralConfig.NOT_FOUND_TEXT
+        for feat in self.feature_instructions:
+            if feat not in df.columns:
+                df[feat] = GeneralConfig.NOT_FOUND_TEXT
 
         prompts: List[str] = []
         indices: List[int] = []
@@ -150,7 +174,7 @@ Here is the report excerpt:
 
         llm_results = self.llm.generate_batch(
             prompts=prompts,
-            response_format=self.feature_model,
+            response_format=self._llm_model,
             tqdm_extra_kwargs={"desc": "LLM: Extracting features", "position": 0, "leave": True},
         )
 
@@ -166,9 +190,8 @@ Here is the report excerpt:
                 values = {f: GeneralConfig.NOT_FOUND_TEXT for f in self.feature_instructions}
 
             for feat in self.feature_instructions:
-                col = self.result_columns[feat]
                 val = values.get(feat, GeneralConfig.NOT_FOUND_TEXT)
-                df.at[idx, col] = val
+                df.at[idx, feat] = val
 
         if reports is None:
             self.reports = df.copy()
