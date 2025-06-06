@@ -70,3 +70,20 @@ def test_extractor_not_found_handling():
     assert result["age"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
     assert result["ethnicity"].iloc[0] == "B"
     assert llm.called == 1
+
+
+def test_extractor_force_assign():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(values={"age": 40, "ethnicity": "C"})
+    extractor = Extractor(
+        llm=llm,
+        feature_model=DemoModel,
+        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
+        reports=df,
+        include_investigation=True,
+        force_assign=True,
+    )
+    assert "must not respond" in extractor.prompt_template
+    field_info = extractor._llm_model.model_fields["age"]
+    field_type = getattr(field_info, "annotation", getattr(field_info, "outer_type_", None))
+    assert str not in getattr(field_type, "__args__", (field_type,))

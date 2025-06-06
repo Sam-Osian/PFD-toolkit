@@ -35,6 +35,9 @@ class Extractor:
         sent to the LLM.
     verbose : bool, optional
         Emit extra logging when ``True``.
+    force_assign : bool, optional
+        When ``True``, the LLM is instructed to avoid returning
+        :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature. Defaults to ``False``.
     """
 
     COL_URL = GeneralConfig.COL_URL
@@ -62,6 +65,7 @@ class Extractor:
         include_circumstances: bool = True,
         include_concerns: bool = True,
         verbose: bool = False,
+        force_assign: bool = False,
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
@@ -74,6 +78,7 @@ class Extractor:
         self.include_circumstances = include_circumstances
         self.include_concerns = include_concerns
         self.verbose = verbose
+        self.force_assign = force_assign
 
         self.reports: pd.DataFrame = reports.copy() if reports is not None else pd.DataFrame()
 
@@ -86,14 +91,20 @@ class Extractor:
             f"- {name}: {desc}" for name, desc in self.feature_instructions.items()
         ]
         features_list = ", ".join(self.feature_instructions.keys())
+        not_found_line_prompt = (
+            f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'."
+            if not self.force_assign
+            else f"You must not respond with '{GeneralConfig.NOT_FOUND_TEXT}'. Provide your best guess for every feature."
+        )
+
         template = f"""
 You are an expert at extracting structured information from UK Prevention of Future Death reports.
 
 Extract the following features from the report excerpt provided.
 
-If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'.
+{not_found_line_prompt}
 
-Return your answer strictly as a JSON object with the following keys: 
+Return your answer strictly as a JSON object with the following keys:
 {features_list}
 
 Feature guidance:
@@ -127,7 +138,10 @@ Here is the report excerpt:
                 # Pydantic v2 ``FieldInfo`` exposes ``annotation`` instead.
                 field_type = getattr(field, "annotation", None)
             alias = getattr(field, "alias", name)
-            union_type = Union[field_type, str]
+            if self.force_assign:
+                union_type = field_type
+            else:
+                union_type = Union[field_type, str]
             fields[name] = (union_type, Field(..., alias=alias))
 
         return create_model("ExtractorLLMModel", **fields)
@@ -174,7 +188,7 @@ Here is the report excerpt:
         llm_results = self.llm.generate_batch(
             prompts=prompts,
             response_format=self._llm_model,
-            tqdm_extra_kwargs={"desc": "LLM: Extracting features", "position": 0, "leave": True},
+            tqdm_extra_kwargs={"desc": "Extracting features", "position": 0, "leave": True},
         )
 
         for i, res in enumerate(llm_results):
