@@ -115,10 +115,9 @@ Here is the report excerpt:
         field regardless of its declared type.  The implementation is compatible
         with both Pydantic v1 and v2 field representations.
         """
-        # Determine where field definitions are stored across Pydantic versions
-        base_fields = getattr(self.feature_model, "__fields__", None)
-        if not base_fields:
-            base_fields = getattr(self.feature_model, "model_fields", {})
+        # Get field versions
+        base_fields = self.feature_model.model_fields
+
 
         fields = {}
         for name, field in base_fields.items():
@@ -182,7 +181,8 @@ Here is the report excerpt:
             idx = indices[i]
             values: Dict[str, object] = {}
             if isinstance(res, BaseModel):
-                values = res.model_dump()
+                dump_fn = getattr(res, "model_dump", None)
+                values = dump_fn()
             elif isinstance(res, dict):
                 values = res
             else:
