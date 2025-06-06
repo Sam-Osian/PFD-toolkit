@@ -1,5 +1,5 @@
 import pandas as pd
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import GeneralConfig
 
@@ -20,18 +20,16 @@ class DummyLLM:
         return outputs
 
 class DemoModel(BaseModel):
-    age: int
-    ethnicity: str
+    age: int = Field(..., description="Age")
+    ethnicity: str = Field(..., description="Ethnicity")
 
 
 def test_extractor_basic():
     df = pd.DataFrame({"InvestigationAndInquest": ["text"], "CircumstancesOfDeath": ["other"]})
     llm = DummyLLM(values={"age": 30, "ethnicity": "White"})
-    feature_instr = {"age": "Age of the deceased", "ethnicity": "Ethnicity"}
     extractor = Extractor(
         llm=llm,
         feature_model=DemoModel,
-        feature_instructions=feature_instr,
         reports=df,
         include_investigation=True,
         include_circumstances=True,
@@ -48,7 +46,6 @@ def test_extractor_empty_df():
     extractor = Extractor(
         llm=llm,
         feature_model=DemoModel,
-        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
         reports=df,
     )
     result = extractor.extract_features()
@@ -62,7 +59,6 @@ def test_extractor_not_found_handling():
     extractor = Extractor(
         llm=llm,
         feature_model=DemoModel,
-        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
         reports=df,
         include_investigation=True,
     )
@@ -78,13 +74,11 @@ def test_extractor_force_assign():
     extractor = Extractor(
         llm=llm,
         feature_model=DemoModel,
-        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
         reports=df,
         include_investigation=True,
         force_assign=True,
     )
-    assert "Provide your best guess" in extractor.prompt_template
-    assert "must not respond" not in extractor.prompt_template
+    assert GeneralConfig.NOT_FOUND_TEXT not in extractor.prompt_template
     field_info = extractor._llm_model.model_fields["age"]
     field_type = getattr(field_info, "annotation", getattr(field_info, "outer_type_", None))
     assert str not in getattr(field_type, "__args__", (field_type,))
@@ -96,7 +90,6 @@ def test_extractor_optional_fields():
     extractor = Extractor(
         llm=llm,
         feature_model=DemoModel,
-        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
         reports=df,
         include_investigation=True,
         add_other=True,
@@ -118,7 +111,6 @@ def test_extractor_allow_multiple_prompt_line():
     extractor = Extractor(
         llm=llm,
         feature_model=DemoModel,
-        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
         reports=df,
         include_investigation=True,
         allow_multiple=True,

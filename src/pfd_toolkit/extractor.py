@@ -23,9 +23,11 @@ class Extractor:
         Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
     feature_model : type[pydantic.BaseModel]
         Pydantic model describing the features to extract from each report.
-    feature_instructions : dict[str, str]
-        Mapping of feature names (matching the model fields) to the extraction
-        instructions presented to the LLM.
+        Field descriptions on the model are used as extraction instructions.
+    feature_instructions : dict[str, str], optional
+        Optional mapping of feature names (matching the model fields) to the
+        extraction instructions presented to the LLM.  Any instructions not
+        provided here will be taken from ``feature_model`` field descriptions.
     reports : pandas.DataFrame, optional
         DataFrame of PFD reports. If provided, it will be copied and stored
         on the instance.
@@ -64,7 +66,7 @@ class Extractor:
         *,
         llm: LLM,
         feature_model: Type[BaseModel],
-        feature_instructions: Dict[str, str],
+        feature_instructions: Optional[Dict[str, str]] = None,
         reports: Optional[pd.DataFrame] = None,
         include_date: bool = False,
         include_coroner: bool = False,
@@ -81,7 +83,7 @@ class Extractor:
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
-        self.feature_instructions = feature_instructions
+        self.feature_instructions = feature_instructions or {}
         self.include_date = include_date
         self.include_coroner = include_coroner
         self.include_area = include_area
@@ -112,6 +114,12 @@ class Extractor:
 
         if self.add_other or self.add_none_of_above:
             self.feature_model = self._extend_feature_model()
+
+        # Collect instructions from model field descriptions and merge with
+        # any provided instructions.
+        model_instructions = self._collect_field_descriptions()
+        for name, desc in model_instructions.items():
+            self.feature_instructions.setdefault(name, desc)
 
         self.prompt_template = self._build_prompt_template()
         self._llm_model = self._build_llm_model()
@@ -166,17 +174,46 @@ Here is the report excerpt:
             if field_type is None:
                 field_type = getattr(field, "annotation", None)
             alias = getattr(field, "alias", name)
-            fields[name] = (field_type, Field(..., alias=alias))
+            description = getattr(field, "description", None)
+            if description is None:
+                description = getattr(getattr(field, "field_info", None), "description", None)
+            fields[name] = (field_type, Field(..., alias=alias, description=description))
 
         if self.add_other:
-            fields["other"] = (str, Field(...))
+            fields["other"] = (
+                str,
+                Field(
+                    ..., description="Assign this if the report fits none of the provided categories."
+                ),
+            )
         if self.add_none_of_above:
-            fields["none_of_the_above"] = (str, Field(...))
+            fields["none_of_the_above"] = (
+                str,
+                Field(
+                    ..., description="Use when no category applies at all."
+                ),
+            )
 
         model = create_model(f"{self.feature_model.__name__}Extended", **fields)
         if not hasattr(model, "model_fields"):
             model.model_fields = model.__fields__
         return model
+
+    # ------------------------------------------------------------------
+    def _collect_field_descriptions(self) -> Dict[str, str]:
+        """Return a mapping from feature names to their field descriptions."""
+        base_fields = getattr(self.feature_model, "model_fields", None)
+        if base_fields is None:
+            base_fields = getattr(self.feature_model, "__fields__", {})
+
+        instructions: Dict[str, str] = {}
+        for name, field in base_fields.items():
+            desc = getattr(field, "description", None)
+            if desc is None:
+                desc = getattr(getattr(field, "field_info", None), "description", None)
+            if desc:
+                instructions[name] = desc
+        return instructions
 
     # ------------------------------------------------------------------
     def _build_llm_model(self) -> Type[BaseModel]:
