@@ -20,6 +20,7 @@ from pfd_toolkit.cleaner import Cleaner
 from pfd_toolkit.llm import LLM
 from pfd_toolkit.loader import load_reports
 from pfd_toolkit.screener import Screener
+from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import (
     GeneralConfig,
     ScraperConfig,
@@ -31,6 +32,7 @@ __all__ = [
     "LLM",
     "load_reports",
     "Screener",
+    "Extractor",
     "GeneralConfig",
     "ScraperConfig",
     "HtmlFieldConfig",

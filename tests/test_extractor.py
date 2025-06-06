@@ -1,0 +1,55 @@
+import pandas as pd
+from pydantic import BaseModel
+from pfd_toolkit.extractor import Extractor
+
+class DummyLLM:
+    def __init__(self, values=None):
+        self.values = values or {}
+        self.called = 0
+        self.max_workers = 1
+
+    def generate_batch(self, prompts, response_format=None, **kwargs):
+        self.called += len(prompts)
+        outputs = []
+        for _ in prompts:
+            if response_format is not None:
+                outputs.append(response_format(**self.values))
+            else:
+                outputs.append(self.values)
+        return outputs
+
+class DemoModel(BaseModel):
+    age: int
+    ethnicity: str
+
+
+def test_extractor_basic():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"], "CircumstancesOfDeath": ["other"]})
+    llm = DummyLLM(values={"age": 30, "ethnicity": "White"})
+    feature_instr = {"age": "Age of the deceased", "ethnicity": "Ethnicity"}
+    extractor = Extractor(
+        llm=llm,
+        feature_model=DemoModel,
+        feature_instructions=feature_instr,
+        reports=df,
+        include_investigation=True,
+        include_circumstances=True,
+    )
+    result = extractor.extract_features()
+    assert result["age"].iloc[0] == 30
+    assert result["ethnicity"].iloc[0] == "White"
+    assert llm.called == 1
+
+
+def test_extractor_empty_df():
+    df = pd.DataFrame(columns=["InvestigationAndInquest"])
+    llm = DummyLLM(values={"age": 20, "ethnicity": "A"})
+    extractor = Extractor(
+        llm=llm,
+        feature_model=DemoModel,
+        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
+        reports=df,
+    )
+    result = extractor.extract_features()
+    assert result.empty
+    assert llm.called == 0
