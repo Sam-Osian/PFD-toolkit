@@ -83,7 +83,45 @@ def test_extractor_force_assign():
         include_investigation=True,
         force_assign=True,
     )
-    assert "must not respond" in extractor.prompt_template
+    assert "Provide your best guess" in extractor.prompt_template
+    assert "must not respond" not in extractor.prompt_template
     field_info = extractor._llm_model.model_fields["age"]
     field_type = getattr(field_info, "annotation", getattr(field_info, "outer_type_", None))
     assert str not in getattr(field_type, "__args__", (field_type,))
+
+
+def test_extractor_optional_fields():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(values={"age": 50, "ethnicity": "D", "other": "O", "none_of_the_above": "N"})
+    extractor = Extractor(
+        llm=llm,
+        feature_model=DemoModel,
+        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
+        reports=df,
+        include_investigation=True,
+        add_other=True,
+        add_none_of_above=True,
+    )
+
+    assert "other" in extractor.feature_instructions
+    assert "none_of_the_above" in extractor.feature_instructions
+    assert "other" in extractor.feature_model.model_fields
+    assert "none_of_the_above" in extractor.feature_model.model_fields
+    result = extractor.extract_features()
+    assert result["other"].iloc[0] == "O"
+    assert result["none_of_the_above"].iloc[0] == "N"
+
+
+def test_extractor_allow_multiple_prompt_line():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(values={"age": 10, "ethnicity": "E"})
+    extractor = Extractor(
+        llm=llm,
+        feature_model=DemoModel,
+        feature_instructions={"age": "Age", "ethnicity": "Ethnicity"},
+        reports=df,
+        include_investigation=True,
+        allow_multiple=True,
+    )
+    assert "multiple categories" in extractor.prompt_template
+

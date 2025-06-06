@@ -38,6 +38,15 @@ class Extractor:
     force_assign : bool, optional
         When ``True``, the LLM is instructed to avoid returning
         :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature. Defaults to ``False``.
+    allow_multiple : bool, optional
+        Allow a report to be assigned to multiple categories when ``True``.
+        Defaults to ``False``.
+    add_other : bool, optional
+        When ``True``, automatically add an ``"other"`` category to
+        ``feature_model`` and ``feature_instructions``.
+    add_none_of_above : bool, optional
+        When ``True``, automatically add a ``"none_of_the_above"`` category to
+        ``feature_model`` and ``feature_instructions``.
     """
 
     COL_URL = GeneralConfig.COL_URL
@@ -66,6 +75,9 @@ class Extractor:
         include_concerns: bool = True,
         verbose: bool = False,
         force_assign: bool = False,
+        allow_multiple: bool = False,
+        add_other: bool = False,
+        add_none_of_above: bool = False,
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
@@ -79,8 +91,27 @@ class Extractor:
         self.include_concerns = include_concerns
         self.verbose = verbose
         self.force_assign = force_assign
+        self.allow_multiple = allow_multiple
+        self.add_other = add_other
+        self.add_none_of_above = add_none_of_above
 
-        self.reports: pd.DataFrame = reports.copy() if reports is not None else pd.DataFrame()
+        self.reports: pd.DataFrame = (
+            reports.copy() if reports is not None else pd.DataFrame()
+        )
+
+        if self.add_other:
+            self.feature_instructions.setdefault(
+                "other",
+                "Assign this if the report fits none of the provided categories.",
+            )
+        if self.add_none_of_above:
+            self.feature_instructions.setdefault(
+                "none_of_the_above",
+                "Use when no category applies at all.",
+            )
+
+        if self.add_other or self.add_none_of_above:
+            self.feature_model = self._extend_feature_model()
 
         self.prompt_template = self._build_prompt_template()
         self._llm_model = self._build_llm_model()
@@ -94,7 +125,12 @@ class Extractor:
         not_found_line_prompt = (
             f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'."
             if not self.force_assign
-            else f"You must not respond with '{GeneralConfig.NOT_FOUND_TEXT}'. Provide your best guess for every feature."
+            else ""
+        )
+        category_line = (
+            "A report may belong to multiple categories; separate them with semicolons (;)."
+            if self.allow_multiple
+            else "Assign only one category to each report."
         )
 
         template = f"""
@@ -103,6 +139,7 @@ You are an expert at extracting structured information from UK Prevention of Fut
 Extract the following features from the report excerpt provided.
 
 {not_found_line_prompt}
+{category_line}
 
 Return your answer strictly as a JSON object with the following keys:
 {features_list}
@@ -117,6 +154,31 @@ Here is the report excerpt:
         return template.strip()
 
     # ------------------------------------------------------------------
+    def _extend_feature_model(self) -> Type[BaseModel]:
+        """Return a feature model extended with optional fields."""
+        base_fields = getattr(self.feature_model, "model_fields", None)
+        if base_fields is None:
+            base_fields = getattr(self.feature_model, "__fields__", {})
+
+        fields = {}
+        for name, field in base_fields.items():
+            field_type = getattr(field, "outer_type_", None)
+            if field_type is None:
+                field_type = getattr(field, "annotation", None)
+            alias = getattr(field, "alias", name)
+            fields[name] = (field_type, Field(..., alias=alias))
+
+        if self.add_other:
+            fields["other"] = (str, Field(...))
+        if self.add_none_of_above:
+            fields["none_of_the_above"] = (str, Field(...))
+
+        model = create_model(f"{self.feature_model.__name__}Extended", **fields)
+        if not hasattr(model, "model_fields"):
+            model.model_fields = model.__fields__
+        return model
+
+    # ------------------------------------------------------------------
     def _build_llm_model(self) -> Type[BaseModel]:
         """Create an internal Pydantic model allowing missing features.
 
@@ -127,7 +189,9 @@ Here is the report excerpt:
         with both Pydantic v1 and v2 field representations.
         """
         # Get field versions
-        base_fields = self.feature_model.model_fields
+        base_fields = getattr(self.feature_model, "model_fields", None)
+        if base_fields is None:
+            base_fields = getattr(self.feature_model, "__fields__", {})
 
 
         fields = {}
@@ -144,7 +208,32 @@ Here is the report excerpt:
                 union_type = Union[field_type, str]
             fields[name] = (union_type, Field(..., alias=alias))
 
-        return create_model("ExtractorLLMModel", **fields)
+        model = create_model("ExtractorLLMModel", **fields)
+        if not hasattr(model, "model_fields"):
+            model.model_fields = model.__fields__
+        return model
+
+    # ------------------------------------------------------------------
+    def _generate_prompt(self, row: pd.Series) -> str:
+        """Construct a single prompt for the given DataFrame row."""
+        parts: List[str] = []
+        if self.include_date and pd.notna(row.get(self.COL_DATE)):
+            parts.append(f"{self.COL_DATE}: {row[self.COL_DATE]}")
+        if self.include_coroner and pd.notna(row.get(self.COL_CORONER_NAME)):
+            parts.append(f"{self.COL_CORONER_NAME}: {row[self.COL_CORONER_NAME]}")
+        if self.include_area and pd.notna(row.get(self.COL_AREA)):
+            parts.append(f"{self.COL_AREA}: {row[self.COL_AREA]}")
+        if self.include_receiver and pd.notna(row.get(self.COL_RECEIVER)):
+            parts.append(f"{self.COL_RECEIVER}: {row[self.COL_RECEIVER]}")
+        if self.include_investigation and pd.notna(row.get(self.COL_INVESTIGATION)):
+            parts.append(f"{self.COL_INVESTIGATION}: {row[self.COL_INVESTIGATION]}")
+        if self.include_circumstances and pd.notna(row.get(self.COL_CIRCUMSTANCES)):
+            parts.append(f"{self.COL_CIRCUMSTANCES}: {row[self.COL_CIRCUMSTANCES]}")
+        if self.include_concerns and pd.notna(row.get(self.COL_CONCERNS)):
+            parts.append(f"{self.COL_CONCERNS}: {row[self.COL_CONCERNS]}")
+        report_text = "\n\n".join(str(p) for p in parts).strip()
+        report_text = " ".join(report_text.split())
+        return self.prompt_template.format(report_excerpt=report_text)
 
     # ------------------------------------------------------------------
     def extract_features(self, reports: Optional[pd.DataFrame] = None) -> pd.DataFrame:
@@ -162,24 +251,7 @@ Here is the report excerpt:
         indices: List[int] = []
 
         for idx, row in df.iterrows():
-            parts: List[str] = []
-            if self.include_date and pd.notna(row.get(self.COL_DATE)):
-                parts.append(f"{self.COL_DATE}: {row[self.COL_DATE]}")
-            if self.include_coroner and pd.notna(row.get(self.COL_CORONER_NAME)):
-                parts.append(f"{self.COL_CORONER_NAME}: {row[self.COL_CORONER_NAME]}")
-            if self.include_area and pd.notna(row.get(self.COL_AREA)):
-                parts.append(f"{self.COL_AREA}: {row[self.COL_AREA]}")
-            if self.include_receiver and pd.notna(row.get(self.COL_RECEIVER)):
-                parts.append(f"{self.COL_RECEIVER}: {row[self.COL_RECEIVER]}")
-            if self.include_investigation and pd.notna(row.get(self.COL_INVESTIGATION)):
-                parts.append(f"{self.COL_INVESTIGATION}: {row[self.COL_INVESTIGATION]}")
-            if self.include_circumstances and pd.notna(row.get(self.COL_CIRCUMSTANCES)):
-                parts.append(f"{self.COL_CIRCUMSTANCES}: {row[self.COL_CIRCUMSTANCES]}")
-            if self.include_concerns and pd.notna(row.get(self.COL_CONCERNS)):
-                parts.append(f"{self.COL_CONCERNS}: {row[self.COL_CONCERNS]}")
-            report_text = "\n\n".join(str(p) for p in parts).strip()
-            report_text = " ".join(report_text.split())
-            prompts.append(self.prompt_template.format(report_excerpt=report_text))
+            prompts.append(self._generate_prompt(row))
             indices.append(idx)
 
         if self.verbose:
@@ -196,6 +268,8 @@ Here is the report excerpt:
             values: Dict[str, object] = {}
             if isinstance(res, BaseModel):
                 dump_fn = getattr(res, "model_dump", None)
+                if dump_fn is None:
+                    dump_fn = getattr(res, "dict", None)
                 values = dump_fn()
             elif isinstance(res, dict):
                 values = res
