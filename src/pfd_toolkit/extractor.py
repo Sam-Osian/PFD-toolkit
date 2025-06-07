@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from typing import Dict, List, Optional, Type, Union
 
 import pandas as pd
@@ -23,11 +24,7 @@ class Extractor:
         Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
     feature_model : type[pydantic.BaseModel]
         Pydantic model describing the features to extract from each report.
-        Field descriptions on the model are used as extraction instructions.
-    feature_instructions : dict[str, str], optional
-        Optional mapping of feature names (matching the model fields) to the
-        extraction instructions presented to the LLM.  Any instructions not
-        provided here will be taken from ``feature_model`` field descriptions.
+        The model field names will be used as the JSON keys in the LLM response.
     reports : pandas.DataFrame, optional
         DataFrame of PFD reports. If provided, it will be copied and stored
         on the instance.
@@ -43,12 +40,6 @@ class Extractor:
     allow_multiple : bool, optional
         Allow a report to be assigned to multiple categories when ``True``.
         Defaults to ``False``.
-    add_other : bool, optional
-        When ``True``, automatically add an ``"other"`` category to
-        ``feature_model`` and ``feature_instructions``.
-    add_none_of_above : bool, optional
-        When ``True``, automatically add a ``"none_of_the_above"`` category to
-        ``feature_model`` and ``feature_instructions``.
     """
 
     COL_URL = GeneralConfig.COL_URL
@@ -66,7 +57,6 @@ class Extractor:
         *,
         llm: LLM,
         feature_model: Type[BaseModel],
-        feature_instructions: Optional[Dict[str, str]] = None,
         reports: Optional[pd.DataFrame] = None,
         include_date: bool = False,
         include_coroner: bool = False,
@@ -78,12 +68,9 @@ class Extractor:
         verbose: bool = False,
         force_assign: bool = False,
         allow_multiple: bool = False,
-        add_other: bool = False,
-        add_none_of_above: bool = False,
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
-        self.feature_instructions = feature_instructions or {}
         self.include_date = include_date
         self.include_coroner = include_coroner
         self.include_area = include_area
@@ -94,42 +81,20 @@ class Extractor:
         self.verbose = verbose
         self.force_assign = force_assign
         self.allow_multiple = allow_multiple
-        self.add_other = add_other
-        self.add_none_of_above = add_none_of_above
 
         self.reports: pd.DataFrame = (
             reports.copy() if reports is not None else pd.DataFrame()
         )
 
-        if self.add_other:
-            self.feature_instructions.setdefault(
-                "other",
-                "Assign this if the report fits none of the provided categories.",
-            )
-        if self.add_none_of_above:
-            self.feature_instructions.setdefault(
-                "none_of_the_above",
-                "Use when no category applies at all.",
-            )
 
-        if self.add_other or self.add_none_of_above:
-            self.feature_model = self._extend_feature_model()
-
-        # Collect instructions from model field descriptions and merge with
-        # any provided instructions.
-        model_instructions = self._collect_field_descriptions()
-        for name, desc in model_instructions.items():
-            self.feature_instructions.setdefault(name, desc)
+        self.feature_names = self._collect_field_names()
 
         self.prompt_template = self._build_prompt_template()
         self._llm_model = self._build_llm_model()
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
-        instructions_lines = [
-            f"- {name}: {desc}" for name, desc in self.feature_instructions.items()
-        ]
-        features_list = ", ".join(self.feature_instructions.keys())
+        features_list = ", ".join(self.feature_names)
         not_found_line_prompt = (
             f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'."
             if not self.force_assign
@@ -151,11 +116,7 @@ Extract the following features from the report excerpt provided.
 
 Return your answer strictly as a JSON object with the following keys:
 {features_list}
-
-Feature guidance:
-{chr(10).join(instructions_lines)}
-
-Here is the report excerpt:
+\n*\n\nHere is the report excerpt:
 
 {{report_excerpt}}
 """
@@ -176,22 +137,12 @@ Here is the report excerpt:
             alias = getattr(field, "alias", name)
             description = getattr(field, "description", None)
             if description is None:
-                description = getattr(getattr(field, "field_info", None), "description", None)
-            fields[name] = (field_type, Field(..., alias=alias, description=description))
-
-        if self.add_other:
-            fields["other"] = (
-                str,
-                Field(
-                    ..., description="Assign this if the report fits none of the provided categories."
-                ),
-            )
-        if self.add_none_of_above:
-            fields["none_of_the_above"] = (
-                str,
-                Field(
-                    ..., description="Use when no category applies at all."
-                ),
+                description = getattr(
+                    getattr(field, "field_info", None), "description", None
+                )
+            fields[name] = (
+                field_type,
+                Field(..., alias=alias, description=description),
             )
 
         model = create_model(f"{self.feature_model.__name__}Extended", **fields)
@@ -200,20 +151,13 @@ Here is the report excerpt:
         return model
 
     # ------------------------------------------------------------------
-    def _collect_field_descriptions(self) -> Dict[str, str]:
-        """Return a mapping from feature names to their field descriptions."""
+    def _collect_field_names(self) -> List[str]:
+        """Return a list of feature names from the model."""
         base_fields = getattr(self.feature_model, "model_fields", None)
         if base_fields is None:
             base_fields = getattr(self.feature_model, "__fields__", {})
 
-        instructions: Dict[str, str] = {}
-        for name, field in base_fields.items():
-            desc = getattr(field, "description", None)
-            if desc is None:
-                desc = getattr(getattr(field, "field_info", None), "description", None)
-            if desc:
-                instructions[name] = desc
-        return instructions
+        return list(base_fields.keys())
 
     # ------------------------------------------------------------------
     def _build_llm_model(self) -> Type[BaseModel]:
@@ -229,7 +173,6 @@ Here is the report excerpt:
         base_fields = getattr(self.feature_model, "model_fields", None)
         if base_fields is None:
             base_fields = getattr(self.feature_model, "__fields__", {})
-
 
         fields = {}
         for name, field in base_fields.items():
@@ -270,7 +213,9 @@ Here is the report excerpt:
             parts.append(f"{self.COL_CONCERNS}: {row[self.COL_CONCERNS]}")
         report_text = "\n\n".join(str(p) for p in parts).strip()
         report_text = " ".join(report_text.split())
-        return self.prompt_template.format(report_excerpt=report_text)
+        prompt = self.prompt_template.format(report_excerpt=report_text)
+        json_template = json.dumps({name: "" for name in self.feature_names}, indent=2)
+        return f"{prompt}\n\n{json_template}"
 
     # ------------------------------------------------------------------
     def extract_features(self, reports: Optional[pd.DataFrame] = None) -> pd.DataFrame:
@@ -280,7 +225,7 @@ Here is the report excerpt:
             return df
 
         # ensure result columns exist
-        for feat in self.feature_instructions:
+        for feat in self.feature_names:
             if feat not in df.columns:
                 df[feat] = GeneralConfig.NOT_FOUND_TEXT
 
@@ -292,12 +237,18 @@ Here is the report excerpt:
             indices.append(idx)
 
         if self.verbose:
-            logger.info("Sending %s prompts to LLM for feature extraction", len(prompts))
+            logger.info(
+                "Sending %s prompts to LLM for feature extraction", len(prompts)
+            )
 
         llm_results = self.llm.generate_batch(
             prompts=prompts,
             response_format=self._llm_model,
-            tqdm_extra_kwargs={"desc": "Extracting features", "position": 0, "leave": True},
+            tqdm_extra_kwargs={
+                "desc": "Extracting features",
+                "position": 0,
+                "leave": True,
+            },
         )
 
         for i, res in enumerate(llm_results):
@@ -312,9 +263,9 @@ Here is the report excerpt:
                 values = res
             else:
                 logger.error("LLM returned unexpected result type: %s", type(res))
-                values = {f: GeneralConfig.NOT_FOUND_TEXT for f in self.feature_instructions}
+                values = {f: GeneralConfig.NOT_FOUND_TEXT for f in self.feature_names}
 
-            for feat in self.feature_instructions:
+            for feat in self.feature_names:
                 val = values.get(feat, GeneralConfig.NOT_FOUND_TEXT)
                 df.at[idx, feat] = val
 
