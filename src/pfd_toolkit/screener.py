@@ -141,30 +141,26 @@ class Screener:
         """
         Constructs the prompt template based on the user query and match approach.
         """
-        base_prompt_template = f"""
-You are an expert text classification assistant. Your job is to read
-through the Prevention of Future Death (PFD) report excerpt at the
-bottom of this message, and decide whether or not it matches a user
-query.
+        base_prompt_template = (
+    "You are an expert text classification assistant. Your task is to read "
+    "the following excerpt from a Prevention of Future Death (PFD) report and "
+    "decide whether it matches the user's query. \n\n"
+    
+    "**Instructions:** \n"
+    "- Only respond 'Yes' if **all** elements of the user query are clearly present in the report. \n"
+    "- If any required element is missing or there is not enough information, respond 'No'. \n"
+    "- You may not infer or make judgements; the evidence must be clear."
+    "- Make sure any user query related to the deceased is concerned with them *only*, not other persons.\n"
+    "- Your response must be a JSON object in which 'matches_topic' can be either 'Yes' or 'No'. \n\n"
+    f"**User query:** \n'{current_user_query}'"
+)
 
-The user's query may be thematic, or it might pertain to a small or
-subtle inclusion in the report. The user query is:
-
-'{current_user_query}'
-
-If the report/excerpt matches this query, even if in part, you must 
-respond 'Yes'. Else, respond 'No'.
-
-Your response must be a JSON object in which "matches_topic" can be either
-"Yes" or "No".
-"""
-
-        # Add match approach instructions: strict or liberal
+        # Add match approach instructions: strict, liberal or none
         if self.match_leniency == "strict":
             base_prompt_template += """
 Your match leniency should be strict.
-This means that if you are on the fence as to whether a report
-matches the user query, you should respond "No".
+This means that if you are not entirely sure whether a report
+matches the user query, you **must** respond "No".
 """
         elif self.match_leniency == "liberal":
             base_prompt_template += """
@@ -192,7 +188,9 @@ Here is the PFD report excerpt:
         return full_template_text
 
     def screen_reports(
-        self, reports: Optional[pd.DataFrame] = None, user_query: Optional[str] = None
+        self, reports: Optional[pd.DataFrame] = None, 
+        user_query: Optional[str] = None,
+        result_col_name: Optional[str] = None
     ) -> pd.DataFrame:
         """
         Classifies reports in the DataFrame against the user-defined topic using the LLM.
@@ -271,6 +269,9 @@ Here is the PFD report excerpt:
             self.prompt_template = self._build_prompt_template(active_user_query)
             self.user_query = active_user_query
 
+        # Determine the result column name for this call
+        self.result_col_name = result_col_name if result_col_name is not None else self.result_col_name
+
         # --- Pre-flight checks ---
         if self.llm is None:
             logger.error("LLM client is not initialised. Cannot screen reports.")
@@ -302,28 +303,28 @@ Here is the PFD report excerpt:
                 and self.COL_DATE in row
                 and pd.notna(row[self.COL_DATE])
             ):
-                report_parts.append(f"{self.COL_DATE}: {str(row[self.COL_DATE])}")
+                report_parts.append(f"The date of the report: {str(row[self.COL_DATE])}")
             if (
                 self.include_coroner
                 and self.COL_CORONER_NAME in row
                 and pd.notna(row[self.COL_CORONER_NAME])
             ):
                 report_parts.append(
-                    f"{self.COL_CORONER_NAME}: {str(row[self.COL_CORONER_NAME])}"
+                    f"The name of the coroner: {str(row[self.COL_CORONER_NAME])}"
                 )
             if (
                 self.include_area
                 and self.COL_AREA in row
                 and pd.notna(row[self.COL_AREA])
             ):
-                report_parts.append(f"{self.COL_AREA}: {str(row[self.COL_AREA])}")
+                report_parts.append(f"The area where the investigation took place: {str(row[self.COL_AREA])}")
             if (
                 self.include_receiver
                 and self.COL_RECEIVER in row
                 and pd.notna(row[self.COL_RECEIVER])
             ):
                 report_parts.append(
-                    f"{self.COL_RECEIVER}: {str(row[self.COL_RECEIVER])}"
+                    f"The recipients of the report: {str(row[self.COL_RECEIVER])}"
                 )
             if (
                 self.include_investigation
@@ -331,7 +332,7 @@ Here is the PFD report excerpt:
                 and pd.notna(row[self.COL_INVESTIGATION])
             ):
                 report_parts.append(
-                    f"{self.COL_INVESTIGATION}: {str(row[self.COL_INVESTIGATION])}"
+                    f"The Investigation & Inquest section:\n {str(row[self.COL_INVESTIGATION])}"
                 )
             if (
                 self.include_circumstances
@@ -339,7 +340,7 @@ Here is the PFD report excerpt:
                 and pd.notna(row[self.COL_CIRCUMSTANCES])
             ):
                 report_parts.append(
-                    f"{self.COL_CIRCUMSTANCES}: {str(row[self.COL_CIRCUMSTANCES])}"
+                    f"The Circumstances of Death section:\n {str(row[self.COL_CIRCUMSTANCES])}"
                 )
             if (
                 self.include_concerns
@@ -347,7 +348,7 @@ Here is the PFD report excerpt:
                 and pd.notna(row[self.COL_CONCERNS])
             ):
                 report_parts.append(
-                    f"{self.COL_CONCERNS}: {str(row[self.COL_CONCERNS])}"
+                    f"The Matters of Concern section: {str(row[self.COL_CONCERNS])}"
                 )
 
             report_text = "\n\n".join(report_parts).strip()
