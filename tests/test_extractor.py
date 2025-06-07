@@ -240,6 +240,53 @@ def test_extractor_caching():
     assert result2["ethnicity"].iloc[0] == "C"
 
 
+def test_export_import_cache(tmp_path):
+    df = pd.DataFrame(
+        {
+            "InvestigationAndInquest": ["text"],
+            "CircumstancesOfDeath": ["other"],
+        }
+    )
+    llm1 = DummyLLM(values={"age": 50, "ethnicity": "D"})
+    extractor1 = Extractor(
+        llm=llm1,
+        feature_model=DemoModel,
+        reports=df,
+        include_investigation=True,
+        include_circumstances=True,
+    )
+    extractor1.extract_features(skip_if_present=False)
+    assert llm1.called == 1
+
+    cache_dir = tmp_path / "cache"
+    exported = extractor1.export_cache(cache_dir)
+    assert cache_dir.exists()
+    assert cache_dir.is_dir()
+    assert exported
+
+    llm2 = DummyLLM(values={"age": 99, "ethnicity": "X"})
+    extractor2 = Extractor(
+        llm=llm2,
+        feature_model=DemoModel,
+        include_investigation=True,
+        include_circumstances=True,
+    )
+    extractor2.import_cache(cache_dir)
+
+    df2 = pd.DataFrame(
+        {
+            "InvestigationAndInquest": ["text"],
+            "CircumstancesOfDeath": ["other"],
+            "age": [GeneralConfig.NOT_FOUND_TEXT],
+            "ethnicity": [GeneralConfig.NOT_FOUND_TEXT],
+        }
+    )
+    result = extractor2.extract_features(df2, skip_if_present=False)
+    assert llm2.called == 0  # result from cache
+    assert result["age"].iloc[0] == 50
+    assert result["ethnicity"].iloc[0] == "D"
+
+
 def test_prompt_additional_instructions():
     llm = DummyLLM()
     extractor = Extractor(

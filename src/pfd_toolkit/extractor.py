@@ -105,7 +105,7 @@ class Extractor:
         self._grammar_model = self._build_grammar_model()
 
         # cache mapping prompt -> feature dict
-        self._cache: Dict[str, Dict[str, object]] = {}
+        self.cache: Dict[str, Dict[str, object]] = {}
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -272,8 +272,8 @@ Here is the report excerpt:
 
             prompt = self._generate_prompt(row)
             key = prompt
-            if key in self._cache:
-                cached = self._cache[key]
+            if key in self.cache:
+                cached = self.cache[key]
                 for feat in self.feature_names:
                     df.at[idx, feat] = cached.get(feat, GeneralConfig.NOT_FOUND_TEXT)
                 continue
@@ -315,8 +315,52 @@ Here is the report excerpt:
                 val = values.get(feat, GeneralConfig.NOT_FOUND_TEXT)
                 df.at[idx, feat] = val
 
-            self._cache[key] = values
+            self.cache[key] = values
 
         if reports is None:
             self.reports = df.copy()
         return df
+
+    # ------------------------------------------------------------------
+    def export_cache(self, directory: str = ".") -> str:
+        """Save the current cache to ``extractor_cache.pkl`` in ``directory``.
+
+        Parameters
+        ----------
+        directory : str, optional
+            Directory where the cache file will be written. Defaults to the
+            current working directory.
+
+        Returns
+        -------
+        str
+            The path to the written cache file.
+        """
+
+        from pathlib import Path
+        import pickle
+
+        path = Path(directory)
+        path.mkdir(parents=True, exist_ok=True)
+        file_path = path / "extractor_cache.pkl"
+        with open(file_path, "wb") as f:
+            pickle.dump(self.cache, f)
+        return str(file_path)
+
+    # ------------------------------------------------------------------
+    def import_cache(self, directory: str = ".") -> None:
+        """Load cache from ``extractor_cache.pkl`` in ``directory``.
+
+        Parameters
+        ----------
+        directory : str, optional
+            Directory containing the cache file. Defaults to the current working
+            directory.
+        """
+
+        from pathlib import Path
+        import pickle
+
+        file_path = Path(directory) / "extractor_cache.pkl"
+        with open(file_path, "rb") as f:
+            self.cache = pickle.load(f)
