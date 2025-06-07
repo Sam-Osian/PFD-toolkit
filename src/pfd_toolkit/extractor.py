@@ -125,39 +125,24 @@ Return your answer strictly as a JSON object with the following keys:
     # ------------------------------------------------------------------
     def _extend_feature_model(self) -> Type[BaseModel]:
         """Return a feature model extended with optional fields."""
-        base_fields = getattr(self.feature_model, "model_fields", None)
-        if base_fields is None:
-            base_fields = getattr(self.feature_model, "__fields__", {})
+        base_fields = self.feature_model.model_fields
 
         fields = {}
         for name, field in base_fields.items():
-            field_type = getattr(field, "outer_type_", None)
-            if field_type is None:
-                field_type = getattr(field, "annotation", None)
+            field_type = field.annotation
             alias = getattr(field, "alias", name)
             description = getattr(field, "description", None)
-            if description is None:
-                description = getattr(
-                    getattr(field, "field_info", None), "description", None
-                )
             fields[name] = (
                 field_type,
                 Field(..., alias=alias, description=description),
             )
 
-        model = create_model(f"{self.feature_model.__name__}Extended", **fields)
-        if not hasattr(model, "model_fields"):
-            model.model_fields = model.__fields__
-        return model
+        return create_model(f"{self.feature_model.__name__}Extended", **fields)
 
     # ------------------------------------------------------------------
     def _collect_field_names(self) -> List[str]:
         """Return a list of feature names from the model."""
-        base_fields = getattr(self.feature_model, "model_fields", None)
-        if base_fields is None:
-            base_fields = getattr(self.feature_model, "__fields__", {})
-
-        return list(base_fields.keys())
+        return list(self.feature_model.model_fields.keys())
 
     # ------------------------------------------------------------------
     def _build_llm_model(self) -> Type[BaseModel]:
@@ -166,21 +151,14 @@ Return your answer strictly as a JSON object with the following keys:
         This helper builds a new model identical to ``feature_model`` but with
         each field accepting either the original type or ``str``.  This ensures
         that the LLM can return :data:`GeneralConfig.NOT_FOUND_TEXT` for any
-        field regardless of its declared type.  The implementation is compatible
-        with both Pydantic v1 and v2 field representations.
+        field regardless of its declared type.
         """
-        # Get field versions
-        base_fields = getattr(self.feature_model, "model_fields", None)
-        if base_fields is None:
-            base_fields = getattr(self.feature_model, "__fields__", {})
+
+        base_fields = self.feature_model.model_fields
 
         fields = {}
         for name, field in base_fields.items():
-            # ``outer_type_`` exists on Pydantic v1 ``ModelField`` objects.
-            field_type = getattr(field, "outer_type_", None)
-            if field_type is None:
-                # Pydantic v2 ``FieldInfo`` exposes ``annotation`` instead.
-                field_type = getattr(field, "annotation", None)
+            field_type = field.annotation
             alias = getattr(field, "alias", name)
             if self.force_assign:
                 union_type = field_type
@@ -188,10 +166,7 @@ Return your answer strictly as a JSON object with the following keys:
                 union_type = Union[field_type, str]
             fields[name] = (union_type, Field(..., alias=alias))
 
-        model = create_model("ExtractorLLMModel", **fields)
-        if not hasattr(model, "model_fields"):
-            model.model_fields = model.__fields__
-        return model
+        return create_model("ExtractorLLMModel", **fields)
 
     # ------------------------------------------------------------------
     def _generate_prompt(self, row: pd.Series) -> str:
@@ -255,10 +230,7 @@ Return your answer strictly as a JSON object with the following keys:
             idx = indices[i]
             values: Dict[str, object] = {}
             if isinstance(res, BaseModel):
-                dump_fn = getattr(res, "model_dump", None)
-                if dump_fn is None:
-                    dump_fn = getattr(res, "dict", None)
-                values = dump_fn()
+                values = res.model_dump()
             elif isinstance(res, dict):
                 values = res
             else:

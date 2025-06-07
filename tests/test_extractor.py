@@ -84,9 +84,7 @@ def test_extractor_force_assign():
     )
     assert GeneralConfig.NOT_FOUND_TEXT not in extractor.prompt_template
     field_info = extractor._llm_model.model_fields["age"]
-    field_type = getattr(
-        field_info, "annotation", getattr(field_info, "outer_type_", None)
-    )
+    field_type = field_info.annotation
     assert str not in getattr(field_type, "__args__", (field_type,))
 
 
