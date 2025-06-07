@@ -44,6 +44,9 @@ class Extractor:
         Level of detail for the feature schema included in the prompt.
         ``"full"`` includes the entire Pydantic model schema while
         ``"minimal"`` uses only field names and descriptions. Defaults to ``"minimal"``.
+    extra_instructions : str, optional
+        Extra instructions injected into every prompt, placed before the schema
+        line. Use this to provide additional context or rules for the LLM.
     """
 
     COL_URL = GeneralConfig.COL_URL
@@ -73,6 +76,7 @@ class Extractor:
         force_assign: bool = False,
         allow_multiple: bool = False,
         schema_detail: Literal["full", "minimal"] = "minimal",
+        extra_instructions: Optional[str] = None,
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
@@ -87,6 +91,7 @@ class Extractor:
         self.force_assign = force_assign
         self.allow_multiple = allow_multiple
         self.schema_detail = schema_detail
+        self.extra_instructions = extra_instructions
 
         self.reports: pd.DataFrame = (
             reports.copy() if reports is not None else pd.DataFrame()
@@ -97,7 +102,10 @@ class Extractor:
 
         self._feature_schema = self._build_feature_schema(schema_detail)
         self.prompt_template = self._build_prompt_template()
-        self._llm_model = self._build_llm_model()
+        self._grammar_model = self._build_grammar_model()
+
+        # cache mapping prompt -> feature dict
+        self._cache: Dict[str, Dict[str, object]] = {}
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -112,6 +120,8 @@ class Extractor:
             else "Assign only one category to each report."
         )
 
+        extra_instr = (self.extra_instructions.strip() + "\n") if self.extra_instructions else ""
+
         template = f"""
 You are an expert at extracting structured information from UK Prevention of Future Death reports.
 
@@ -119,6 +129,7 @@ Extract the following features from the report excerpt provided.
 
 {not_found_line_prompt}
 {category_line}
+{extra_instr}
 
 Return your answer strictly as a JSON object matching this schema:\n
 {{schema}}
@@ -167,7 +178,7 @@ Here is the report excerpt:
         return json.dumps(properties, indent=2)
     
     # ------------------------------------------------------------------
-    def _build_llm_model(self) -> Type[BaseModel]:
+    def _build_grammar_model(self) -> Type[BaseModel]:
         """Create an internal Pydantic model allowing missing features.
 
         This helper builds a new model identical to ``feature_model`` but with
@@ -217,8 +228,22 @@ Here is the report excerpt:
         return prompt
 
     # ------------------------------------------------------------------
-    def extract_features(self, reports: Optional[pd.DataFrame] = None) -> pd.DataFrame:
-        """Run feature extraction for the given reports."""
+    def extract_features(
+        self, reports: Optional[pd.DataFrame] = None, *, skip_if_present: bool = True
+    ) -> pd.DataFrame:
+        """Run feature extraction for the given reports.
+
+        Parameters
+        ----------
+        reports : pandas.DataFrame, optional
+            DataFrame of reports to process. Defaults to the instance's stored
+            reports if omitted.
+        skip_if_present : bool, optional
+            When ``True`` (default), skip rows when any feature column already
+            holds a non-missing value that is not equal to
+            :data:`GeneralConfig.NOT_FOUND_TEXT`. This assumes the row has been
+            processed previously and prevents another LLM call.
+        """
         df = reports.copy() if reports is not None else self.reports.copy()
         if df.empty:
             return df
@@ -230,28 +255,53 @@ Here is the report excerpt:
 
         prompts: List[str] = []
         indices: List[int] = []
+        keys: List[str] = []
 
         for idx, row in df.iterrows():
-            prompts.append(self._generate_prompt(row))
+            if skip_if_present:
+                present = any(
+                    pd.notna(row.get(f))
+                    and row.get(f) != GeneralConfig.NOT_FOUND_TEXT
+                    for f in self.feature_names
+                )
+                if present:
+                    # If any feature column already contains data we assume
+                    #   the row was cached from a previous run and skip calling
+                    #   the LLM again.
+                    continue
+
+            prompt = self._generate_prompt(row)
+            key = prompt
+            if key in self._cache:
+                cached = self._cache[key]
+                for feat in self.feature_names:
+                    df.at[idx, feat] = cached.get(feat, GeneralConfig.NOT_FOUND_TEXT)
+                continue
+
+            prompts.append(prompt)
             indices.append(idx)
+            keys.append(key)
 
         if self.verbose:
             logger.info(
                 "Sending %s prompts to LLM for feature extraction", len(prompts)
             )
 
-        llm_results = self.llm.generate_batch(
-            prompts=prompts,
-            response_format=self._llm_model,
-            tqdm_extra_kwargs={
-                "desc": "Extracting features",
-                "position": 0,
-                "leave": True,
-            },
-        )
+        llm_results: List[BaseModel | Dict[str, object] | str] = []
+        if prompts:
+            llm_results = self.llm.generate_batch(
+                prompts=prompts,
+                response_format=self._grammar_model,
+                tqdm_extra_kwargs={
+                    "desc": "Extracting features",
+                    "position": 0,
+                    "leave": True,
+                },
+            )
 
         for i, res in enumerate(llm_results):
             idx = indices[i]
+            key = keys[i]
             values: Dict[str, object] = {}
             if isinstance(res, BaseModel):
                 values = res.model_dump()
@@ -264,6 +314,8 @@ Here is the report excerpt:
             for feat in self.feature_names:
                 val = values.get(feat, GeneralConfig.NOT_FOUND_TEXT)
                 df.at[idx, feat] = val
+
+            self._cache[key] = values
 
         if reports is None:
             self.reports = df.copy()
