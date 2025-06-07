@@ -322,14 +322,14 @@ Here is the report excerpt:
         return df
 
     # ------------------------------------------------------------------
-    def export_cache(self, directory: str = ".") -> str:
-        """Save the current cache to ``extractor_cache.pkl`` in ``directory``.
+    def export_cache(self, path: str = "extractor_cache.pkl") -> str:
+        """Save the current cache to ``path``.
 
         Parameters
         ----------
-        directory : str, optional
-            Directory where the cache file will be written. Defaults to the
-            current working directory.
+        path : str, optional
+            Full path to the cache file including the filename. If ``path`` is a
+            directory, ``extractor_cache.pkl`` will be created inside it.
 
         Returns
         -------
@@ -340,27 +340,34 @@ Here is the report excerpt:
         from pathlib import Path
         import pickle
 
-        path = Path(directory)
-        path.mkdir(parents=True, exist_ok=True)
-        file_path = path / "extractor_cache.pkl"
+        file_path = Path(path)
+        if file_path.is_dir() or file_path.suffix == "":
+            file_path.mkdir(parents=True, exist_ok=True)
+            file_path = file_path / "extractor_cache.pkl"
+        else:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
         with open(file_path, "wb") as f:
             pickle.dump(self.cache, f)
         return str(file_path)
 
     # ------------------------------------------------------------------
-    def import_cache(self, directory: str = ".") -> None:
-        """Load cache from ``extractor_cache.pkl`` in ``directory``.
+    def import_cache(self, path: str = "extractor_cache.pkl") -> None:
+        """Load cache from ``path``.
 
         Parameters
         ----------
-        directory : str, optional
-            Directory containing the cache file. Defaults to the current working
-            directory.
+        path : str, optional
+            Full path to the cache file including the filename. If ``path`` is a
+            directory, ``extractor_cache.pkl`` will be loaded from inside it.
         """
 
         from pathlib import Path
         import pickle
 
-        file_path = Path(directory) / "extractor_cache.pkl"
+        file_path = Path(path)
+        if file_path.is_dir() or file_path.suffix == "":
+            file_path = file_path / "extractor_cache.pkl"
+
         with open(file_path, "rb") as f:
             self.cache = pickle.load(f)

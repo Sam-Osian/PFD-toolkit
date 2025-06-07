@@ -258,10 +258,10 @@ def test_export_import_cache(tmp_path):
     extractor1.extract_features(skip_if_present=False)
     assert llm1.called == 1
 
-    cache_dir = tmp_path / "cache"
-    exported = extractor1.export_cache(cache_dir)
-    assert cache_dir.exists()
-    assert cache_dir.is_dir()
+    cache_file = tmp_path / "cache" / "cache.pkl"
+    exported = extractor1.export_cache(cache_file)
+    assert cache_file.exists()
+    assert cache_file.parent.is_dir()
     assert exported
 
     llm2 = DummyLLM(values={"age": 99, "ethnicity": "X"})
@@ -271,7 +271,7 @@ def test_export_import_cache(tmp_path):
         include_investigation=True,
         include_circumstances=True,
     )
-    extractor2.import_cache(cache_dir)
+    extractor2.import_cache(cache_file)
 
     df2 = pd.DataFrame(
         {
