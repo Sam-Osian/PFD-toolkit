@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import json
-from typing import Dict, List, Optional, Type, Union
+from typing import Dict, List, Optional, Type, Union, Literal
 
 import pandas as pd
 from pydantic import BaseModel, Field, create_model
@@ -40,6 +40,10 @@ class Extractor:
     allow_multiple : bool, optional
         Allow a report to be assigned to multiple categories when ``True``.
         Defaults to ``False``.
+    schema_detail : Literal["full", "minimal"], optional
+        Level of detail for the feature schema included in the prompt.
+        ``"full"`` includes the entire Pydantic model schema while
+        ``"minimal"`` uses only field names and descriptions. Defaults to ``"minimal"``.
     """
 
     COL_URL = GeneralConfig.COL_URL
@@ -68,6 +72,7 @@ class Extractor:
         verbose: bool = False,
         force_assign: bool = False,
         allow_multiple: bool = False,
+        schema_detail: Literal["full", "minimal"] = "minimal",
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
@@ -81,6 +86,7 @@ class Extractor:
         self.verbose = verbose
         self.force_assign = force_assign
         self.allow_multiple = allow_multiple
+        self.schema_detail = schema_detail
 
         self.reports: pd.DataFrame = (
             reports.copy() if reports is not None else pd.DataFrame()
@@ -89,12 +95,7 @@ class Extractor:
 
         self.feature_names = self._collect_field_names()
 
-        self._feature_schema = json.dumps(
-            self._extend_feature_model()
-            .model_json_schema()
-            .get("properties", {}),
-            indent=2,
-        )
+        self._feature_schema = self._build_feature_schema(schema_detail)
         self.prompt_template = self._build_prompt_template()
         self._llm_model = self._build_llm_model()
 
@@ -150,6 +151,21 @@ Here is the report excerpt:
         """Return a list of feature names from the model."""
         return list(self.feature_model.model_fields.keys())
 
+    # ------------------------------------------------------------------
+
+    def _build_feature_schema(self, detail: str) -> str:
+        """Return a JSON schema string for the feature model."""
+        properties = (
+            self._extend_feature_model().model_json_schema().get("properties", {})
+        )
+        if detail == "minimal":
+            properties = {
+                name: {"type": info.get("type"), "description": info.get("description")}
+                for name, info in properties.items()
+            }
+
+        return json.dumps(properties, indent=2)
+    
     # ------------------------------------------------------------------
     def _build_llm_model(self) -> Type[BaseModel]:
         """Create an internal Pydantic model allowing missing features.

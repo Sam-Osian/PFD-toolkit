@@ -100,3 +100,40 @@ def test_extractor_allow_multiple_prompt_line():
         allow_multiple=True,
     )
     assert "multiple categories" in extractor.prompt_template
+
+
+def test_feature_schema_full_and_minimal():
+    llm = DummyLLM()
+    extractor_full = Extractor(llm=llm, feature_model=DemoModel, schema_detail="full")
+    extractor_min = Extractor(llm=llm, feature_model=DemoModel, schema_detail="minimal")
+
+    expected_full = (
+        "{\n"
+        "  \"age\": {\n"
+        "    \"description\": \"Age\",\n"
+        "    \"title\": \"Age\",\n"
+        "    \"type\": \"integer\"\n"
+        "  },\n"
+        "  \"ethnicity\": {\n"
+        "    \"description\": \"Ethnicity\",\n"
+        "    \"title\": \"Ethnicity\",\n"
+        "    \"type\": \"string\"\n"
+        "  }\n"
+        "}"
+    )
+
+    expected_minimal = (
+        "{\n"
+        "  \"age\": {\n"
+        "    \"type\": \"integer\",\n"
+        "    \"description\": \"Age\"\n"
+        "  },\n"
+        "  \"ethnicity\": {\n"
+        "    \"type\": \"string\",\n"
+        "    \"description\": \"Ethnicity\"\n"
+        "  }\n"
+        "}"
+    )
+
+    assert extractor_full._feature_schema == expected_full
+    assert extractor_min._feature_schema == expected_minimal
