@@ -66,9 +66,11 @@ nav:
   - Loading reports: loader.md
   - Creating an LLM client: llm_setup.md
   - Screening relevant reports: screener.md
+  - Extracting information from reports: extractor.md
   - API Reference:
       - Data loader: reference/loader.md
       - Screener: reference/screener.md
+      - Extractor: reference/extractor.md
       - Scraper: reference/scraper.md
       - Cleaner: reference/cleaner.md
       - LLM: reference/llm.md
