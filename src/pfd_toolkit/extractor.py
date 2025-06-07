@@ -48,6 +48,7 @@ class Extractor:
         Emit extra logging when ``True``.
     """
 
+    # Load column names from config.py
     COL_URL = GeneralConfig.COL_URL
     COL_ID = GeneralConfig.COL_ID
     COL_DATE = GeneralConfig.COL_DATE
@@ -96,13 +97,13 @@ class Extractor:
             reports.copy() if reports is not None else pd.DataFrame()
         )
 
-
+        # Prepare feature metadata and prompt template
         self.feature_names = self._collect_field_names()
         self._feature_schema = self._build_feature_schema(schema_detail)
         self.prompt_template = self._build_prompt_template()
         self._grammar_model = self._build_grammar_model()
 
-        if verbose:
+        if verbose: # ...debug logging of initialisation internals
             logger.debug("Feature names: %r", self.feature_names)
             logger.debug("Feature schema: %s", self._feature_schema)
             logger.debug("Prompt template: %s", self.prompt_template)
@@ -114,6 +115,8 @@ class Extractor:
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
+        """Optional instructions depening on `self.force_assign` and
+        `self.allow_multiple` parammeters."""
         not_found_line_prompt = (
             f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'.\n"
             if not self.force_assign
@@ -124,10 +127,11 @@ class Extractor:
             if self.allow_multiple
             else "Assign only one category to each report."
         )
-
+        # Include any extra user instructions if provided
         extra_instr = (self.extra_instructions.strip() + "\n") if self.extra_instructions else ""
-
-        template = f"""
+        
+        # Compose the full template
+        template = f""" 
 You are an expert at extracting structured information from UK Prevention of Future Death reports.
 
 Extract the following features from the report excerpt provided.
@@ -153,8 +157,8 @@ Here is the report excerpt:
         fields = {}
         for name, field in base_fields.items():
             field_type = field.annotation
-            alias = getattr(field, "alias", name)
-            description = getattr(field, "description", None)
+            alias = field.alias
+            description = field.description
             fields[name] = (
                 field_type,
                 Field(..., alias=alias, description=description),
@@ -174,7 +178,7 @@ Here is the report excerpt:
         properties = (
             self._extend_feature_model().model_json_schema().get("properties", {})
         )
-        if detail == "minimal":
+        if detail == "minimal": # ...only include type and description for brevity
             properties = {
                 name: {"type": info.get("type"), "description": info.get("description")}
                 for name, info in properties.items()
@@ -197,10 +201,10 @@ Here is the report excerpt:
         fields = {}
         for name, field in base_fields.items():
             field_type = field.annotation
-            alias = getattr(field, "alias", name)
+            alias = field.alias
             if self.force_assign:
                 union_type = field_type
-            else:
+            else: # ...allow str fallback if force_assign is False
                 union_type = Union[field_type, str]
             fields[name] = (union_type, Field(..., alias=alias))
 
@@ -210,6 +214,7 @@ Here is the report excerpt:
     def _generate_prompt(self, row: pd.Series) -> str:
         """Construct a single prompt for the given DataFrame row."""
         parts: List[str] = []
+        # Add each enabled section if value present
         if self.include_date and pd.notna(row.get(self.COL_DATE)):
             parts.append(f"{self.COL_DATE}: {row[self.COL_DATE]}")
         if self.include_coroner and pd.notna(row.get(self.COL_CORONER_NAME)):
@@ -253,7 +258,7 @@ Here is the report excerpt:
         if df.empty:
             return df
 
-        # ensure result columns exist
+        # Ensure result columns exist with default NOT_FOUND_TEXT
         for feat in self.feature_names:
             if feat not in df.columns:
                 df[feat] = GeneralConfig.NOT_FOUND_TEXT
@@ -262,6 +267,7 @@ Here is the report excerpt:
         indices: List[int] = []
         keys: List[str] = []
 
+        # For each row needing extraction, build prompt
         for idx, row in df.iterrows():
             if skip_if_present:
                 present = any(
@@ -270,14 +276,13 @@ Here is the report excerpt:
                     for f in self.feature_names
                 )
                 if present:
-                    # If any feature column already contains data we assume
-                    #   the row was cached from a previous run and skip calling
-                    #   the LLM again.
+                        # If any feature column already contains data, assume
+                        # the row was cached from a previous run, and skip
                     continue
 
             prompt = self._generate_prompt(row)
             key = prompt
-            if key in self.cache:
+            if key in self.cache: # ...use cached values if available
                 cached = self.cache[key]
                 for feat in self.feature_names:
                     df.at[idx, feat] = cached.get(feat, GeneralConfig.NOT_FOUND_TEXT)
@@ -291,7 +296,7 @@ Here is the report excerpt:
             logger.info(
                 "Sending %s prompts to LLM for feature extraction", len(prompts)
             )
-
+        # Call LLM ...
         llm_results: List[BaseModel | Dict[str, object] | str] = []
         if prompts:
             llm_results = self.llm.generate_batch(
@@ -303,7 +308,7 @@ Here is the report excerpt:
                     "leave": True,
                 },
             )
-
+        # Parse and store results
         for i, res in enumerate(llm_results):
             idx = indices[i]
             key = keys[i]
@@ -320,9 +325,9 @@ Here is the report excerpt:
                 val = values.get(feat, GeneralConfig.NOT_FOUND_TEXT)
                 df.at[idx, feat] = val
 
-            self.cache[key] = values
+            self.cache[key] = values # ...cache response for reuse
 
-        if reports is None:
+        if reports is None: # ...update stored reports in instance
             self.reports = df.copy()
         return df
 
@@ -346,6 +351,7 @@ Here is the report excerpt:
         import pickle
 
         file_path = Path(path)
+        # Handle directory paths by appending default filename
         if file_path.is_dir() or file_path.suffix == "":
             file_path.mkdir(parents=True, exist_ok=True)
             file_path = file_path / "extractor_cache.pkl"
