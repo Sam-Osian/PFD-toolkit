@@ -89,19 +89,24 @@ class Extractor:
 
         self.feature_names = self._collect_field_names()
 
+        self._feature_schema = json.dumps(
+            self._extend_feature_model()
+            .model_json_schema()
+            .get("properties", {}),
+            indent=2,
+        )
         self.prompt_template = self._build_prompt_template()
         self._llm_model = self._build_llm_model()
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
-        features_list = ", ".join(self.feature_names)
         not_found_line_prompt = (
-            f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'."
+            f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'.\n"
             if not self.force_assign
             else ""
         )
         category_line = (
-            "A report may belong to multiple categories; separate them with semicolons (;)."
+            "A report may belong to multiple categories; separate them with semicolons (;).\n"
             if self.allow_multiple
             else "Assign only one category to each report."
         )
@@ -114,9 +119,10 @@ Extract the following features from the report excerpt provided.
 {not_found_line_prompt}
 {category_line}
 
-Return your answer strictly as a JSON object with the following keys:
-{features_list}
-\n*\n\nHere is the report excerpt:
+Return your answer strictly as a JSON object matching this schema:\n
+{{schema}}
+
+Here is the report excerpt:
 
 {{report_excerpt}}
 """
@@ -188,9 +194,11 @@ Return your answer strictly as a JSON object with the following keys:
             parts.append(f"{self.COL_CONCERNS}: {row[self.COL_CONCERNS]}")
         report_text = "\n\n".join(str(p) for p in parts).strip()
         report_text = " ".join(report_text.split())
-        prompt = self.prompt_template.format(report_excerpt=report_text)
-        json_template = json.dumps({name: "" for name in self.feature_names}, indent=2)
-        return f"{prompt}\n\n{json_template}"
+        prompt = self.prompt_template.format(
+            report_excerpt=report_text, schema=self._feature_schema
+        )
+
+        return prompt
 
     # ------------------------------------------------------------------
     def extract_features(self, reports: Optional[pd.DataFrame] = None) -> pd.DataFrame:
