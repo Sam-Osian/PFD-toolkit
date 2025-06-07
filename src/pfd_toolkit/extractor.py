@@ -51,7 +51,7 @@ class Extractor:
     COL_DATE = GeneralConfig.COL_DATE
     COL_CORONER_NAME = GeneralConfig.COL_CORONER_NAME
     COL_AREA = GeneralConfig.COL_AREA
-    COL_RECEIVER = GeneralConfig.COL_URL
+    COL_RECEIVER = GeneralConfig.COL_RECEIVER
     COL_INVESTIGATION = GeneralConfig.COL_INVESTIGATION
     COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
     COL_CONCERNS = GeneralConfig.COL_CONCERNS
