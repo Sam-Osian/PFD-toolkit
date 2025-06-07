@@ -20,20 +20,17 @@ class Extractor:
 
     Parameters
     ----------
-    llm : LLM
-        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
     feature_model : type[pydantic.BaseModel]
         Pydantic model describing the features to extract from each report.
-        The model field names will be used as the JSON keys in the LLM response.
+        The model field names will be used as the JSON keys in the LLM response
+    llm : LLM
+        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting..
     reports : pandas.DataFrame, optional
         DataFrame of PFD reports. If provided, it will be copied and stored
         on the instance.
-    include_date, include_coroner, include_area, include_receiver,
-    include_investigation, include_circumstances, include_concerns : bool, optional
+    include_date, include_coroner, include_area, include_receiver, include_investigation, include_circumstances, include_concerns : bool, optional
         Flags controlling which existing report columns are included in the text
         sent to the LLM.
-    verbose : bool, optional
-        Emit extra logging when ``True``.
     force_assign : bool, optional
         When ``True``, the LLM is instructed to avoid returning
         :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature. Defaults to ``False``.
@@ -47,6 +44,8 @@ class Extractor:
     extra_instructions : str, optional
         Extra instructions injected into every prompt, placed before the schema
         line. Use this to provide additional context or rules for the LLM.
+    verbose : bool, optional
+        Emit extra logging when ``True``.
     """
 
     COL_URL = GeneralConfig.COL_URL
@@ -62,8 +61,8 @@ class Extractor:
     def __init__(
         self,
         *,
-        llm: LLM,
         feature_model: Type[BaseModel],
+        llm: LLM,
         reports: Optional[pd.DataFrame] = None,
         include_date: bool = False,
         include_coroner: bool = False,
@@ -72,11 +71,11 @@ class Extractor:
         include_investigation: bool = True,
         include_circumstances: bool = True,
         include_concerns: bool = True,
-        verbose: bool = False,
         force_assign: bool = False,
         allow_multiple: bool = False,
         schema_detail: Literal["full", "minimal"] = "minimal",
         extra_instructions: Optional[str] = None,
+        verbose: bool = False,
     ) -> None:
         self.llm = llm
         self.feature_model = feature_model
@@ -87,11 +86,11 @@ class Extractor:
         self.include_investigation = include_investigation
         self.include_circumstances = include_circumstances
         self.include_concerns = include_concerns
-        self.verbose = verbose
         self.force_assign = force_assign
         self.allow_multiple = allow_multiple
         self.schema_detail = schema_detail
         self.extra_instructions = extra_instructions
+        self.verbose = verbose
 
         self.reports: pd.DataFrame = (
             reports.copy() if reports is not None else pd.DataFrame()
@@ -99,12 +98,18 @@ class Extractor:
 
 
         self.feature_names = self._collect_field_names()
-
         self._feature_schema = self._build_feature_schema(schema_detail)
         self.prompt_template = self._build_prompt_template()
         self._grammar_model = self._build_grammar_model()
 
-        # cache mapping prompt -> feature dict
+        if verbose:
+            logger.debug("Feature names: %r", self.feature_names)
+            logger.debug("Feature schema: %s", self._feature_schema)
+            logger.debug("Prompt template: %s", self.prompt_template)
+            logger.debug("Grammar (Pydantic) model: %r", self._grammar_model)
+
+        
+        # Cache mapping prompt -> feature dict
         self.cache: Dict[str, Dict[str, object]] = {}
 
     # ------------------------------------------------------------------
@@ -242,7 +247,7 @@ Here is the report excerpt:
             When ``True`` (default), skip rows when any feature column already
             holds a non-missing value that is not equal to
             :data:`GeneralConfig.NOT_FOUND_TEXT`. This assumes the row has been
-            processed previously and prevents another LLM call.
+            processed previously and is logged in an instance of `Extractor.cache`
         """
         df = reports.copy() if reports is not None else self.reports.copy()
         if df.empty:
