@@ -120,6 +120,7 @@ include = ["src/pfd_toolkit/data/*.csv"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.0",
+    "pytest-cov>=6.1.1",
 ]
 
 [project.urls]
