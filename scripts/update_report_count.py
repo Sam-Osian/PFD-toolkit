@@ -21,7 +21,7 @@ with open(md_path, "r", encoding="utf-8") as f:
 # Replace the old 4-digit number inside ** with the current count.
 # It matches lines like: includes **5720** PFD reports
 pattern = r"(includes \*\*)\d{4}(\*\* PFD reports)"
-replacement = rf"\1{count}\2"
+replacement = rf"\g<1>{count}\g<2>"
 text = re.sub(pattern, replacement, text)
 
 # Write the updated markdown back to disk

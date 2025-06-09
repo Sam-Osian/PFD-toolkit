@@ -1,4 +1,4 @@
-name: Weekly PFD Top-Up
+name: Auto PFD Top-Up
 
 on:
   workflow_dispatch:
