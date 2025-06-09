@@ -44,14 +44,3 @@ jobs:
 
       - name: Run pytests
         run: uv run pytest
-
-      - name: Run tests with coverage
-        run: |
-          uv run pytest --cov=src > pytest-coverage.txt
-          echo "Overall coverage: $(grep TOTAL pytest-coverage.txt | awk '{print $NF}')"
-
-      - name: Upload pytest coverage
-        uses: actions/upload-artifact@v4
-        with:
-          name: pytest-coverage-${{ matrix.python-version }}
-          path: pytest-coverage.txt
