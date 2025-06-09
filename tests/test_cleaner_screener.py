@@ -2,18 +2,10 @@ import pandas as pd
 import pytest
 from pfd_toolkit.cleaner import Cleaner
 from pfd_toolkit.screener import Screener, TopicMatch
+from pfd_toolkit.config import GeneralConfig
 
 
 class DummyLLM:
-    CLEANER_BASE_PROMPT = "{field_description}{field_contents_and_rules}{extra_instructions}"
-    CLEANER_PROMPT_CONFIG = {
-        "Coroner": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
-        "Area": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
-        "Receiver": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
-        "InvestigationAndInquest": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
-        "CircumstancesOfDeath": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
-        "MattersOfConcern": {"field_description": "desc", "field_contents_and_rules": "rules", "extra_instructions": ""},
-    }
 
     def __init__(self, keywords=None):
         self.keywords = [k.lower() for k in (keywords or [])]
@@ -40,10 +32,25 @@ def test_cleaner_basic():
     assert cleaned["CoronerName"].iloc[0] == "JOHN DOE"
 
 
+def test_generate_prompt_template():
+    df = pd.DataFrame({
+        GeneralConfig.COL_CORONER_NAME: ["john doe"],
+        GeneralConfig.COL_AREA: ["area"],
+        GeneralConfig.COL_RECEIVER: ["x"],
+        GeneralConfig.COL_INVESTIGATION: ["inv"],
+        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+        GeneralConfig.COL_CONCERNS: ["conc"],
+    })
+    cleaner = Cleaner(df, DummyLLM())
+    tmpl = cleaner.generate_prompt_template()
+    assert GeneralConfig.COL_CORONER_NAME in tmpl
+    assert "[TEXT]" in tmpl[GeneralConfig.COL_CORONER_NAME]
+
+
 def test_cleaner_missing_column_error():
     df = pd.DataFrame({"CoronerName": ["x"]})
     with pytest.raises(ValueError):
-        Cleaner(df, DummyLLM(), area=True)
+        Cleaner(df, DummyLLM(), include_area=True)
 
 
 def test_screener_basic():

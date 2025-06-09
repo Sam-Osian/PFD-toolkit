@@ -6,6 +6,7 @@ import warnings
 from tqdm import TqdmWarning
 
 from pfd_toolkit.llm import LLM
+from pfd_toolkit.config import GeneralConfig
 
 # -----------------------------------------------------------------------------
 # Logging Configuration:
@@ -31,20 +32,16 @@ class Cleaner:
     Parameters
     ----------
     reports : pandas.DataFrame
-        Input DataFrame returned by :pyclass:`~pfd_toolkit.scraper.PFDScraper`
+        Input DataFrame returned by :class:`~pfd_toolkit.scraper.PFDScraper`
         or similar.
     llm : LLM
-        Client that implements ``generate`` and exposes
-        ``CLEANER_BASE_PROMPT`` plus ``CLEANER_PROMPT_CONFIG``.
-    coroner, receiver, area, investigation_and_inquest,\
-    circumstances_of_death, matters_of_concern : bool, optional
+        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
+    include_coroner, include_receiver, include_area, include_investigation,\
+    include_circumstances, include_concerns : bool, optional
         Flags that decide which columns are processed.
-    *_field : str, optional
-        Column names for each section; defaults follow the PFDScraper
-        convention.
     *_prompt : str or None, optional
-        Custom prompt templates.  If *None*, a default is assembled from the
-        LLM’s prompt config.
+        Custom prompt templates.  If *None*, defaults based on
+        :attr:`CLEANER_PROMPT_CONFIG`.
     verbose : bool, optional
         Emit info-level logs for each batch when ``True``.
 
@@ -57,10 +54,95 @@ class Cleaner:
 
     Examples
     --------
-    >>> cleaner = Cleaner(df, llm, coroner=False, verbose=True)
+    >>> cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
     >>> cleaned_df = cleaner.clean_reports()
     >>> cleaned_df.head()
     """
+
+    # DataFrame column names
+    COL_URL = GeneralConfig.COL_URL
+    COL_ID = GeneralConfig.COL_ID
+    COL_DATE = GeneralConfig.COL_DATE
+    COL_CORONER_NAME = GeneralConfig.COL_CORONER_NAME
+    COL_AREA = GeneralConfig.COL_AREA
+    COL_RECEIVER = GeneralConfig.COL_RECEIVER
+    COL_INVESTIGATION = GeneralConfig.COL_INVESTIGATION
+    COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
+    COL_CONCERNS = GeneralConfig.COL_CONCERNS
+
+    # Base prompt template used for all cleaning operations
+    CLEANER_BASE_PROMPT = """\
+You are an expert in extracting and cleaning specific information from UK Coronial Prevention of Future Death Reports.
+
+Task:
+1. **Extract** only the information related to {field_description}.
+2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content, if any occurs.
+3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Do not replace any acronyms.
+4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.
+5. **If extraction fails**, return only and exactly: N/A: Not found
+6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. Do not ever summarise, *nor* edit for conciseness or flow.
+
+Extra instructions:
+{extra_instructions}
+
+Input Text:
+"""
+
+    # Field-specific configuration for prompt substitution
+    CLEANER_PROMPT_CONFIG = {
+        "Coroner": {
+            "field_description": "the name of the Coroner who presided over the inquest",
+            "field_contents_and_rules": "this name of the Coroner -- nothing else",
+            "extra_instructions": (
+                "Remove all reference to titles & middle name(s), if present, and replace the first name with an initial. "
+                'For example, if the string is "Mr. Joe E Bloggs", return "J. Bloggs". '
+                'If the string is "Joe Bloggs Senior Coroner for West London", return "J. Bloggs". '
+                'If the string is "J. Bloggs", just return "J. Bloggs" (no modification). '
+            ),
+        },
+        "Area": {
+            "field_description": "the area where the inquest took place",
+            "field_contents_and_rules": "only the name of the area -- nothing else",
+            "extra_instructions": (
+                'For example, if the string is "Area: West London", return "West London". '
+                'If the string is "Hampshire, Portsmouth and Southampton", return it as is.'
+            ),
+        },
+        "Receiver": {
+            "field_description": "the name(s)/organisation(s) of the receiver(s) of the report",
+            "field_contents_and_rules": "only the name(s)/organisation(s) and, if given, their job title(s) -- nothing else",
+            "extra_instructions": (
+                "Separate multiple names/organisations with semicolons (;). "
+                "Do not use a numbered list. "
+                "Do not separate information with commas or new lines. "
+            ),
+        },
+        "InvestigationAndInquest": {
+            "field_description": "the details of the investigation and inquest",
+            "field_contents_and_rules": "only the details of the investigation and inquest -- nothing else",
+            "extra_instructions": (
+                "If the string appears to need no cleaning, return it as is. "
+                "If a date is used, convert it into British long format. "
+            ),
+        },
+        "CircumstancesOfDeath": {
+            "field_description": "the circumstances of death",
+            "field_contents_and_rules": "only the circumstances of death -- nothing else",
+            "extra_instructions": (
+                "If the string appears to need no cleaning, return it as is. "
+                "If a date is used, convert it into British long format. "
+            ),
+        },
+        "MattersOfConcern": {
+            "field_description": "the matters of concern",
+            "field_contents_and_rules": "only the matters of concern, nothing else",
+            "extra_instructions": (
+                'Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with "...The Matters of Concern are as follows:" (which should also be removed). '
+                "If the string appears to need no cleaning, return it as is. "
+                "If a date is used, convert it into British long format. "
+            ),
+        },
+    }
 
     def __init__(
         self,
@@ -68,19 +150,12 @@ class Cleaner:
         reports: pd.DataFrame,
         llm: LLM,
         # Fields to clean
-        coroner: bool = True,
-        receiver: bool = True,
-        area: bool = True,
-        investigation_and_inquest: bool = True,
-        circumstances_of_death: bool = True,
-        matters_of_concern: bool = True,
-        # Name of column for each report section; default to the names provided by PFDScraper
-        coroner_field: str = "CoronerName",
-        area_field: str = "Area",
-        receiver_field: str = "Receiver",
-        investigation_field: str = "InvestigationAndInquest",
-        circumstances_field: str = "CircumstancesOfDeath",
-        concerns_field: str = "MattersOfConcern",
+        include_coroner: bool = True,
+        include_receiver: bool = True,
+        include_area: bool = True,
+        include_investigation: bool = True,
+        include_circumstances: bool = True,
+        include_concerns: bool = True,
         # Custom prompts for each field; defaults to None
         coroner_prompt: str = None,
         area_prompt: str = None,
@@ -95,20 +170,12 @@ class Cleaner:
         self.llm = llm
 
         # Flags for which fields to clean
-        self.process_coroner = coroner
-        self.process_receiver = receiver
-        self.process_area = area
-        self.process_investigation_and_inquest = investigation_and_inquest
-        self.process_circumstances_of_death = circumstances_of_death
-        self.process_matters_of_concern = matters_of_concern
-
-        # DataFrame column names
-        self.coroner_col_name = coroner_field
-        self.area_col_name = area_field
-        self.receiver_col_name = receiver_field
-        self.investigation_col_name = investigation_field
-        self.circumstances_col_name = circumstances_field
-        self.concerns_col_name = concerns_field
+        self.include_coroner = include_coroner
+        self.include_receiver = include_receiver
+        self.include_area = include_area
+        self.include_investigation = include_investigation
+        self.include_circumstances = include_circumstances
+        self.include_concerns = include_concerns
 
         # Prompt templates
         self.coroner_prompt_template = coroner_prompt or self._get_prompt_for_field(
@@ -142,18 +209,18 @@ class Cleaner:
 
         # If the input DataFrame does not contain the necessary columns
         required_df_columns = []
-        if self.process_coroner:
-            required_df_columns.append(self.coroner_col_name)
-        if self.process_area:
-            required_df_columns.append(self.area_col_name)
-        if self.process_receiver:
-            required_df_columns.append(self.receiver_col_name)
-        if self.process_investigation_and_inquest:
-            required_df_columns.append(self.investigation_col_name)
-        if self.process_circumstances_of_death:
-            required_df_columns.append(self.circumstances_col_name)
-        if self.process_matters_of_concern:
-            required_df_columns.append(self.concerns_col_name)
+        if self.include_coroner:
+            required_df_columns.append(self.COL_CORONER_NAME)
+        if self.include_area:
+            required_df_columns.append(self.COL_AREA)
+        if self.include_receiver:
+            required_df_columns.append(self.COL_RECEIVER)
+        if self.include_investigation:
+            required_df_columns.append(self.COL_INVESTIGATION)
+        if self.include_circumstances:
+            required_df_columns.append(self.COL_CIRCUMSTANCES)
+        if self.include_concerns:
+            required_df_columns.append(self.COL_CONCERNS)
 
         # Get unique column names in case user mapped multiple flags to the same df column
         required_df_columns = list(set(required_df_columns))
@@ -168,13 +235,30 @@ class Cleaner:
 
     def _get_prompt_for_field(self, field_name: str) -> str:
         """Generates a complete prompt template for a given PFD report field."""
-        # Access PROMPT_CONFIG and BASE_PROMPT from the llm instance
-        config = self.llm.CLEANER_PROMPT_CONFIG[field_name]
-        return self.llm.CLEANER_BASE_PROMPT.format(
+        # Access prompt configuration stored on this class
+        config = self.CLEANER_PROMPT_CONFIG[field_name]
+        return self.CLEANER_BASE_PROMPT.format(
             field_description=config["field_description"],
             field_contents_and_rules=config["field_contents_and_rules"],
             extra_instructions=config["extra_instructions"],
         )
+
+    def generate_prompt_template(self) -> dict[str, str]:
+        """Return the prompt templates used for each field.
+
+        The returned dictionary maps DataFrame column names to the full
+        prompt text with a ``[TEXT]`` placeholder appended to illustrate how the
+        prompt will look during :meth:`clean_reports`.
+        """
+
+        return {
+            self.COL_CORONER_NAME: f"{self.coroner_prompt_template}\n[TEXT]",
+            self.COL_AREA: f"{self.area_prompt_template}\n[TEXT]",
+            self.COL_RECEIVER: f"{self.receiver_prompt_template}\n[TEXT]",
+            self.COL_INVESTIGATION: f"{self.investigation_prompt_template}\n[TEXT]",
+            self.COL_CIRCUMSTANCES: f"{self.circumstances_prompt_template}\n[TEXT]",
+            self.COL_CONCERNS: f"{self.concerns_prompt_template}\n[TEXT]",
+        }
 
     def clean_reports(self) -> pd.DataFrame:
         """Run LLM-based cleaning for the configured columns.
@@ -201,33 +285,33 @@ class Cleaner:
         field_processing_config = [
             (
                 "Coroner",
-                self.process_coroner,
-                self.coroner_col_name,
+                self.include_coroner,
+                self.COL_CORONER_NAME,
                 self.coroner_prompt_template,
             ),
-            ("Area", self.process_area, self.area_col_name, self.area_prompt_template),
+            ("Area", self.include_area, self.COL_AREA, self.area_prompt_template),
             (
                 "Receiver",
-                self.process_receiver,
-                self.receiver_col_name,
+                self.include_receiver,
+                self.COL_RECEIVER,
                 self.receiver_prompt_template,
             ),
             (
                 "InvestigationAndInquest",
-                self.process_investigation_and_inquest,
-                self.investigation_col_name,
+                self.include_investigation,
+                self.COL_INVESTIGATION,
                 self.investigation_prompt_template,
             ),
             (
                 "CircumstancesOfDeath",
-                self.process_circumstances_of_death,
-                self.circumstances_col_name,
+                self.include_circumstances,
+                self.COL_CIRCUMSTANCES,
                 self.circumstances_prompt_template,
             ),
             (
                 "MattersOfConcern",
-                self.process_matters_of_concern,
-                self.concerns_col_name,
+                self.include_concerns,
+                self.COL_CONCERNS,
                 self.concerns_prompt_template,
             ),
         ]

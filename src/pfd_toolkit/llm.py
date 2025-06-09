@@ -57,11 +57,6 @@ class LLM:
 
     Attributes
     ----------
-    CLEANER_BASE_PROMPT : str
-        The shared template used by *Cleaner* to build field-specific
-        prompts.
-    CLEANER_PROMPT_CONFIG : dict
-        Field-level substitution values for the cleaner prompt.
     _sem : threading.Semaphore
         Global semaphore that limits concurrent requests to *max_workers*.
     client : openai.Client
@@ -75,80 +70,6 @@ class LLM:
     'Hello! How can I assist you today?'
     """
 
-    # Base prompt template that all prompts will share, with placeholders for field-specific information.
-    CLEANER_BASE_PROMPT = """\
-    You are an expert in extracting and cleaning specific information from UK Coronial Prevention of Future Death Reports.
-
-    Task:
-    1. **Extract** only the information related to {field_description}.
-    2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content, if any occurs.
-    3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Do not replace any acronyms.
-    4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.
-    5. **If extraction fails**, return only and exactly: N/A: Not found
-    6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. Do not ever summarise, *nor* edit for conciseness or flow.
-
-    Extra instructions:
-    {extra_instructions}
-
-    Input Text:
-    """
-
-    # Dictionary holding field-specific configurations for the prompt
-    # The placeholders for the above `BASE_PROMPT` will be 'filled in' using the values below...
-    CLEANER_PROMPT_CONFIG = {
-        "Coroner": {
-            "field_description": "the name of the Coroner who presided over the inquest",
-            "field_contents_and_rules": "this name of the Coroner -- nothing else",
-            "extra_instructions": (
-                "Remove all reference to titles & middle name(s), if present, and replace the first name with an initial. "
-                'For example, if the string is "Mr. Joe E Bloggs", return "J. Bloggs". '
-                'If the string is "Joe Bloggs Senior Coroner for West London", return "J. Bloggs". '
-                'If the string is "J. Bloggs", just return "J. Bloggs" (no modification). '
-            ),
-        },
-        "Area": {
-            "field_description": "the area where the inquest took place",
-            "field_contents_and_rules": "only the name of the area -- nothing else",
-            "extra_instructions": (
-                'For example, if the string is "Area: West London", return "West London". '
-                'If the string is "Hampshire, Portsmouth and Southampton", return it as is.'
-            ),
-        },
-        "Receiver": {
-            "field_description": "the name(s)/organisation(s) of the receiver(s) of the report",
-            "field_contents_and_rules": "only the name(s)/organisation(s) and, if given, their job title(s) -- nothing else",
-            "extra_instructions": (
-                "Separate multiple names/organisations with semicolons (;). "
-                "Do not use a numbered list. "
-                "Do not separate information with commas or new lines. "
-            ),
-        },
-        "InvestigationAndInquest": {
-            "field_description": "the details of the investigation and inquest",
-            "field_contents_and_rules": "only the details of the investigation and inquest -- nothing else",
-            "extra_instructions": (
-                "If the string appears to need no cleaning, return it as is. "
-                "If a date is used, convert it into British long format. "
-            ),
-        },
-        "CircumstancesOfDeath": {
-            "field_description": "the circumstances of death",
-            "field_contents_and_rules": "only the circumstances of death -- nothing else",
-            "extra_instructions": (
-                "If the string appears to need no cleaning, return it as is. "
-                "If a date is used, convert it into British long format. "
-            ),
-        },
-        "MattersOfConcern": {
-            "field_description": "the matters of concern",
-            "field_contents_and_rules": "only the matters of concern, nothing else",
-            "extra_instructions": (
-                'Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with "...The Matters of Concern are as follows:" (which should also be removed). '
-                "If the string appears to need no cleaning, return it as is. "
-                "If a date is used, convert it into British long format. "
-            ),
-        },
-    }
 
     def __init__(
         self,
