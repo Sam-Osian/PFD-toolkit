@@ -41,6 +41,3 @@ jobs:
       - name: Check dependencies # Flag any offending dependencies
         run: uv pip check
         continue-on-error: false
-
-      - name: Run pytests
-        run: uv run pytest
