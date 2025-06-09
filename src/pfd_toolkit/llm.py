@@ -151,7 +151,7 @@ class LLM:
         api_key: Optional[str] = None,
         model: str = "gpt-4.1-mini",
         base_url: Optional[str] = None,
-        max_workers: int = 1,
+        max_workers: int = 8,
     ):
         self.api_key = api_key
         self.model = model
@@ -163,22 +163,6 @@ class LLM:
 
         # Global semaphore to throttle calls based on max_workers
         self._sem = Semaphore(self.max_workers)
-
-        # Backoff for raw generate calls, handles OpenAI connection errors
-        # Jitter helps avoid synchronized retry storms
-        @backoff.on_exception(
-            backoff.expo,
-            (RateLimitError, APIConnectionError, APITimeoutError),
-            max_time=60,
-            jitter=backoff.full_jitter,
-        )
-        def _generate_with_backoff(
-            messages: List[Dict], temperature: float = 0.0
-        ) -> str:
-            with self._sem:
-                return self._raw_generate(messages, temperature)
-
-        self._safe_generate_impl = _generate_with_backoff
 
         # Backoff for parse endpoint, handles OpenAI connection errors
         # Adding jitter avoids thundering-herd retries
@@ -194,24 +178,6 @@ class LLM:
                 return self.client.beta.chat.completions.parse(**kwargs)
 
         self._parse_with_backoff = _parse_with_backoff
-
-    def _raw_generate(self, messages: List[Dict], temperature: float = 0.0) -> str:
-        # Make the API call
-        resp = self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-        )
-
-        # Record actual usage (for future tuning/logging)
-        try:
-            used = resp.usage.total_tokens
-            logger.debug(f"Actual tokens used: {used}")
-        except Exception:
-            pass
-
-        # Return content
-        return resp.choices[0].message.content.strip()
 
     def _pdf_bytes_to_base64_images(
         self, pdf_bytes: bytes, dpi: int = 200
@@ -233,7 +199,7 @@ class LLM:
         doc.close()
         return imgs
 
-    #  -- LLM Method for the cleaner.py module --
+    # Main LLM method for other modules
     def generate_batch(
         self,
         prompts: List[str],
@@ -248,7 +214,7 @@ class LLM:
         Parameters
         ----------
         prompts : list[str]
-            List of user prompts—one prompt per model call.
+            List of user prompts. One prompt per model call.
 
         images_list : list[list[bytes]] or None, optional
             For vision models: a parallel list where each inner list
@@ -269,7 +235,7 @@ class LLM:
         Returns
         -------
         list[Union[pydantic.BaseModel, str]]
-            Results in **the same order** as *prompts*.
+            Results in the same order as `prompts`.
 
         Raises
         ------
@@ -309,45 +275,26 @@ class LLM:
         else:
             effective_workers = self.max_workers
 
-        # Sequential execution if only one worker is designated
-        if effective_workers <= 1:
-            results: List[BaseModel | str] = []
-            seq_kwargs = dict(tqdm_kwargs)
-            current_desc = seq_kwargs.pop(
-                "desc", "Sending requests to the LLM (sequentially)"
-            )
-            for idx, prompt in tqdm(
-                enumerate(prompts),
-                total=len(prompts),
-                desc=current_desc,
-                **seq_kwargs,
-            ):
-                current_images = (
-                    images_list[idx] if images_list and idx < len(images_list) else None
+        @backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, APIConnectionError, APITimeoutError),
+            max_time=60,
+            jitter=backoff.full_jitter,
+        )
+        def _call_llm(messages: List[Dict]) -> str:
+            with self._sem:
+                resp = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
                 )
-                messages = _build_messages(prompt, current_images)
+            try:
+                used = resp.usage.total_tokens
+                logger.debug(f"Actual tokens used: {used}")
+            except Exception:
+                pass
+            return resp.choices[0].message.content.strip()
 
-                if response_format:
-                    try:
-                        resp = self._parse_with_backoff(
-                            model=self.model,
-                            messages=messages,
-                            temperature=temperature,
-                            response_format=response_format,
-                        )
-                        validated = response_format.model_validate_json(
-                            resp.choices[0].message.content
-                        )
-                        results.append(validated)
-                    except Exception as e:
-                        logger.error(f"Batch pydantic parse failed for item {idx}: {e}")
-                        results.append(f"Error: {e}")
-                else:
-                    txt = self._safe_generate_impl(messages, temperature)
-                    results.append(txt)
-            return results
-
-        # Parallel execution
         results: List[BaseModel | str] = [None] * len(prompts)
 
         def _worker(idx: int, prompt_text: str):
@@ -372,27 +319,27 @@ class LLM:
                     logger.error(f"Batch pydantic parse failed for item {idx}: {e}")
                     return idx, f"Error: {e}"
             else:
-                txt = self._safe_generate_impl(messages, temperature)
+                txt = _call_llm(messages)
                 return idx, txt
 
         with ThreadPoolExecutor(max_workers=effective_workers) as executor:
             futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
-            par_kwargs = dict(tqdm_kwargs)
-            current_desc = par_kwargs.pop(
-                "desc", "Sending requests to the LLM (in parallel)"
+            bar_kwargs = dict(tqdm_kwargs)
+            current_desc = bar_kwargs.pop(
+                "desc", "Sending requests to the LLM"
             )
             for fut in tqdm(
                 as_completed(futures),
                 total=len(prompts),
                 desc=current_desc,
-                **par_kwargs,
+                **bar_kwargs,
             ):
                 i, out = fut.result()
                 results[i] = out
 
         return results
 
-    # -- LLM method for scraper.py module --
+    # LLM method for scraper.py module
     def _call_llm_fallback(
         self,
         pdf_bytes: Optional[bytes],
@@ -448,8 +395,6 @@ class LLM:
             logger.info("LLM fallback prompt for %s:\n%s", report_url, prompt)
 
         try:
-            # Casting images_for_batch to any to satisfy the potentially problematic type hint
-            # without changing the underlying data which is List[List[str]]
             result_list = self.generate_batch(
                 prompts=[prompt],
                 images_list=images_for_batch,  # type: ignore

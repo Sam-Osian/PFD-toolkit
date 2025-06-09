@@ -44,10 +44,18 @@ from pfd_toolkit.llm import LLM
 def test_generate_batch_sequential(monkeypatch):
     llm = LLM(api_key="test", max_workers=1)
 
-    def fake_safe(messages, temperature=0.0):
-        return messages[0]["content"][0]["text"].upper()
+    def fake_create(model, messages, temperature=0.0):
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=messages[0]["content"][0]["text"].upper())
+                )
+            ],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
 
-    monkeypatch.setattr(llm, "_safe_generate_impl", fake_safe)
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
     results = llm.generate_batch(["one", "two"], max_workers=1)
     assert results == ["ONE", "TWO"]
 
@@ -55,10 +63,18 @@ def test_generate_batch_sequential(monkeypatch):
 def test_generate_batch_parallel(monkeypatch):
     llm = LLM(api_key="test", max_workers=4)
 
-    def fake_safe(messages, temperature=0.0):
-        return messages[0]["content"][0]["text"].upper()
+    def fake_create(model, messages, temperature=0.0):
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=messages[0]["content"][0]["text"].upper())
+                )
+            ],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
 
-    monkeypatch.setattr(llm, "_safe_generate_impl", fake_safe)
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
     results = llm.generate_batch(["a", "b", "c"], max_workers=3)
     assert results == ["A", "B", "C"]
 

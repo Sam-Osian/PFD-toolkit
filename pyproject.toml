@@ -42,7 +42,6 @@ dependencies = [
     "debugpy==1.8.12",
     "decorator==5.2.1",
     "distro==1.9.0",
-    "docx2pdf==0.1.8",
     "dotenv==0.9.9",
     "etelemetry==0.3.1",
     "executing==2.2.0",
