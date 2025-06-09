@@ -43,11 +43,11 @@ jobs:
         continue-on-error: false
 
       - name: Run pytests
-        run: pytest
+        run: uv run pytest
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=src > pytest-coverage.txt
+          uv run pytest --cov=src > pytest-coverage.txt
           echo "Overall coverage: $(grep TOTAL pytest-coverage.txt | awk '{print $NF}')"
 
       - name: Upload pytest coverage
