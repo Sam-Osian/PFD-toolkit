@@ -34,17 +34,6 @@ src/pfd_toolkit/scraper/pdf_extractor.py      121     48    60%
 src/pfd_toolkit/scraper/scraper.py            256    118    54%
 src/pfd_toolkit/screener.py                   148     47    68%
 src/pfd_toolkit/text_utils.py                  45      6    87%
-tests/conftest.py                               8      1    88%
-tests/test_cleaner_screener.py                 43      0   100%
-tests/test_config.py                           30      1    97%
-tests/test_extractor.py                       120      1    99%
-tests/test_html_pdf_extractors.py              42      0   100%
-tests/test_llm_extractor.py                    39      0   100%
-tests/test_llm_methods.py                      54      0   100%
-tests/test_loader.py                           15      0   100%
-tests/test_network_scraper.py                  45      0   100%
-tests/test_scraper_misc.py                      8      0   100%
-tests/test_text_utils.py                       30      0   100%
 ---------------------------------------------------------------
-TOTAL                                        1664    368    78%
-============================== 47 passed in 2.77s ==============================
+TOTAL                                        1230    365    70%
+============================== 47 passed in 2.75s ==============================
