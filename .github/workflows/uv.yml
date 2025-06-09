@@ -34,7 +34,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          #cache: "pip"
       
       - name: Install pfd-toolkit
         run: uv sync --all-extras --dev
@@ -42,3 +41,17 @@ jobs:
       - name: Check dependencies # Flag any offending dependencies
         run: uv pip check
         continue-on-error: false
+
+      - name: Run pytests
+        run: pytest
+
+      - name: Run tests with coverage
+        run: |
+          pytest --cov=src > pytest-coverage.txt
+          echo "Overall coverage: $(grep TOTAL pytest-coverage.txt | awk '{print $NF}')"
+
+      - name: Upload pytest coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-coverage-${{ matrix.python-version }}
+          path: pytest-coverage.txt
