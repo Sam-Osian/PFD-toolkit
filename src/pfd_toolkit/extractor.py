@@ -115,8 +115,8 @@ class Extractor:
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
-        """Optional instructions depening on `self.force_assign` and
-        `self.allow_multiple` parammeters."""
+        """Optional instructions depending on ``self.force_assign`` and
+        ``self.allow_multiple`` parameters."""
         not_found_line_prompt = (
             f"If a feature cannot be located, respond with '{GeneralConfig.NOT_FOUND_TEXT}'.\n"
             if not self.force_assign
@@ -151,7 +151,8 @@ Here is the report excerpt:
 
     # ------------------------------------------------------------------
     def _extend_feature_model(self) -> Type[BaseModel]:
-        """Return a feature model extended with optional fields."""
+        """Return a feature model mirroring ``feature_model`` with all fields
+        required."""
         base_fields = self.feature_model.model_fields
 
         fields = {}
@@ -299,7 +300,7 @@ Here is the report excerpt:
         # Call LLM ...
         llm_results: List[BaseModel | Dict[str, object] | str] = []
         if prompts:
-            llm_results = self.llm.generate_batch(
+            llm_results = self.llm.generate(
                 prompts=prompts,
                 response_format=self._grammar_model,
                 tqdm_extra_kwargs={

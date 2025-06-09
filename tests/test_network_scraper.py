@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 
 from pfd_toolkit.scraper.html_extractor import HtmlExtractor
 from pfd_toolkit.scraper.pdf_extractor import PdfExtractor
-from pfd_toolkit.scraper.scraper import PFDScraper
+from pfd_toolkit.scraper.scraper import Scraper
 from pfd_toolkit.config import ScraperConfig
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures"
@@ -52,7 +52,7 @@ def test_fetch_pdf_bytes():
 
 
 def test_get_report_href_values():
-    scraper = PFDScraper(
+    scraper = Scraper(
         category="all",
         start_date="2024-01-01",
         end_date="2024-01-02",

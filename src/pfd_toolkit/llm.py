@@ -32,7 +32,7 @@ class LLM:
 
     The helper provides:
 
-    * A generic :py:meth:`self.generate_batch()` that optionally supports vision
+    * A generic :py:meth:`self.generate()` that optionally supports vision
       inputs and pydantic validation.
     * A PDF-to-image utility used by
       :py:meth:`self._call_llm_fallback()` - the method the scraper invokes when
@@ -70,7 +70,7 @@ class LLM:
     Examples
     --------
     >>> llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2)
-    >>> out = llm.generate_batch(["Hello world"])
+    >>> out = llm.generate(["Hello world"])
     >>> out[0]
     'Hello! How can I assist you today?'
     """
@@ -209,7 +209,7 @@ class LLM:
         return imgs
 
     # Main LLM method for other modules
-    def generate_batch(
+    def generate(
         self,
         prompts: List[str],
         images_list: Optional[List[List[bytes]]] = None,
@@ -254,7 +254,7 @@ class LLM:
         Examples
         --------
         >>> msgs = ["Summarise:\\n" + txt for txt in docs]
-        >>> summaries = llm.generate_batch(msgs, max_workers=8)
+        >>> summaries = llm.generate(msgs, max_workers=8)
         """
         tqdm_kwargs = dict(tqdm_extra_kwargs or {})
         if len(prompts) == 1:
@@ -402,7 +402,7 @@ class LLM:
             logger.info("LLM fallback prompt for %s:\n%s", report_url, prompt)
 
         try:
-            result_list = self.generate_batch(
+            result_list = self.generate(
                 prompts=[prompt],
                 images_list=images_for_batch,  # type: ignore
                 response_format=MissingModel,

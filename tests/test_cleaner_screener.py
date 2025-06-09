@@ -18,7 +18,7 @@ class DummyLLM:
     def __init__(self, keywords=None):
         self.keywords = [k.lower() for k in (keywords or [])]
 
-    def generate_batch(self, prompts, response_format=None, **kwargs):
+    def generate(self, prompts, response_format=None, **kwargs):
         outputs = []
         for p in prompts:
             text = p.split("\n")[-1]

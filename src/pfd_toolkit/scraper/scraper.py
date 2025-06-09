@@ -24,7 +24,7 @@ from ..config import GeneralConfig, ScraperConfig
 logger = logging.getLogger(__name__)
 
 
-class PFDScraper:
+class Scraper:
     """Scrape UK “Prevention of Future Death” (PFD) reports into a
     :class:`pandas.DataFrame`.
 
@@ -82,8 +82,8 @@ class PFDScraper:
 
     Examples
     --------
-    >>> from pfd_toolkit import PFDScraper
-    >>> scraper = PFDScraper(category="suicide",
+    >>> from pfd_toolkit import Scraper
+    >>> scraper = Scraper(category="suicide",
     ...                      start_date="2020-01-01",
     ...                      end_date="2022-12-31",
     ...                      llm_fallback=True,

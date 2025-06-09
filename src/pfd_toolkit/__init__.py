@@ -12,7 +12,7 @@ warnings.filterwarnings(
 # The below lets users run `from pfd_toolkit import PFDScraper` instead of `from pfd_toolkit.scraper import PFDScraper`
 # Same for the other modules
 from pfd_toolkit.scraper import (
-    PFDScraper,
+    Scraper,
     HtmlFieldConfig,
     PdfSectionConfig,
 )
@@ -27,7 +27,7 @@ from pfd_toolkit.config import (
 )
 
 __all__ = [
-    "PFDScraper",
+    "Scraper",
     "Cleaner",
     "LLM",
     "load_reports",

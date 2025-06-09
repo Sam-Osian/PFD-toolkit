@@ -378,10 +378,10 @@ Here is the PFD report excerpt:
         # --- Call LLM ---
         if self.verbose:
             logger.debug(
-                f"Sending {len(prompts_for_screening)} prompts to LLM.generate_batch..."
+                f"Sending {len(prompts_for_screening)} prompts to LLM.generate..."
             )
 
-        llm_results = self.llm.generate_batch(
+        llm_results = self.llm.generate(
             prompts=prompts_for_screening, response_format=TopicMatch
         )
 

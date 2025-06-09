@@ -25,7 +25,7 @@ class Cleaner:
     """Batch-clean PFD report fields with an LLM.
 
     The cleaner loops over selected columns, builds field-specific prompts,
-    calls :pyattr:`llm.generate_batch`, and writes the returned text back into
+    calls :pyattr:`llm.generate`, and writes the returned text back into
     a copy of the DataFrame.
 
     Parameters
@@ -34,7 +34,7 @@ class Cleaner:
         Input DataFrame returned by :pyclass:`~pfd_toolkit.scraper.PFDScraper`
         or similar.
     llm : LLM
-        Client that implements ``generate_batch`` and exposes
+        Client that implements ``generate`` and exposes
         ``CLEANER_BASE_PROMPT`` plus ``CLEANER_PROMPT_CONFIG``.
     coroner, receiver, area, investigation_and_inquest,\
     circumstances_of_death, matters_of_concern : bool, optional
@@ -307,7 +307,7 @@ class Cleaner:
                 "leave": False,
             }
 
-            cleaned_results_batch = self.llm.generate_batch(
+            cleaned_results_batch = self.llm.generate(
                 prompts=prompts_for_batch, tqdm_extra_kwargs=inner_tqdm_config
             )
 

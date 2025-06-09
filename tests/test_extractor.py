@@ -10,7 +10,7 @@ class DummyLLM:
         self.called = 0
         self.max_workers = 1
 
-    def generate_batch(self, prompts, response_format=None, **kwargs):
+    def generate(self, prompts, response_format=None, **kwargs):
         self.called += len(prompts)
         outputs = []
         for _ in prompts:

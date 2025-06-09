@@ -41,7 +41,7 @@ importlib.reload(llm_module)
 from pfd_toolkit.llm import LLM
 
 
-def test_generate_batch_sequential(monkeypatch):
+def test_generate_sequential(monkeypatch):
     llm = LLM(api_key="test", max_workers=1)
 
     def fake_create(model, messages, temperature=0.0, seed=None):
@@ -56,11 +56,11 @@ def test_generate_batch_sequential(monkeypatch):
 
     monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
 
-    results = llm.generate_batch(["one", "two"], max_workers=1)
+    results = llm.generate(["one", "two"], max_workers=1)
     assert results == ["ONE", "TWO"]
 
 
-def test_generate_batch_parallel(monkeypatch):
+def test_generate_parallel(monkeypatch):
     llm = LLM(api_key="test", max_workers=4)
 
     def fake_create(model, messages, temperature=0.0, seed=None):
@@ -75,7 +75,7 @@ def test_generate_batch_parallel(monkeypatch):
 
     monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
 
-    results = llm.generate_batch(["a", "b", "c"], max_workers=3)
+    results = llm.generate(["a", "b", "c"], max_workers=3)
     assert results == ["A", "B", "C"]
 
 

@@ -1,9 +1,9 @@
-from pfd_toolkit.scraper.scraper import PFDScraper
+from pfd_toolkit.scraper.scraper import Scraper
 
 
 
 def test_assemble_report_respects_include_flags():
-    scraper = PFDScraper(
+    scraper = Scraper(
         category="all",
         start_date="2024-01-01",
         end_date="2024-01-02",
