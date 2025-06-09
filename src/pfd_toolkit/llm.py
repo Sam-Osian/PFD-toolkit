@@ -1,5 +1,5 @@
 import openai
-from openai import RateLimitError
+from openai import RateLimitError, APIConnectionError, APITimeoutError
 import logging
 import base64
 from typing import List, Optional, Dict, Type, Any
@@ -164,8 +164,12 @@ class LLM:
         # Global semaphore to throttle calls based on max_workers
         self._sem = Semaphore(self.max_workers)
 
-        # Backoff for raw generate calls, handles OpenAI's RateLimitError
-        @backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
+        # Backoff for raw generate calls, handles OpenAI connection errors
+        @backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, APIConnectionError, APITimeoutError),
+            max_time=60,
+        )
         def _generate_with_backoff(
             messages: List[Dict], temperature: float = 0.0
         ) -> str:
@@ -174,8 +178,12 @@ class LLM:
 
         self._safe_generate_impl = _generate_with_backoff
 
-        # Backoff for parse endpoint, handles OpenAI's RateLimitError
-        @backoff.on_exception(backoff.expo, RateLimitError, max_time=60)
+        # Backoff for parse endpoint, handles OpenAI connection errors
+        @backoff.on_exception(
+            backoff.expo,
+            (RateLimitError, APIConnectionError, APITimeoutError),
+            max_time=60,
+        )
         def _parse_with_backoff(**kwargs):
             with self._sem:
                 # Call the client's parse method directly
@@ -263,6 +271,10 @@ class LLM:
         ------
         openai.RateLimitError
             Raised only if the exponential back-off exhausts all retries.
+        openai.APIConnectionError
+            Raised if network issues persist beyond the retry window.
+        openai.APITimeoutError
+            Raised if the API repeatedly times out.
 
         Examples
         --------
