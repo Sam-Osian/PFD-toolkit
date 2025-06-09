@@ -165,10 +165,12 @@ class LLM:
         self._sem = Semaphore(self.max_workers)
 
         # Backoff for raw generate calls, handles OpenAI connection errors
+        # Jitter helps avoid synchronized retry storms
         @backoff.on_exception(
             backoff.expo,
             (RateLimitError, APIConnectionError, APITimeoutError),
             max_time=60,
+            jitter=backoff.full_jitter,
         )
         def _generate_with_backoff(
             messages: List[Dict], temperature: float = 0.0
@@ -179,10 +181,12 @@ class LLM:
         self._safe_generate_impl = _generate_with_backoff
 
         # Backoff for parse endpoint, handles OpenAI connection errors
+        # Adding jitter avoids thundering-herd retries
         @backoff.on_exception(
             backoff.expo,
             (RateLimitError, APIConnectionError, APITimeoutError),
             max_time=60,
+            jitter=backoff.full_jitter,
         )
         def _parse_with_backoff(**kwargs):
             with self._sem:
