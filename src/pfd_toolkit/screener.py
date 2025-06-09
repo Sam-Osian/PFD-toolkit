@@ -382,7 +382,7 @@ Here is the PFD report excerpt:
             )
 
         llm_results = self.llm.generate_batch(
-            prompts=prompts_for_screening, response_format=TopicMatch, temperature=0.0
+            prompts=prompts_for_screening, response_format=TopicMatch
         )
 
         if self.verbose:

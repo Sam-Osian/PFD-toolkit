@@ -50,6 +50,10 @@ class LLM:
     max_workers : int, optional
         Maximum parallel workers for batch calls and for the global
         semaphore.
+    temperature : float, optional
+        Sampling temperature used for all requests; defaults to ``0.0``.
+    seed : int or None, optional
+        Optional deterministic seed value passed to the OpenAI API.
 
     Attributes
     ----------
@@ -65,7 +69,7 @@ class LLM:
 
     Examples
     --------
-    >>> llm = LLM(api_key="sk-...", model="gpt-4o-mini", max_workers=4)
+    >>> llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2)
     >>> out = llm.generate_batch(["Hello world"])
     >>> out[0]
     'Hello! How can I assist you today?'
@@ -152,11 +156,16 @@ class LLM:
         model: str = "gpt-4.1-mini",
         base_url: Optional[str] = None,
         max_workers: int = 8,
+        temperature: float = 0.0,
+        seed: Optional[int] = None,
     ):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url or openai.base_url
         self.client = openai.Client(api_key=self.api_key, base_url=self.base_url)
+
+        self.temperature = float(temperature)
+        self.seed = seed
 
         # Ensure max_workers is at least 1
         self.max_workers = max(1, max_workers)
@@ -205,7 +214,6 @@ class LLM:
         prompts: List[str],
         images_list: Optional[List[List[bytes]]] = None,
         response_format: Optional[Type[BaseModel]] = None,
-        temperature: float = 0.0,
         max_workers: Optional[int] = None,
         tqdm_extra_kwargs: Optional[Dict[str, Any]] = None,
     ) -> List[BaseModel | str]:
@@ -224,9 +232,6 @@ class LLM:
         response_format : type[pydantic.BaseModel] or None, optional
             If provided, each response is parsed into that model via the
             *beta/parse* endpoint; otherwise a raw string is returned.
-
-        temperature : float, optional
-            Sampling temperature.  Defaults to *0.0* (deterministic).
 
         max_workers : int or None, optional
             Thread count just for this batch.  When *None*, fall back to
@@ -249,7 +254,7 @@ class LLM:
         Examples
         --------
         >>> msgs = ["Summarise:\\n" + txt for txt in docs]
-        >>> summaries = llm.generate_batch(msgs, temperature=0.2, max_workers=8)
+        >>> summaries = llm.generate_batch(msgs, max_workers=8)
         """
         tqdm_kwargs = dict(tqdm_extra_kwargs or {})
         if len(prompts) == 1:
@@ -286,7 +291,8 @@ class LLM:
                 resp = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
-                    temperature=temperature,
+                    temperature=self.temperature,
+                    **({"seed": self.seed} if self.seed is not None else {}),
                 )
             try:
                 used = resp.usage.total_tokens
@@ -308,8 +314,9 @@ class LLM:
                     resp = self._parse_with_backoff(
                         model=self.model,
                         messages=messages,
-                        temperature=temperature,
+                        temperature=self.temperature,
                         response_format=response_format,
+                        **({"seed": self.seed} if self.seed is not None else {}),
                     )
                     validated = response_format.model_validate_json(
                         resp.choices[0].message.content
@@ -399,7 +406,6 @@ class LLM:
                 prompts=[prompt],
                 images_list=images_for_batch,  # type: ignore
                 response_format=MissingModel,
-                temperature=0.0,
                 tqdm_extra_kwargs=tqdm_extra_kwargs,
             )
             output = result_list[0]

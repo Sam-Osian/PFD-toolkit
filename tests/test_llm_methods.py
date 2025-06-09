@@ -44,7 +44,7 @@ from pfd_toolkit.llm import LLM
 def test_generate_batch_sequential(monkeypatch):
     llm = LLM(api_key="test", max_workers=1)
 
-    def fake_create(model, messages, temperature=0.0):
+    def fake_create(model, messages, temperature=0.0, seed=None):
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -63,7 +63,7 @@ def test_generate_batch_sequential(monkeypatch):
 def test_generate_batch_parallel(monkeypatch):
     llm = LLM(api_key="test", max_workers=4)
 
-    def fake_create(model, messages, temperature=0.0):
+    def fake_create(model, messages, temperature=0.0, seed=None):
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
