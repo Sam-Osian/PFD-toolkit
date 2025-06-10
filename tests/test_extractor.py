@@ -1,4 +1,5 @@
 import pandas as pd
+import json
 from pydantic import BaseModel, Field
 from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import GeneralConfig
@@ -18,7 +19,10 @@ class DummyLLM:
             if response_format is not None:
                 outputs.append(response_format(**self.values))
             else:
-                outputs.append(self.values)
+                if isinstance(self.values, dict):
+                    outputs.append(json.dumps(self.values))
+                else:
+                    outputs.append(self.values)
         return outputs
 
     def estimate_tokens(self, texts, model=None):
@@ -323,3 +327,17 @@ def test_token_cache_export_import(tmp_path):
     ext2 = Extractor(llm=llm, feature_model=DemoModel)
     ext2.import_cache(cache_file)
     assert ext2.token_cache == ext1.token_cache
+
+
+def test_discover_themes_basic():
+    df = pd.DataFrame({"summary": ["one", "two"]})
+    llm = DummyLLM(values={"safety": "Cases about safety"})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+
+    theme_model = ext.discover_themes()
+
+    assert issubclass(theme_model, BaseModel)
+    assert "safety" in theme_model.model_fields
+    assert ext.feature_model is theme_model

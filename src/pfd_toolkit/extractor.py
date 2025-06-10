@@ -431,7 +431,7 @@ Here is the report excerpt:
 
     # ------------------------------------------------------------------
     def estimate_tokens(
-        self, 
+        self,
         col_name: Optional[str] = None,
         return_series: Optional[bool] = False
     ) -> Union[int, pd.Series]:
@@ -482,6 +482,97 @@ Here is the report excerpt:
         else:
             total_sum = series.sum()
             return total_sum.item()
+
+
+    # ------------------------------------------------------------------
+    def discover_themes(
+        self,
+        *,
+        warn_exceed: int = 100000,
+        error_exceed: int = 500000,
+    ) -> Type[BaseModel]:
+        """Use an LLM to automatically discover report themes.
+
+        The method expects :meth:`summarise` to have been run so that a summary
+        column exists. All summaries are concatenated into one prompt sent to
+        the LLM. The LLM should return a JSON object mapping theme names to
+        descriptions. A new ``pydantic`` model is built from this mapping and
+        stored as :pyattr:`feature_model`.
+
+        Parameters
+        ----------
+        warn_exceed : int, optional
+            Emit a warning if the estimated token count exceeds this value.
+            Defaults to ``100000``.
+        error_exceed : int, optional
+            Raise a ``ValueError`` if the estimated token count exceeds this
+            value. Defaults to ``500000``.
+
+        Returns
+        -------
+        type[pydantic.BaseModel]
+            The generated feature model containing discovered themes.
+        """
+
+        if not hasattr(self, "summarised_reports"):
+            raise AttributeError(
+                "Please run `summarise()` before calling discover_themes()."
+            )
+
+        if self.summary_col not in self.summarised_reports.columns:
+            raise ValueError(
+                f"Column '{self.summary_col}' not found in summarised reports."
+            )
+
+        total_tokens = self.estimate_tokens(col_name=self.summary_col)
+        if total_tokens > error_exceed:
+            raise ValueError(
+                f"Token estimate {total_tokens} exceeds error threshold {error_exceed}."
+            )
+        if total_tokens > warn_exceed:
+            logger.warning(
+                "Estimated token count %s exceeds warning threshold %s",
+                total_tokens,
+                warn_exceed,
+            )
+
+        summaries = self.summarised_reports[self.summary_col].fillna("")
+        combined_text = "\n".join(str(s) for s in summaries)
+
+        prompt = (
+            "You are analysing UK Prevention of Future Death report summaries. "
+            "Identify the key recurring themes across all summaries. "
+            "Respond ONLY with a JSON object mapping short theme names suitable "
+            "as Python identifiers to a brief description of that theme.\n\n"
+            "Do not provide nested themes; there should be only one 'tier'.\n\n"
+            "Summaries:\n" + combined_text
+        )
+
+        result = self.llm.generate([prompt])[0]
+
+        if isinstance(result, dict):
+            theme_dict = result
+        else:
+            try:
+                theme_dict = json.loads(str(result))
+                if not isinstance(theme_dict, dict):
+                    raise ValueError("LLM output is not a JSON object")
+            except Exception as exc:  # pragma: no cover - unlikely parse failure
+                raise ValueError(f"Failed to parse theme JSON: {exc}") from exc
+
+        fields = {
+            name: (bool, Field(description=str(desc)))
+            for name, desc in theme_dict.items()
+        }
+        ThemeModel = create_model("DiscoveredThemes", **fields)
+
+        self.feature_model = ThemeModel
+        self.feature_names = self._collect_field_names()
+        self._feature_schema = self._build_feature_schema(self.schema_detail)
+        self.prompt_template = self._build_prompt_template()
+        self._grammar_model = self._build_grammar_model()
+
+        return ThemeModel
 
 
     # ------------------------------------------------------------------
