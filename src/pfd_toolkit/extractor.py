@@ -125,7 +125,7 @@ class Extractor:
         # Token estimates for columns
         self.token_cache: Dict[str, List[int]] = {}
         # Store raw LLM output from discover_themes for debugging
-        self._last_theme_output = None
+        self.identified_themes = None
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -556,8 +556,8 @@ Here is the report excerpt:
 
         prompt = (
             "You are analysing UK Prevention of Future Death report summaries. "
-            "Your task is to identify commonly recurring themes across report "
-            "summaries.\n\n "
+            "Your task is to identify a small but cohesive set of commonly "
+            "recurring themes across report summaries.\n\n "
         )
         if max_themes is not None:
             prompt += f"Identify no more than **{max_themes} themes.** "
@@ -565,14 +565,15 @@ Here is the report excerpt:
             prompt += f"Identify at least **{min_themes} themes.** "
         prompt += (
             "\n\nRespond ONLY with a JSON object mapping short theme names suitable "
-            "as Python identifiers to a brief description of that theme.\n\n"
+            "as Python identifiers to a brief description of that theme. Identifiers "
+            "must be no more than 2 words and must be in snake case.\n\n"
             "Denote each theme as being of type bool.\n\n"
             "Do not provide nested themes; there should be only one 'tier'.\n\n"
             "Here are the report summaries:\n\n" + combined_text
         )
 
         result = self.llm.generate([prompt])[0]
-        self._last_theme_output = result
+        self.identified_themes = result
 
         if isinstance(result, dict):
             theme_dict = result

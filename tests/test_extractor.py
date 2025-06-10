@@ -9,6 +9,7 @@ class DummyLLM:
     def __init__(self, values=None):
         self.values = values or {}
         self.called = 0
+        self.token_called = 0
         self.max_workers = 1
         self.model = "gpt-3.5-turbo"
 
@@ -26,6 +27,7 @@ class DummyLLM:
         return outputs
 
     def estimate_tokens(self, texts, model=None):
+        self.token_called += 1
         if isinstance(texts, str):
             texts = [texts]
         return [len((t or "").split()) for t in texts]
@@ -353,7 +355,7 @@ def test_discover_themes_handles_code_fence():
     theme_model = ext.discover_themes()
 
     assert "fence" in theme_model.model_fields
-    assert ext._last_theme_output == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
+    assert ext.identified_themes == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
 
 
 def test_discover_themes_bool_fields():
@@ -399,5 +401,5 @@ def test_discover_themes_prompt_limits(monkeypatch):
     ext.discover_themes(max_themes=5, min_themes=2)
 
     prompt = captured["prompt"].lower()
-    assert "no more than 5" in prompt
-    assert "at least 2" in prompt
+    assert "no more than **5" in prompt
+    assert "at least **2" in prompt
