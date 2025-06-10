@@ -78,3 +78,17 @@ def test_screener_add_column_no_filter():
     result = screener.screen_reports()
     assert screener.result_col_name in result.columns
     assert result[screener.result_col_name].iloc[0] is False
+
+def test_cleaner_summarise():
+    df = pd.DataFrame({
+        GeneralConfig.COL_CORONER_NAME: ["john"],
+        GeneralConfig.COL_AREA: ["area"],
+        GeneralConfig.COL_RECEIVER: ["x"],
+        GeneralConfig.COL_INVESTIGATION: ["inv"],
+        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+        GeneralConfig.COL_CONCERNS: ["conc"],
+    })
+    cleaner = Cleaner(df, DummyLLM())
+    out = cleaner.summarise()
+    assert "summary" in out.columns
+    assert len(out) == len(df)
