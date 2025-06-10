@@ -1,5 +1,6 @@
 import openai
 from openai import RateLimitError, APIConnectionError, APITimeoutError
+import tiktoken
 import logging
 import base64
 from typing import List, Optional, Dict, Type, Any
@@ -128,6 +129,41 @@ class LLM:
 
         doc.close()
         return imgs
+
+    def estimate_tokens(
+        self, texts: List[str] | str, model: Optional[str] = None
+    ) -> List[int]:
+        """Return token counts for text using ``tiktoken``.
+
+        Parameters
+        ----------
+        texts : list[str] | str
+            Input strings to tokenise.
+        model : str, optional
+            Model name for selecting the encoding. Defaults to
+            ``self.model``.
+
+        Returns
+        -------
+        list[int]
+            Token counts in the same order as ``texts``.
+        """
+
+        if isinstance(texts, str):
+            texts = [texts]
+
+        enc_model = model or self.model
+        try:
+            try:
+                enc = tiktoken.encoding_for_model(enc_model)
+            except KeyError:
+                enc = tiktoken.get_encoding("cl100k_base")
+            counts = [len(enc.encode(t or "")) for t in texts]
+        except Exception as e:  # pragma: no cover - network or other failure
+            logger.warning("tiktoken failed (%s); using fallback estimate", e)
+            counts = [len((t or "").split()) for t in texts]
+
+        return counts
 
     # Main LLM method for other modules
     def generate(

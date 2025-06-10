@@ -70,6 +70,7 @@ dependencies = [
     "nest-asyncio==1.6.0",
     "numpy==2.2.3",
     "openai==1.65.2",
+    "tiktoken>=0.7.0",
     "packaging==24.2",
     "pandas==2.2.3",
     "parso==0.8.4",

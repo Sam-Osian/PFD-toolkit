@@ -9,6 +9,7 @@ class DummyLLM:
         self.values = values or {}
         self.called = 0
         self.max_workers = 1
+        self.model = "gpt-3.5-turbo"
 
     def generate(self, prompts, response_format=None, **kwargs):
         self.called += len(prompts)
@@ -19,6 +20,16 @@ class DummyLLM:
             else:
                 outputs.append(self.values)
         return outputs
+
+    def estimate_tokens(self, texts, model=None):
+        import tiktoken
+        if isinstance(texts, str):
+            texts = [texts]
+        try:
+            enc = tiktoken.encoding_for_model(model or self.model)
+        except KeyError:
+            enc = tiktoken.get_encoding("cl100k_base")
+        return [len(enc.encode(t or "")) for t in texts]
 
 
 class DemoModel(BaseModel):
@@ -295,3 +306,23 @@ def test_prompt_additional_instructions():
         extra_instructions="Extra guidance",
     )
     assert "Extra guidance" in extractor.prompt_template
+
+
+def test_estimate_tokens_default_column():
+    df = pd.DataFrame({"summary": ["hello world"]})
+    llm = DummyLLM()
+    extractor = Extractor(llm=llm, feature_model=DemoModel, reports=df)
+    tokens = extractor.estimate_tokens()
+    assert int(tokens.iloc[0]) == llm.estimate_tokens(["hello world"])[0]
+
+
+def test_token_cache_export_import(tmp_path):
+    df = pd.DataFrame({"summary": ["a short summary"]})
+    llm = DummyLLM()
+    ext1 = Extractor(llm=llm, feature_model=DemoModel, reports=df)
+    ext1.estimate_tokens()
+    cache_file = ext1.export_cache(tmp_path / "c.pkl")
+
+    ext2 = Extractor(llm=llm, feature_model=DemoModel)
+    ext2.import_cache(cache_file)
+    assert ext2.token_cache == ext1.token_cache

@@ -62,7 +62,7 @@ class Extractor:
     def __init__(
         self,
         *,
-        feature_model: Type[BaseModel],
+        feature_model: Optional[Type[BaseModel]] = None,
         llm: LLM,
         reports: Optional[pd.DataFrame] = None,
         include_date: bool = False,
@@ -93,15 +93,24 @@ class Extractor:
         self.extra_instructions = extra_instructions
         self.verbose = verbose
 
+        # Default summary column name used by Cleaner.summarise
+        self.summary_col = "summary"
+
         self.reports: pd.DataFrame = (
             reports.copy() if reports is not None else pd.DataFrame()
         )
 
         # Prepare feature metadata and prompt template
-        self.feature_names = self._collect_field_names()
-        self._feature_schema = self._build_feature_schema(schema_detail)
-        self.prompt_template = self._build_prompt_template()
-        self._grammar_model = self._build_grammar_model()
+        if feature_model:
+            self.feature_names = self._collect_field_names()
+            self._feature_schema = self._build_feature_schema(schema_detail)
+            self.prompt_template = self._build_prompt_template()
+            self._grammar_model = self._build_grammar_model()
+        else:
+            self.feature_names = []
+            self._feature_schema = ""
+            self.prompt_template = ""
+            self._grammar_model = None
 
         if verbose: # ...debug logging of initialisation internals
             logger.debug("Feature names: %r", self.feature_names)
@@ -112,6 +121,8 @@ class Extractor:
         
         # Cache mapping prompt -> feature dict
         self.cache: Dict[str, Dict[str, object]] = {}
+        # Token estimates for columns
+        self.token_cache: Dict[str, List[int]] = {}
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -153,7 +164,7 @@ Here is the report excerpt:
     def _extend_feature_model(self) -> Type[BaseModel]:
         """Return a feature model mirroring ``feature_model`` with all fields
         required."""
-        base_fields = self.feature_model.model_fields
+        base_fields = getattr(self.feature_model, "model_fields", getattr(self.feature_model, "__fields__"))
 
         fields = {}
         for name, field in base_fields.items():
@@ -333,6 +344,147 @@ Here is the report excerpt:
         return df
 
     # ------------------------------------------------------------------
+
+    def summarise(
+        self,
+        result_col_name: str = "summary",
+        trim_intensity: str = "medium",
+    ) -> pd.DataFrame:
+        """Summarise selected report fields into one column using the LLM.
+
+        Parameters
+        ----------
+        result_col_name : str, optional
+            Name of the summary column. Defaults to ``"summary"``.
+        trim_intensity : {"low", "medium", "high", "very high"}, optional
+            Controls how concise the summary should be. Defaults to ``"medium"``.
+
+        Returns
+        ------- 
+        pandas.DataFrame
+            A new DataFrame identical to the one provided at initialisation with
+            an extra summary column.
+        """
+        if trim_intensity not in {"low", "medium", "high"}:
+            raise ValueError("trim_intensity must be 'low', 'medium', 'high', or 'very high'")
+
+        self.summary_col = result_col_name
+        summary_df = self.reports.copy()
+
+        instructions = {
+            "low": "write a fairly detailed paragraph summarising the report.",
+            "medium": "write a concise summary of the key points of the report.",
+            "high": "write a very short summary of the report.",
+            "very high": "write a one or two sentence summary of the report."
+        }
+        base_prompt = (
+            "You are an assistant summarising UK Prevention of Future Death reports."
+            "You will be given an exerpt from one report.\n\n"
+            "Your task is to "
+            + instructions[trim_intensity]
+            + "\n\nDo not provide any commentary or headings; simply summarise the report."
+            + "Always use British English. Do not re-write acronyms to full form."
+            + "\n\nReport exerpt:\n\n"
+        )
+
+        fields = [
+            (self.include_coroner, self.COL_CORONER_NAME, "Coroner name"),
+            (self.include_area, self.COL_AREA, "Area"),
+            (self.include_receiver, self.COL_RECEIVER, "Receiver"),
+            (self.include_investigation, self.COL_INVESTIGATION, "Investigation and Inquest"),
+            (self.include_circumstances, self.COL_CIRCUMSTANCES, "Circumstances of Death"),
+            (self.include_concerns, self.COL_CONCERNS, "Matters of Concern"),
+        ]
+
+        prompts = []
+        idx_order = []
+        for idx, row in summary_df.iterrows():
+            parts = []
+            for flag, col, label in fields:
+                if flag and col in summary_df.columns:
+                    val = row.get(col)
+                    if pd.notna(val):
+                        parts.append(f"{label}: {str(val)}")
+            if not parts:
+                prompts.append(base_prompt + "\nN/A")
+            else:
+                text = " ".join(str(p) for p in parts)
+                prompts.append(base_prompt + "\n" + text)
+            idx_order.append(idx)
+
+        if prompts:
+            results = self.llm.generate(
+                prompts=prompts,
+                tqdm_extra_kwargs={"desc": "Summarising reports", "leave": False},
+            )
+        else:
+            results = []
+
+        summary_series = pd.Series(index=idx_order, dtype=object)
+        for i, res in enumerate(results):
+            summary_series.loc[idx_order[i]] = res
+
+        summary_df[result_col_name] = summary_series
+        self.summarised_reports = summary_df
+        return summary_df
+
+
+    # ------------------------------------------------------------------
+    def estimate_tokens(
+        self, 
+        col_name: Optional[str] = None,
+        return_series: Optional[bool] = False
+    ) -> Union[int, pd.Series]:
+        """Estimate token counts for a columnsummarise( using :mod:`tiktoken`.
+
+        Parameters
+        ----------
+        summary_col : str, optional
+            Name of the column containing report summaries. Defaults to
+            :pyattr:`summary_col`.
+        return_series : bool, optional
+            Returns a pandas.Series of per-row token counts for that field
+            if ``True``, or an integer if ``False``. Defaults to ``false``.
+
+        Returns
+        -------
+        Union[int, pandas.Series]
+            If `return_series` is `False`, returns an `int` representing the total sum
+            of all token counts across all rows for the provided field.
+            If `return_series` is `True`, returns a `pandas.Series` of token counts
+            aligned to :pyattr:`self.reports` for the provided field.
+        
+        """
+        
+        # Check if summarise() has been run; throw error if not
+        if not hasattr(self, 'summarised_reports'):
+            raise AttributeError(
+                "The 'summarised_reports' attribute does not exist. "
+                "Please run the `summarise()` method before estimating tokens."
+            )
+        
+        col = col_name or self.summary_col
+        
+        if col not in self.summarised_reports.columns:
+            raise ValueError(
+                f"Column '{col}' not found in reports. "
+                f"Did you run `summarise()` with a different `result_col_name`?"
+            )
+
+        texts = self.summarised_reports[col].fillna("").astype(str).tolist()
+        counts = self.llm.estimate_tokens(texts)
+        series = pd.Series(counts, index=self.reports.index, name=f"{col}_tokens")
+
+        self.token_cache[col] = counts
+        
+        if return_series:
+            return series
+        else:
+            total_sum = series.sum()
+            return total_sum.item()
+
+
+    # ------------------------------------------------------------------
     def export_cache(self, path: str = "extractor_cache.pkl") -> str:
         """Save the current cache to ``path``.
 
@@ -360,7 +512,7 @@ Here is the report excerpt:
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(file_path, "wb") as f:
-            pickle.dump(self.cache, f)
+            pickle.dump({"features": self.cache, "tokens": self.token_cache}, f)
         return str(file_path)
 
     # ------------------------------------------------------------------
@@ -382,4 +534,13 @@ Here is the report excerpt:
             file_path = file_path / "extractor_cache.pkl"
 
         with open(file_path, "rb") as f:
-            self.cache = pickle.load(f)
+            data = pickle.load(f)
+
+        if isinstance(data, dict) and "features" in data:
+            self.cache = data.get("features", {})
+            self.token_cache = data.get("tokens", {})
+        else:
+            # backwards compatibility with older cache files
+            self.cache = data
+            self.token_cache = {}
+
