@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import json
+import re
 from typing import Dict, List, Optional, Type, Union, Literal
 
 import pandas as pd
@@ -123,6 +124,8 @@ class Extractor:
         self.cache: Dict[str, Dict[str, object]] = {}
         # Token estimates for columns
         self.token_cache: Dict[str, List[int]] = {}
+        # Store raw LLM output from discover_themes for debugging
+        self._last_theme_output = None
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -549,16 +552,37 @@ Here is the report excerpt:
         )
 
         result = self.llm.generate([prompt])[0]
+        self._last_theme_output = result
 
         if isinstance(result, dict):
             theme_dict = result
         else:
+            raw = str(result)
             try:
-                theme_dict = json.loads(str(result))
+                theme_dict = json.loads(raw)
                 if not isinstance(theme_dict, dict):
                     raise ValueError("LLM output is not a JSON object")
-            except Exception as exc:  # pragma: no cover - unlikely parse failure
-                raise ValueError(f"Failed to parse theme JSON: {exc}") from exc
+            except Exception as exc:
+                fenced = re.match(r"^```(?:json)?\n(?P<json>.*)\n```$", raw.strip(), re.DOTALL)
+                if fenced:
+                    try:
+                        theme_dict = json.loads(fenced.group("json"))
+                        if not isinstance(theme_dict, dict):
+                            raise ValueError("LLM output is not a JSON object")
+                    except Exception as exc2:
+                        logger.warning(
+                            "Failed to parse theme JSON: %s. Raw output: %r",
+                            exc2,
+                            result,
+                        )
+                        return self.feature_model
+                else:
+                    logger.warning(
+                        "Failed to parse theme JSON: %s. Raw output: %r",
+                        exc,
+                        result,
+                    )
+                    return self.feature_model
 
         fields = {
             name: (bool, Field(description=str(desc)))

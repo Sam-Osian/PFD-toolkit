@@ -341,3 +341,16 @@ def test_discover_themes_basic():
     assert issubclass(theme_model, BaseModel)
     assert "safety" in theme_model.model_fields
     assert ext.feature_model is theme_model
+
+
+def test_discover_themes_handles_code_fence():
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = DummyLLM(values="```json\n{\n  \"fence\": \"ok\"\n}\n```")
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+
+    theme_model = ext.discover_themes()
+
+    assert "fence" in theme_model.model_fields
+    assert ext._last_theme_output == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
