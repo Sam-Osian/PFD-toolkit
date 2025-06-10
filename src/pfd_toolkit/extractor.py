@@ -124,6 +124,8 @@ class Extractor:
         self.cache: Dict[str, Dict[str, object]] = {}
         # Token estimates for columns
         self.token_cache: Dict[str, List[int]] = {}
+        # Cached total token counts for columns
+        self.token_counts: Dict[str, int] = {}
         # Store raw LLM output from discover_themes for debugging
         self._last_theme_output = None
 
@@ -479,12 +481,12 @@ Here is the report excerpt:
         series = pd.Series(counts, index=self.reports.index, name=f"{col}_tokens")
 
         self.token_cache[col] = counts
-        
+        self.token_counts[col] = int(series.sum())
+
         if return_series:
             return series
         else:
-            total_sum = series.sum()
-            return total_sum.item()
+            return self.token_counts[col]
 
 
     # ------------------------------------------------------------------
@@ -493,14 +495,16 @@ Here is the report excerpt:
         *,
         warn_exceed: int = 100000,
         error_exceed: int = 500000,
+        max_themes: Optional[int] = None,
+        min_themes: Optional[int] = None,
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
         The method expects :meth:`summarise` to have been run so that a summary
         column exists. All summaries are concatenated into one prompt sent to
         the LLM. The LLM should return a JSON object mapping theme names to
-        descriptions. A new ``pydantic`` model is built from this mapping and
-        stored as :pyattr:`feature_model`.
+        ``true``. A new ``pydantic`` model is built from the keys of this
+        mapping and stored as :pyattr:`feature_model`.
 
         Parameters
         ----------
@@ -510,6 +514,10 @@ Here is the report excerpt:
         error_exceed : int, optional
             Raise a ``ValueError`` if the estimated token count exceeds this
             value. Defaults to ``500000``.
+        max_themes : int, optional
+            If provided, instruct the LLM to return no more than this many themes.
+        min_themes : int, optional
+            If provided, instruct the LLM to return at least this many themes.
 
         Returns
         -------
@@ -527,7 +535,10 @@ Here is the report excerpt:
                 f"Column '{self.summary_col}' not found in summarised reports."
             )
 
-        total_tokens = self.estimate_tokens(col_name=self.summary_col)
+        if self.summary_col in self.token_counts:
+            total_tokens = self.token_counts[self.summary_col]
+        else:
+            total_tokens = self.estimate_tokens(col_name=self.summary_col)
         if total_tokens > error_exceed:
             raise ValueError(
                 f"Token estimate {total_tokens} exceeds error threshold {error_exceed}."
@@ -542,14 +553,26 @@ Here is the report excerpt:
         summaries = self.summarised_reports[self.summary_col].fillna("")
         combined_text = "\n".join(str(s) for s in summaries)
 
-        prompt = (
-            "You are analysing UK Prevention of Future Death report summaries. "
-            "Identify the key recurring themes across all summaries. "
-            "Respond ONLY with a JSON object mapping short theme names suitable "
-            "as Python identifiers to a brief description of that theme.\n\n"
-            "Do not provide nested themes; there should be only one 'tier'.\n\n"
-            "Summaries:\n" + combined_text
+        prompt_lines = [
+            "You are analysing UK Prevention of Future Death report summaries.",
+            "Identify the key recurring themes across all summaries.",
+        ]
+        if max_themes is not None and min_themes is not None:
+            prompt_lines.append(
+                f"Return between {min_themes} and {max_themes} themes."
+            )
+        elif max_themes is not None:
+            prompt_lines.append(f"Return no more than {max_themes} themes.")
+        elif min_themes is not None:
+            prompt_lines.append(f"Return at least {min_themes} themes.")
+        prompt_lines.append(
+            "Respond ONLY with a JSON object mapping short theme names suitable as Python identifiers to true."
         )
+        prompt_lines.append(
+            "Do not provide nested themes; there should be only one 'tier'.\n\n"
+            + "Summaries:\n" + combined_text
+        )
+        prompt = " ".join(prompt_lines)
 
         result = self.llm.generate([prompt])[0]
         self._last_theme_output = result
@@ -585,7 +608,7 @@ Here is the report excerpt:
                     return self.feature_model
 
         fields = {
-            name: (bool, Field(description=str(desc)))
+            name: (bool, Field(description=str(desc) if not isinstance(desc, bool) else ""))
             for name, desc in theme_dict.items()
         }
         ThemeModel = create_model("DiscoveredThemes", **fields)
@@ -627,7 +650,7 @@ Here is the report excerpt:
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(file_path, "wb") as f:
-            pickle.dump({"features": self.cache, "tokens": self.token_cache}, f)
+            pickle.dump({"features": self.cache, "tokens": self.token_cache, "totals": self.token_counts}, f)
         return str(file_path)
 
     # ------------------------------------------------------------------
@@ -654,8 +677,10 @@ Here is the report excerpt:
         if isinstance(data, dict) and "features" in data:
             self.cache = data.get("features", {})
             self.token_cache = data.get("tokens", {})
+            self.token_counts = data.get("totals", {})
         else:
             # backwards compatibility with older cache files
             self.cache = data
             self.token_cache = {}
+            self.token_counts = {}
 

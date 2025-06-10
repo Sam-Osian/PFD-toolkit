@@ -314,6 +314,7 @@ def test_estimate_tokens_default_column():
     extractor.summarised_reports = df
     tokens = extractor.estimate_tokens(return_series=True)
     assert int(tokens.iloc[0]) == llm.estimate_tokens(["hello world"])[0]
+    assert extractor.token_counts["summary"] == int(tokens.sum())
 
 
 def test_token_cache_export_import(tmp_path):
@@ -327,11 +328,12 @@ def test_token_cache_export_import(tmp_path):
     ext2 = Extractor(llm=llm, feature_model=DemoModel)
     ext2.import_cache(cache_file)
     assert ext2.token_cache == ext1.token_cache
+    assert ext2.token_counts == ext1.token_counts
 
 
 def test_discover_themes_basic():
     df = pd.DataFrame({"summary": ["one", "two"]})
-    llm = DummyLLM(values={"safety": "Cases about safety"})
+    llm = DummyLLM(values={"safety": True})
     ext = Extractor(llm=llm, reports=df)
     ext.summarised_reports = df
     ext.summary_col = "summary"
@@ -340,12 +342,13 @@ def test_discover_themes_basic():
 
     assert issubclass(theme_model, BaseModel)
     assert "safety" in theme_model.model_fields
+    assert theme_model.model_fields["safety"].annotation is bool
     assert ext.feature_model is theme_model
 
 
 def test_discover_themes_handles_code_fence():
     df = pd.DataFrame({"summary": ["one"]})
-    llm = DummyLLM(values="```json\n{\n  \"fence\": \"ok\"\n}\n```")
+    llm = DummyLLM(values="```json\n{\n  \"fence\": true\n}\n```")
     ext = Extractor(llm=llm, reports=df)
     ext.summarised_reports = df
     ext.summary_col = "summary"
@@ -353,4 +356,35 @@ def test_discover_themes_handles_code_fence():
     theme_model = ext.discover_themes()
 
     assert "fence" in theme_model.model_fields
-    assert ext._last_theme_output == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
+    assert ext._last_theme_output == "```json\n{\n  \"fence\": true\n}\n```"
+
+
+def test_discover_themes_uses_cached_tokens():
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = DummyLLM(values={"x": True})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+    ext.estimate_tokens()
+
+    def fail(*args, **kwargs):
+        raise AssertionError("estimate_tokens called")
+
+    ext.estimate_tokens = fail
+    theme_model = ext.discover_themes()
+    assert "x" in theme_model.model_fields
+
+
+def test_discover_themes_prompt_min_max():
+    class CaptureLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            self.seen = prompts[0]
+            return super().generate(prompts, response_format, **kwargs)
+
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = CaptureLLM(values={"t": True})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+    ext.discover_themes(min_themes=1, max_themes=2)
+    assert "between 1 and 2 themes" in llm.seen
