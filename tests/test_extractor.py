@@ -354,3 +354,50 @@ def test_discover_themes_handles_code_fence():
 
     assert "fence" in theme_model.model_fields
     assert ext._last_theme_output == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
+
+
+def test_discover_themes_bool_fields():
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = DummyLLM(values={"example": "desc"})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+
+    theme_model = ext.discover_themes()
+
+    assert theme_model.model_fields["example"].annotation is bool
+
+
+def test_discover_themes_uses_token_cache():
+    df = pd.DataFrame({"summary": ["one", "two"]})
+    llm = DummyLLM(values={})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+    ext.token_cache["summary"] = [1, 2]
+
+    ext.discover_themes()
+
+    assert llm.token_called == 0
+
+
+def test_discover_themes_prompt_limits(monkeypatch):
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = DummyLLM(values={})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+    ext.token_cache["summary"] = [1]
+
+    captured = {}
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        captured["prompt"] = prompts[0]
+        return [{}]
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    ext.discover_themes(max_themes=5, min_themes=2)
+
+    prompt = captured["prompt"].lower()
+    assert "no more than 5" in prompt
+    assert "at least 2" in prompt
