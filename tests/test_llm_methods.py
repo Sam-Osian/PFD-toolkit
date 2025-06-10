@@ -113,9 +113,4 @@ def test_parse_with_backoff_retries(monkeypatch):
 def test_estimate_tokens():
     llm = LLM(api_key="test")
     counts = llm.estimate_tokens(["hello"])
-    import tiktoken
-    try:
-        enc = tiktoken.encoding_for_model(llm.model)
-    except KeyError:
-        enc = tiktoken.get_encoding("cl100k_base")
-    assert counts == [len(enc.encode("hello"))]
+    assert counts == [len("hello".split())]

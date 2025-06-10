@@ -164,7 +164,7 @@ Here is the report excerpt:
     def _extend_feature_model(self) -> Type[BaseModel]:
         """Return a feature model mirroring ``feature_model`` with all fields
         required."""
-        base_fields = getattr(self.feature_model, "model_fields", getattr(self.feature_model, "__fields__"))
+        base_fields = self.feature_model.model_fields
 
         fields = {}
         for name, field in base_fields.items():

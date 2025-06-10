@@ -22,14 +22,9 @@ class DummyLLM:
         return outputs
 
     def estimate_tokens(self, texts, model=None):
-        import tiktoken
         if isinstance(texts, str):
             texts = [texts]
-        try:
-            enc = tiktoken.encoding_for_model(model or self.model)
-        except KeyError:
-            enc = tiktoken.get_encoding("cl100k_base")
-        return [len(enc.encode(t or "")) for t in texts]
+        return [len((t or "").split()) for t in texts]
 
 
 class DemoModel(BaseModel):
@@ -312,7 +307,8 @@ def test_estimate_tokens_default_column():
     df = pd.DataFrame({"summary": ["hello world"]})
     llm = DummyLLM()
     extractor = Extractor(llm=llm, feature_model=DemoModel, reports=df)
-    tokens = extractor.estimate_tokens()
+    extractor.summarised_reports = df
+    tokens = extractor.estimate_tokens(return_series=True)
     assert int(tokens.iloc[0]) == llm.estimate_tokens(["hello world"])[0]
 
 
@@ -320,6 +316,7 @@ def test_token_cache_export_import(tmp_path):
     df = pd.DataFrame({"summary": ["a short summary"]})
     llm = DummyLLM()
     ext1 = Extractor(llm=llm, feature_model=DemoModel, reports=df)
+    ext1.summarised_reports = df
     ext1.estimate_tokens()
     cache_file = ext1.export_cache(tmp_path / "c.pkl")
 

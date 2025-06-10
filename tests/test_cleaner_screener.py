@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 from pfd_toolkit.cleaner import Cleaner
 from pfd_toolkit.screener import Screener, TopicMatch
+from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import GeneralConfig
 
 
@@ -88,7 +89,7 @@ def test_cleaner_summarise():
         GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
         GeneralConfig.COL_CONCERNS: ["conc"],
     })
-    cleaner = Cleaner(df, DummyLLM())
-    out = cleaner.summarise()
+    extractor = Extractor(llm=DummyLLM(), feature_model=TopicMatch, reports=df)
+    out = extractor.summarise()
     assert "summary" in out.columns
     assert len(out) == len(df)
