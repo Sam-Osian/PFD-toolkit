@@ -493,6 +493,8 @@ Here is the report excerpt:
         *,
         warn_exceed: int = 100000,
         error_exceed: int = 500000,
+        max_themes: Optional[int] = None,
+        min_themes: Optional[int] = None,
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
@@ -501,7 +503,7 @@ Here is the report excerpt:
         the LLM. The LLM should return a JSON object mapping theme names to
         descriptions. A new ``pydantic`` model is built from this mapping and
         stored as :pyattr:`feature_model`.
-
+        
         Parameters
         ----------
         warn_exceed : int, optional
@@ -510,6 +512,12 @@ Here is the report excerpt:
         error_exceed : int, optional
             Raise a ``ValueError`` if the estimated token count exceeds this
             value. Defaults to ``500000``.
+        max_themes : int or None, optional
+            Instruct the LLM to identify no more than this number of themes when
+            provided.
+        min_themes : int or None, optional
+            Instruct the LLM to identify at least this number of themes when
+            provided.
 
         Returns
         -------
@@ -527,7 +535,10 @@ Here is the report excerpt:
                 f"Column '{self.summary_col}' not found in summarised reports."
             )
 
-        total_tokens = self.estimate_tokens(col_name=self.summary_col)
+        if self.summary_col in self.token_cache:
+            total_tokens = sum(self.token_cache[self.summary_col])
+        else:
+            total_tokens = self.estimate_tokens(col_name=self.summary_col)
         if total_tokens > error_exceed:
             raise ValueError(
                 f"Token estimate {total_tokens} exceeds error threshold {error_exceed}."
@@ -545,6 +556,12 @@ Here is the report excerpt:
         prompt = (
             "You are analysing UK Prevention of Future Death report summaries. "
             "Identify the key recurring themes across all summaries. "
+        )
+        if max_themes is not None:
+            prompt += f"Identify no more than {max_themes} themes. "
+        if min_themes is not None:
+            prompt += f"Identify at least {min_themes} themes. "
+        prompt += (
             "Respond ONLY with a JSON object mapping short theme names suitable "
             "as Python identifiers to a brief description of that theme.\n\n"
             "Do not provide nested themes; there should be only one 'tier'.\n\n"
