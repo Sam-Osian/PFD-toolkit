@@ -17,34 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 class Extractor:
-    """Extract custom features from Prevention of Future Death reports using an LLM.
+    """Extract custom features from Prevention of Future Death reports using an
+    LLM.
 
     Parameters
     ----------
-    feature_model : type[pydantic.BaseModel]
-        Pydantic model describing the features to extract from each report.
-        The model field names will be used as the JSON keys in the LLM response
     llm : LLM
-        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting..
+        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
     reports : pandas.DataFrame, optional
-        DataFrame of PFD reports. If provided, it will be copied and stored
-        on the instance.
-    include_date, include_coroner, include_area, include_receiver, include_investigation, include_circumstances, include_concerns : bool, optional
+        DataFrame of PFD reports. If provided, it will be copied and stored on
+        the instance.
+    include_date, include_coroner, include_area, include_receiver,
+    include_investigation, include_circumstances, include_concerns : bool,
         Flags controlling which existing report columns are included in the text
         sent to the LLM.
-    force_assign : bool, optional
-        When ``True``, the LLM is instructed to avoid returning
-        :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature. Defaults to ``False``.
-    allow_multiple : bool, optional
-        Allow a report to be assigned to multiple categories when ``True``.
-        Defaults to ``False``.
-    schema_detail : Literal["full", "minimal"], optional
-        Level of detail for the feature schema included in the prompt.
-        ``"full"`` includes the entire Pydantic model schema while
-        ``"minimal"`` uses only field names and descriptions. Defaults to ``"minimal"``.
-    extra_instructions : str, optional
-        Extra instructions injected into every prompt, placed before the schema
-        line. Use this to provide additional context or rules for the LLM.
     verbose : bool, optional
         Emit extra logging when ``True``.
     """
@@ -63,7 +49,6 @@ class Extractor:
     def __init__(
         self,
         *,
-        feature_model: Optional[Type[BaseModel]] = None,
         llm: LLM,
         reports: Optional[pd.DataFrame] = None,
         include_date: bool = False,
@@ -73,14 +58,10 @@ class Extractor:
         include_investigation: bool = True,
         include_circumstances: bool = True,
         include_concerns: bool = True,
-        force_assign: bool = False,
-        allow_multiple: bool = False,
-        schema_detail: Literal["full", "minimal"] = "minimal",
-        extra_instructions: Optional[str] = None,
         verbose: bool = False,
     ) -> None:
         self.llm = llm
-        self.feature_model = feature_model
+        self.feature_model: Optional[Type[BaseModel]] = None
         self.include_date = include_date
         self.include_coroner = include_coroner
         self.include_area = include_area
@@ -88,10 +69,10 @@ class Extractor:
         self.include_investigation = include_investigation
         self.include_circumstances = include_circumstances
         self.include_concerns = include_concerns
-        self.force_assign = force_assign
-        self.allow_multiple = allow_multiple
-        self.schema_detail = schema_detail
-        self.extra_instructions = extra_instructions
+        self.force_assign = False
+        self.allow_multiple = False
+        self.schema_detail: Literal["full", "minimal"] = "minimal"
+        self.extra_instructions: Optional[str] = None
         self.verbose = verbose
 
         # Default summary column name used by Cleaner.summarise
@@ -101,17 +82,12 @@ class Extractor:
             reports.copy() if reports is not None else pd.DataFrame()
         )
 
-        # Prepare feature metadata and prompt template
-        if feature_model:
-            self.feature_names = self._collect_field_names()
-            self._feature_schema = self._build_feature_schema(schema_detail)
-            self.prompt_template = self._build_prompt_template()
-            self._grammar_model = self._build_grammar_model()
-        else:
-            self.feature_names = []
-            self._feature_schema = ""
-            self.prompt_template = ""
-            self._grammar_model = None
+        # No feature model defined until ``extract_features`` or
+        # ``discover_themes`` is called
+        self.feature_names: List[str] = []
+        self._feature_schema = ""
+        self.prompt_template = ""
+        self._grammar_model = None
 
         if verbose: # ...debug logging of initialisation internals
             logger.debug("Feature names: %r", self.feature_names)
@@ -254,7 +230,15 @@ Here is the report excerpt:
 
     # ------------------------------------------------------------------
     def extract_features(
-        self, reports: Optional[pd.DataFrame] = None, *, skip_if_present: bool = True
+        self,
+        reports: Optional[pd.DataFrame] = None,
+        *,
+        feature_model: Optional[Type[BaseModel]] = None,
+        force_assign: bool = False,
+        allow_multiple: bool = False,
+        schema_detail: Literal["full", "minimal"] = "minimal",
+        extra_instructions: Optional[str] = None,
+        skip_if_present: bool = True,
     ) -> pd.DataFrame:
         """Run feature extraction for the given reports.
 
@@ -263,12 +247,39 @@ Here is the report excerpt:
         reports : pandas.DataFrame, optional
             DataFrame of reports to process. Defaults to the instance's stored
             reports if omitted.
+        feature_model : type[pydantic.BaseModel], optional
+            Pydantic model describing the features to extract. Must be provided
+            on first call or after calling :meth:`discover_themes`.
+        force_assign : bool, optional
+            When ``True``, the LLM is instructed to avoid returning
+            :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature.
+        allow_multiple : bool, optional
+            Allow a report to be assigned to multiple categories when ``True``.
+        schema_detail : {"full", "minimal"}, optional
+            Level of detail for the feature schema included in the prompt.
+        extra_instructions : str, optional
+            Additional instructions injected into each prompt before the schema.
         skip_if_present : bool, optional
             When ``True`` (default), skip rows when any feature column already
             holds a non-missing value that is not equal to
             :data:`GeneralConfig.NOT_FOUND_TEXT`. This assumes the row has been
             processed previously and is logged in an instance of `Extractor.cache`
         """
+        # Update feature extraction configuration
+        if feature_model is not None:
+            self.feature_model = feature_model
+        if self.feature_model is None:
+            raise ValueError("feature_model must be provided")
+        self.force_assign = force_assign
+        self.allow_multiple = allow_multiple
+        self.schema_detail = schema_detail
+        self.extra_instructions = extra_instructions
+
+        self.feature_names = self._collect_field_names()
+        self._feature_schema = self._build_feature_schema(self.schema_detail)
+        self.prompt_template = self._build_prompt_template()
+        self._grammar_model = self._build_grammar_model()
+
         df = reports.copy() if reports is not None else self.reports.copy()
         if df.empty:
             return df
@@ -352,6 +363,7 @@ Here is the report excerpt:
         self,
         result_col_name: str = "summary",
         trim_intensity: str = "medium",
+        extra_instructions: Optional[str] = None,
     ) -> pd.DataFrame:
         """Summarise selected report fields into one column using the LLM.
 
@@ -361,6 +373,9 @@ Here is the report excerpt:
             Name of the summary column. Defaults to ``"summary"``.
         trim_intensity : {"low", "medium", "high", "very high"}, optional
             Controls how concise the summary should be. Defaults to ``"medium"``.
+        extra_instructions : str, optional
+            Additional instructions to append to the prompt before the report
+            excerpt.
 
         Returns
         ------- 
@@ -387,8 +402,10 @@ Here is the report excerpt:
             + instructions[trim_intensity]
             + "\n\nDo not provide any commentary or headings; simply summarise the report."
             + "Always use British English. Do not re-write acronyms to full form."
-            + "\n\nReport exerpt:\n\n"
         )
+        if extra_instructions:
+            base_prompt += "\n\n" + extra_instructions.strip()
+        base_prompt += "\n\nReport exerpt:\n\n"
 
         fields = [
             (self.include_coroner, self.COL_CORONER_NAME, "Coroner name"),
@@ -495,6 +512,7 @@ Here is the report excerpt:
         error_exceed: int = 500000,
         max_themes: Optional[int] = None,
         min_themes: Optional[int] = None,
+        extra_instructions: Optional[str] = None,
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
@@ -518,6 +536,8 @@ Here is the report excerpt:
         min_themes : int or None, optional
             Instruct the LLM to identify at least this number of themes when
             provided.
+        extra_instructions : str, optional
+            Additional instructions appended to the theme discovery prompt.
 
         Returns
         -------
@@ -559,6 +579,8 @@ Here is the report excerpt:
             "Your task is to identify a small but cohesive set of commonly "
             "recurring themes across report summaries.\n\n "
         )
+        if extra_instructions:
+            prompt += extra_instructions.strip() + "\n\n"
         if max_themes is not None:
             prompt += f"Identify no more than **{max_themes} themes.** "
         if min_themes is not None:

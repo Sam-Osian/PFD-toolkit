@@ -89,7 +89,7 @@ def test_cleaner_summarise():
         GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
         GeneralConfig.COL_CONCERNS: ["conc"],
     })
-    extractor = Extractor(llm=DummyLLM(), feature_model=TopicMatch, reports=df)
+    extractor = Extractor(llm=DummyLLM(), reports=df)
     out = extractor.summarise()
     assert "summary" in out.columns
     assert len(out) == len(df)
