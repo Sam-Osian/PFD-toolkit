@@ -674,8 +674,6 @@ Here is the report excerpt:
         self.prompt_template = self._build_prompt_template()
         self._grammar_model = self._build_grammar_model()
 
-        return ThemeModel
-
 
     # ------------------------------------------------------------------
     def export_cache(self, path: str = "extractor_cache.pkl") -> str:
