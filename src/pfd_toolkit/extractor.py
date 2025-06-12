@@ -296,20 +296,23 @@ Here is the report excerpt:
 
         # For each row needing extraction, build prompt
         for idx, row in df.iterrows():
+            prompt = self._generate_prompt(row)
+            key = prompt
+
             if skip_if_present:
-                present = any(
+                has_data = any(
                     pd.notna(row.get(f))
                     and row.get(f) != GeneralConfig.NOT_FOUND_TEXT
                     for f in self.feature_names
                 )
-                if present:
-                        # If any feature column already contains data, assume
-                        # the row was cached from a previous run, and skip
+                if has_data and key in self.cache:
+                    # Row previously processed; reuse cached values
+                    cached = self.cache[key]
+                    for feat in self.feature_names:
+                        df.at[idx, feat] = cached.get(feat, GeneralConfig.NOT_FOUND_TEXT)
                     continue
 
-            prompt = self._generate_prompt(row)
-            key = prompt
-            if key in self.cache: # ...use cached values if available
+            if key in self.cache:  # ...use cached values if available
                 cached = self.cache[key]
                 for feat in self.feature_names:
                     df.at[idx, feat] = cached.get(feat, GeneralConfig.NOT_FOUND_TEXT)
@@ -707,3 +710,18 @@ Here is the report excerpt:
             self.cache = data
             self.token_cache = {}
 
+
+    # ------------------------------------------------------------------
+    def reset(self) -> "Extractor":
+        """Reset internal caches and intermediate state.
+
+        This clears any cached feature extraction results and token
+        estimations so that :meth:`extract_features` can be run again on
+        the same reports.  The instance itself is returned to allow method
+        chaining, e.g. ``extractor.reset().extract_features()``.
+        """
+
+        self.cache.clear()
+        self.token_cache.clear()
+        self.identified_themes = None
+        return self

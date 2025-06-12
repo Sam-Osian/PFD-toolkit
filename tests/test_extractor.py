@@ -165,12 +165,13 @@ def test_extract_skip_if_present_default():
         include_circumstances=True,
     )
     result = extractor.extract_features(feature_model=DemoModel)
-    assert llm.called == 0
-    assert result["age"].iloc[0] == 10
+    # No cache present, so features are re-extracted and overwritten
+    assert llm.called == 1
+    assert result["age"].iloc[0] == 99
 
 
 def test_extract_skip_if_present_partial_row():
-    """Row is skipped when any feature column already contains data."""
+    """Row is processed again when cache is empty despite partial data."""
     df = pd.DataFrame(
         {
             "InvestigationAndInquest": ["text"],
@@ -187,10 +188,10 @@ def test_extract_skip_if_present_partial_row():
         include_circumstances=True,
     )
     result = extractor.extract_features(feature_model=DemoModel)
-    # LLM should not be called because one feature value is already present
-    assert llm.called == 0
-    assert result["ethnicity"].iloc[0] == "Cached"
-    assert result["age"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
+    # Cache is empty so the row is processed again
+    assert llm.called == 1
+    assert result["ethnicity"].iloc[0] == "New"
+    assert result["age"].iloc[0] == 88
 
 
 def test_extract_skip_if_present_false():
@@ -243,6 +244,29 @@ def test_extractor_caching():
     assert llm.called == 1  # cached result used
     assert result2["age"].iloc[0] == 21
     assert result2["ethnicity"].iloc[0] == "C"
+
+
+def test_reset_allows_rerun():
+    df = pd.DataFrame(
+        {
+            "InvestigationAndInquest": ["text"],
+            "CircumstancesOfDeath": ["other"],
+        }
+    )
+    llm = DummyLLM(values={"age": 10, "ethnicity": "A"})
+    extractor = Extractor(
+        llm=llm,
+        reports=df,
+        include_investigation=True,
+        include_circumstances=True,
+    )
+    extractor.extract_features(feature_model=DemoModel, skip_if_present=False)
+    assert llm.called == 1
+
+    # Change values and rerun after reset
+    llm.values = {"age": 20, "ethnicity": "B"}
+    extractor.reset().extract_features(feature_model=DemoModel)
+    assert llm.called == 2
 
 
 def test_export_import_cache(tmp_path):
