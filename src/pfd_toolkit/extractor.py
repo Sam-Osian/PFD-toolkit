@@ -383,7 +383,7 @@ Here is the report excerpt:
             A new DataFrame identical to the one provided at initialisation with
             an extra summary column.
         """
-        if trim_intensity not in {"low", "medium", "high"}:
+        if trim_intensity not in {"low", "medium", "high", "very high"}:
             raise ValueError("trim_intensity must be 'low', 'medium', 'high', or 'very high'")
 
         self.summary_col = result_col_name
@@ -397,7 +397,7 @@ Here is the report excerpt:
         }
         base_prompt = (
             "You are an assistant summarising UK Prevention of Future Death reports."
-            "You will be given an exerpt from one report.\n\n"
+            "You will be given an excerpt from one report.\n\n"
             "Your task is to "
             + instructions[trim_intensity]
             + "\n\nDo not provide any commentary or headings; simply summarise the report."
@@ -405,7 +405,7 @@ Here is the report excerpt:
         )
         if extra_instructions:
             base_prompt += "\n\n" + extra_instructions.strip()
-        base_prompt += "\n\nReport exerpt:\n\n"
+        base_prompt += "\n\nReport excerpt:\n\n"
 
         fields = [
             (self.include_coroner, self.COL_CORONER_NAME, "Coroner name"),
@@ -455,16 +455,18 @@ Here is the report excerpt:
         col_name: Optional[str] = None,
         return_series: Optional[bool] = False
     ) -> Union[int, pd.Series]:
-        """Estimate token counts for a columnsummarise( using :mod:`tiktoken`.
+        """Estimate token counts for all rows of a given column using 
+        :mod:`tiktoken`.
 
         Parameters
         ----------
         summary_col : str, optional
             Name of the column containing report summaries. Defaults to
-            :pyattr:`summary_col`.
+            excerpt:`summary_col`, which is generated after running
+            `self.summarise()`.
         return_series : bool, optional
             Returns a pandas.Series of per-row token counts for that field
-            if ``True``, or an integer if ``False``. Defaults to ``false``.
+            if ``True``, or an integer if ``False``. Defaults to ``False``.
 
         Returns
         -------
@@ -670,7 +672,8 @@ Here is the report excerpt:
             file_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(file_path, "wb") as f:
-            pickle.dump({"features": self.cache, "tokens": self.token_cache}, f)
+            pickle.dump({"features": self.cache, "tokens": self.token_cache, 
+                         "summary_col": self.summary_col}, f)
         return str(file_path)
 
     # ------------------------------------------------------------------
@@ -697,6 +700,7 @@ Here is the report excerpt:
         if isinstance(data, dict) and "features" in data:
             self.cache = data.get("features", {})
             self.token_cache = data.get("tokens", {})
+            self.summary_col = data.get("summary_col", {})
         else:
             # backwards compatibility with older cache files
             self.cache = data
