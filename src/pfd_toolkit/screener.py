@@ -1,6 +1,6 @@
 from typing import Literal, Dict, List, Tuple, Any, Optional, Union
 import logging
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 import pandas as pd
 
 from .config import GeneralConfig
@@ -20,6 +20,8 @@ class TopicMatch(BaseModel):
         ...,
         description="Indicate whether the report text is relevant to the user's query. Must be Yes or No.",
     )
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class Screener:

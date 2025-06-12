@@ -8,7 +8,7 @@ import re
 from typing import Dict, List, Optional, Type, Union, Literal
 
 import pandas as pd
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field, create_model, ConfigDict
 
 from .llm import LLM
 from .config import GeneralConfig
@@ -155,7 +155,11 @@ Here is the report excerpt:
                 Field(..., alias=alias, description=description),
             )
 
-        return create_model(f"{self.feature_model.__name__}Extended", **fields)
+        return create_model(
+            f"{self.feature_model.__name__}Extended",
+            **fields,
+            __config__=ConfigDict(extra="forbid"),
+        )
 
     # ------------------------------------------------------------------
     def _collect_field_names(self) -> List[str]:
@@ -199,7 +203,12 @@ Here is the report excerpt:
                 union_type = Union[field_type, str]
             fields[name] = (union_type, Field(..., alias=alias))
 
-        return create_model("ExtractorLLMModel", **fields)
+        return create_model(
+            "ExtractorLLMModel",
+            **fields,
+            __config__=ConfigDict(extra="forbid"),
+        )
+
 
     # ------------------------------------------------------------------
     def _generate_prompt(self, row: pd.Series) -> str:
@@ -637,7 +646,9 @@ Here is the report excerpt:
             name: (bool, Field(description=str(desc)))
             for name, desc in theme_dict.items()
         }
-        ThemeModel = create_model("DiscoveredThemes", **fields)
+        ThemeModel = create_model(
+            "DiscoveredThemes", **fields, __config__=ConfigDict(extra="forbid")
+        )
 
         self.feature_model = ThemeModel
         self.feature_names = self._collect_field_names()

@@ -4,7 +4,7 @@ import tiktoken
 import logging
 import base64
 from typing import List, Optional, Dict, Type, Any
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, create_model, ConfigDict
 import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import backoff
@@ -55,6 +55,9 @@ class LLM:
         Sampling temperature used for all requests; defaults to ``0.0``.
     seed : int or None, optional
         Optional deterministic seed value passed to the OpenAI API.
+    validation_attempts : int, optional
+        Number of times to retry when parsing LLM output into a
+        ``pydantic`` model fails. Defaults to ``2``.
 
     Attributes
     ----------
@@ -80,6 +83,7 @@ class LLM:
         max_workers: int = 8,
         temperature: float = 0.0,
         seed: Optional[int] = None,
+        validation_attempts: int = 2,
     ):
         self.api_key = api_key
         self.model = model
@@ -88,6 +92,7 @@ class LLM:
 
         self.temperature = float(temperature)
         self.seed = seed
+        self.validation_attempts = max(1, validation_attempts)
 
         # Ensure max_workers is at least 1
         self.max_workers = max(1, max_workers)
@@ -267,21 +272,32 @@ class LLM:
             messages = _build_messages(prompt_text, current_images)
 
             if response_format:
-                try:
-                    resp = self._parse_with_backoff(
-                        model=self.model,
-                        messages=messages,
-                        temperature=self.temperature,
-                        response_format=response_format,
-                        **({"seed": self.seed} if self.seed is not None else {}),
-                    )
-                    validated = response_format.model_validate_json(
-                        resp.choices[0].message.content
-                    )
-                    return idx, validated
-                except Exception as e:
-                    logger.error(f"Batch pydantic parse failed for item {idx}: {e}")
-                    return idx, f"Error: {e}"
+                for attempt in range(self.validation_attempts):
+                    try:
+                        resp = self._parse_with_backoff(
+                            model=self.model,
+                            messages=messages,
+                            temperature=self.temperature,
+                            response_format=response_format,
+                            **({"seed": self.seed} if self.seed is not None else {}),
+                        )
+                        validated = response_format.model_validate_json(
+                            resp.choices[0].message.content,
+                            strict=True,
+                        )
+                        return idx, validated
+                    except Exception as e:
+                        if attempt == self.validation_attempts - 1:
+                            logger.error(
+                                f"Batch pydantic parse failed for item {idx}: {e}"
+                            )
+                            return idx, f"Error: {e}"
+                        logger.debug(
+                            "Validation attempt %s failed for item %s: %s",
+                            attempt + 1,
+                            idx,
+                            e,
+                        )
             else:
                 txt = _call_llm(messages)
                 return idx, txt
@@ -353,7 +369,9 @@ class LLM:
         )
 
         schema = {fld: (str, ...) for fld in response_fields}
-        MissingModel = create_model("MissingFields", **schema)
+        MissingModel = create_model(
+            "MissingFields", **schema, __config__=ConfigDict(extra="forbid")
+        )
 
         if verbose:
             logger.info("LLM fallback prompt for %s:\n%s", report_url, prompt)
