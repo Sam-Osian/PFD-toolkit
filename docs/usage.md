@@ -8,7 +8,7 @@ This page talks you through an example workflow using PFD Toolkit. It doesn't co
 
 PFD Toolkit can be installed from pip as `pfd_toolkit`:
 
-```bath
+```bash
 pip install pfd_toolkit
 ```
 

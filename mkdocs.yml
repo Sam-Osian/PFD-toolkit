@@ -1,5 +1,7 @@
 site_name: PFD Toolkit
 site_url: https://sam-osian.github.io/pfd-toolkit/
+repo_url: https://github.com/Sam-Osian/PFD-toolkit/
+edit_uri: edit/main/docs/
 theme:
   palette:
     # Palette toggle for light mode
@@ -22,9 +24,13 @@ theme:
   features:
     - navigation.instant
     - navigation.sections
+    - navigation.footer
+    - navigation.tabs
+    - navigation.tabs.sticky
     - content.code.copy
     - search.suggest
     - search.highlight
+    - social
 extra_css:
   - stylesheets/extra.css
 
@@ -43,6 +49,9 @@ markdown_extensions:
   - pymdownx.superfences
 
 plugins:
+  - git-revision-date-localized:
+      type: date
+      fallback_to_build_date: false
   - search
   - autorefs
   - mkdocstrings:

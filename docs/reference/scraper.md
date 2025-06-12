@@ -1,3 +1,3 @@
-# `PFDScraper`
+# `Scraper`
 
 ::: pfd_toolkit.Scraper

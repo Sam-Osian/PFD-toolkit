@@ -67,6 +67,7 @@ dependencies = [
     "mkdocs-autorefs>=1.4.2",
     "mkdocs-material>=9.6.14",
     "mkdocstrings[python]>=0.29.1",
+    "mkdocs-git-revision-date-localized-plugin>=1.4.7",
     "nest-asyncio==1.6.0",
     "numpy==2.2.3",
     "openai==1.65.2",
@@ -121,6 +122,7 @@ include = ["src/pfd_toolkit/data/*.csv"]
 dev = [
     "pytest>=8.4.0",
     "pytest-cov>=6.1.1",
+    "mkdocs-git-revision-date-localized-plugin>=1.4.7",
 ]
 
 [project.urls]

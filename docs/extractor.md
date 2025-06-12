@@ -77,7 +77,7 @@ extractor = Extractor(
     reports=reports,
     include_investigation=True,
     include_circumstances=True,
-    include_concerns=False,  # Skip coroner's concerns if not relevant
+    include_concerns=False  # Skip coroner's concerns if not relevant
 )
 ```
 
@@ -119,7 +119,7 @@ IdentifiedThemes = extractor.discover_themes()
 # print(IdentifiedThemes)
 
 assigned_reports = extractor.extract_features(
-                              feature_model=IdentifiedThemes
+                              feature_model=IdentifiedThemes,
                             # Recommended: set below parameters to True
                               force_assign=True, 
                               allow_multiple=True)
