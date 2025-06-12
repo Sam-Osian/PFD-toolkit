@@ -1,6 +1,7 @@
 name: Run Pytests
 on:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   pytest:
@@ -30,6 +31,7 @@ jobs:
 
       - name: Run pytest suite
         run: uv run pytest
+        continue-on-error: false
 
       - name: Run coverage report
         run: uv run pytest --cov=src

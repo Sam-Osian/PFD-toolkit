@@ -528,6 +528,7 @@ Here is the report excerpt:
         max_themes: Optional[int] = None,
         min_themes: Optional[int] = None,
         extra_instructions: Optional[str] = None,
+        seed_topics: Optional[Union[str, List[str], BaseModel]] = None,
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
@@ -553,6 +554,10 @@ Here is the report excerpt:
             provided.
         extra_instructions : str, optional
             Additional instructions appended to the theme discovery prompt.
+        seed_topics : str | list[str] | pydantic.BaseModel, optional
+            Optional seed topics to include in the prompt. These are treated as
+            starting suggestions and the model should incorporate them into a
+            broader list of themes.
 
         Returns
         -------
@@ -596,6 +601,19 @@ Here is the report excerpt:
         )
         if extra_instructions:
             prompt += extra_instructions.strip() + "\n\n"
+        if seed_topics:
+            if isinstance(seed_topics, BaseModel):
+                seed_text = seed_topics.model_dump_json(indent=2)
+            elif isinstance(seed_topics, str):
+                seed_text = seed_topics
+            else:
+                seed_text = ", ".join(str(t) for t in seed_topics)
+            prompt += (
+                "The following seed topics were provided by the user. "
+                "They are only suggestions; please incorporate them into a "
+                "broader list of themes as appropriate:\n"
+                f"{seed_text}\n\n"
+            )
         if max_themes is not None:
             prompt += f"Identify no more than **{max_themes} themes.** "
         if min_themes is not None:

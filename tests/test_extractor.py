@@ -415,3 +415,50 @@ def test_discover_themes_prompt_limits(monkeypatch):
     prompt = captured["prompt"].lower()
     assert "no more than **5" in prompt
     assert "at least **2" in prompt
+
+
+def test_discover_themes_seed_topics_string(monkeypatch):
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = DummyLLM(values={})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+
+    captured = {}
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        captured["prompt"] = prompts[0]
+        return [{}]
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    ext.discover_themes(seed_topics="health")
+
+    prompt = captured["prompt"].lower()
+    assert "seed topics" in prompt
+    assert "health" in prompt
+
+
+def test_discover_themes_seed_topics_model(monkeypatch):
+    class SeedModel(BaseModel):
+        topic_a: str
+        topic_b: str
+
+    df = pd.DataFrame({"summary": ["one"]})
+    llm = DummyLLM(values={})
+    ext = Extractor(llm=llm, reports=df)
+    ext.summarised_reports = df
+    ext.summary_col = "summary"
+
+    captured = {}
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        captured["prompt"] = prompts[0]
+        return [{}]
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    seeds = SeedModel(topic_a="desc", topic_b="desc")
+    ext.discover_themes(seed_topics=seeds)
+
+    prompt = captured["prompt"]
+    assert "topic_a" in prompt
+    assert "seed topics" in prompt.lower()
