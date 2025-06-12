@@ -205,21 +205,22 @@ Here is the report excerpt:
     def _generate_prompt(self, row: pd.Series) -> str:
         """Construct a single prompt for the given DataFrame row."""
         parts: List[str] = []
-        # Add each enabled section if value present
-        if self.include_date and pd.notna(row.get(self.COL_DATE)):
-            parts.append(f"{self.COL_DATE}: {row[self.COL_DATE]}")
-        if self.include_coroner and pd.notna(row.get(self.COL_CORONER_NAME)):
-            parts.append(f"{self.COL_CORONER_NAME}: {row[self.COL_CORONER_NAME]}")
-        if self.include_area and pd.notna(row.get(self.COL_AREA)):
-            parts.append(f"{self.COL_AREA}: {row[self.COL_AREA]}")
-        if self.include_receiver and pd.notna(row.get(self.COL_RECEIVER)):
-            parts.append(f"{self.COL_RECEIVER}: {row[self.COL_RECEIVER]}")
-        if self.include_investigation and pd.notna(row.get(self.COL_INVESTIGATION)):
-            parts.append(f"{self.COL_INVESTIGATION}: {row[self.COL_INVESTIGATION]}")
-        if self.include_circumstances and pd.notna(row.get(self.COL_CIRCUMSTANCES)):
-            parts.append(f"{self.COL_CIRCUMSTANCES}: {row[self.COL_CIRCUMSTANCES]}")
-        if self.include_concerns and pd.notna(row.get(self.COL_CONCERNS)):
-            parts.append(f"{self.COL_CONCERNS}: {row[self.COL_CONCERNS]}")
+        fields = [
+            (self.include_date, self.COL_DATE),
+            (self.include_coroner, self.COL_CORONER_NAME),
+            (self.include_area, self.COL_AREA),
+            (self.include_receiver, self.COL_RECEIVER),
+            (self.include_investigation, self.COL_INVESTIGATION),
+            (self.include_circumstances, self.COL_CIRCUMSTANCES),
+            (self.include_concerns, self.COL_CONCERNS),
+        ]
+
+        for flag, col in fields:
+            if not flag:
+                continue
+            val = row.get(col)
+            if pd.notna(val) and val != GeneralConfig.NOT_FOUND_TEXT:
+                parts.append(f"{col}: {val}")
         report_text = "\n\n".join(str(p) for p in parts).strip()
         report_text = " ".join(report_text.split())
         prompt = self.prompt_template.format(
@@ -423,7 +424,7 @@ Here is the report excerpt:
             for flag, col, label in fields:
                 if flag and col in summary_df.columns:
                     val = row.get(col)
-                    if pd.notna(val):
+                    if pd.notna(val) and val != GeneralConfig.NOT_FOUND_TEXT:
                         parts.append(f"{label}: {str(val)}")
             if not parts:
                 prompts.append(base_prompt + "\nN/A")

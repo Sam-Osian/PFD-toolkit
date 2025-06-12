@@ -3,6 +3,8 @@ import logging
 from pydantic import BaseModel, Field
 import pandas as pd
 
+from .config import GeneralConfig
+
 # Configure basic logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -296,60 +298,30 @@ Here is the PFD report excerpt:
 
         for index, row in current_reports.iterrows():
             report_parts = []
-            # Conditionally include column data based on toggles and existence
-            # ...also prefix the colname in to make the sections clearer for the LLM
-            if (
-                self.include_date
-                and self.COL_DATE in row
-                and pd.notna(row[self.COL_DATE])
-            ):
-                report_parts.append(f"The date of the report: {str(row[self.COL_DATE])}")
-            if (
-                self.include_coroner
-                and self.COL_CORONER_NAME in row
-                and pd.notna(row[self.COL_CORONER_NAME])
-            ):
-                report_parts.append(
-                    f"The name of the coroner: {str(row[self.COL_CORONER_NAME])}"
-                )
-            if (
-                self.include_area
-                and self.COL_AREA in row
-                and pd.notna(row[self.COL_AREA])
-            ):
-                report_parts.append(f"The area where the investigation took place: {str(row[self.COL_AREA])}")
-            if (
-                self.include_receiver
-                and self.COL_RECEIVER in row
-                and pd.notna(row[self.COL_RECEIVER])
-            ):
-                report_parts.append(
-                    f"The recipients of the report: {str(row[self.COL_RECEIVER])}"
-                )
-            if (
-                self.include_investigation
-                and self.COL_INVESTIGATION in row
-                and pd.notna(row[self.COL_INVESTIGATION])
-            ):
-                report_parts.append(
-                    f"The Investigation & Inquest section:\n {str(row[self.COL_INVESTIGATION])}"
-                )
-            if (
-                self.include_circumstances
-                and self.COL_CIRCUMSTANCES in row
-                and pd.notna(row[self.COL_CIRCUMSTANCES])
-            ):
-                report_parts.append(
-                    f"The Circumstances of Death section:\n {str(row[self.COL_CIRCUMSTANCES])}"
-                )
-            if (
-                self.include_concerns
-                and self.COL_CONCERNS in row
-                and pd.notna(row[self.COL_CONCERNS])
-            ):
-                report_parts.append(
-                    f"The Matters of Concern section: {str(row[self.COL_CONCERNS])}"
-                )
+            fields = [
+                (self.include_date, self.COL_DATE, "The date of the report:"),
+                (self.include_coroner, self.COL_CORONER_NAME, "The name of the coroner:"),
+                (self.include_area, self.COL_AREA, "The area where the investigation took place:"),
+                (self.include_receiver, self.COL_RECEIVER, "The recipients of the report:"),
+                (
+                    self.include_investigation,
+                    self.COL_INVESTIGATION,
+                    "The Investigation & Inquest section:\n",
+                ),
+                (
+                    self.include_circumstances,
+                    self.COL_CIRCUMSTANCES,
+                    "The Circumstances of Death section:\n",
+                ),
+                (self.include_concerns, self.COL_CONCERNS, "The Matters of Concern section:"),
+            ]
+
+            for flag, col, label in fields:
+                if not flag or col not in row:
+                    continue
+                val = row.get(col)
+                if pd.notna(val) and val != GeneralConfig.NOT_FOUND_TEXT:
+                    report_parts.append(f"{label} {str(val)}".strip())
 
             report_text = "\n\n".join(report_parts).strip()
             report_text = " ".join(report_text.split())
