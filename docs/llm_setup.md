@@ -33,10 +33,9 @@ from pfd_toolkit import Screener
 query = "Deaths that followed ordering medication(s) online."
 
 screener = Screener(llm=llm_client, # Assign llm client here
-                        reports = reports,
-                        user_query=query)
+                        reports = reports)
 
-online_med_reports = screener.screen_reports()
+online_med_reports = screener.screen_reports(user_query=query)
 
 ```
 

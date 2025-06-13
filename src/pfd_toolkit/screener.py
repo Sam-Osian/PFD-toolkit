@@ -65,19 +65,8 @@ class Screener:
         An instance of the LLM class from `pfd_toolkit`.
     reports : pd.DataFrame, optional
         A DataFrame containing Prevention of Future Death reports.
-    user_query : str, optional
-        The topic string provided by the user. If provided, the prompt template
-        is built during initialisation.
-    match_leniency : str, optional
-        Either 'strict' or 'liberal'. Determines the LLM's bias when in doubt.
-        Defaults to 'strict'.
-    filter_df : bool, optional
-        If True, the returned DataFrame will be filtered. Defaults to True.
     verbose : bool, optional
         If True, print more detailed logs. Defaults to False.
-    result_col_name : str, optional
-        The name for the classification column added to the DataFrame.
-        Defaults to 'matches_query'.
     include_date : bool, optional
         Flag to determine if the 'Date' column is included. Defaults to False.
     include_coroner : bool, optional
@@ -97,8 +86,8 @@ class Screener:
     --------
     >>> user_topic = "medication errors"
     >>> llm_client = LLM()
-    >>> screener = Screener(llm=llm_client, user_query=user_topic, reports=reports_df)
-    >>> screened_reports = screener.screen_reports()
+    >>> screener = Screener(llm=llm_client, reports=reports_df)
+    >>> screened_reports = screener.screen_reports(user_query=user_topic)
     >>> print(f"Found {len(fscreened_reports)} report(s) on '{user_topic}'.")
     >>> # Found 1 report(s) on 'medication errors'.
 
@@ -119,11 +108,7 @@ class Screener:
         self,
         llm: Optional[Any] = None,
         reports: Optional[pd.DataFrame] = None,
-        user_query: Optional[str] = None,
-        match_leniency: str = "strict",
-        filter_df: bool = True,
         verbose: bool = False,
-        result_col_name: str = "matches_query",
         include_date: bool = False,
         include_coroner: bool = False,
         include_area: bool = False,
@@ -133,10 +118,7 @@ class Screener:
         include_concerns: bool = True,
     ) -> None:
         self.llm = llm
-        self.match_leniency = match_leniency
-        self.filter_df = filter_df
         self.verbose = verbose
-        self.result_col_name = result_col_name
         self.produce_spans = False
 
         # Store column inclusion toggles
@@ -153,15 +135,12 @@ class Screener:
             reports.copy() if reports is not None else pd.DataFrame()
         )
 
-        self.user_query: Optional[str] = user_query
+        self.user_query: Optional[str] = None
         self.prompt_template: Optional[str] = None
 
-        # If a query is provided at init, build the prompt
-        if self.user_query:
-            self.prompt_template = self._build_prompt_template(self.user_query)
-        elif self.verbose:
+        if self.verbose:
             logger.debug(
-                "Screener initialised without an initial user query. Prompt will be built on first screen_reports call with a query."
+                "Screener initialised without a user query. Prompt will be built on first screen_reports call."
             )
 
         if self.verbose:
@@ -194,20 +173,6 @@ class Screener:
     f"**User query:** \n'{current_user_query}'"
 )
 
-        # Add match approach instructions: strict, liberal or none
-        if self.match_leniency == "strict":
-            base_prompt_template += """
-Your match leniency should be strict.
-This means that if you are not entirely sure whether a report
-matches the user query, you **must** respond "No".
-"""
-        elif self.match_leniency == "liberal":
-            base_prompt_template += """
-Your match leniency should be liberal.
-This means that if you are on the fence as to whether a report
-matches the user query, you should respond "Yes".
-"""
-
         # Add the placeholder for the report text (adding right at the end should support caching!)
         full_template_text = (
             base_prompt_template
@@ -219,7 +184,7 @@ Here is the PFD report excerpt:
 
         if self.verbose:
             logger.debug(
-                f"Building prompt template for user query: '{current_user_query}'. Match approach: {self.match_leniency}."
+                f"Building prompt template for user query: '{current_user_query}'."
             )
             logger.debug(
                 f"Base prompt template created:\n{full_template_text.replace('{report_excerpt}', '[REPORT_TEXT_WILL_GO_HERE]')}"
@@ -227,9 +192,11 @@ Here is the PFD report excerpt:
         return full_template_text
 
     def screen_reports(
-        self, reports: Optional[pd.DataFrame] = None,
+        self,
+        reports: Optional[pd.DataFrame] = None,
         user_query: Optional[str] = None,
-        result_col_name: Optional[str] = None,
+        filter_df: bool = True,
+        result_col_name: str = "matches_query",
         produce_spans: bool = False,
         drop_spans: bool = False,
     ) -> pd.DataFrame:
@@ -244,6 +211,12 @@ Here is the PFD report excerpt:
         user_query : str, optional
             If provided, this query will be used, overriding any query stored
             in the instance for this call. The prompt template will be rebuilt.
+        filter_df : bool, optional
+            If ``True`` the returned DataFrame is filtered to only matching
+            reports. Defaults to ``True``.
+        result_col_name : str, optional
+            Name of the boolean column added when ``filter_df`` is ``False``.
+            Defaults to ``"matches_query"``.
         produce_spans : bool, optional
             When ``True`` a ``spans_matches_topic`` column is created containing
             the text snippet that justified the classification. Defaults to ``False``.
@@ -255,20 +228,19 @@ Here is the PFD report excerpt:
         Returns
         ----------
         pd.DataFrame
-            Either a filtered DataFrame (if self.filter_df is True), or the
+            Either a filtered DataFrame (if ``filter_df`` is ``True``), or the
             original DataFrame with an added classification column.
 
         Examples
         --------
         >>> reports_df = pd.DataFrame(data)
-        >>> screener = Screener(LLM(), user_query="medication safety", filter_df=True, reports=reports_df)
+        >>> screener = Screener(LLM(), reports=reports_df)
         >>>
         >>> # Screen reports with the initial query
-        >>> filtered_df = screener.screen_reports()
+        >>> filtered_df = screener.screen_reports(user_query="medication safety")
         >>>
         >>> # Screen the same reports with a new query and add classification column
-        >>> screener.filter_df = False     # Modify screener behaviour
-        >>> classified_df = screener.screen_reports(user_query="tree safety")
+        >>> classified_df = screener.screen_reports(user_query="tree safety", filter_df=False)
         """
         # Update produce_spans flag and prompt if needed
         if produce_spans != self.produce_spans:
@@ -322,10 +294,9 @@ Here is the PFD report excerpt:
             self.prompt_template = self._build_prompt_template(active_user_query)
             self.user_query = active_user_query
 
-        # Determine the result column name for this call
-        self.result_col_name = result_col_name if result_col_name is not None else self.result_col_name
+        result_col = result_col_name
 
-        span_col = "spans_matches_topic"
+        span_col = f"spans_{result_col_name}"
         if self.produce_spans and span_col not in current_reports.columns:
             current_reports[span_col] = GeneralConfig.NOT_FOUND_TEXT
 
@@ -348,7 +319,7 @@ Here is the PFD report excerpt:
 
         if self.verbose:
             logger.debug(
-                f"Preparing prompts for {len(current_reports)} reports using classification column '{self.result_col_name}'."
+                f"Preparing prompts for {len(current_reports)} reports using classification column '{result_col}'."
             )
 
         for index, row in current_reports.iterrows():
@@ -449,7 +420,7 @@ Here is the PFD report excerpt:
                 temp_classifications_series.loc[original_report_index] = pd.NA
 
         # Add classification results to the DataFrame being processed for this call
-        current_reports[self.result_col_name] = temp_classifications_series
+        current_reports[result_col] = temp_classifications_series
 
         if (
             reports is None
@@ -459,13 +430,13 @@ Here is the PFD report excerpt:
             )  # ...update the instance's dataframe with the results
 
         if self.verbose:
-            if self.result_col_name in current_reports.columns:
+            if result_col in current_reports.columns:
                 logger.debug(
-                    f"Added '{self.result_col_name}' column. Distribution:\n{current_reports[self.result_col_name].value_counts(dropna=False)}"
+                    f"Added '{result_col}' column. Distribution:\n{current_reports[result_col].value_counts(dropna=False)}"
                 )
             else:
                 logger.warning(
-                    f"'{self.result_col_name}' classification column was not added. This was unexpected!"
+                    f"'{result_col}' classification column was not added. This was unexpected!"
                 )
 
         if drop_spans:
@@ -477,12 +448,12 @@ Here is the PFD report excerpt:
                 current_reports.drop(span_col, axis=1, inplace=True, errors="ignore")
 
         # --- Filter DataFrame if requested ---
-        if self.filter_df:
-            if self.result_col_name in current_reports.columns:
-                mask = current_reports[self.result_col_name] == True
+        if filter_df:
+            if result_col in current_reports.columns:
+                mask = current_reports[result_col] == True
                 filtered_df = current_reports[mask].copy()
                 filtered_df.drop(
-                    self.result_col_name, axis=1, inplace=True, errors="ignore"
+                    result_col, axis=1, inplace=True, errors="ignore"
                 )
 
                 if self.verbose:
@@ -493,12 +464,12 @@ Here is the PFD report excerpt:
             else:
                 if self.verbose:
                     logger.warning(
-                        f"Cannot screen DataFrame as '{self.result_col_name}' column is missing."
+                        f"Cannot screen DataFrame as '{result_col}' column is missing."
                     )
                 return current_reports
         else:
             if self.verbose:
                 logger.debug(
-                    f"Returning DataFrame with '{self.result_col_name}' column (no filtering applied as filter_df is False)."
+                    f"Returning DataFrame with '{result_col}' column (no filtering applied as filter_df is False)."
                 )
             return current_reports

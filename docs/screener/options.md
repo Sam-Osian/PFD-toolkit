@@ -1,31 +1,5 @@
 # Additional options
 
-### Match leniency
-The `match_leniency` flag nudges the LLM when it's unsure whether a report meets your query or not.
-
-In "strict" mode (the default), a marginal case is excluded and is not added to your curated list; in "liberal" mode, the benefit of the doubt gears towards inclusion.
-
-If you are sweeping widely then tightening by hand, start liberal; if you want only high-precision hits for immediate analysis, stay strict.
-
-```py
-screener = Screener(
-    llm=llm_client,
-    reports=reports,
-    user_query=user_query,
-    match_leniency='liberal'    # <--- or 'strict' (default)
-)
-```
-
-Under the hood, this is what the LLM sees. For "strict" mode (default):
-
-> Your match leniency should be strict. This means that if you are on the fence as to whether a report matches the user query, you should respond "No".
-
-And for "liberal" mode:
-
-> Your match leniency should be liberal. This means that if you are on the fence as to whether a report matches the user query, you should respond "Yes".
-
----
-
 ### Annotation vs. filtering
 
 If `filter_df` is True (the default) `Screener` returns a trimmed DataFrame that contains only the reports the LLM marked as relevant to your query.
@@ -38,6 +12,9 @@ A common workflow is to screen once with `filter_df=False`, inspect a few border
 screener = Screener(
     llm=llm_client,
     reports=reports,
+)
+
+annotated = screener.screen_reports(
     user_query=user_query,
     filter_df=False,    # <--- create annotation column; don't filter out
     result_col_name='custody_match'     # <--- name of annotation column
@@ -60,9 +37,10 @@ user_query = "Death from insulin overdose due to misprogrammed insulin pumps."
 screener = Screener(
     llm=llm_client,
     reports=reports,
-    user_query=user_query,
     include_concerns=False    # <--- Our query doesn't need this section
 )
+
+result = screener.screen_reports(user_query=user_query)
 ```
 
 In another example, let's say we are only interested in reports sent to a *Member of Parliament*. We'll want to turn off all default sections and only read from the receiver column.
@@ -73,7 +51,6 @@ user_query = "Whether the report was sent to a Member of Parliament (MP)"
 screener = Screener(
     llm=llm_client,
     reports=reports,
-    user_query=user_query,
 
     # Turn off the defaults...
     include_investigation=False,
@@ -82,6 +59,8 @@ screener = Screener(
 
     include_receiver=True       # <--- Read from receiver section
 )
+
+result = screener.screen_reports(user_query=user_query)
 ```
 
 #### All options and defaults
@@ -145,7 +124,6 @@ column from the returned DataFrame after screening.
 
 ```python
 screener = Screener(llm=llm_client,
-                    reports=reports,
-                    user_query="needle")
-annotated = screener.screen_reports(produce_spans=True, drop_spans=False)
+                    reports=reports)
+annotated = screener.screen_reports(user_query="needle", produce_spans=True, drop_spans=False)
 ```

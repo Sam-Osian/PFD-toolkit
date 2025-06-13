@@ -31,12 +31,10 @@ user_query = "deaths in police custody"
 
 screener = Screener(
     llm=llm_client,
-    reports=reports,
-    user_query=user_query,
-    filter_df=True
+    reports=reports
 )
 
-police_df = screener.screen_reports()
+police_df = screener.screen_reports(user_query=user_query, filter_df=True)
 
 print(f"{len(police_df)} reports matched.")
 >> "13 reports matched."

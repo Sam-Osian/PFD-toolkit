@@ -81,10 +81,10 @@ user_query = "Deaths that occurred in police custody"
 # Set up the screening/filtering engine
 screener = Screener(llm = llm_client,
                         reports = reports, # Reports that you loaded earlier
-                        user_query = user_query) 
+                        )
 
 # And screen/filter reports!
-filtered_reports = screener.screen_reports()
+filtered_reports = screener.screen_reports(user_query=user_query)
 ```
 
 `filtered_reports` also returns a pandas DataFrame, but only contains reports that matched your query.
