@@ -134,3 +134,18 @@ screener = Screener(
     </tr>
   </tbody>
 </table>
+
+### Returning text spans
+
+Set `produce_spans=True` when calling `.screen_reports()` to capture the exact
+lines from the report that justified each classification. A new column called
+`spans_matches_topic` will be created containing these verbatim snippets. If you
+only want to use the spans internally, pass `drop_spans=True` to remove the
+column from the returned DataFrame after screening.
+
+```python
+screener = Screener(llm=llm_client,
+                    reports=reports,
+                    user_query="needle")
+annotated = screener.screen_reports(produce_spans=True, drop_spans=False)
+```

@@ -1,6 +1,6 @@
 from typing import Literal, Dict, List, Tuple, Any, Optional, Union
 import logging
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, create_model
 import pandas as pd
 
 from .config import GeneralConfig
@@ -22,6 +22,32 @@ class TopicMatch(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+
+def _topic_model_with_spans() -> type[BaseModel]:
+    """Return a TopicMatch model extended with a ``spans_matches_topic`` field."""
+    return create_model(
+        "TopicMatchWithSpans",
+        spans_matches_topic=(
+            str,
+            Field(
+                ...,
+                description="Text spans supporting matches_topic",
+                alias="spans_matches_topic",
+            ),
+        ),
+        matches_topic=(
+            Literal["Yes", "No"],
+            Field(
+                ...,
+                description=(
+                    "Indicate whether the report text is relevant to the user's query. Must be Yes or No."
+                ),
+                alias="matches_topic",
+            ),
+        ),
+        __config__=ConfigDict(extra="forbid"),
+    )
 
 
 class Screener:
@@ -111,6 +137,7 @@ class Screener:
         self.filter_df = filter_df
         self.verbose = verbose
         self.result_col_name = result_col_name
+        self.produce_spans = False
 
         # Store column inclusion toggles
         self.include_date = include_date
@@ -145,17 +172,25 @@ class Screener:
         """
         Constructs the prompt template based on the user query and match approach.
         """
+        span_line = (
+            "Text spans should be **extremely concise**, but always verbatum from the source. "
+            "Wrap each text span in quotation marks. If multiple spans are found, separate them with semicolons (;).\n"
+            if self.produce_spans
+            else ""
+        )
+
         base_prompt_template = (
     "You are an expert text classification assistant. Your task is to read "
     "the following excerpt from a Prevention of Future Death (PFD) report and "
     "decide whether it matches the user's query. \n\n"
-    
+
     "**Instructions:** \n"
     "- Only respond 'Yes' if **all** elements of the user query are clearly present in the report. \n"
     "- If any required element is missing or there is not enough information, respond 'No'. \n"
     "- You may not infer or make judgements; the evidence must be clear."
     "- Make sure any user query related to the deceased is concerned with them *only*, not other persons.\n"
     "- Your response must be a JSON object in which 'matches_topic' can be either 'Yes' or 'No'. \n\n"
+    f"{span_line}"
     f"**User query:** \n'{current_user_query}'"
 )
 
@@ -192,9 +227,11 @@ Here is the PFD report excerpt:
         return full_template_text
 
     def screen_reports(
-        self, reports: Optional[pd.DataFrame] = None, 
+        self, reports: Optional[pd.DataFrame] = None,
         user_query: Optional[str] = None,
-        result_col_name: Optional[str] = None
+        result_col_name: Optional[str] = None,
+        produce_spans: bool = False,
+        drop_spans: bool = False,
     ) -> pd.DataFrame:
         """
         Classifies reports in the DataFrame against the user-defined topic using the LLM.
@@ -207,6 +244,13 @@ Here is the PFD report excerpt:
         user_query : str, optional
             If provided, this query will be used, overriding any query stored
             in the instance for this call. The prompt template will be rebuilt.
+        produce_spans : bool, optional
+            When ``True`` a ``spans_matches_topic`` column is created containing
+            the text snippet that justified the classification. Defaults to ``False``.
+        drop_spans : bool, optional
+            When ``True`` and ``produce_spans`` is also ``True``, the
+            ``spans_matches_topic`` column is removed from the returned
+            DataFrame. Defaults to ``False``.
 
         Returns
         ----------
@@ -226,6 +270,11 @@ Here is the PFD report excerpt:
         >>> screener.filter_df = False     # Modify screener behaviour
         >>> classified_df = screener.screen_reports(user_query="tree safety")
         """
+        # Update produce_spans flag and prompt if needed
+        if produce_spans != self.produce_spans:
+            self.produce_spans = produce_spans
+            self.prompt_template = None
+
         # Update reports if a new one is provided for this call
         if reports is not None:
             # Use a copy of the provided DataFrame for this operation
@@ -275,6 +324,10 @@ Here is the PFD report excerpt:
 
         # Determine the result column name for this call
         self.result_col_name = result_col_name if result_col_name is not None else self.result_col_name
+
+        span_col = "spans_matches_topic"
+        if self.produce_spans and span_col not in current_reports.columns:
+            current_reports[span_col] = GeneralConfig.NOT_FOUND_TEXT
 
         # --- Pre-flight checks ---
         if self.llm is None:
@@ -355,8 +408,9 @@ Here is the PFD report excerpt:
                 f"Sending {len(prompts_for_screening)} prompts to LLM.generate..."
             )
 
+        response_model = _topic_model_with_spans() if self.produce_spans else TopicMatch
         llm_results = self.llm.generate(
-            prompts=prompts_for_screening, response_format=TopicMatch
+            prompts=prompts_for_screening, response_format=response_model
         )
 
         if self.verbose:
@@ -368,15 +422,26 @@ Here is the PFD report excerpt:
 
         for i, result in enumerate(llm_results):
             original_report_index = report_indices[i]
-            if isinstance(result, TopicMatch):
+            if isinstance(result, BaseModel):
                 classification_value = result.matches_topic == "Yes"
-                temp_classifications_series.loc[original_report_index] = (
-                    classification_value
-                )
+                temp_classifications_series.loc[original_report_index] = classification_value
+                if self.produce_spans:
+                    span_val = getattr(result, "spans_matches_topic", "")
+                    if not isinstance(span_val, str) or not span_val.strip():
+                        span_val = GeneralConfig.NOT_FOUND_TEXT
+                    current_reports.at[original_report_index, span_col] = span_val
                 if self.verbose:
                     logger.debug(
                         f"Report original index {original_report_index}: LLM classified as '{result.matches_topic}' -> {classification_value}"
                     )
+            elif isinstance(result, dict):
+                classification_value = result.get("matches_topic") == "Yes"
+                temp_classifications_series.loc[original_report_index] = classification_value
+                if self.produce_spans:
+                    span_val = result.get("spans_matches_topic", "")
+                    if not isinstance(span_val, str) or not span_val.strip():
+                        span_val = GeneralConfig.NOT_FOUND_TEXT
+                    current_reports.at[original_report_index, span_col] = span_val
             else:
                 logger.error(
                     f"Error classifying report at original index {original_report_index}: {result}"
@@ -402,6 +467,14 @@ Here is the PFD report excerpt:
                 logger.warning(
                     f"'{self.result_col_name}' classification column was not added. This was unexpected!"
                 )
+
+        if drop_spans:
+            if not self.produce_spans:
+                logger.warning(
+                    "drop_spans=True has no effect because produce_spans=False"
+                )
+            else:
+                current_reports.drop(span_col, axis=1, inplace=True, errors="ignore")
 
         # --- Filter DataFrame if requested ---
         if self.filter_df:
