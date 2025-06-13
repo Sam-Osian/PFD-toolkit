@@ -119,17 +119,25 @@ class Extractor:
             if self.allow_multiple
             else "Assign only one category to each report."
         )
+        span_line = (
+            "Text spans should be as concise as possible, but always verbatum from the source."
+            "Wrap each text span in quotation marks. "
+            "If multiple spans are found, separate them with semicolons (;).\n"
+            if self.produce_spans
+            else ""
+        )
         # Include any extra user instructions if provided
         extra_instr = (self.extra_instructions.strip() + "\n") if self.extra_instructions else ""
-        
+
         # Compose the full template
-        template = f""" 
+        template = f"""
 You are an expert at extracting structured information from UK Prevention of Future Death reports.
 
 Extract the following features from the report excerpt provided.
 
 {not_found_line_prompt}
 {category_line}
+{span_line}
 {extra_instr}
 
 Return your answer strictly as a JSON object matching this schema:\n

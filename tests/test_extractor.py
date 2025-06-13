@@ -74,6 +74,7 @@ def test_extract_produce_spans():
         "spans_ethnicity",
         "ethnicity",
     ]
+    assert "quotation marks" in extractor.prompt_template
     assert result["spans_age"].iloc[0] == "age 30"
     assert result["ethnicity"].iloc[0] == "White"
     assert llm.called == 1
