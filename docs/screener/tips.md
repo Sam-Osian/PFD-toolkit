@@ -1,14 +1,14 @@
 # Tips for writing a good user query
 
 1. **Stick to one core idea.** Give the LLM a single, clear subject: “falls from hospital beds,” “carbon-monoxide poisoning at home.” In general, the shorter the prompt, the less room for misinterpretation.
-2. **Avoid nested logic.** Complex clauses like “suicide *and* medication error *but not* in custody” dilute the signal. Run separate screens (suicide; medication error; in custody) and combine or subtract results later with pandas.
+2. **Avoid nested logic.** Complex clauses like “suicide *and* medication error *but not* in custody” dilute the signal. Consider running separate screens (suicide; medication error; in custody) and combine or subtract results later with pandas.
 3. **Let the model handle synonyms.** You don’t need “defective, faulty, malfunctioning” all in the same query; “malfunctioning defibrillators” is enough.
-4. **Use positive phrasing.** Negations (e.g. “not related to COVID-19”) can flip the model’s reasoning. Screen positively, set `filter_df` to False, then drop rows in pandas.
+4. **Use positive phrasing.** Negations (e.g. “not related to COVID-19”) can flip the model’s reasoning. Screen positively, set [`filter_df`](http://127.0.0.1:8000/pfd-toolkit/screener/options/#annotation-vs-filtering) to False, then drop rows in pandas.
 5. **Keep it readable.** If your query needs multiple commas or parentheses, break it up. A one-line statement without side notes usually performs best.
 
 Examples:
 
-| Less-effective query | Why it struggles | Better query |
+| :material-close: Less-effective query | Why it struggles | :material-check: Better query |
 |---|---|---|
 | “Deaths where someone slipped or fell in hospital corridors or patient rooms and maybe had fractures but **not** clinics” | Too long, multiple settings, negative clause | “Falls on inpatient wards” |
 | “Fires or explosions causing death at home including gas leaks but **not** industrial accidents” | Mixes two ideas (home vs. industrial) plus a negation | “Domestic gas explosions” |

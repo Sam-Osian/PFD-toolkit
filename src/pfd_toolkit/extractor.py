@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import json
 import re
-import warnings
 from typing import Dict, List, Optional, Type, Union, Literal
 
 import pandas as pd
@@ -431,9 +430,8 @@ Here is the report excerpt:
         result_df = df
         if drop_spans:
             if not self.produce_spans:
-                warnings.warn(
-                    "drop_spans=True has no effect because produce_spans=False",
-                    stacklevel=2,
+                logger.warning(
+                    "drop_spans=True has no effect because produce_spans=False"
                 )
             else:
                 span_cols = [c for c in result_df.columns if c.startswith("spans_")]

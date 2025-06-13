@@ -1487,6 +1487,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "mkdocs-git-revision-date-localized-plugin" },
+    { name = "pymdown-extensions" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]
@@ -1585,6 +1586,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "mkdocs-git-revision-date-localized-plugin", specifier = ">=1.4.7" },
+    { name = "pymdown-extensions", specifier = ">=10.15" },
     { name = "pytest", specifier = ">=8.4.0" },
     { name = "pytest-cov", specifier = ">=6.1.1" },
 ]

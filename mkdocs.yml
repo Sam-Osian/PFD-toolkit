@@ -3,6 +3,8 @@ site_url: https://sam-osian.github.io/pfd-toolkit/
 repo_url: https://github.com/Sam-Osian/PFD-toolkit/
 edit_uri: edit/main/docs/
 theme:
+  icon:
+    repo: fontawesome/brands/github
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
@@ -31,11 +33,13 @@ theme:
     - search.suggest
     - search.highlight
     - social
+    - content.tooltips
 extra_css:
   - stylesheets/extra.css
 
 
 markdown_extensions:
+  - tables
   - admonition
   - codehilite
   - toc:
@@ -47,6 +51,15 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - abbr
+  - attr_list
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 plugins:
   - git-revision-date-localized:
@@ -84,6 +97,7 @@ nav:
       - Basic usage: extractor/basics.md
       - Summaries & token counts: extractor/summarising.md
       - Tagging reports with themes: extractor/themes.md
+      - Capturing text spans: extractor/spans.md
       - Caching and exporting results: extractor/caching.md
   - API Reference:
       - Data loader: reference/loader.md

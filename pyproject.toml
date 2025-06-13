@@ -123,6 +123,7 @@ dev = [
     "pytest>=8.4.0",
     "pytest-cov>=6.1.1",
     "mkdocs-git-revision-date-localized-plugin>=1.4.7",
+    "pymdown-extensions>=10.15",
 ]
 
 [project.urls]
