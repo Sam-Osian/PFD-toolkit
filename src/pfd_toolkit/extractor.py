@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import json
 import re
+import warnings
 from typing import Dict, List, Optional, Type, Union, Literal
 
 import pandas as pd
@@ -288,6 +289,7 @@ Here is the report excerpt:
         *,
         feature_model: Optional[Type[BaseModel]] = None,
         produce_spans: bool = False,
+        drop_spans: bool = False,
         force_assign: bool = False,
         allow_multiple: bool = False,
         schema_detail: Literal["full", "minimal"] = "minimal",
@@ -307,6 +309,11 @@ Here is the report excerpt:
         produce_spans : bool, optional
             When ``True``, create ``spans_`` versions of each feature to capture
             the supporting text snippets. Defaults to ``False``.
+        drop_spans : bool, optional
+            When ``True`` and ``produce_spans`` is also ``True``, remove all
+            ``spans_`` columns from the returned DataFrame after extraction.
+            If ``produce_spans`` is ``False`` a warning is emitted and no columns
+            are dropped. Defaults to ``False``.
         force_assign : bool, optional
             When ``True``, the LLM is instructed to avoid returning
             :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature.
@@ -421,9 +428,21 @@ Here is the report excerpt:
 
             self.cache[key] = values # ...cache response for reuse
 
+        result_df = df
+        if drop_spans:
+            if not self.produce_spans:
+                warnings.warn(
+                    "drop_spans=True has no effect because produce_spans=False",
+                    stacklevel=2,
+                )
+            else:
+                span_cols = [c for c in result_df.columns if c.startswith("spans_")]
+                if span_cols:
+                    result_df = result_df.drop(columns=span_cols)
+
         if reports is None: # ...update stored reports in instance
-            self.reports = df.copy()
-        return df
+            self.reports = result_df.copy()
+        return result_df
 
     # ------------------------------------------------------------------
 

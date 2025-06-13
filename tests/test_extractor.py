@@ -1,5 +1,6 @@
 import pandas as pd
 import json
+import pytest
 from pydantic import BaseModel, Field
 from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import GeneralConfig
@@ -78,6 +79,43 @@ def test_extract_produce_spans():
     assert result["spans_age"].iloc[0] == "age 30"
     assert result["ethnicity"].iloc[0] == "White"
     assert llm.called == 1
+
+
+def test_extract_drop_spans():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(
+        values={
+            "spans_age": "age 30",
+            "age": 30,
+            "spans_ethnicity": "white",
+            "ethnicity": "White",
+        }
+    )
+    extractor = Extractor(llm=llm, reports=df, include_investigation=True)
+    result = extractor.extract_features(
+        feature_model=DemoModel, produce_spans=True, drop_spans=True
+    )
+
+    assert "spans_age" not in result.columns
+    assert "spans_ethnicity" not in result.columns
+    assert result["age"].iloc[0] == 30
+    assert result["ethnicity"].iloc[0] == "White"
+    assert llm.called == 1
+
+
+def test_extract_drop_spans_warns():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(values={"age": 30, "ethnicity": "White"})
+    extractor = Extractor(llm=llm, reports=df, include_investigation=True)
+    with pytest.warns(UserWarning):
+        result = extractor.extract_features(
+            feature_model=DemoModel, produce_spans=False, drop_spans=True
+        )
+
+    assert "spans_age" not in result.columns
+    assert "spans_ethnicity" not in result.columns
+    assert result["age"].iloc[0] == 30
+    assert result["ethnicity"].iloc[0] == "White"
 
 
 def test_extract_spans_blank_replaced():
