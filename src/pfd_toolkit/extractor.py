@@ -62,6 +62,7 @@ class Extractor:
     ) -> None:
         self.llm = llm
         self.feature_model: Optional[Type[BaseModel]] = None
+        self._base_feature_model: Optional[Type[BaseModel]] = None
         self.include_date = include_date
         self.include_coroner = include_coroner
         self.include_area = include_area
@@ -74,6 +75,7 @@ class Extractor:
         self.schema_detail: Literal["full", "minimal"] = "minimal"
         self.extra_instructions: Optional[str] = None
         self.verbose = verbose
+        self.produce_spans = False
 
         # Default summary column name used by Cleaner.summarise
         self.summary_col = "summary"
@@ -138,6 +140,39 @@ Here is the report excerpt:
 {{report_excerpt}}
 """
         return template.strip()
+
+    # ------------------------------------------------------------------
+    def _add_span_fields(self, model: Type[BaseModel]) -> Type[BaseModel]:
+        """Return a new model with ``spans_`` prefixed fields added."""
+
+        base_fields = model.model_fields
+        fields = {}
+        for name, field in base_fields.items():
+            if name.startswith("spans_"):
+                fields[name] = (
+                    field.annotation,
+                    Field(..., alias=field.alias, description=field.description),
+                )
+                continue
+            span_name = f"spans_{name}"
+            fields[span_name] = (
+                str,
+                Field(
+                    ...,
+                    alias=span_name,
+                    description=f"Text spans supporting {name}",
+                ),
+            )
+            fields[name] = (
+                field.annotation,
+                Field(..., alias=field.alias, description=field.description),
+            )
+
+        return create_model(
+            f"{model.__name__}WithSpans",
+            **fields,
+            __config__=ConfigDict(extra="forbid"),
+        )
 
     # ------------------------------------------------------------------
     def _extend_feature_model(self) -> Type[BaseModel]:
@@ -244,6 +279,7 @@ Here is the report excerpt:
         reports: Optional[pd.DataFrame] = None,
         *,
         feature_model: Optional[Type[BaseModel]] = None,
+        produce_spans: bool = False,
         force_assign: bool = False,
         allow_multiple: bool = False,
         schema_detail: Literal["full", "minimal"] = "minimal",
@@ -260,6 +296,9 @@ Here is the report excerpt:
         feature_model : type[pydantic.BaseModel], optional
             Pydantic model describing the features to extract. Must be provided
             on first call or after calling :meth:`discover_themes`.
+        produce_spans : bool, optional
+            When ``True``, create ``spans_`` versions of each feature to capture
+            the supporting text snippets. Defaults to ``False``.
         force_assign : bool, optional
             When ``True``, the LLM is instructed to avoid returning
             :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature.
@@ -277,9 +316,15 @@ Here is the report excerpt:
         """
         # Update feature extraction configuration
         if feature_model is not None:
-            self.feature_model = feature_model
-        if self.feature_model is None:
+            self._base_feature_model = feature_model
+        if self._base_feature_model is None:
             raise ValueError("feature_model must be provided")
+
+        self.produce_spans = produce_spans
+        if self.produce_spans:
+            self.feature_model = self._add_span_fields(self._base_feature_model)
+        else:
+            self.feature_model = self._base_feature_model
         self.force_assign = force_assign
         self.allow_multiple = allow_multiple
         self.schema_detail = schema_detail
@@ -289,7 +334,6 @@ Here is the report excerpt:
         self._feature_schema = self._build_feature_schema(self.schema_detail)
         self.prompt_template = self._build_prompt_template()
         self._grammar_model = self._build_grammar_model()
-
         df = reports.copy() if reports is not None else self.reports.copy()
         if df.empty:
             return df
@@ -669,10 +713,12 @@ Here is the report excerpt:
         )
 
         self.feature_model = ThemeModel
+        self._base_feature_model = ThemeModel
         self.feature_names = self._collect_field_names()
         self._feature_schema = self._build_feature_schema(self.schema_detail)
         self.prompt_template = self._build_prompt_template()
         self._grammar_model = self._build_grammar_model()
+        return ThemeModel
 
 
     # ------------------------------------------------------------------
