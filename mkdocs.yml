@@ -74,8 +74,17 @@ nav:
   - Getting started: usage.md
   - Loading reports: loader.md
   - Creating an LLM client: llm_setup.md
-  - Screening relevant reports: screener.md
-  - Extracting information from reports: extractor.md
+  - Screening relevant reports:
+      - Overview: screener/index.md
+      - Getting started: screener/basics.md
+      - Additional options: screener/options.md
+      - Tips for writing a good user query: screener/tips.md
+  - Extracting information from reports:
+      - Overview: extractor/index.md
+      - Basic usage: extractor/basics.md
+      - Summaries & token counts: extractor/summarising.md
+      - Tagging reports with themes: extractor/themes.md
+      - Caching and exporting results: extractor/caching.md
   - API Reference:
       - Data loader: reference/loader.md
       - Screener: reference/screener.md

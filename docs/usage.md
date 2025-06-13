@@ -89,4 +89,4 @@ filtered_reports = screener.screen_reports()
 
 `filtered_reports` also returns a pandas DataFrame, but only contains reports that matched your query.
 
-For more information on Screening reports, see [Screening relevant reports](screener.md).
+For more information on Screening reports, see [Screening relevant reports](screener/index.md).
