@@ -406,6 +406,9 @@ Here is the report excerpt:
 
             for feat in self.feature_names:
                 val = values.get(feat, GeneralConfig.NOT_FOUND_TEXT)
+                if feat.startswith("spans_"):
+                    if not isinstance(val, str) or not val.strip():
+                        val = GeneralConfig.NOT_FOUND_TEXT
                 df.at[idx, feat] = val
 
             self.cache[key] = values # ...cache response for reuse

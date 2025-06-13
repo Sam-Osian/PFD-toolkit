@@ -79,6 +79,23 @@ def test_extract_produce_spans():
     assert llm.called == 1
 
 
+def test_extract_spans_blank_replaced():
+    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    llm = DummyLLM(
+        values={
+            "spans_age": " ",
+            "age": 30,
+            "spans_ethnicity": "",
+            "ethnicity": "White",
+        }
+    )
+    extractor = Extractor(llm=llm, reports=df, include_investigation=True)
+    result = extractor.extract_features(feature_model=DemoModel, produce_spans=True)
+
+    assert result["spans_age"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
+    assert result["spans_ethnicity"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
+
+
 def test_extractor_empty_df():
     df = pd.DataFrame(columns=["InvestigationAndInquest"])
     llm = DummyLLM(values={"age": 20, "ethnicity": "A"})
