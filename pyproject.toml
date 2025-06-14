@@ -79,6 +79,7 @@ dependencies = [
     "pdf2image==1.17.0",
     "pexpect==4.9.0",
     "pillow==11.1.0",
+    "cairosvg>=2.6",
     "platformdirs==4.3.6",
     "prompt-toolkit==3.0.50",
     "psutil==7.0.0",

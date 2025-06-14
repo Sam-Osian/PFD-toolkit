@@ -1,4 +1,5 @@
 site_name: PFD Toolkit
+site_description: "Turn raw PFD reports into structured insights — fast."
 site_url: https://sam-osian.github.io/pfd-toolkit/
 repo_url: https://github.com/Sam-Osian/PFD-toolkit/
 edit_uri: edit/main/docs/
@@ -66,6 +67,13 @@ plugins:
       type: date
       fallback_to_build_date: false
   - search
+  - social:
+      cards: true
+      cards_dir: assets/images/social
+      cards_layout_options:
+        font_family: "IBM Plex Sans"
+        background_color: "#ffffff"
+        color: "#000000"
   - autorefs
   - mkdocstrings:
       default_handler: python
