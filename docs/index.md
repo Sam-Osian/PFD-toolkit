@@ -31,7 +31,7 @@ As a result, analysing PFD reports has previously been a slow, manual process â€
 
 We've collected all PFD reports, and made them available in a single, downloadable dataset that looks like this:
 
-| URL                                   | ID         | Date       | CoronerName      | Area                           | Receiver                  | InvestigationAndInquest           | CircumstancesOfDeath       | MattersOfConcern         |
+| url                                   | id         | date       | coroner      | area                           | receiver                  | investigation           | circumstances       | concerns         |
 |----------------------------------------|------------|------------|------------------|--------------------------------|---------------------------|-----------------------------------|----------------------------|--------------------------|
 | https://www.judiciary.uk/prevention...<br> | 2025-0207 | 2025-04-30 | Alison Mutch     | Manchester South               | Flixton Road...        | On 1st October...                 | Louise Danielle...         | During the course...     |
 | https://www.judiciary.uk/prevention...<br> | 2025-0208 | 2025-04-30 | Joanne Andrews   | West Sussex...       | West Sussex County...     | On 02 November...                 | Mrs Turner drove...        | During the course...     |

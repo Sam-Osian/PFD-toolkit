@@ -30,6 +30,20 @@ Please fork the repository, create a new branch for your work, and submit a pull
 
 If your change is significant, consider opening an issue first to discuss it.
 
+## Local setup
+
+PFD Toolkit uses `uv` as its dependency management tool. Once `uv` is running on your system, install dependencies with:
+
+```bash
+uv sync
+```
+
+Run the test suite with:
+
+```bash
+uv run pytest
+```
+
 ---
 
 ### Anything else, get in touch 💬
