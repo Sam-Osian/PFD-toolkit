@@ -59,9 +59,7 @@ def test_get_report_href_values():
         delay_range=(0, 0),
         max_workers=1,
         max_requests=1,
-        html_scraping=False,
-        pdf_fallback=True,
-        llm_fallback=False,
+        scraping_strategy=[-1, 1, -1],
     )
     search_html = (
         "<html><body>"

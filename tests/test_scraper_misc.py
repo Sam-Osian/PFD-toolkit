@@ -10,9 +10,7 @@ def test_assemble_report_respects_include_flags():
         max_workers=1,
         max_requests=1,
         delay_range=(0, 0),
-        html_scraping=True,
-        pdf_fallback=False,
-        llm_fallback=False,
+        scraping_strategy=[1, -1, -1],
         include_receiver=False,
         include_time_stamp=False,
     )
