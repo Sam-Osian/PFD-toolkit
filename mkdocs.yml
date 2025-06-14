@@ -93,8 +93,11 @@ plugins:
               - "!^_" # Exclude private methods
 
 nav:
-  - Home: index.md
-  - Getting started: usage.md
+  - Home: 
+      - Home: index.md
+      - More about PFD reports: pfd_reports.md
+  - Getting started: 
+      - Getting started: usage.md
   - Load PFD reports:
       - Overview: loader/index.md
       - Loading report data: loader/load_reports.md
@@ -105,7 +108,7 @@ nav:
       - Getting started: screener/basics.md
       - Additional options: screener/options.md
       - Tips for writing a good user query: screener/tips.md
-  - Extracting information from reports:
+  - Analysing reports:
       - Overview: extractor/index.md
       - Basic usage: extractor/basics.md
       - Summaries & token counts: extractor/summarising.md

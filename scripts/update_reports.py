@@ -6,19 +6,19 @@ the repo (`../pfd_toolkit/data`).
 """
 
 import pandas as pd
-from pfd_toolkit import PFDScraper, LLM
+from pfd_toolkit import Scraper, LLM
 from pathlib import Path
 import os
 
 DATA_PATH = Path("./src/pfd_toolkit/data/all_reports.csv")
 
-# -- INITIALISE LLM CLIENT --
+# Initialise LLM client
 llm_client = LLM(api_key=os.environ["OPENAI_API_KEY"], max_workers=30)
 
-# -- INITIALISE SCRAPER ENGINE --
-scraper = PFDScraper(llm=llm_client, llm_fallback=True)
+# Initialise scraper
+scraper = Scraper(llm=llm_client, scraping_strategy=[-1,-1,1])
 
-# -- LOAD EXISTING REPORTS --
+# Load existing reports
 if DATA_PATH.exists():
     old_df = pd.read_csv(DATA_PATH)
     old_count = len(old_df)
@@ -30,11 +30,8 @@ else:
     old_count = 0
     print(f"DEBUG: {DATA_PATH} not found.")
 
-# -- GET LATEST REPORT DATE --
-# Come back to this later. I fear that an rrroneous in at least one
-# PFD report could throw this off. Hardcode start date as as 2025-01-01 for now
 
-# -- TOP UP REPORTS --
+# Top up reports
 new_df = scraper.top_up(old_reports=old_df, start_date="2025-05-01")
 
 if new_df is not None:

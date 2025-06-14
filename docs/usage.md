@@ -1,6 +1,6 @@
 # Getting started
 
-This page talks you through an example workflow using PFD Toolkit. It doesn't cover everything: for more, checkout the various pages on the left panel.
+This page talks you through an example workflow using PFD Toolkit. It doesn't cover everything: for more, take a look at the various pages on the top panel.
 
 ---
 
@@ -11,8 +11,6 @@ PFD Toolkit can be installed from pip as `pfd_toolkit`:
 ```bash
 pip install pfd_toolkit
 ```
-
-*Note: The package is not currently on Conda distributions.*
 
 ---
 
@@ -70,7 +68,7 @@ Suppose you want to screen for reports based on a description, such as:
 
 > "Deaths that occurred in police custody"
 
-PFD Toolkit's `Screener` allows you to submit this as a user query, returning relevant reports:
+PFD Toolkit's `Screener` allows you to submit this as a user query, returning relevant reports. You don't have to worry *too* much about you phrase this user query, as long as it's clear, concise and makes sense.
 
 ```python
 from pfd_toolkit import Screener
@@ -90,3 +88,11 @@ filtered_reports = screener.screen_reports(user_query=user_query)
 `filtered_reports` also returns a pandas DataFrame, but only contains reports that matched your query.
 
 For more information on Screening reports, see [Screening relevant reports](screener/index.md).
+
+---
+
+## What next?
+
+Once you've got your filtered dataset, it is ready for qualitative analysis tasks.
+
+You can do this manually, if you'd like, or you can use PFD Toolkit's [Extractor module](extractor/index.md) to surface key information from report, including recurring themes.
