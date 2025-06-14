@@ -15,7 +15,7 @@ reports = load_reports(
 )
 ```
 
-Pass a `start_date` and `end_date` to restrict the date range, and use
+Pass a `start_date` and `end_date` to restrict the date range, and optionally use
 `n_reports` to trim the DataFrame to the most recent *n* entries.
 Results are always sorted newest first.
 
@@ -23,5 +23,13 @@ The dataset is refreshed weekly.  Simply run
 `pip install --upgrade pfd_toolkit` whenever a new snapshot is
 published.
 
-See the [API reference](../reference/loader.md) for a breakdown of the
-output columns.
+
+## Caveats
+
+To collect PFD reports, we run a scraping pipeline on the judiciary.uk website every week. 
+Our scraping methods assume that the host website will not change its basic layout. Should 
+the host change their website structure, our pipeline may fail to update its catelogue of 
+reports. The existing catelogue of reports will be unaffected.
+
+Should this happen, we will notify users at the top of the [Home page](/) and provide 
+updates on when we can remedy the issue.
