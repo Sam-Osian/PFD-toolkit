@@ -42,7 +42,7 @@ from pfd_toolkit.llm import LLM
 
 
 def test_generate_sequential(monkeypatch):
-    llm = LLM(api_key="test", max_workers=1)
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
 
     def fake_create(model, messages, temperature=0.0, seed=None):
         return types.SimpleNamespace(
@@ -61,7 +61,7 @@ def test_generate_sequential(monkeypatch):
 
 
 def test_generate_parallel(monkeypatch):
-    llm = LLM(api_key="test", max_workers=4)
+    llm = LLM(api_key="test", max_workers=4, timeout=1)
 
     def fake_create(model, messages, temperature=0.0, seed=None):
         return types.SimpleNamespace(
@@ -90,7 +90,7 @@ def test_parse_with_backoff_retries(monkeypatch):
     import backoff._sync as backoff_sync
     monkeypatch.setattr(backoff_sync.time, "sleep", lambda s: None)
 
-    llm = LLM(api_key="test")
+    llm = LLM(api_key="test", timeout=1)
 
     call_counter = {"n": 0}
 
@@ -114,3 +114,39 @@ def test_estimate_tokens():
     llm = LLM(api_key="test")
     counts = llm.estimate_tokens(["hello"])
     assert counts == [len("hello".split())]
+
+
+def test_call_llm_fallback_success(monkeypatch):
+    llm = LLM(api_key="test")
+
+    # Pretend PDF conversion succeeded
+    monkeypatch.setattr(llm, "_pdf_bytes_to_base64_images", lambda b, dpi=200: ["img"])  # noqa: E501
+
+    def fake_generate(prompts, images_list=None, response_format=None, **kwargs):
+        assert images_list == [["img"]]
+        return [response_format(foo="BAR")]
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+
+    out = llm._call_llm_fallback(b"pdf", {"foo": "prompt"})
+    assert out == {"foo": "BAR"}
+
+
+def test_call_llm_fallback_error_string(monkeypatch):
+    llm = LLM(api_key="test")
+
+    monkeypatch.setattr(llm, "_pdf_bytes_to_base64_images", lambda b, dpi=200: [])
+    monkeypatch.setattr(llm, "generate", lambda **kwargs: ["Error: boom"])
+
+    out = llm._call_llm_fallback(b"pdf", {"foo": "prompt"})
+    assert out == {"foo": "LLM Fallback error"}
+
+
+def test_call_llm_fallback_missing_field(monkeypatch):
+    llm = LLM(api_key="test")
+
+    monkeypatch.setattr(llm, "_pdf_bytes_to_base64_images", lambda b, dpi=200: [])
+    monkeypatch.setattr(llm, "generate", lambda **kwargs: [{}])
+
+    out = llm._call_llm_fallback(None, {"foo": "prompt"})
+    assert out == {"foo": str(llm_module.GeneralConfig.NOT_FOUND_TEXT) + " in LLM response"}

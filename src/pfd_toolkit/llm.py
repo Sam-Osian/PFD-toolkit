@@ -1,5 +1,6 @@
 import openai
 from openai import RateLimitError, APIConnectionError, APITimeoutError
+import httpx
 import tiktoken
 import logging
 import base64
@@ -57,9 +58,12 @@ class LLM:
         Sampling temperature used for all requests; defaults to ``0.0``.
     seed : int or None, optional
         Optional deterministic seed value passed to the OpenAI API.
-    validation_attempts : int, optional
+        validation_attempts : int, optional
         Number of times to retry when parsing LLM output into a
         ``pydantic`` model fails. Defaults to ``2``.
+    timeout : float | httpx.Timeout | None, optional
+        Override the HTTP timeout in seconds. If omitted, the OpenAI
+        client default of 600 seconds (10 minutes) is used.
 
     Attributes
     ----------
@@ -72,7 +76,8 @@ class LLM:
     --------
     Basic usage::
 
-        llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2)
+        llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2,
+                  timeout=600)
         out = llm.generate(["Hello world"])
         out[0]
     """
@@ -87,11 +92,17 @@ class LLM:
         temperature: float = 0.0,
         seed: Optional[int] = None,
         validation_attempts: int = 2,
+        timeout: float | httpx.Timeout | None = None,
     ):
         self.api_key = api_key
         self.model = model
         self.base_url = base_url or openai.base_url
-        self.client = openai.Client(api_key=self.api_key, base_url=self.base_url)
+        self.timeout = timeout
+        self.client = openai.Client(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout,
+        )
 
         self.temperature = float(temperature)
         self.seed = seed
