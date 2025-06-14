@@ -22,8 +22,6 @@ def load_reports(
 
     Parameters
     ----------
-    category : str, optional
-        PFD category slug (e.g. ``"suicide"``) or ``"all"``.
     start_date : str, optional
         Inclusive lower bound for the **report date** in the ``YYYY-MM-DD``
         format.

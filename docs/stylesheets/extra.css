@@ -78,3 +78,11 @@ html {
   .md-tabs__link--active {
     color: var(--md-primary-fg-color);
   }
+/* Clickable dropdown for navigation tabs */
+.md-tabs__item .md-tabs__dropdown {
+  display: none;
+}
+.md-tabs__item--active .md-tabs__dropdown {
+  display: block;
+}
+

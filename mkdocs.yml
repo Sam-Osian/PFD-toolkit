@@ -95,7 +95,10 @@ plugins:
 nav:
   - Home: index.md
   - Getting started: usage.md
-  - Loading reports: loader.md
+  - Load PFD reports:
+      - Overview: loader/index.md
+      - Loading report data: loader/load_reports.md
+      - Scraping module: loader/scraper.md
   - Creating an LLM client: llm_setup.md
   - Screening relevant reports:
       - Overview: screener/index.md
@@ -109,13 +112,13 @@ nav:
       - Tagging reports with themes: extractor/themes.md
       - Capturing text spans: extractor/spans.md
       - Caching and exporting results: extractor/caching.md
-  - API Reference:
-      - Data loader: reference/loader.md
-      - Screener: reference/screener.md
-      - Extractor: reference/extractor.md
-      - Scraper: reference/scraper.md
-      - Cleaner: reference/cleaner.md
-      - LLM: reference/llm.md
   - Extra:
+      - API Reference:
+          - Data loader: reference/loader.md
+          - Screener: reference/screener.md
+          - Extractor: reference/extractor.md
+          - Scraper: reference/scraper.md
+          - Cleaner: reference/cleaner.md
+          - LLM: reference/llm.md
       - Changelog: changelog.md
       - Feedback & contributions: contribute.md
