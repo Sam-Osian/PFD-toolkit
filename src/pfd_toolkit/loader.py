@@ -75,13 +75,13 @@ def load_reports(
 
     # Cleaning
     # ...Parse the Date column, drop rows with invalid dates, and filter window
-    reports["Date"] = pd.to_datetime(
-        reports["Date"], format="%Y-%m-%d", errors="coerce"
+    reports["date"] = pd.to_datetime(
+        reports["date"], format="%Y-%m-%d", errors="coerce"
     )
     reports = (
-        reports.dropna(subset=["Date"])
-        .loc[lambda df: (df["Date"] >= date_from) & (df["Date"] <= date_to)]
-        .sort_values("Date", ascending=False)
+        reports.dropna(subset=["date"])
+        .loc[lambda df: (df["date"] >= date_from) & (df["date"] <= date_to)]
+        .sort_values("date", ascending=False)
         .reset_index(drop=True)
     )
 

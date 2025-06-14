@@ -11,6 +11,8 @@ import backoff
 from threading import Semaphore
 from tqdm import tqdm
 
+from .config import GeneralConfig
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, force=True)
 
@@ -363,7 +365,7 @@ class LLM:
             prompt += f"\n{field}: {instruction}\n"
         prompt += (
             "\nRespond with nothing else whatsoever. You must not respond in your own 'voice'...\n"
-            '\'If you are unable to identify the text for any section, respond exactly: "N/A: Not found".\n'
+            f"If you are unable to identify the text for any section, respond exactly: {GeneralConfig.NOT_FOUND_TEXT}.\n"
             "Transcribe redactions as '[REDACTED]'.\n"
             "Do *not* change section titles. Respond in the specified format.\n"
         )
@@ -419,7 +421,7 @@ class LLM:
                 out_json, dict
             ):  # Check if out_json is a dict
                 updates[fld] = (
-                    "N/A: Not found in LLM response"  # Field was expected but not in output
+                    f"{GeneralConfig.NOT_FOUND_TEXT} in LLM response"  # Field was expected but not in output
                 )
             elif val is not None:
                 updates[fld] = str(val)  # Ensure value is string

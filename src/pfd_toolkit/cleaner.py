@@ -57,7 +57,7 @@ class Cleaner:
     >>> cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
     >>> cleaned_df = cleaner.clean_reports()
     >>> cleaned_df.head()
-    """
+    """""
 
     # DataFrame column names
     COL_URL = GeneralConfig.COL_URL
@@ -71,22 +71,20 @@ class Cleaner:
     COL_CONCERNS = GeneralConfig.COL_CONCERNS
 
     # Base prompt template used for all cleaning operations
-    CLEANER_BASE_PROMPT = """\
-You are an expert in extracting and cleaning specific information from UK Coronial Prevention of Future Death Reports.
-
-Task:
-1. **Extract** only the information related to {field_description}.
-2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content, if any occurs.
-3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Do not replace any acronyms.
-4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.
-5. **If extraction fails**, return only and exactly: N/A: Not found
-6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. Do not ever summarise, *nor* edit for conciseness or flow.
-
-Extra instructions:
-{extra_instructions}
-
-Input Text:
-"""
+    CLEANER_BASE_PROMPT = (
+        "You are an expert in extracting and cleaning specific information from UK Coronal Prevention of Future Death Reports.\n\n"
+        "Task:\n"
+        "1. **Extract** only the information related to {field_description}.\n"
+        "2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content, if any occurs.\n"
+        "3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Do not replace any acronyms.\n"
+        "4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.\n"
+        f"5. **If extraction fails**, return only and exactly: {GeneralConfig.NOT_FOUND_TEXT}\n"
+        "6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. Do not ever summarise, *nor* edit for conciseness or flow.\n\n"
+        "Extra instructions:\n"
+        "{extra_instructions}\n\n"
+        "Input Text:\n"
+        '"""'
+    )
 
     # Field-specific configuration for prompt substitution
     CLEANER_PROMPT_CONFIG = {
@@ -412,9 +410,9 @@ Input Text:
                 final_text_to_write = cleaned_text_output  # Assume success initially
 
                 # Logic to revert to original if cleaning "failed" or LLM indicated "N/A"
-                if isinstance(cleaned_text_output, str):
+                if isinstance(cleaned_text_output, str) or pd.isna(cleaned_text_output):
                     if (
-                        cleaned_text_output == "N/A: Not found"
+                        pd.isna(cleaned_text_output)
                         or cleaned_text_output.startswith("Error:")
                         or cleaned_text_output.startswith("N/A: LLM Error")
                         or cleaned_text_output.startswith("N/A: Unexpected LLM output")

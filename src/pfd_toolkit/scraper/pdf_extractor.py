@@ -4,6 +4,7 @@ import logging
 import os
 from io import BytesIO
 from typing import Dict
+import pandas as pd
 from urllib.parse import urlparse, unquote
 
 from bs4 import BeautifulSoup
@@ -218,7 +219,7 @@ class PdfExtractor:
 
     def apply_pdf_fallback(self, pdf_text: str, fields: Dict[str, str], include_flags: Dict[str, bool]) -> None:
         # Only attempt sections that are missing
-        missing = {k for k, v in fields.items() if v == self.not_found_text}
+        missing = {k for k, v in fields.items() if pd.isna(v)}
         for cfg in self.cfg.pdf_sections:
             if cfg.key not in missing or not include_flags.get(cfg.key, False):
                 continue
@@ -227,7 +228,7 @@ class PdfExtractor:
                 start_keywords=cfg.start_keys,
                 end_keywords=cfg.end_keys,
             )
-            if raw == self.not_found_text:
+            if pd.isna(raw):
                 continue
             cleaned = clean_text(raw)
             for rem in cfg.rem_strs:
@@ -238,4 +239,4 @@ class PdfExtractor:
             ):
                 continue
             # Update fields dict with extracted section
-            fields[cfg.key] = cleaned or self.not_found_text
+            fields[cfg.key] = cleaned if cleaned else self.not_found_text

@@ -245,43 +245,43 @@ class Scraper:
                 self.include_date,
                 self.COL_DATE,
                 self.LLM_KEY_DATE,
-                "[Date of the report, not the death]",
+                f"[Date of the report, not the death. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_coroner,
                 self.COL_CORONER_NAME,
                 self.LLM_KEY_CORONER,
-                "[Name of the coroner. Provide the name only.]",
+                f"[Name of the coroner. Provide the name only. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_area,
                 self.COL_AREA,
                 self.LLM_KEY_AREA,
-                "[Area/location of the Coroner. Provide the location itself only.]",
+                f"[Area/location of the Coroner. Provide the location itself only. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_receiver,
                 self.COL_RECEIVER,
                 self.LLM_KEY_RECEIVER,
-                "[Name or names of the recipient(s) as provided in the report.]",
+                f"[Name or names of the recipient(s) as provided in the report. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_investigation,
                 self.COL_INVESTIGATION,
                 self.LLM_KEY_INVESTIGATION,
-                "[The text from the Investigation/Inquest section.]",
+                f"[The text from the Investigation/Inquest section. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_circumstances,
                 self.COL_CIRCUMSTANCES,
                 self.LLM_KEY_CIRCUMSTANCES,
-                "[The text from the Circumstances of Death section.]",
+                f"[The text from the Circumstances of Death section. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_concerns,
                 self.COL_CONCERNS,
                 self.LLM_KEY_CONCERNS,
-                "[The text from the Coroner's Concerns section.]",
+                f"[The text from the Coroner's Concerns section. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
         ]
 
@@ -815,12 +815,9 @@ class Scraper:
         if self.html_scraping:
             self._html_extractor.extract_fields_from_html(soup, fields, self._include_flags)
         # Use PDF fallback if enabled and PDF text is available
-        if self.pdf_fallback and pdf_text not in (
-            self.NOT_FOUND_TEXT,
-            "N/A: Source file not PDF",
-        ):
+        if self.pdf_fallback and pd.notna(pdf_text) and pdf_text != "N/A: Source file not PDF":
             if any( # ...only trigger when one of the main fields is missing
-                fields[key] == self.NOT_FOUND_TEXT
+                pd.isna(fields[key])
                 for key in [
                     "coroner",
                     "area",

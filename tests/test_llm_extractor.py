@@ -1,6 +1,7 @@
 import pandas as pd
 
 from pfd_toolkit.scraper.llm_extractor import run_llm_fallback
+from pfd_toolkit.config import GeneralConfig
 
 
 class DummyLLM:
@@ -30,18 +31,18 @@ class DummyPdfExtractor:
 
 def test_run_llm_fallback_basic():
     df = pd.DataFrame({
-        "URL": ["https://example.com/report1"],
-        "Date": ["N/A: Not found"],
-        "Receiver": ["N/A: Not found"],
+        GeneralConfig.COL_URL: ["https://example.com/report1"],
+        GeneralConfig.COL_DATE: [GeneralConfig.NOT_FOUND_TEXT],
+        GeneralConfig.COL_RECEIVER: [GeneralConfig.NOT_FOUND_TEXT],
     })
 
     llm = DummyLLM()
     pdf_extractor = DummyPdfExtractor()
     llm_field_config = [
-        (True, "Date", "date", "prompt-date"),
-        (True, "Receiver", "receiver", "prompt-receiver"),
+        (True, GeneralConfig.COL_DATE, "date", "prompt-date"),
+        (True, GeneralConfig.COL_RECEIVER, "receiver", "prompt-receiver"),
     ]
-    llm_to_df_mapping = {"date": "Date", "receiver": "Receiver"}
+    llm_to_df_mapping = {"date": GeneralConfig.COL_DATE, "receiver": GeneralConfig.COL_RECEIVER}
 
     result = run_llm_fallback(
         df.copy(),
@@ -49,20 +50,20 @@ def test_run_llm_fallback_basic():
         pdf_extractor=pdf_extractor,
         llm_field_config=llm_field_config,
         llm_to_df_mapping=llm_to_df_mapping,
-        col_url="URL",
-        not_found_text="N/A: Not found",
+        col_url=GeneralConfig.COL_URL,
+        not_found_text=GeneralConfig.NOT_FOUND_TEXT,
         llm_key_date="date",
         verbose=False,
     )
 
     assert pdf_extractor.called_urls == ["https://example.com/report1"]
-    assert result["Date"].iloc[0] == "2024-05-01"
-    assert result["Receiver"].iloc[0] == "VAL-receiver"
+    assert result[GeneralConfig.COL_DATE].iloc[0] == "2024-05-01"
+    assert result[GeneralConfig.COL_RECEIVER].iloc[0] == "VAL-receiver"
     assert llm.called_with[0][1] == {"date": "prompt-date", "receiver": "prompt-receiver"}
 
 
 def test_run_llm_fallback_empty_df():
-    df = pd.DataFrame(columns=["URL", "Date"])
+    df = pd.DataFrame(columns=[GeneralConfig.COL_URL, GeneralConfig.COL_DATE])
     llm = DummyLLM()
     pdf_extractor = DummyPdfExtractor()
 
@@ -72,8 +73,8 @@ def test_run_llm_fallback_empty_df():
         pdf_extractor=pdf_extractor,
         llm_field_config=[],
         llm_to_df_mapping={},
-        col_url="URL",
-        not_found_text="N/A",
+        col_url=GeneralConfig.COL_URL,
+        not_found_text=GeneralConfig.NOT_FOUND_TEXT,
         llm_key_date="date",
         verbose=False,
     )

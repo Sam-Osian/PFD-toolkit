@@ -243,8 +243,8 @@ Here is the report excerpt:
             alias = field.alias
             if self.force_assign:
                 union_type = field_type
-            else: # ...allow str fallback if force_assign is False
-                union_type = Union[field_type, str]
+            else:  # allow str or None when force_assign is False
+                union_type = Union[field_type, str, None]
             fields[name] = (union_type, Field(..., alias=alias))
 
         return create_model(
@@ -272,7 +272,7 @@ Here is the report excerpt:
             if not flag:
                 continue
             val = row.get(col)
-            if pd.notna(val) and val != GeneralConfig.NOT_FOUND_TEXT:
+            if pd.notna(val):
                 parts.append(f"{col}: {val}")
         report_text = "\n\n".join(str(p) for p in parts).strip()
         report_text = " ".join(report_text.split())
@@ -368,11 +368,7 @@ Here is the report excerpt:
             key = prompt
 
             if skip_if_present:
-                has_data = any(
-                    pd.notna(row.get(f))
-                    and row.get(f) != GeneralConfig.NOT_FOUND_TEXT
-                    for f in self.feature_names
-                )
+                has_data = any(pd.notna(row.get(f)) for f in self.feature_names)
                 if has_data and key in self.cache:
                     # Row previously processed; reuse cached values
                     cached = self.cache[key]
@@ -513,7 +509,7 @@ Here is the report excerpt:
             for flag, col, label in fields:
                 if flag and col in summary_df.columns:
                     val = row.get(col)
-                    if pd.notna(val) and val != GeneralConfig.NOT_FOUND_TEXT:
+                    if pd.notna(val):
                         parts.append(f"{label}: {str(val)}")
             if not parts:
                 prompts.append(base_prompt + "\nN/A")

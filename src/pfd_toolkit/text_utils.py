@@ -1,6 +1,7 @@
 import logging
 import re
 from dateutil import parser as date_parser
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def normalise_date(raw_date_str: str, verbose: bool = False) -> str:
 def process_extracted_field(
     text: str,
     strings_to_remove: list[str],
-    not_found_text: str,
+    not_found_text: object,
     *,
     min_len: int | None = None,
     max_len: int | None = None,
@@ -58,8 +59,12 @@ def process_extracted_field(
     verbose: bool = False,
 ) -> str:
     """Apply cleaning and validation to an extracted text field."""
-    if text == not_found_text:
-        return not_found_text
+    if pd.isna(not_found_text):
+        if pd.isna(text) or text is None or text == "":
+            return not_found_text
+    else:
+        if text == not_found_text:
+            return not_found_text
     processed_text = text
     for s_to_remove in strings_to_remove:
         processed_text = processed_text.replace(s_to_remove, "")

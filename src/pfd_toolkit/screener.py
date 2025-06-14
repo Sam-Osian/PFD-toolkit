@@ -94,15 +94,15 @@ class Screener:
     """
 
     # DataFrame column names
-    COL_URL = "URL"
-    COL_ID = "ID"
-    COL_DATE = "Date"
-    COL_CORONER_NAME = "CoronerName"
-    COL_AREA = "Area"
-    COL_RECEIVER = "Receiver"
-    COL_INVESTIGATION = "InvestigationAndInquest"
-    COL_CIRCUMSTANCES = "CircumstancesOfDeath"
-    COL_CONCERNS = "MattersOfConcern"
+    COL_URL = GeneralConfig.COL_URL
+    COL_ID = GeneralConfig.COL_ID
+    COL_DATE = GeneralConfig.COL_DATE
+    COL_CORONER_NAME = GeneralConfig.COL_CORONER_NAME
+    COL_AREA = GeneralConfig.COL_AREA
+    COL_RECEIVER = GeneralConfig.COL_RECEIVER
+    COL_INVESTIGATION = GeneralConfig.COL_INVESTIGATION
+    COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
+    COL_CONCERNS = GeneralConfig.COL_CONCERNS
 
     def __init__(
         self,
@@ -346,7 +346,7 @@ Here is the PFD report excerpt:
                 if not flag or col not in row:
                     continue
                 val = row.get(col)
-                if pd.notna(val) and val != GeneralConfig.NOT_FOUND_TEXT:
+                if pd.notna(val):
                     report_parts.append(f"{label} {str(val)}".strip())
 
             report_text = "\n\n".join(report_parts).strip()

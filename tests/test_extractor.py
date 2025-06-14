@@ -19,7 +19,8 @@ class DummyLLM:
         outputs = []
         for _ in prompts:
             if response_format is not None:
-                outputs.append(response_format(**self.values))
+                vals = {k: (None if pd.isna(v) else v) for k, v in self.values.items()}
+                outputs.append(response_format(**vals))
             else:
                 if isinstance(self.values, dict):
                     outputs.append(json.dumps(self.values))
@@ -41,7 +42,7 @@ class DemoModel(BaseModel):
 
 def test_extractor_basic():
     df = pd.DataFrame(
-        {"InvestigationAndInquest": ["text"], "CircumstancesOfDeath": ["other"]}
+        {GeneralConfig.COL_INVESTIGATION: ["text"], GeneralConfig.COL_CIRCUMSTANCES: ["other"]}
     )
     llm = DummyLLM(values={"age": 30, "ethnicity": "White"})
     extractor = Extractor(
@@ -57,7 +58,7 @@ def test_extractor_basic():
 
 
 def test_extract_produce_spans():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(
         values={
             "spans_age": "age 30",
@@ -82,7 +83,7 @@ def test_extract_produce_spans():
 
 
 def test_extract_drop_spans():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(
         values={
             "spans_age": "age 30",
@@ -104,7 +105,7 @@ def test_extract_drop_spans():
 
 
 def test_extract_drop_spans_warns():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(values={"age": 30, "ethnicity": "White"})
     extractor = Extractor(llm=llm, reports=df, include_investigation=True)
     with pytest.warns(UserWarning):
@@ -119,7 +120,7 @@ def test_extract_drop_spans_warns():
 
 
 def test_extract_spans_blank_replaced():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(
         values={
             "spans_age": " ",
@@ -131,12 +132,12 @@ def test_extract_spans_blank_replaced():
     extractor = Extractor(llm=llm, reports=df, include_investigation=True)
     result = extractor.extract_features(feature_model=DemoModel, produce_spans=True)
 
-    assert result["spans_age"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
-    assert result["spans_ethnicity"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
+    assert pd.isna(result["spans_age"].iloc[0])
+    assert pd.isna(result["spans_ethnicity"].iloc[0])
 
 
 def test_extractor_empty_df():
-    df = pd.DataFrame(columns=["InvestigationAndInquest"])
+    df = pd.DataFrame(columns=[GeneralConfig.COL_INVESTIGATION])
     llm = DummyLLM(values={"age": 20, "ethnicity": "A"})
     extractor = Extractor(
         llm=llm,
@@ -148,7 +149,7 @@ def test_extractor_empty_df():
 
 
 def test_extractor_not_found_handling():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(values={"age": GeneralConfig.NOT_FOUND_TEXT, "ethnicity": "B"})
     extractor = Extractor(
         llm=llm,
@@ -156,13 +157,13 @@ def test_extractor_not_found_handling():
         include_investigation=True,
     )
     result = extractor.extract_features(feature_model=DemoModel)
-    assert result["age"].iloc[0] == GeneralConfig.NOT_FOUND_TEXT
+    assert pd.isna(result["age"].iloc[0])
     assert result["ethnicity"].iloc[0] == "B"
     assert llm.called == 1
 
 
 def test_extractor_force_assign():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(values={"age": 40, "ethnicity": "C"})
     extractor = Extractor(
         llm=llm,
@@ -170,7 +171,7 @@ def test_extractor_force_assign():
         include_investigation=True,
     )
     extractor.extract_features(feature_model=DemoModel, force_assign=True)
-    assert GeneralConfig.NOT_FOUND_TEXT not in extractor.prompt_template
+    assert str(GeneralConfig.NOT_FOUND_TEXT) not in extractor.prompt_template
     field_info = extractor._grammar_model.model_fields["age"]
     field_type = field_info.annotation
     assert str not in getattr(field_type, "__args__", (field_type,))
@@ -178,7 +179,7 @@ def test_extractor_force_assign():
 
 
 def test_extractor_allow_multiple_prompt_line():
-    df = pd.DataFrame({"InvestigationAndInquest": ["text"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(values={"age": 10, "ethnicity": "E"})
     extractor = Extractor(
         llm=llm,
@@ -231,8 +232,8 @@ def test_feature_schema_full_and_minimal():
 def test_extract_skip_if_present_default():
     df = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
             "age": [10],
             "ethnicity": ["Z"],
         }
@@ -254,8 +255,8 @@ def test_extract_skip_if_present_partial_row():
     """Row is processed again when cache is empty despite partial data."""
     df = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
             "age": [GeneralConfig.NOT_FOUND_TEXT],
             "ethnicity": ["Cached"],
         }
@@ -277,8 +278,8 @@ def test_extract_skip_if_present_partial_row():
 def test_extract_skip_if_present_false():
     df = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
             "age": [1],
             "ethnicity": ["A"],
         }
@@ -298,8 +299,8 @@ def test_extract_skip_if_present_false():
 def test_extractor_caching():
     df = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
         }
     )
     llm = DummyLLM(values={"age": 21, "ethnicity": "C"})
@@ -314,8 +315,8 @@ def test_extractor_caching():
 
     df2 = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
             "age": [GeneralConfig.NOT_FOUND_TEXT],
             "ethnicity": [GeneralConfig.NOT_FOUND_TEXT],
         }
@@ -329,8 +330,8 @@ def test_extractor_caching():
 def test_reset_allows_rerun():
     df = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
         }
     )
     llm = DummyLLM(values={"age": 10, "ethnicity": "A"})
@@ -352,8 +353,8 @@ def test_reset_allows_rerun():
 def test_export_import_cache(tmp_path):
     df = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
         }
     )
     llm1 = DummyLLM(values={"age": 50, "ethnicity": "D"})
@@ -382,8 +383,8 @@ def test_export_import_cache(tmp_path):
 
     df2 = pd.DataFrame(
         {
-            "InvestigationAndInquest": ["text"],
-            "CircumstancesOfDeath": ["other"],
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["other"],
             "age": [GeneralConfig.NOT_FOUND_TEXT],
             "ethnicity": [GeneralConfig.NOT_FOUND_TEXT],
         }

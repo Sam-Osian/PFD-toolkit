@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 import re
 
+import pandas as pd
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -37,19 +38,19 @@ class GeneralConfig:
     """Constants that may be reused by other modules in the toolkit."""
 
     # Flag for missing data
-    NOT_FOUND_TEXT: str = "N/A: Not found"
+    NOT_FOUND_TEXT: object = pd.NA
 
     # Column names used across every DataFrame we emit
-    COL_URL = "URL"
-    COL_ID = "ID"
-    COL_DATE = "Date"
-    COL_CORONER_NAME = "CoronerName"
-    COL_AREA = "Area"
-    COL_RECEIVER = "Receiver"
-    COL_INVESTIGATION = "InvestigationAndInquest"
-    COL_CIRCUMSTANCES = "CircumstancesOfDeath"
-    COL_CONCERNS = "MattersOfConcern"
-    COL_DATE_SCRAPED = "DateScraped"
+    COL_URL = "url"
+    COL_ID = "id"
+    COL_DATE = "date"
+    COL_CORONER_NAME = "coroner"
+    COL_AREA = "area"
+    COL_RECEIVER = "receiver"
+    COL_INVESTIGATION = "investigation"
+    COL_CIRCUMSTANCES = "circumstances"
+    COL_CONCERNS = "concerns"
+    COL_DATE_SCRAPED = "date_scraped"
 
     ID_PATTERN = re.compile(r"(\d{4}-\d{4})")
 

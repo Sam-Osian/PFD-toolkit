@@ -31,12 +31,17 @@ class DummyLLM:
 
 
 def test_cleaner_basic():
-    df = pd.DataFrame({"CoronerName": ["john doe"], "Area": ["area"], "Receiver": ["x"],
-                       "InvestigationAndInquest": ["inv"], "CircumstancesOfDeath": ["circ"],
-                       "MattersOfConcern": ["conc"]})
+    df = pd.DataFrame({
+        GeneralConfig.COL_CORONER_NAME: ["john doe"],
+        GeneralConfig.COL_AREA: ["area"],
+        GeneralConfig.COL_RECEIVER: ["x"],
+        GeneralConfig.COL_INVESTIGATION: ["inv"],
+        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+        GeneralConfig.COL_CONCERNS: ["conc"],
+    })
     cleaner = Cleaner(df, DummyLLM())
     cleaned = cleaner.clean_reports()
-    assert cleaned["CoronerName"].iloc[0] == "JOHN DOE"
+    assert cleaned[GeneralConfig.COL_CORONER_NAME].iloc[0] == "JOHN DOE"
 
 
 def test_generate_prompt_template():
@@ -55,16 +60,16 @@ def test_generate_prompt_template():
 
 
 def test_cleaner_missing_column_error():
-    df = pd.DataFrame({"CoronerName": ["x"]})
+    df = pd.DataFrame({GeneralConfig.COL_CORONER_NAME: ["x"]})
     with pytest.raises(ValueError):
         Cleaner(df, DummyLLM(), include_area=True)
 
 
 def test_screener_basic():
     data = {
-        "InvestigationAndInquest": ["Contains needle text"],
-        "CircumstancesOfDeath": ["other"],
-        "MattersOfConcern": ["something"]
+        GeneralConfig.COL_INVESTIGATION: ["Contains needle text"],
+        GeneralConfig.COL_CIRCUMSTANCES: ["other"],
+        GeneralConfig.COL_CONCERNS: ["something"],
     }
     df = pd.DataFrame(data)
     llm = DummyLLM(keywords=["needle"])
@@ -75,9 +80,9 @@ def test_screener_basic():
 
 def test_screener_add_column_no_filter():
     data = {
-        "InvestigationAndInquest": ["foo"],
-        "CircumstancesOfDeath": ["bar"],
-        "MattersOfConcern": ["baz"],
+        GeneralConfig.COL_INVESTIGATION: ["foo"],
+        GeneralConfig.COL_CIRCUMSTANCES: ["bar"],
+        GeneralConfig.COL_CONCERNS: ["baz"],
     }
     df = pd.DataFrame(data)
     llm = DummyLLM(keywords=["zzz"])  # no match
@@ -88,7 +93,7 @@ def test_screener_add_column_no_filter():
 
 
 def test_screener_produce_spans():
-    df = pd.DataFrame({"InvestigationAndInquest": ["needle info"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["needle info"]})
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
     result = screener.screen_reports(user_query="needle", filter_df=False, produce_spans=True)
@@ -98,7 +103,7 @@ def test_screener_produce_spans():
 
 
 def test_screener_drop_spans():
-    df = pd.DataFrame({"InvestigationAndInquest": ["needle info"]})
+    df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["needle info"]})
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
     result = screener.screen_reports(user_query="needle", filter_df=False, produce_spans=True, drop_spans=True)
