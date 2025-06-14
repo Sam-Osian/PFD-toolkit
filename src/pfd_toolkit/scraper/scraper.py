@@ -360,8 +360,8 @@ class Scraper:
         Workflow
         --------
         1. Call :py:meth:`get_report_links`.
-        2. Extract each report in parallel via
-           :py:meth:`_extract_report_info`.
+        2. Extract each report in two stages:
+           HTML scraping followed by optional PDF fallback.
         3. Optionally invoke :py:meth:`run_llm_fallback`.
         4. Cache the final DataFrame to :pyattr:`self.reports`.
 
@@ -570,18 +570,32 @@ class Scraper:
         if not new_links:
             return None if base_df is None and old_reports is None else base_df
 
-        # Scrape details for new links
+        # Scrape details for new links in staged manner
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(
+            html_stage = list(
                 tqdm(
-                    executor.map(self._extract_report_info, new_links),
+                    executor.map(self._extract_html_stage, new_links),
                     total=len(new_links),
-                    desc="Topping up reports",
+                    desc="Topping up HTML",
                     position=0,
                     leave=True,
                 )
             )
-        new_records = [record for record in new_results if record is not None]
+        records = [r for r in html_stage if r is not None]
+
+        if self.pdf_fallback and records:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                records = list(
+                    tqdm(
+                        executor.map(self._apply_pdf_fallback_stage, records),
+                        total=len(records),
+                        desc="Topping up PDF",
+                        position=0,
+                        leave=True,
+                    )
+                )
+
+        new_records = [self._assemble_report(r["url"], r["fields"]) for r in records]
         if new_records:
             new_df = pd.DataFrame(new_records)
             updated_reports_df = (
@@ -722,25 +736,99 @@ class Scraper:
 
 
     # ──────────────────────────────────────────────────────────────────────────
+    # Internal helpers for staged scraping
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _extract_html_stage(self, url: str) -> dict[str, Any] | None:
+        """Fetch HTML and extract configured fields."""
+        fields: dict[str, str] = {
+            "id": self.NOT_FOUND_TEXT,
+            "date": self.NOT_FOUND_TEXT,
+            "receiver": self.NOT_FOUND_TEXT,
+            "coroner": self.NOT_FOUND_TEXT,
+            "area": self.NOT_FOUND_TEXT,
+            "investigation": self.NOT_FOUND_TEXT,
+            "circumstances": self.NOT_FOUND_TEXT,
+            "concerns": self.NOT_FOUND_TEXT,
+        }
+
+        soup = self._html_extractor.fetch_report_page(url)
+        if soup is None:
+            return None
+
+        pdf_link = self._pdf_extractor.get_pdf_link(soup)
+        if not pdf_link:
+            logger.error("No .pdf links found on %s", url)
+            return None
+
+        if self.html_scraping:
+            self._html_extractor.extract_fields_from_html(soup, fields, self._include_flags)
+
+        return {"url": url, "pdf_link": pdf_link, "fields": fields}
+
+    def _apply_pdf_fallback_stage(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Apply PDF fallback extraction for a single record."""
+        pdf_link = record.get("pdf_link")
+        if not pdf_link:
+            return record
+
+        pdf_text = self._pdf_extractor.extract_text_from_pdf(pdf_link)
+        fields = record["fields"]
+        if pd.notna(pdf_text) and pdf_text != "N/A: Source file not PDF":
+            if any(
+                pd.isna(fields[key])
+                for key in [
+                    "coroner",
+                    "area",
+                    "receiver",
+                    "investigation",
+                    "circumstances",
+                    "concerns",
+                ]
+            ):
+                if self.verbose:
+                    logger.debug(
+                        f"Initiating .pdf fallback for URL: {record['url']} because one or more fields are missing."
+                    )
+                self._pdf_extractor.apply_pdf_fallback(pdf_text, fields, self._include_flags)
+        return record
+
+
+    # ──────────────────────────────────────────────────────────────────────────
     # Utilities: text-cleaning & assembly
     # ──────────────────────────────────────────────────────────────────────────
 
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
-        """Handles the mechanics of scraping PFD reports for all given URLs using multithreading,
-        returning a list of result dicts."""
-        # Use a thread pool to fetch each report
+        """Scrape HTML then optionally apply PDF fallback for all given URLs."""
+
+        # Stage 1: fetch HTML pages and extract available fields
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            raw_results = list(
+            html_stage = list(
                 tqdm(
-                    executor.map(self._extract_report_info, urls),
+                    executor.map(self._extract_html_stage, urls),
                     total=len(urls),
-                    desc="Scraping reports",
+                    desc="HTML scraping",
                     position=0,
                     leave=False,
                 )
             )
-        # filter out any None failures
-        return [r for r in raw_results if r is not None]
+
+        records = [r for r in html_stage if r is not None]
+
+        # Stage 2: PDF fallback applied only when enabled
+        if self.pdf_fallback and records:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                records = list(
+                    tqdm(
+                        executor.map(self._apply_pdf_fallback_stage, records),
+                        total=len(records),
+                        desc=".pdf scraping",
+                        position=0,
+                        leave=False,
+                    )
+                )
+
+        return [self._assemble_report(r["url"], r["fields"]) for r in records]
 
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
         """Assemble a single report's data into a dictionary based on included fields."""
@@ -773,65 +861,13 @@ class Scraper:
         return report
 
     def _extract_report_info(self, url: str) -> dict[str, Any] | None:
-        """
-        Extracts text from a single PFD report page (given by URL).
+        """Extract full report information for a single URL."""
 
-        The process involves:
-          1. Fetching and parsing the HTML of the report page.
-          2. Identifying and downloading the associated PDF report.
-          3. Extracting all text from the PDF.
-          4. If `html_scraping` is enabled, attempting to extract all configured fields from the HTML.
-          5. If `pdf_fallback` is enabled and any fields are still missing, attempting to extract them
-             from the PDF text using keyword-based section extraction.
-          6. (LLM fallback is handled by `run_llm_fallback` method if enabled globally).
+        record = self._extract_html_stage(url)
+        if record is None:
+            return None
 
-        :param url: The URL of the PFD report's HTML page.
-        :return: A dictionary containing the extracted report information.
-                 Returns None if the page fetch fails or essential components (like PDF link) are missing.
-        """
-        # Initialise all fields with default "not found" text
-        fields: dict[str, str] = {
-            "id": self.NOT_FOUND_TEXT,
-            "date": self.NOT_FOUND_TEXT,
-            "receiver": self.NOT_FOUND_TEXT,
-            "coroner": self.NOT_FOUND_TEXT,
-            "area": self.NOT_FOUND_TEXT,
-            "investigation": self.NOT_FOUND_TEXT,
-            "circumstances": self.NOT_FOUND_TEXT,
-            "concerns": self.NOT_FOUND_TEXT,
-        }
-        # Fetch HTML page
-        soup = self._html_extractor.fetch_report_page(url)
-        if soup is None:
-            return None
-        # Find PDF download link
-        pdf_link = self._pdf_extractor.get_pdf_link(soup)
-        if not pdf_link:
-            logger.error("No .pdf links found on %s", url)
-            return None
-        # Download and extract PDF text
-        pdf_text = self._pdf_extractor.extract_text_from_pdf(pdf_link)
-        # Extract fields from HTML if enabled
-        if self.html_scraping:
-            self._html_extractor.extract_fields_from_html(soup, fields, self._include_flags)
-        # Use PDF fallback if enabled and PDF text is available
-        if self.pdf_fallback and pd.notna(pdf_text) and pdf_text != "N/A: Source file not PDF":
-            if any( # ...only trigger when one of the main fields is missing
-                pd.isna(fields[key])
-                for key in [
-                    "coroner",
-                    "area",
-                    "receiver",
-                    "investigation",
-                    "circumstances",
-                    "concerns",
-                ]
-            ):
-                if self.verbose:
-                    logger.debug(
-                        f"Initiating .pdf fallback for URL: {url} because one or more fields are missing."
-                    )
-                self._pdf_extractor.apply_pdf_fallback(pdf_text, fields, self._include_flags)
-        # Assemble result dictionary
-        report = self._assemble_report(url, fields)
-        return report
+        if self.pdf_fallback:
+            record = self._apply_pdf_fallback_stage(record)
+
+        return self._assemble_report(record["url"], record["fields"])

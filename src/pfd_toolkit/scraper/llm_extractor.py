@@ -73,7 +73,7 @@ def run_llm_fallback(
             for future in tqdm(
                 as_completed(future_to_idx),
                 total=len(future_to_idx),
-                desc="Running LLM fallback",
+                desc="LLM scraping",
                 position=0,
                 leave=True,
             ):
