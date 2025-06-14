@@ -559,8 +559,8 @@ Here is the report excerpt:
         Union[int, pandas.Series]
             If `return_series` is `False`, returns an `int` representing the total sum
             of all token counts across all rows for the provided field.
-            If `return_series` is `True`, returns a `pandas.Series` of token counts
-            aligned to :pyattr:`self.reports` for the provided field.
+            If ``return_series`` is ``True``, returns a :class:`pandas.Series` of token counts
+            aligned to :py:attr:`self.reports` for the provided field.
         
         """
         
@@ -609,7 +609,7 @@ Here is the report excerpt:
         column exists. All summaries are concatenated into one prompt sent to
         the LLM. The LLM should return a JSON object mapping theme names to
         descriptions. A new ``pydantic`` model is built from this mapping and
-        stored as :pyattr:`feature_model`.
+        stored as :py:attr:`feature_model`.
 
         Parameters
         ----------

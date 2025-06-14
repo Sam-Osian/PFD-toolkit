@@ -70,10 +70,11 @@ class LLM:
 
     Examples
     --------
-    >>> llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2)
-    >>> out = llm.generate(["Hello world"])
-    >>> out[0]
-    'Hello! How can I assist you today?'
+    Basic usage::
+
+        llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2)
+        out = llm.generate(["Hello world"])
+        out[0]
     """
 
 
@@ -198,8 +199,8 @@ class LLM:
             *beta/parse* endpoint; otherwise a raw string is returned.
 
         max_workers : int or None, optional
-            Thread count just for this batch.  When *None*, fall back to
-            the instance-wide :pyattr:`max_workers`.
+            Thread count just for this batch.  When ``None``, fall back to
+            the instance-wide :py:attr:`max_workers`.
 
         Returns
         -------
@@ -217,8 +218,10 @@ class LLM:
 
         Examples
         --------
-        >>> msgs = ["Summarise:\\n" + txt for txt in docs]
-        >>> summaries = llm.generate(msgs, max_workers=8)
+        Generate multiple summaries::
+
+            msgs = ["Summarise:\n" + txt for txt in docs]
+            summaries = llm.generate(msgs, max_workers=8)
         """
         tqdm_kwargs = dict(tqdm_extra_kwargs or {})
         if len(prompts) == 1:

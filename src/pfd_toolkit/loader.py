@@ -48,9 +48,11 @@ def load_reports(
 
     Examples
     --------
-    >>> from pfd_toolkit import load_reports
-    >>> df = load_reports(start_date="2020-01-01", end_date="2022-12-31", n_reports=1000)
-    >>> df.head()
+    Load reports for a specific period::
+
+        from pfd_toolkit import load_reports
+        df = load_reports(start_date="2020-01-01", end_date="2022-12-31", n_reports=1000)
+        df.head()
     """
     # Date param reading
     date_from = _date_parser.parse(start_date)

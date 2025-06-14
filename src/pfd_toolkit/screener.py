@@ -84,12 +84,13 @@ class Screener:
 
     Examples
     --------
-    >>> user_topic = "medication errors"
-    >>> llm_client = LLM()
-    >>> screener = Screener(llm=llm_client, reports=reports_df)
-    >>> screened_reports = screener.screen_reports(user_query=user_topic)
-    >>> print(f"Found {len(fscreened_reports)} report(s) on '{user_topic}'.")
-    >>> # Found 1 report(s) on 'medication errors'.
+    Basic usage::
+
+        user_topic = "medication errors"
+        llm_client = LLM()
+        screener = Screener(llm=llm_client, reports=reports_df)
+        screened_reports = screener.screen_reports(user_query=user_topic)
+        print(f"Found {len(screened_reports)} report(s) on '{user_topic}'.")
 
     """
 
@@ -233,14 +234,16 @@ Here is the PFD report excerpt:
 
         Examples
         --------
-        >>> reports_df = pd.DataFrame(data)
-        >>> screener = Screener(LLM(), reports=reports_df)
-        >>>
-        >>> # Screen reports with the initial query
-        >>> filtered_df = screener.screen_reports(user_query="medication safety")
-        >>>
-        >>> # Screen the same reports with a new query and add classification column
-        >>> classified_df = screener.screen_reports(user_query="tree safety", filter_df=False)
+        Example session::
+
+            reports_df = pd.DataFrame(data)
+            screener = Screener(LLM(), reports=reports_df)
+
+            # Screen reports with the initial query
+            filtered_df = screener.screen_reports(user_query="medication safety")
+
+            # Screen the same reports with a new query and add a classification column
+            classified_df = screener.screen_reports(user_query="tree safety", filter_df=False)
         """
         # Update produce_spans flag and prompt if needed
         if produce_spans != self.produce_spans:

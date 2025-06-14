@@ -26,7 +26,7 @@ class Cleaner:
     """Batch-clean PFD report fields with an LLM.
 
     The cleaner loops over selected columns, builds field-specific prompts,
-    calls :pyattr:`llm.generate`, and writes the returned text back into
+    calls :py:attr:`llm.generate`, and writes the returned text back into
     a copy of the DataFrame.
 
     Parameters
@@ -36,11 +36,12 @@ class Cleaner:
         or similar.
     llm : LLM
         Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
-    include_coroner, include_receiver, include_area, include_investigation,\
-    include_circumstances, include_concerns : bool, optional
-        Flags that decide which columns are processed.
-    *_prompt : str or None, optional
-        Custom prompt templates.  If *None*, defaults based on
+    include_coroner, include_receiver, include_area,
+    include_investigation, include_circumstances, include_concerns : bool, optional
+        Flags controlling which columns are processed.
+    coroner_prompt, area_prompt, receiver_prompt, investigation_prompt,
+    circumstances_prompt, concerns_prompt : str or None, optional
+        Custom prompt templates.  When ``None``, defaults based on
         :attr:`CLEANER_PROMPT_CONFIG`.
     verbose : bool, optional
         Emit info-level logs for each batch when ``True``.
@@ -54,9 +55,11 @@ class Cleaner:
 
     Examples
     --------
-    >>> cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
-    >>> cleaned_df = cleaner.clean_reports()
-    >>> cleaned_df.head()
+    Basic usage::
+
+        cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
+        cleaned_df = cleaner.clean_reports()
+        cleaned_df.head()
     """""
 
     # DataFrame column names
@@ -262,7 +265,7 @@ class Cleaner:
         """Run LLM-based cleaning for the configured columns.
 
         The method operates **in place on a copy** of
-        :pyattr:`self.reports`, so the original DataFrame is never mutated.
+        :py:attr:`self.reports`, so the original DataFrame is never mutated.
 
         Returns
         -------
@@ -273,9 +276,10 @@ class Cleaner:
 
         Examples
         --------
-        >>> cleaned = cleaner.clean_reports()
-        >>> cleaned.equals(df)
-        False
+        Basic usage::
+
+            cleaned = cleaner.clean_reports()
+            cleaned.equals(df)
         """
         cleaned_df = self.reports.copy()  # Work on a copy
 

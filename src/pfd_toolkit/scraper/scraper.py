@@ -68,8 +68,10 @@ class Scraper:
         The sequence indexes correspond to ``(HTML, PDF, LLM)``. Provide
         ``-1`` to disable a stage.  For example ``[1, 2, -1]`` runs HTML first,
         then PDF, and disables LLM scraping.
-    include_* : bool
-        Flags that control which columns appear in the output DataFrame.
+    include_url, include_id, include_date, include_coroner, include_area,
+    include_receiver, include_investigation, include_circumstances,
+    include_concerns, include_time_stamp : bool
+        Flags controlling which columns appear in the output DataFrame.
     verbose : bool
         Emit debug-level logs when *True*.
 
@@ -85,15 +87,19 @@ class Scraper:
 
     Examples
     --------
-    >>> from pfd_toolkit import Scraper
-    >>> scraper = Scraper(category="suicide",
-    ...                      start_date="2020-01-01",
-    ...                      end_date="2022-12-31",
-    ...                      scraping_strategy=[1, 2, 3],
-    ...                      llm=my_llm_client)         # Configured in LLM class
-    >>> df = scraper.scrape_reports()          # full scrape
-    >>> newer_df = scraper.top_up(df)             # later "top-up"
-    >>> added_llm_df = scraper.run_llm_fallback(df)   # apply LLM retro-actively
+    Basic usage::
+
+        from pfd_toolkit import Scraper
+        scraper = Scraper(
+            category="suicide",
+            start_date="2020-01-01",
+            end_date="2022-12-31",
+            scraping_strategy=[1, 2, 3],
+            llm=my_llm_client,
+        )
+        df = scraper.scrape_reports()          # full scrape
+        newer_df = scraper.top_up(df)          # later "top-up"
+        added_llm_df = scraper.run_llm_fallback(df)  # apply LLM retro-actively
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
@@ -401,19 +407,20 @@ class Scraper:
         --------
         1. Call :py:meth:`get_report_links`.
         2. Extract each report according to ``scraping_strategy``.
-        3. Cache the final DataFrame to :pyattr:`self.reports`.
+        3. Cache the final DataFrame to :py:attr:`self.reports`.
 
         Returns
         -------
         pandas.DataFrame
-            One row per report.  Column presence matches the *include_* flags.
+            One row per report.  Column presence matches the ``include_*`` flags.
             The DataFrame is empty if nothing was scraped.
 
         Examples
         --------
-        >>> df = scraper.scrape_reports()
-        >>> df.columns
-        Index(['URL', 'ID', 'Date', ...], dtype='object')
+        Scrape reports and inspect columns::
+
+            df = scraper.scrape_reports()
+            df.columns
         """
         # Check to see if get_report_links() has already been run; if not, run it.
         if not self.report_links:
@@ -433,21 +440,21 @@ class Scraper:
         return reports_df
 
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
-        """Ask the LLM to fill cells still set to :pyattr:`self.NOT_FOUND_TEXT`.
+        """Ask the LLM to fill cells still set to :py:attr:`self.NOT_FOUND_TEXT`.
 
-        Only the missing fields requested via *include_* flags are sent to
+        Only the missing fields requested via ``include_*`` flags are sent to
         the model, along with the report’s PDF bytes (when available).
 
         Parameters
         ----------
         reports_df : pandas.DataFrame | None
-            DataFrame to process.  Defaults to :pyattr:`self.reports`.
+            DataFrame to process.  Defaults to :py:attr:`self.reports`.
 
         Returns
         -------
         pandas.DataFrame
-            Same shape as *reports_df*, updated in place and re-cached to
-            :pyattr:`self.reports`.
+            Same shape as ``reports_df``, updated in place and re-cached to
+            :py:attr:`self.reports`.
 
         Raises
         ------
@@ -456,7 +463,9 @@ class Scraper:
 
         Examples
         --------
-        >>> updated_df = scraper.run_llm_fallback()
+        Run the fallback step after scraping::
+
+            updated_df = scraper.run_llm_fallback()
         """
         # Make sure llm param is set
         if not self.llm:
@@ -498,7 +507,7 @@ class Scraper:
         """Check for and append new PFD reports within the current parameters.
 
         If new links are found they are scraped and appended to
-        :pyattr:`self.reports`.  Any URL (or ID) already present in
+        :py:attr:`self.reports`.  Any URL (or ID) already present in
         *old_reports* is skipped.
 
         Optionally, you can override the *start_date* and *end_date*
@@ -507,7 +516,7 @@ class Scraper:
         Parameters
         ----------
         old_reports : pandas.DataFrame | None
-            Existing DataFrame.  Defaults to :pyattr:`self.reports`.
+            Existing DataFrame.  Defaults to :py:attr:`self.reports`.
         start_date, end_date : str | None
             Optionally override the scraper’s date window *for this call only*.
 
@@ -524,9 +533,10 @@ class Scraper:
 
         Examples
         --------
-        >>> updated = scraper.top_up(df, end_date="2023-01-01")
-        >>> len(updated) - len(df)     # number of new reports
-        3
+        Add new reports to an existing DataFrame::
+
+            updated = scraper.top_up(df, end_date="2023-01-01")
+            len(updated) - len(df)  # number of new reports
         """
         logger.info("Attempting to 'top up' the existing reports with new data.")
 
@@ -842,7 +852,7 @@ class Scraper:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
-        """Scrape reports according to :pyattr:`scraping_strategy`."""
+        """Scrape reports according to :py:attr:`scraping_strategy`."""
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             initial = list(
