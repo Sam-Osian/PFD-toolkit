@@ -463,15 +463,14 @@ class Scraper:
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> pd.DataFrame | None:
-        """Checks to see if there are any unscraped PFD reports within Class instance parameters.
+        """Check for and append new PFD reports within the current parameters.
 
-        If so, it reruns the scraper and appends new reports to
-        :pyattr:`self.reports` under Class instance parameters.
-
-        Any URL (or ID) already present in *old_reports* is skipped.
+        If new links are found they are scraped and appended to
+        :pyattr:`self.reports`.  Any URL (or ID) already present in
+        *old_reports* is skipped.
 
         Optionally, you can override the *start_date* and *end_date*
-        parameters from `self`.
+        parameters from ``self`` for this call only.
 
         Parameters
         ----------
@@ -570,34 +569,13 @@ class Scraper:
         if not new_links:
             return None if base_df is None and old_reports is None else base_df
 
-        # Scrape details for new links in staged manner
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            html_stage = list(
-                tqdm(
-                    executor.map(self._extract_html_stage, new_links),
-                    total=len(new_links),
-                    desc="Topping up HTML",
-                    position=0,
-                    leave=True,
-                )
-            )
-        records = [r for r in html_stage if r is not None]
-
-        if self.pdf_fallback and records:
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                records = list(
-                    tqdm(
-                        executor.map(self._apply_pdf_fallback_stage, records),
-                        total=len(records),
-                        desc="Topping up PDF",
-                        position=0,
-                        leave=True,
-                    )
-                )
-
-        new_records = [self._assemble_report(r["url"], r["fields"]) for r in records]
+        # Scrape details for new links using existing helpers
+        new_records = self._scrape_report_details(new_links)
         if new_records:
             new_df = pd.DataFrame(new_records)
+            # Apply LLM fallback if configured
+            if self.llm_fallback and self.llm:
+                new_df = self.run_llm_fallback(new_df)
             updated_reports_df = (
                 pd.concat([base_df, new_df], ignore_index=True)
                 if base_df is not None
