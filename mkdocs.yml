@@ -37,6 +37,8 @@ theme:
     - content.tooltips
 extra_css:
   - stylesheets/extra.css
+extra_templates:
+  - 404.html
 
 
 markdown_extensions:
