@@ -11,13 +11,14 @@ import os
 # Load OpenAI API key
 load_dotenv("../notebooks/api.env")
 openai_api_key = os.getenv("OPENAI_API_KEY")
-llm_client = LLM(api_key=openai_api_key, max_workers=30)
+llm_client = LLM(api_key=openai_api_key, max_workers=25,
+                 timeout=150)
 
 # Set up scraper
 scraper = Scraper(
+    start_date="2025-05-01",
     llm=llm_client,
-    scraping_strategy=[-1, -1, 1],
-    delay_range=None,
+    scraping_strategy=[3, 2, 1],
 )
 
 # Run scraper & save reports
@@ -25,4 +26,4 @@ scraper.scrape_reports()
 
 reports = scraper.reports
 
-reports.to_csv('../src/pfd_toolkit/data/all_reports.csv')
+reports.to_csv('../src/pfd_toolkit/data/all_reports_test.csv')

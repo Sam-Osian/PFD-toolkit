@@ -792,7 +792,7 @@ class Scraper:
         temp_fields = {key: self.NOT_FOUND_TEXT for key in record["fields"].keys()}
         self._html_extractor.extract_fields_from_html(soup, temp_fields, self._include_flags)
         for key, value in temp_fields.items():
-            if pd.isna(record["fields"][key]) or record["fields"][key] == self.NOT_FOUND_TEXT:
+            if pd.isna(record["fields"][key]) or record["fields"][key] is self.NOT_FOUND_TEXT:
                 record["fields"][key] = value
         return record
 

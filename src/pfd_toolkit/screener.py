@@ -153,7 +153,7 @@ class Screener:
         Constructs the prompt template based on the user query and match approach.
         """
         span_line = (
-            "Text spans should be **extremely concise**, but always verbatum from the source. "
+            "Text spans should be **extremely concise**, but always **verbatim** from the source. "
             "Wrap each text span in quotation marks. If multiple spans are found, separate them with semicolons (;).\n"
             if self.produce_spans
             else ""

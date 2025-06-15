@@ -121,7 +121,7 @@ class Extractor:
             else "Assign only one category to each report."
         )
         span_line = (
-            "Text spans should be as concise as possible, but always verbatum from the source."
+            "Text spans should be as concise as possible, but always **verbatim** from the source."
             "Wrap each text span in quotation marks. "
             "If multiple spans are found, separate them with semicolons (;).\n"
             if self.produce_spans
