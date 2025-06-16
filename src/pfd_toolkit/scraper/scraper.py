@@ -386,7 +386,7 @@ class Scraper:
             the given category/date window.
         """
         self.report_links = []
-        pbar = tqdm(desc="Fetching pages", unit="page", leave=False)
+        pbar = tqdm(desc="Fetching pages", unit="", leave=False)
         for page in count(self.start_page):
             # Build the search page URL
             page_url = self.page_template.format(page=page, **self.date_params)

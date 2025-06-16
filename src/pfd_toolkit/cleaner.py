@@ -60,7 +60,7 @@ class Cleaner:
         cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
         cleaned_df = cleaner.clean_reports()
         cleaned_df.head()
-    """""
+    """
 
     # DataFrame column names
     COL_URL = GeneralConfig.COL_URL

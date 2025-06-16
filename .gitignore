@@ -6,6 +6,7 @@ data/testreports.csv
 data/testreports_cleaned.csv
 
 # OpenAI API key
+api.env
 src/pfd_toolkit/api.env
 notebooks/api.env
 
