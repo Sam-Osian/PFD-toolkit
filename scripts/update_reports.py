@@ -32,7 +32,8 @@ else:
 
 
 # Top up reports
-new_df = scraper.top_up(old_reports=old_df, start_date="2025-05-01")
+new_df = scraper.top_up(old_reports=old_df, start_date="2025-05-01",
+                        clean=True)
 
 if new_df is not None:
     new_count = len(new_df)

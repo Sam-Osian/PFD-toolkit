@@ -27,13 +27,7 @@ scraper.scrape_reports()
 
 reports = scraper.reports
 
-# reports.to_csv('../src/pfd_toolkit/data/all_reports.csv', index=False)
-
 # Clean reports
-
-reports = load_reports()
-reports
-
 cleaner = Cleaner(llm=llm_client,
                   reports=reports)
 
