@@ -262,7 +262,7 @@ class Cleaner:
             self.COL_CONCERNS: f"{self.concerns_prompt_template}\n[TEXT]",
         }
 
-    def clean_reports(self) -> pd.DataFrame:
+    def clean_reports(self, anonymise: bool = False) -> pd.DataFrame:
         """Run LLM-based cleaning for the configured columns.
 
         The method operates **in place on a copy** of
@@ -275,6 +275,14 @@ class Cleaner:
             replaced by the LLM output (or left unchanged when the model
             returns an error marker).
 
+        Parameters
+        ----------
+        anonymise : bool, optional
+            When ``True`` append an instruction to the prompts for the
+            investigation, circumstances and concerns fields telling the
+            language model to replace any personal names and pronouns with
+            they/them/their.
+
         Examples
         --------
         Basic usage::
@@ -283,6 +291,32 @@ class Cleaner:
             cleaned.equals(df)
         """
         cleaned_df = self.reports.copy()  # Work on a copy
+
+        # Optional anonymisation instruction
+        anonymise_instruction = (
+            "Replace all personal names and pronouns with they/them/their."
+        )
+
+        investigation_prompt = self.investigation_prompt_template
+        circumstances_prompt = self.circumstances_prompt_template
+        concerns_prompt = self.concerns_prompt_template
+
+        if anonymise:
+            # Insert the instruction just before the input text portion so the
+            # LLM treats it as guidance rather than part of the text to clean
+            insertion_point = "\n\nInput Text:"
+            investigation_prompt = investigation_prompt.replace(
+                insertion_point,
+                f"\n{anonymise_instruction}{insertion_point}",
+            )
+            circumstances_prompt = circumstances_prompt.replace(
+                insertion_point,
+                f"\n{anonymise_instruction}{insertion_point}",
+            )
+            concerns_prompt = concerns_prompt.replace(
+                insertion_point,
+                f"\n{anonymise_instruction}{insertion_point}",
+            )
 
         # Define fields to process: (Config Key, Process Flag, DF Column Name, Prompt Template)
         field_processing_config = [
@@ -303,19 +337,19 @@ class Cleaner:
                 "InvestigationAndInquest",
                 self.include_investigation,
                 self.COL_INVESTIGATION,
-                self.investigation_prompt_template,
+                investigation_prompt,
             ),
             (
                 "CircumstancesOfDeath",
                 self.include_circumstances,
                 self.COL_CIRCUMSTANCES,
-                self.circumstances_prompt_template,
+                circumstances_prompt,
             ),
             (
                 "MattersOfConcern",
                 self.include_concerns,
                 self.COL_CONCERNS,
-                self.concerns_prompt_template,
+                concerns_prompt,
             ),
         ]
 

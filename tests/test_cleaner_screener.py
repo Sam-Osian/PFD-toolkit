@@ -44,6 +44,36 @@ def test_cleaner_basic():
     assert cleaned[GeneralConfig.COL_CORONER_NAME].iloc[0] == "JOHN DOE"
 
 
+def test_cleaner_anonymise_prompts():
+    df = pd.DataFrame({
+        GeneralConfig.COL_CORONER_NAME: ["john"],
+        GeneralConfig.COL_AREA: ["area"],
+        GeneralConfig.COL_RECEIVER: ["x"],
+        GeneralConfig.COL_INVESTIGATION: ["inv"],
+        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+        GeneralConfig.COL_CONCERNS: ["conc"],
+    })
+
+    captured = []
+
+    class CaptureLLM(DummyLLM):
+        def generate(self, prompts, *args, **kwargs):
+            captured.extend(prompts)
+            return super().generate(prompts, *args, **kwargs)
+
+    cleaner = Cleaner(df, CaptureLLM())
+    cleaner.clean_reports(anonymise=True)
+
+    instruction = "replace all personal names and pronouns with they/them/their"
+    for text in ["inv", "circ", "conc"]:
+        relevant = [p for p in captured if p.strip().endswith(text)]
+        assert relevant, f"no prompt captured for text {text}"
+        prompt = relevant[0]
+        lines = [line.strip().lower() for line in prompt.splitlines()]
+        idx = lines.index("input text:")
+        assert lines[idx - 2].startswith(instruction)
+
+
 def test_generate_prompt_template():
     df = pd.DataFrame({
         GeneralConfig.COL_CORONER_NAME: ["john doe"],
