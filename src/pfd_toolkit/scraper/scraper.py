@@ -13,6 +13,7 @@ from datetime import datetime
 
 from .html_extractor import HtmlExtractor
 from .pdf_extractor import PdfExtractor
+from ..cleaner import Cleaner
 
 from .llm_extractor import run_llm_fallback as _run_llm_fallback
 from ..llm import LLM
@@ -503,6 +504,7 @@ class Scraper:
         old_reports: pd.DataFrame | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        clean: bool = False,
     ) -> pd.DataFrame | None:
         """Check for and append new PFD reports within the current parameters.
 
@@ -519,6 +521,9 @@ class Scraper:
             Existing DataFrame.  Defaults to :py:attr:`self.reports`.
         start_date, end_date : str | None
             Optionally override the scraper’s date window *for this call only*.
+        clean : bool, optional
+            When ``True``, run :class:`~pfd_toolkit.Cleaner` on the newly
+            scraped rows before merging them with existing reports.
 
         Returns
         -------
@@ -618,6 +623,23 @@ class Scraper:
             # Apply LLM fallback if configured
             if self.llm_fallback and self.llm:
                 new_df = self.run_llm_fallback(new_df)
+            if clean:
+                if not self.llm:
+                    raise ValueError(
+                        "LLM client (self.llm) required when clean=True."
+                    )
+                cleaner = Cleaner(
+                    reports=new_df,
+                    llm=self.llm,
+                    include_coroner=self.include_coroner,
+                    include_receiver=self.include_receiver,
+                    include_area=self.include_area,
+                    include_investigation=self.include_investigation,
+                    include_circumstances=self.include_circumstances,
+                    include_concerns=self.include_concerns,
+                    verbose=self.verbose,
+                )
+                new_df = cleaner.clean_reports()
             updated_reports_df = (
                 pd.concat([base_df, new_df], ignore_index=True)
                 if base_df is not None

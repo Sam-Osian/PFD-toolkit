@@ -45,10 +45,10 @@ df = scraper.scrape_reports()
 The results are cached on `scraper.reports` as a pandas DataFrame. This cache lets you rerun individual stages without hitting the network again. If more reports are published later you can update the existing DataFrame with `top_up()`:
 
 ```python
-updated = scraper.top_up(existing_df=df, end_date="2025-01-31")
+updated = scraper.top_up(existing_df=df, end_date="2025-01-31", clean=True)
 ```
 
-`top_up()` only fetches new pages, meaning you avoid repeating work and keep the original ordering intact.
+`top_up()` only fetches new pages, meaning you avoid repeating work and keep the original ordering intact. When `clean=True` the new and existing rows are passed through `Cleaner.clean_reports()` for optional LLM-powered tidying.
 
 ### Applying the LLM fallback separately
 
