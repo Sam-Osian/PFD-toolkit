@@ -78,11 +78,11 @@ class Cleaner:
         "You are an expert in extracting and cleaning specific information from UK Coronal Prevention of Future Death Reports.\n\n"
         "Task:\n"
         "1. **Extract** only the information related to {field_description}.\n"
-        "2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, or redundant content, if any occurs.\n"
+        "2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, if any occur.\n"
         "3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Do not replace any acronyms.\n"
         "4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.\n"
         f"5. **If extraction fails**, return only and exactly: {GeneralConfig.NOT_FOUND_TEXT}\n"
-        "6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. Do not ever summarise, *nor* edit for conciseness or flow.\n\n"
+        "6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. **Do not ever** summarise, *nor* edit for conciseness or flow.\n\n"
         "Extra instructions:\n"
         "{extra_instructions}\n\n"
         "Input Text:\n"
@@ -93,7 +93,7 @@ class Cleaner:
     CLEANER_PROMPT_CONFIG = {
         "Coroner": {
             "field_description": "the name of the Coroner who presided over the inquest",
-            "field_contents_and_rules": "this name of the Coroner -- nothing else",
+            "field_contents_and_rules": "this name of the Coroner - nothing else",
             "extra_instructions": (
                 "Remove all reference to titles & middle name(s), if present, and replace the first name with an initial. "
                 'For example, if the string is "Mr. Joe E Bloggs", return "J. Bloggs". '
@@ -113,9 +113,10 @@ class Cleaner:
             "field_description": "the name(s)/organisation(s) of the receiver(s) of the report",
             "field_contents_and_rules": "only the name(s)/organisation(s) and, if given, their job title(s) -- nothing else",
             "extra_instructions": (
-                "Separate multiple names/organisations with semicolons (;). "
+                "Separate multiple recipients with semicolons (;). "
                 "Do not use a numbered list. "
-                "Do not separate information with commas or new lines. "
+                "Remove reference to family altogether. "
+                "Remove address(es) if given (i.e. just include the recipient). "
             ),
         },
         "InvestigationAndInquest": {
