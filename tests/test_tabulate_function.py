@@ -1,11 +1,11 @@
 import pandas as pd
 import pytest
-from pfd_toolkit.extractor import tabulate
+from pfd_toolkit.extractor import _tabulate
 
 
-def test_tabulate_boolean_columns():
+def test__tabulate_boolean_columns():
     df = pd.DataFrame({"a": [True, False, True, None], "b": [False, True, True, False]})
-    table = tabulate(df, ["a", "b"], ["A", "B"])
+    table = _tabulate(df, ["a", "b"], ["A", "B"])
     row_a = table[table["Category"] == "A"].iloc[0]
     row_b = table[table["Category"] == "B"].iloc[0]
     assert row_a["Count"] == 2
@@ -14,9 +14,9 @@ def test_tabulate_boolean_columns():
     assert row_b["Percentage"] == 50.0
 
 
-def test_tabulate_categorical_column():
+def test__tabulate_categorical_column():
     df = pd.DataFrame({"cat": ["x", "y", "x", None, "y"]})
-    table = tabulate(df, "cat", "Category")
+    table = _tabulate(df, "cat", "Category")
     counts = dict(zip(table["Category"], table["Count"]))
     assert counts["Category: x"] == 2
     assert counts["Category: y"] == 2
@@ -25,8 +25,8 @@ def test_tabulate_categorical_column():
     assert percents["Category: y"] == 40.0
 
 
-def test_tabulate_label_length_mismatch():
+def test__tabulate_label_length_mismatch():
     df = pd.DataFrame({"a": [1]})
     with pytest.raises(ValueError):
-        tabulate(df, ["a"], ["label1", "label2"])
+        _tabulate(df, ["a"], ["label1", "label2"])
 
