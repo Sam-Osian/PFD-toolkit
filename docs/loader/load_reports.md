@@ -24,6 +24,10 @@ The dataset is refreshed weekly.  Simply run
 published.
 
 
+!!! note
+    The dataset loaded when you call `load_reports()` is cleaned and fully processed. If you wish to load an uncleaned version of the dataset, we suggest running your own scrape via [`Scraper`](scraper.md).
+
+
 ## Caveats
 
 To collect PFD reports, we run a scraping pipeline on the judiciary.uk website every week. 
