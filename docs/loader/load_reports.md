@@ -9,10 +9,10 @@ the main sections.
 from pfd_toolkit import load_reports
 
 reports = load_reports(
-    start_date="2024-01-01",
-    end_date="2024-12-31",
-    n_reports=None,
-)
+    start_date="2025-01-01",
+    end_date="2025-05-01")
+
+reports.head()
 ```
 
 Pass a `start_date` and `end_date` to restrict the date range, and optionally use

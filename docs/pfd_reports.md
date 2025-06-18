@@ -8,29 +8,29 @@ Prevention of Future Death (PFD) reports are a unique, under-recognised mechanis
 
 When a coroner concludes an inquest and believes that action should be taken to prevent future deaths, they are legally obliged (under Regulation 28 of the Coroners (Investigations) Regulations 2013) to issue a PFD report. The report is sent to any person or organisation the coroner thinks could take action. This could be an NHS trust, a regulator, a private company, a local council, or even the government.
 
-The aim is simple: to prevent further deaths by highlighting systemic risks, missed opportunities, or patterns of harm that have already claimed a life.
+The aim is simple: to prevent further deaths by highlighting risks, missed opportunities, or avoidable harm that have already claimed a life.
+
+Other than through this toolkit, reports are publicly available [here](https://www.judiciary.uk/prevention-of-future-death-reports/).
 
 ## What do PFD reports look like?
 
-PFD reports tend to be short, factual documents. They usually contain:
+PFD reports tend to be short, factual documents. PFD Toolkit collects the following sections from each report:
 
- * The coroner’s name and area
+| PFD report section              | What it contains                                                                     |
+|---------------------------------|---------------------------------------------------------------------------------------------------------------------|
+| Recipient(s)   | The addressee list – every person, body or department the coroner believes has the power to act on the concerns.    |
+| Coroner name                        | Identifies the coroner by name.                  |
+| Coroner area                        | States the area of the coroner. Each area typically covers one or more local authorities.
+| Investigation and inquest       | Provides the inquest conclusion (medical cause and verdict).                   |
+| Circumstances of the death      | A concise, factual summary of how the death occurred, setting the scene for the concerns that follow.                |
+| Coroner's concerns             | Lists specific matters revealed by the evidence that give rise to a risk of future deaths.|
+| Date and signature        | The coroner dates and signs the report.                                             |
 
- * The date of the reports
 
- * The recipient(s) of the report
+!!! Note
+    The above table is a rough guide. In practice, each coroner may approach the writing of PFD reports slightly differently. For example, there is occasional overlap between the "Investigation and inquest" and "Circumstances of the death" sections.
 
- * Key details of the inquest
- 
- * The circumstances behind the death
-
- * The coroner's concerns, explaining what went wrong and why further action is needed
-
-These coroner concerns are the heart of PFD reporting. Between them, they contain a plethora of information on why so many deaths in England and Wales are preventable.
-
-But formatting varies wildly. Some reports are rich with detail; others are extremely brief. Some are typed, some are scanned PDFs, and some have inconsistent metadata or missing information. Some are correctly tagged with a broad category, while others are not for no clear reason.
-
-This variability is a big part of why working with PFDs at scale has been so difficult.
+Although each section of the report has value, when we analyse PFD reports for recurring themes, we are typically most interested in the *Concerns* section. However, information contained within other sections can help to contextualise these concerns.
 
 
 ## Why do PFD reports matter?
@@ -50,4 +50,6 @@ Because coroners have a statutory duty to write them, PFD reports sometimes iden
 
 ## How does PFD Toolkit help?
 
-PFD Toolkit addresses these barriers by automatically gathering, cleaning, and structuring every available PFD report — making them accessible, searchable, and ready for analysis at scale.
+Before PFD Toolkit, there was no automated way of screening, discovering themes, or extracting information from these reports. Researchers would have to manually screen them report-by-report, demanding months or even years of researcher time.
+
+Through this, we are hoping to lower the barrier to research for those interested in using PFD reports.

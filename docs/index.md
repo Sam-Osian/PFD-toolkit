@@ -4,21 +4,22 @@
 
 ## Background
 
-*PFD Toolkit* is an open-source Python package created to transform how researchers, policymakers, and analysts accessed and analysed Prevention of Future Death (PFD) reports from coroners in England and Wales.
+*PFD Toolkit* is an open-source Python package created to transform how researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.
 
 ### The problem
 
-PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports were chronically underused. This was for one simple reason: they were a *nightmare* to work with. Common issues included:
+PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This was for one simple reason: PFD reports are a pain to analyse. Common issues included:
 
- * No straightforward way to download reports in bulk
+ * No straightforward way to download report content in bulk
 
  * Wildly inconsistent formats, making traditional web scraping unreliable
 
- * No system for surfacing recurring themes
+ * No reliable way of automatically screening/filtering reports based on a custom query
+
+ * No system for surfacing recurring themes, or extracting other key pieces of information
 
  * Widespread miscategorisation of reports, creating research limitations
 
- * No easy way for users to screen reports for cases relevant to their research
 
 As a result, valuable insights often ended up buried beneath months or even years of manual admin. Researchers were forced to sift through thousands of reports one by one, wrestle with patchy metadata, and code themes by hand. 
 
@@ -27,19 +28,18 @@ As a result, valuable insights often ended up buried beneath months or even year
 
 PFD Toolkit acts as a one-stop-shop for extracting, screening and analysing PFD report data.
 
-The package brings together every PFD report and made them available in a single, downloadable dataset, ready for instant analysis. This dataset looks like this:
+The package brings together every PFD report (around 6000) and makes them available in a single, downloadable dataset, ready for instant analysis. 
 
-| url                                   | id         | date       | coroner      | area                           | receiver                  | investigation           | circumstances       | concerns         |
-|----------------------------------------|------------|------------|------------------|--------------------------------|---------------------------|-----------------------------------|----------------------------|--------------------------|
-| https://www.judiciary.uk/prevention...<br> | 2025-0207 | 2025-04-30 | Alison Mutch     | Manchester South               | Flixton Road...        | On 1st October...                 | Louise Danielle...         | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0208 | 2025-04-30 | Joanne Andrews   | West Sussex...       | West Sussex County...     | On 02 November...                 | Mrs Turner drove...        | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0120 | 2025-04-25 | Mary Hassell     | Inner North London             | The President...       | On 23 August...                   | Jan was a big baby...      | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0206 | 2025-04-25 | Jonathan Heath   | North Yorkshire and York       | Townhead Surgery          | On 04 June...                     | On 15 March 2024...        | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0199 | 2025-04-24 | Samantha Goward  | Norfolk                        | The Department...         | On 22 August...                   | In summary, on...          | During the course...     |
+Here is a sample of the PFD dataset:
 
+| url                        | date       | coroner    | area                        | receiver                | investigation           | circumstances                 | concerns                   |
+|----------------------------|------------|------------|-----------------------------|-------------------------|-------------------------|-------------------------------|----------------------------|
+| [...]            | 2025-05-01 | A. Hodson  | Birmingham and...    | NHS England; The Rob... | On 9th December 2024... | At 10.45am on 23rd November...| To The Robert Jones... |
+| [...]           | 2025-04-30 | J. Andrews | West Sussex, Br...| West Sussex C... | On 2 November 2024 I... | They drove their car into...   | The inquest was told t...  |
+| [...]            | 2025-04-30 | A. Mutch   | Manchester Sou...            | Fluxton Road Medical... | On 1 October 2024 I...  | They were prescribed long...   | The inquest heard evide... |
+| [...]            | 2025-04-25 | J. Heath   | North Yorkshire...   | Townhead Surgery        | On 4th June 2024 I...   | On 15 March 2024, Richar...    | When a referral docume...  |
+| [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
-
-> As of the latest update, PFD Toolkit includes **5720** PFD reports.
 
 
 ---
@@ -56,7 +56,10 @@ PFD Toolkit was built to break down every major barrier to PFD report analysis. 
 5. Tag and organise reports based on these themes (or provide your own themes!)
 
 
-Data is updated once a week, with newly published reports added to the toolkit.
+!!! Note
+
+    The dataset is refreshed each week, with newly published reports being added to the dataset. 
+    You don't have to update PFD Toolkit to access new reports.
 
 
 ---
