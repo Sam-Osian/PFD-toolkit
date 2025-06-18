@@ -103,7 +103,6 @@ class Scraper:
 
     Examples
     --------
-    Basic usage::
 
         from pfd_toolkit import Scraper
         scraper = Scraper(

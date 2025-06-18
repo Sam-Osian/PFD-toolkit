@@ -12,7 +12,6 @@ _DATA_FILE: Final[str] = "all_reports.csv"
 
 
 def load_reports(
-    category: str = "all",
     start_date: str = "2000-01-01",
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
@@ -21,8 +20,6 @@ def load_reports(
 
     Parameters
     ----------
-    category : str, optional
-        Judiciary category slug. Defaults to ``"all"``.
     start_date : str, optional
         Inclusive lower bound for the report date in ``YYYY-MM-DD`` format.
         Defaults to ``"2000-01-01"``.
@@ -48,12 +45,11 @@ def load_reports(
 
     Examples
     --------
-    Load reports for a specific period::
-
         from pfd_toolkit import load_reports
-        df = load_reports(start_date="2020-01-01", end_date="2022-12-31", n_reports=1000)
+        df = load_reports(start_date="2020-01-01", end_date="2022-12-31", n_reports=100)
         df.head()
     """
+    
     # Date param reading
     date_from = _date_parser.parse(start_date)
     date_to = _date_parser.parse(end_date)
@@ -89,8 +85,5 @@ def load_reports(
     if n_reports is not None:
         # .head(n) will return all rows if n > len(reports)
         reports = reports.head(n_reports).reset_index(drop=True)
-
-    # Category filtering placeholder
-    # _ = category.lower()
 
     return reports

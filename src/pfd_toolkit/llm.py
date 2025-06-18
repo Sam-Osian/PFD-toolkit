@@ -20,19 +20,9 @@ logging.basicConfig(level=logging.INFO, force=True)
 # Set the log level for the 'httpx' library to WARNING to reduce verbosity
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Silence the ratelimit package
-# logging.getLogger("ratelimit").setLevel(logging.WARNING)
-
-# Disable all logging calls from pfd_toolkit.llm
-# logging.getLogger("pfd_toolkit.llm").disabled = True
-
-# Silence the OpenAI client’s info-level logs
-# logging.getLogger("openai").setLevel(logging.WARNING)
-
 
 class LLM:
-    """Wrapper around the OpenAI Python SDK for batch prompting and PDF vision
-    fallback.
+    """Wrapper around the OpenAI Python SDK for batch prompting.
 
     The helper provides:
 
@@ -74,12 +64,9 @@ class LLM:
 
     Examples
     --------
-    Basic usage::
 
-        llm = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2,
+        llm_client = LLM(api_key="sk-...", model="gpt-4o-mini", temperature=0.2,
                   timeout=600)
-        out = llm.generate(["Hello world"])
-        out[0]
     """
 
 

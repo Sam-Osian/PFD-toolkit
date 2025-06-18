@@ -68,23 +68,22 @@ class Screener:
     verbose : bool, optional
         If True, print more detailed logs. Defaults to False.
     include_date : bool, optional
-        Flag to determine if the 'Date' column is included. Defaults to False.
+        Flag to determine if the 'date' column is included. Defaults to False.
     include_coroner : bool, optional
-        Flag to determine if the 'CoronerName' column is included. Defaults to False.
+        Flag to determine if the 'coroner' column is included. Defaults to False.
     include_area : bool, optional
-        Flag to determine if the 'Area' column is included. Defaults to False.
+        Flag to determine if the 'area' column is included. Defaults to False.
     include_receiver : bool, optional
-        Flag to determine if the 'Receiver' column is included. Defaults to False.
+        Flag to determine if the 'receiver' column is included. Defaults to False.
     include_investigation : bool, optional
-        Flag to determine if the 'InvestigationAndInquest' column is included. Defaults to True.
+        Flag to determine if the 'investigation' column is included. Defaults to True.
     include_circumstances : bool, optional
-        Flag to determine if the 'CircumstancesOfDeath' column is included. Defaults to True.
+        Flag to determine if the 'circumstances' column is included. Defaults to True.
     include_concerns : bool, optional
-        Flag to determine if the 'MattersOfConcern' column is included. Defaults to True.
+        Flag to determine if the 'concerns' column is included. Defaults to True.
 
     Examples
     --------
-    Basic usage::
 
         user_topic = "medication errors"
         llm_client = LLM()
@@ -234,7 +233,6 @@ Here is the PFD report excerpt:
 
         Examples
         --------
-        Example session::
 
             reports_df = pd.DataFrame(data)
             screener = Screener(LLM(), reports=reports_df)

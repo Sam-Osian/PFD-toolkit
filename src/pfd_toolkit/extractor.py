@@ -29,21 +29,21 @@ class Extractor:
         DataFrame of PFD reports. When provided it is copied and stored on the
         instance. Defaults to ``None``.
     include_date : bool, optional
-        Include the ``Date`` column in prompts. Defaults to ``False``.
+        Include the ``date`` column in prompts. Defaults to ``False``.
     include_coroner : bool, optional
-        Include the ``Coroner`` column in prompts. Defaults to ``False``.
+        Include the ``coroner`` column in prompts. Defaults to ``False``.
     include_area : bool, optional
-        Include the ``Area`` column in prompts. Defaults to ``False``.
+        Include the ``area`` column in prompts. Defaults to ``False``.
     include_receiver : bool, optional
-        Include the ``Receiver`` column in prompts. Defaults to ``False``.
+        Include the ``receiver`` column in prompts. Defaults to ``False``.
     include_investigation : bool, optional
-        Include the ``InvestigationAndInquest`` column in prompts. Defaults to
+        Include the ``investigation`` column in prompts. Defaults to
         ``True``.
     include_circumstances : bool, optional
-        Include the ``CircumstancesOfDeath`` column in prompts. Defaults to
+        Include the ``circumstances`` column in prompts. Defaults to
         ``True``.
     include_concerns : bool, optional
-        Include the ``MattersOfConcern`` column in prompts. Defaults to ``True``.
+        Include the ``concerns`` column in prompts. Defaults to ``True``.
     verbose : bool, optional
         Emit extra logging when ``True``. Defaults to ``False``.
     """

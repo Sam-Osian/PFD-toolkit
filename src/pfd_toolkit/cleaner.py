@@ -35,17 +35,17 @@ class Cleaner:
     llm : LLM
         Instance of the ``LLM`` helper used for prompting.
     include_coroner : bool, optional
-        Clean the ``Coroner`` column. Defaults to ``True``.
+        Clean the ``coroner`` column. Defaults to ``True``.
     include_receiver : bool, optional
-        Clean the ``Receiver`` column. Defaults to ``True``.
+        Clean the ``receiver`` column. Defaults to ``True``.
     include_area : bool, optional
-        Clean the ``Area`` column. Defaults to ``True``.
+        Clean the ``area`` column. Defaults to ``True``.
     include_investigation : bool, optional
-        Clean the ``InvestigationAndInquest`` column. Defaults to ``True``.
+        Clean the ``investigation`` column. Defaults to ``True``.
     include_circumstances : bool, optional
-        Clean the ``CircumstancesOfDeath`` column. Defaults to ``True``.
+        Clean the ``circumstances`` column. Defaults to ``True``.
     include_concerns : bool, optional
-        Clean the ``MattersOfConcern`` column. Defaults to ``True``.
+        Clean the ``concerns`` column. Defaults to ``True``.
     coroner_prompt : str or None, optional
         Custom prompt for the coroner field. Defaults to ``None``.
     area_prompt : str or None, optional
@@ -70,7 +70,6 @@ class Cleaner:
 
     Examples
     --------
-    Basic usage::
 
         cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
         cleaned_df = cleaner.clean_reports()
@@ -299,10 +298,9 @@ class Cleaner:
 
         Examples
         --------
-        Basic usage::
-
+            cleaner = Cleaner(llm=llm_client, reports=reports)
             cleaned = cleaner.clean_reports()
-            cleaned.equals(df)
+
         """
         cleaned_df = self.reports.copy()  # Work on a copy
 
