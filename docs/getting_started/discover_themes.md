@@ -52,9 +52,9 @@ IdentifiedThemes = extractor.discover_themes(
     `Extractor` will warn you if the word count of your summaries is too high. In these cases, you might want to set your `trim_intensity` to `high` or `very high` (though please note that the more we trim, the more detail we lose).
 
 
-`IdentifiedThemes` is a Pydantic model whose boolean fields represent the themes the LLM found. You can print it to inspect the descriptions of each theme.
+`IdentifiedThemes` is a Pydantic model containing our list of themes.
 
-`IdentifiedThemes` is not printable in itself, but it is replicated as a JSON in `self.identified_themes` which we can print:
+It is not printable in itself, but it is internally replicated as a JSON which we can print:
 
 ```python
 print(extractor.identified_themes)
@@ -95,7 +95,7 @@ This gives us a record of each proposed theme with an accompanying description:
 
 ## Tag the reports
 
-Above, we've only identified the themes: we haven't assigned these themes to the reports.
+Above, we've only identified the themes: we haven't assigned these themes to each of our the reports.
 
 Once you have the theme model, pass it back into the extractor to assign themes to every report in the dataset:
 

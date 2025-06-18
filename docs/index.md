@@ -8,7 +8,9 @@
 
 ### The problem
 
-PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This was for one simple reason: PFD reports are a pain to analyse. Common issues included:
+PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This is for one simple reason: PFD reports are a pain to analyse. 
+
+Common issues include:
 
  * No straightforward way to download report content in bulk
 
@@ -21,14 +23,14 @@ PFD reports have long served as urgent public warnings — issued when coroners 
  * Widespread miscategorisation of reports, creating research limitations
 
 
-As a result, valuable insights often ended up buried beneath months or even years of manual admin. Researchers were forced to sift through thousands of reports one by one, wrestle with patchy metadata, and code themes by hand. 
+As a result, valuable insights often ends up buried beneath months or even years of manual admin. Researchers are forced to sift through thousands of reports, one-by-one, wrestle with absent metadata, and code themes by hand. 
 
 
 ### Our solution
 
 PFD Toolkit acts as a one-stop-shop for extracting, screening and analysing PFD report data.
 
-The package brings together every PFD report (around 6000) and makes them available in a single, downloadable dataset, ready for instant analysis. 
+The package brings together every PFD report (currently just under 6000) and makes them available in a single, downloadable dataset, ready for instant analysis. 
 
 Here is a sample of the PFD dataset:
 
@@ -53,13 +55,7 @@ PFD Toolkit was built to break down every major barrier to PFD report analysis. 
 
 4. Automatically discover recurring themes
 
-5. Tag and organise reports based on these themes (or provide your own themes!)
-
-
-!!! Note
-
-    The dataset is refreshed each week, with newly published reports being added to the dataset. 
-    You don't have to update PFD Toolkit to access new reports.
+5. Extract other kinds of information, such as age, sex and cause of death
 
 
 ---

@@ -18,24 +18,25 @@ PFD reports tend to be short, factual documents. PFD Toolkit collects the follow
 
 | PFD report section              | What it contains                                                                     |
 |---------------------------------|---------------------------------------------------------------------------------------------------------------------|
-| Recipient(s)   | The addressee list – every person, body or department the coroner believes has the power to act on the concerns.    |
+| URL | The URL of the report.
+| ID | The ID number associated with the report.
+| Date | The date that the report was published. Note that this is not the date of death.
 | Coroner name                        | Identifies the coroner by name.                  |
 | Coroner area                        | States the area of the coroner. Each area typically covers one or more local authorities.
+| Recipient(s)   | The addressee list – every person, body or department the coroner believes has the power to act on the concerns.    |
 | Investigation and inquest       | Provides the inquest conclusion (medical cause and verdict).                   |
 | Circumstances of the death      | A concise, factual summary of how the death occurred, setting the scene for the concerns that follow.                |
 | Coroner's concerns             | Lists specific matters revealed by the evidence that give rise to a risk of future deaths.|
-| Date and signature        | The coroner dates and signs the report.                                             |
 
 
 !!! Note
     The above table is a rough guide. In practice, each coroner may approach the writing of PFD reports slightly differently. For example, there is occasional overlap between the "Investigation and inquest" and "Circumstances of the death" sections.
 
-Although each section of the report has value, when we analyse PFD reports for recurring themes, we are typically most interested in the *Concerns* section. However, information contained within other sections can help to contextualise these concerns.
 
 
 ## Why do PFD reports matter?
 
-PFD reports offer us a rare window into risks and failures that may not appear in routine data. They can expose themes including, but not limited to:
+PFD reports offer us a rare window into risks and failures that may not appear in routine data. They can expose themes including, but absolutely not limited to:
 
 * Missed diagnoses and medical errors
 
@@ -45,7 +46,7 @@ PFD reports offer us a rare window into risks and failures that may not appear i
 
 * Inadequate policies or regulatory oversight
 
-Because coroners have a statutory duty to write them, PFD reports sometimes identify entirely new risks — before they turn into trends. For researchers and policymakers, they are a critical early-warning system.
+Because coroners have a statutory duty to write them, PFD reports sometimes identify entirely new risks — before they turn into trends. For researchers and policymakers, they are therefore a critical early-warning system.
 
 
 ## How does PFD Toolkit help?

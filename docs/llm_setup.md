@@ -38,9 +38,43 @@ online_med_reports = screener.screen_reports(user_query=query)
 
 For more information about usage costs, see [OpenAI pricing](https://openai.com/api/pricing/).
 
+## Speed up your LLM
 
-## Why do I need an LLM client anyway?
+Process more reports in parallel by increasing the `max_workers` parameter. By default, this is set to `8`, but larger values can lead to faster run-times.
 
-Many toolkit features - like advanced cleaning, screening, and assigning themes - rely on AI, which goes far beyond what’s possible with rule-based scripts. If you want to use these features, you’ll need to set up an LLM client as described above.
+```python
+llm_client = LLM(
+    api_key=openai_api_key,
+    max_workers=30      # Increase parallelisation
+)
+```
 
-We’ve made the setup as simple as possible, especially if you’re new to APIs. If you get stuck, please [reach out](contact.md): we’re happy to help.
+!!! note
+    OpenAI enforces rate limits for each account and model. If you set `max_workers` too high, you may hit these limits and see errors or slowdowns. PFD Toolkit will automatically pause and retry if a rate limit is reached, but it’s best to keep `max_workers` within a reasonable range (usually 8 to 20 for most users). 
+    
+    Your exact rate limit may depend on the 'tier' of your OpenAI account as well as the model you're using. If you need higher limits, you may be able to apply for an increase in your OpenAI account settings.
+
+
+## Change your model
+
+By default, PFD Toolkit uses `gpt-4.1-mini`. We love this model as it balances cost, speed, and accuracy. We also recommend its larger equivalent, `gpt-4.1`, which may offer improved performance, though with additional API costs and less forgiving rate limits.
+
+
+```python
+llm_client = LLM(
+    api_key=openai_api_key,
+    model="gpt-4.1"     # Set model here
+)
+```
+See OpenAI's [documentation](https://platform.openai.com/docs/models) for a complete list of their models.
+
+## Use a custom endpoint
+
+You can set a custom endpoint (e.g. for Azure, Ollama, etc.) if it supports the OpenAI SDK:
+
+```python
+llm_client = LLM(
+    api_key=openai_api_key,
+    base_url="https://..."   # Set your custom endpoint
+)
+```
