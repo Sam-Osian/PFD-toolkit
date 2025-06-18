@@ -546,10 +546,10 @@ Here is the report excerpt:
 
         Parameters
         ----------
-        summary_col : str, optional
+        col_name : str, optional
             Name of the column containing report summaries. Defaults to
-            excerpt:`summary_col`, which is generated after running
-            `self.summarise()`.
+            :pyattr:`summary_col`, which is generated after running
+            :py:meth:`summarise`.
         return_series : bool, optional
             Returns a pandas.Series of per-row token counts for that field
             if ``True``, or an integer if ``False``. Defaults to ``False``.

@@ -31,5 +31,5 @@ Our scraping methods assume that the host website will not change its basic layo
 the host change their website structure, our pipeline may fail to update its catelogue of 
 reports. The existing catelogue of reports will be unaffected.
 
-Should this happen, we will notify users at the top of the [Home page](/) and provide 
+Should this happen, we will notify users at the top of the [Home page](../index.md) and provide
 updates on when we can remedy the issue.

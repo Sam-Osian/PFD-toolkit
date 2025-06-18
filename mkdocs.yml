@@ -96,6 +96,7 @@ nav:
   - Home: 
       - Home: index.md
       - More about PFD reports: pfd_reports.md
+      - Not a coder?: non_coders.md
   - Getting started: 
       - Getting started: usage.md
   - Load PFD reports:

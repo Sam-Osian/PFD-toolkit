@@ -17,7 +17,7 @@ We appreciate that not everyone using this package will have worked with API key
 
 ## Setting up your LLM client
 
-Import the `LLM` class and provide your API key ([see below for details](#what-is-an-api-key-why-do-i-need-one)):
+Import the `LLM` class and provide your API key ([see below for details](#what-is-an-api-key)):
 
 ```py
 from pfd_toolkit import LLM
