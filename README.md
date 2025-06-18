@@ -4,7 +4,7 @@ Turn raw PFD reports into structured insights — fast.
 
 PFD Toolkit is a suite of tools that replaces the manual effort involved in the collection, screening, and thematic discovery of PFD reports. It helps researchers, journalists, and public health analysts turn raw reports into actionable insights.
 
-
+For more information, please consult the [documentation](https://sam-osian.github.io/PFD-toolkit/).
 
 ## Getting started
 
@@ -25,25 +25,24 @@ To load PFD data, just import the module, specify the category of reports and yo
 from pfd_toolkit import load_reports
 
 reports = load_reports(
-    category='all',
     start_date="2024-01-01",
     end_date="2025-01-01"
 )
 ```
 
-
 `reports` will be a pandas DataFrame. Each row is a separate report, and each column is a report section. For example:
 
 
-| url                                   | id         | date       | coroner_name      | area                           | receiver                  | investigation           | circumstances       | concerns         |
-|----------------------------------------|------------|------------|------------------|--------------------------------|---------------------------|-----------------------------------|----------------------------|--------------------------|
-| https://www.judiciary.uk/prevention...<br> | 2025-0207 | 2025-04-30 | Alison Mutch     | Manchester South               | Flixton Road...        | On 1st October...                 | Louise Danielle...         | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0208 | 2025-04-30 | Joanne Andrews   | West Sussex...       | West Sussex County...     | On 02 November...                 | Mrs Turner drove...        | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0120 | 2025-04-25 | Mary Hassell     | Inner North London             | The President...       | On 23 August...                   | Jan was a big baby...      | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0206 | 2025-04-25 | Jonathan Heath   | North Yorkshire and York       | Townhead Surgery          | On 04 June...                     | On 15 March 2024...        | During the course...     |
-| https://www.judiciary.uk/prevention...<br> | 2025-0199 | 2025-04-24 | Samantha Goward  | Norfolk                        | The Department...         | On 22 August...                   | In summary, on...          | During the course...     |
+| url                        | date       | coroner    | area                        | receiver                | investigation           | circumstances                 | concerns                   |
+|----------------------------|------------|------------|-----------------------------|-------------------------|-------------------------|-------------------------------|----------------------------|
+| [...]            | 2025-05-01 | A. Hodson  | Birmingham and...    | NHS England; The Rob... | On 9th December 2024... | At 10.45am on 23rd November...| To The Robert Jones... |
+| [...]           | 2025-04-30 | J. Andrews | West Sussex, Br...| West Sussex C... | On 2 November 2024 I... | They drove their car into...   | The inquest was told t...  |
+| [...]            | 2025-04-30 | A. Mutch   | Manchester Sou...            | Fluxton Road Medical... | On 1 October 2024 I...  | They were prescribed long...   | The inquest heard evide... |
+| [...]            | 2025-04-25 | J. Heath   | North Yorkshire...   | Townhead Surgery        | On 4th June 2024 I...   | On 15 March 2024, Richar...    | When a referral docume...  |
+| [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
-For more information on each of these columns / report sections, please see the package documentation. 
+
+For more information on each of these columns / report sections, please see the [documentation](https://sam-osian.github.io/PFD-toolkit/). 
 
 
 ### Update reports
@@ -74,5 +73,4 @@ This project is distributed under the GNU Affero General Public License v3.0 (AG
 **Please note:**
 - You are welcome to use, modify, and share this code under the terms of the AGPL-3.0.
 - If you use this code to provide a networked service, you are required to make the complete source code available to users of that service.
-- Some project dependencies may have their own licence terms, which could affect certain types of use.
-- If you plan to use this software in a commercial or proprietary setting, please review all relevant licences to ensure compliance.
+- Some project dependencies may have their own licence terms, which could affect certain types of use (e.g. commercial use). Please review all relevant licences to ensure compliance.
