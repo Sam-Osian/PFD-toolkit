@@ -17,34 +17,34 @@ def load_reports(
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
 ) -> pd.DataFrame:
-    """Utility for loading the fully-cleaned **Prevention of Future Death**
-    report dataset shipped with *pfd_toolkit* as a :class:`pandas.DataFrame`.
+    """Load the bundled Prevention of Future Death reports as a DataFrame.
 
     Parameters
     ----------
+    category : str, optional
+        Judiciary category slug. Defaults to ``"all"``.
     start_date : str, optional
-        Inclusive lower bound for the **report date** in the ``YYYY-MM-DD``
-        format.
+        Inclusive lower bound for the report date in ``YYYY-MM-DD`` format.
+        Defaults to ``"2000-01-01"``.
     end_date : str, optional
-        Inclusive upper bound for the **report date** in the ``YYYY-MM-DD``
-        format.
+        Inclusive upper bound for the report date in ``YYYY-MM-DD`` format.
+        Defaults to ``"2050-01-01"``.
     n_reports : int or None, optional
-        If given, keep only the most recent *n_reports* (based on the “Date” column)
-        after filtering by date. If `None` (the default), return all reports
-        in the specified date range.
+        Keep only the most recent ``n_reports`` rows after filtering by date.
+        ``None`` (the default) returns all rows.
 
     Returns
     -------
     pandas.DataFrame
-        Reports filtered by date, sorted newest-first, and (optionally) truncated
-        to the first *n_reports* rows.
+        Reports filtered by date, sorted newest first and optionally
+        limited to ``n_reports`` rows.
 
     Raises
     ------
     ValueError
         If *start_date* is after *end_date*.
     FileNotFoundError
-        If the bundled CSV cannot be located (i.e. a package-level error).
+        If the bundled CSV cannot be located.
 
     Examples
     --------

@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class Scraper:
     """Scrape UK “Prevention of Future Death” (PFD) reports into a
-    :class:`pandas.DataFrame`.
+    pandas.DataFrame.
 
     The extractor runs in three cascading layers
     (`html → pdf → llm`), each independently switchable.
@@ -69,20 +69,35 @@ class Scraper:
         The sequence indexes correspond to ``(HTML, PDF, LLM)``. Provide
         ``-1`` to disable a stage.  For example ``[1, 2, -1]`` runs HTML first,
         then PDF, and disables LLM scraping.
-    include_url, include_id, include_date, include_coroner, include_area,
-    include_receiver, include_investigation, include_circumstances,
-    include_concerns, include_time_stamp : bool
-        Flags controlling which columns appear in the output DataFrame.
+    include_url : bool, optional
+        Include the ``url`` column. Defaults to ``True``.
+    include_id : bool, optional
+        Include the ``id`` column. Defaults to ``True``.
+    include_date : bool, optional
+        Include the ``date`` column. Defaults to ``True``.
+    include_coroner : bool, optional
+        Include the ``coroner`` column. Defaults to ``True``.
+    include_area : bool, optional
+        Include the ``area`` column. Defaults to ``True``.
+    include_receiver : bool, optional
+        Include the ``receiver`` column. Defaults to ``True``.
+    include_investigation : bool, optional
+        Include the ``investigation`` column. Defaults to ``True``.
+    include_circumstances : bool, optional
+        Include the ``circumstances`` column. Defaults to ``True``.
+    include_concerns : bool, optional
+        Include the ``concerns`` column. Defaults to ``True``.
+    include_time_stamp : bool, optional
+        Include a ``date_scraped`` column. Defaults to ``False``.
     verbose : bool
         Emit debug-level logs when *True*.
 
     Attributes
     ----------
     reports : pandas.DataFrame | None
-        Cached result of the last call to :py:meth:`scrape_reports`
-        or :py:meth:`top_up`.
+        Cached result of the last call to ``scrape_reports`` or ``top_up``.
     report_links : list[str]
-        URLs discovered by :py:meth:`get_report_links`.
+        URLs discovered by ``get_report_links``.
     NOT_FOUND_TEXT : str
         Placeholder value set when a field cannot be extracted.
 
@@ -406,9 +421,9 @@ class Scraper:
 
         Workflow
         --------
-        1. Call :py:meth:`get_report_links`.
+        1. Call ``get_report_links``.
         2. Extract each report according to ``scraping_strategy``.
-        3. Cache the final DataFrame to :py:attr:`self.reports`.
+        3. Cache the final DataFrame to ``self.reports``.
 
         Returns
         -------
@@ -441,7 +456,7 @@ class Scraper:
         return reports_df
 
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
-        """Ask the LLM to fill cells still set to :py:attr:`self.NOT_FOUND_TEXT`.
+        """Ask the LLM to fill cells still set to ``self.NOT_FOUND_TEXT``.
 
         Only the missing fields requested via ``include_*`` flags are sent to
         the model, along with the report’s PDF bytes (when available).
@@ -449,13 +464,13 @@ class Scraper:
         Parameters
         ----------
         reports_df : pandas.DataFrame | None
-            DataFrame to process.  Defaults to :py:attr:`self.reports`.
+            DataFrame to process. Defaults to ``self.reports``.
 
         Returns
         -------
         pandas.DataFrame
             Same shape as ``reports_df``, updated in place and re-cached to
-            :py:attr:`self.reports`.
+            ``self.reports``.
 
         Raises
         ------
@@ -509,7 +524,7 @@ class Scraper:
         """Check for and append new PFD reports within the current parameters.
 
         If new links are found they are scraped and appended to
-        :py:attr:`self.reports`.  Any URL (or ID) already present in
+        ``self.reports``. Any URL (or ID) already present in
         *old_reports* is skipped.
 
         Optionally, you can override the *start_date* and *end_date*
@@ -518,11 +533,11 @@ class Scraper:
         Parameters
         ----------
         old_reports : pandas.DataFrame | None
-            Existing DataFrame.  Defaults to :py:attr:`self.reports`.
+            Existing DataFrame. Defaults to ``self.reports``.
         start_date, end_date : str | None
             Optionally override the scraper’s date window *for this call only*.
         clean : bool, optional
-            When ``True``, run :class:`~pfd_toolkit.Cleaner` on the newly
+            When ``True``, run the ``Cleaner`` on the newly
             scraped rows before merging them with existing reports.
 
         Returns
@@ -874,7 +889,7 @@ class Scraper:
     # ──────────────────────────────────────────────────────────────────────────
 
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
-        """Scrape reports according to :py:attr:`scraping_strategy`."""
+        """Scrape reports according to ``scraping_strategy``."""
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             initial = list(

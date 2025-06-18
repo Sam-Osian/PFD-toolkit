@@ -25,31 +25,46 @@ warnings.filterwarnings("ignore", category=TqdmWarning)
 class Cleaner:
     """Batch-clean PFD report fields with an LLM.
 
-    The cleaner loops over selected columns, builds field-specific prompts,
-    calls :py:attr:`llm.generate`, and writes the returned text back into
-    a copy of the DataFrame.
+    The cleaner loops over selected columns, builds field-specific prompts and
+    writes the returned text back into a copy of the DataFrame.
 
     Parameters
     ----------
     reports : pandas.DataFrame
-        Input DataFrame returned by :class:`~pfd_toolkit.scraper.PFDScraper`
-        or similar.
+        Input DataFrame to clean.
     llm : LLM
-        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
-    include_coroner, include_receiver, include_area,
-    include_investigation, include_circumstances, include_concerns : bool, optional
-        Flags controlling which columns are processed.
-    coroner_prompt, area_prompt, receiver_prompt, investigation_prompt,
-    circumstances_prompt, concerns_prompt : str or None, optional
-        Custom prompt templates.  When ``None``, defaults based on
-        :attr:`CLEANER_PROMPT_CONFIG`.
+        Instance of the ``LLM`` helper used for prompting.
+    include_coroner : bool, optional
+        Clean the ``Coroner`` column. Defaults to ``True``.
+    include_receiver : bool, optional
+        Clean the ``Receiver`` column. Defaults to ``True``.
+    include_area : bool, optional
+        Clean the ``Area`` column. Defaults to ``True``.
+    include_investigation : bool, optional
+        Clean the ``InvestigationAndInquest`` column. Defaults to ``True``.
+    include_circumstances : bool, optional
+        Clean the ``CircumstancesOfDeath`` column. Defaults to ``True``.
+    include_concerns : bool, optional
+        Clean the ``MattersOfConcern`` column. Defaults to ``True``.
+    coroner_prompt : str or None, optional
+        Custom prompt for the coroner field. Defaults to ``None``.
+    area_prompt : str or None, optional
+        Custom prompt for the area field. Defaults to ``None``.
+    receiver_prompt : str or None, optional
+        Custom prompt for the receiver field. Defaults to ``None``.
+    investigation_prompt : str or None, optional
+        Custom prompt for the investigation field. Defaults to ``None``.
+    circumstances_prompt : str or None, optional
+        Custom prompt for the circumstances field. Defaults to ``None``.
+    concerns_prompt : str or None, optional
+        Custom prompt for the concerns field. Defaults to ``None``.
     verbose : bool, optional
-        Emit info-level logs for each batch when ``True``.
+        Emit info-level logs for each batch when ``True``. Defaults to ``False``.
 
     Attributes
     ----------
     cleaned_reports : pandas.DataFrame
-        Result of the last call to :py:meth:`clean_reports`.
+        Result of the last call to ``clean_reports``.
     coroner_prompt_template, area_prompt_template, ... : str
         Finalised prompt strings actually sent to the model.
 
@@ -248,9 +263,9 @@ class Cleaner:
     def generate_prompt_template(self) -> dict[str, str]:
         """Return the prompt templates used for each field.
 
-        The returned dictionary maps DataFrame column names to the full
-        prompt text with a ``[TEXT]`` placeholder appended to illustrate how the
-        prompt will look during :meth:`clean_reports`.
+        The returned dictionary maps DataFrame column names to the full prompt
+        text with a ``[TEXT]`` placeholder appended to illustrate how the
+        prompt will look during ``clean_reports``.
         """
 
         return {
@@ -265,8 +280,8 @@ class Cleaner:
     def clean_reports(self, anonymise: bool = False) -> pd.DataFrame:
         """Run LLM-based cleaning for the configured columns.
 
-        The method operates **in place on a copy** of
-        :py:attr:`self.reports`, so the original DataFrame is never mutated.
+        The method operates **in place on a copy** of ``self.reports`` so the
+        original DataFrame is never mutated.
 
         Returns
         -------
@@ -278,10 +293,9 @@ class Cleaner:
         Parameters
         ----------
         anonymise : bool, optional
-            When ``True`` append an instruction to the prompts for the
-            investigation, circumstances and concerns fields telling the
-            language model to replace any personal names and pronouns with
-            they/them/their.
+            When ``True`` append an instruction to anonymise names and pronouns
+            in the investigation, circumstances and concerns fields. Defaults to
+            ``False``.
 
         Examples
         --------

@@ -24,16 +24,28 @@ class Extractor:
     Parameters
     ----------
     llm : LLM
-        Instance of :class:`~pfd_toolkit.llm.LLM` used for prompting.
+        Instance of the ``LLM`` helper used for prompting.
     reports : pandas.DataFrame, optional
-        DataFrame of PFD reports. If provided, it will be copied and stored on
-        the instance.
-    include_date, include_coroner, include_area, include_receiver,
-    include_investigation, include_circumstances, include_concerns : bool,
-        Flags controlling which existing report columns are included in the text
-        sent to the LLM.
+        DataFrame of PFD reports. When provided it is copied and stored on the
+        instance. Defaults to ``None``.
+    include_date : bool, optional
+        Include the ``Date`` column in prompts. Defaults to ``False``.
+    include_coroner : bool, optional
+        Include the ``Coroner`` column in prompts. Defaults to ``False``.
+    include_area : bool, optional
+        Include the ``Area`` column in prompts. Defaults to ``False``.
+    include_receiver : bool, optional
+        Include the ``Receiver`` column in prompts. Defaults to ``False``.
+    include_investigation : bool, optional
+        Include the ``InvestigationAndInquest`` column in prompts. Defaults to
+        ``True``.
+    include_circumstances : bool, optional
+        Include the ``CircumstancesOfDeath`` column in prompts. Defaults to
+        ``True``.
+    include_concerns : bool, optional
+        Include the ``MattersOfConcern`` column in prompts. Defaults to ``True``.
     verbose : bool, optional
-        Emit extra logging when ``True``.
+        Emit extra logging when ``True``. Defaults to ``False``.
     """
 
     # Load column names from config.py
@@ -305,7 +317,7 @@ Here is the report excerpt:
             reports if omitted.
         feature_model : type[pydantic.BaseModel], optional
             Pydantic model describing the features to extract. Must be provided
-            on first call or after calling :meth:`discover_themes`.
+            on first call or after calling ``discover_themes``.
         produce_spans : bool, optional
             When ``True``, create ``spans_`` versions of each feature to capture
             the supporting text snippets. Defaults to ``False``.
@@ -541,15 +553,14 @@ Here is the report excerpt:
         col_name: Optional[str] = None,
         return_series: Optional[bool] = False
     ) -> Union[int, pd.Series]:
-        """Estimate token counts for all rows of a given column using 
-        :mod:`tiktoken`.
+        """Estimate token counts for all rows of a given column using
+        the ``tiktoken`` library.
 
         Parameters
         ----------
         col_name : str, optional
             Name of the column containing report summaries. Defaults to
-            :pyattr:`summary_col`, which is generated after running
-            :py:meth:`summarise`.
+            ``summary_col``, which is generated after running ``summarise``.
         return_series : bool, optional
             Returns a pandas.Series of per-row token counts for that field
             if ``True``, or an integer if ``False``. Defaults to ``False``.
@@ -559,8 +570,8 @@ Here is the report excerpt:
         Union[int, pandas.Series]
             If `return_series` is `False`, returns an `int` representing the total sum
             of all token counts across all rows for the provided field.
-            If ``return_series`` is ``True``, returns a :class:`pandas.Series` of token counts
-            aligned to :py:attr:`self.reports` for the provided field.
+            If ``return_series`` is ``True``, returns a ``pandas.Series`` of
+            token counts aligned to ``self.reports`` for the provided field.
         
         """
         
@@ -605,11 +616,11 @@ Here is the report excerpt:
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
-        The method expects :meth:`summarise` to have been run so that a summary
+        The method expects ``summarise`` to have been run so that a summary
         column exists. All summaries are concatenated into one prompt sent to
         the LLM. The LLM should return a JSON object mapping theme names to
         descriptions. A new ``pydantic`` model is built from this mapping and
-        stored as :py:attr:`feature_model`.
+        stored as ``feature_model``.
 
         Parameters
         ----------
@@ -818,8 +829,8 @@ Here is the report excerpt:
         """Reset internal caches and intermediate state.
 
         This clears any cached feature extraction results and token
-        estimations so that :meth:`extract_features` can be run again on
-        the same reports.  The instance itself is returned to allow method
+        estimations so that ``extract_features`` can be run again on
+        the same reports. The instance itself is returned to allow method
         chaining, e.g. ``extractor.reset().extract_features()``.
         """
 

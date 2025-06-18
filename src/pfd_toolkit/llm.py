@@ -31,39 +31,39 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class LLM:
-    """Wrapper around the OpenAI Python SDK for batch prompting and PDF
-    vision fallback.
+    """Wrapper around the OpenAI Python SDK for batch prompting and PDF vision
+    fallback.
 
     The helper provides:
 
-    * A generic :py:meth:`self.generate()` that optionally supports vision
-      inputs and pydantic validation.
-    * A PDF-to-image utility used by
-      :py:meth:`self._call_llm_fallback()` - the method the scraper invokes when
-      HTML and PDF heuristics fail.
+    * ``generate`` for plain or vision-enabled prompts with optional pydantic
+      validation.
+    * ``_call_llm_fallback`` used by the scraper when HTML and PDF heuristics
+      fail.
     * Built-in back-off and host-wide throttling via a semaphore.
 
     Parameters
     ----------
     api_key : str, optional
-        OpenAI (or proxy) API key.
+        OpenAI (or proxy) API key. Defaults to ``None`` which expects the
+        environment variable to be set.
     model : str, optional
-        Chat model name; defaults to ``"gpt-4.1-mini"``.
+        Chat model name. Defaults to ``"gpt-4.1-mini"``.
     base_url : str or None, optional
-        Override the OpenAI endpoint (for Azure/OpenRouter etc.).
+        Override the OpenAI endpoint. Defaults to ``None``.
     max_workers : int, optional
-        Maximum parallel workers for batch calls and for the global
-        semaphore.
+        Maximum parallel workers for batch calls and for the global semaphore.
+        Defaults to ``8``.
     temperature : float, optional
-        Sampling temperature used for all requests; defaults to ``0.0``.
+        Sampling temperature used for all requests. Defaults to ``0.0``.
     seed : int or None, optional
-        Optional deterministic seed value passed to the OpenAI API.
-        validation_attempts : int, optional
-        Number of times to retry when parsing LLM output into a
-        ``pydantic`` model fails. Defaults to ``2``.
+        Deterministic seed value passed to the API. Defaults to ``None``.
+    validation_attempts : int, optional
+        Number of times to retry parsing LLM output into a pydantic model.
+        Defaults to ``2``.
     timeout : float | httpx.Timeout | None, optional
-        Override the HTTP timeout in seconds. If omitted, the OpenAI
-        client default of 600 seconds (10 minutes) is used.
+        Override the HTTP timeout in seconds. ``None`` uses the OpenAI client
+        default of 600 seconds.
 
     Attributes
     ----------
@@ -210,8 +210,8 @@ class LLM:
             *beta/parse* endpoint; otherwise a raw string is returned.
 
         max_workers : int or None, optional
-            Thread count just for this batch.  When ``None``, fall back to
-            the instance-wide :py:attr:`max_workers`.
+            Thread count just for this batch. ``None`` uses the instance-wide
+            ``max_workers`` value. Defaults to ``None``.
 
         Returns
         -------
@@ -344,17 +344,25 @@ class LLM:
         verbose: bool = False,
         tqdm_extra_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, str]:
-        """
-        Use the LLM to extract text from PDF images for missing fields.
+        """Use the LLM to extract text from PDF images for missing fields.
 
-        Args:
-            pdf_bytes (bytes): Raw PDF bytes.
-            missing_fields (dict): Mapping of field names to prompt instructions.
-            report_url (str, optional): URL of the report, for logging.
-            verbose (bool): If True, log prompt and output.
+        Parameters
+        ----------
+        pdf_bytes : bytes or None
+            Raw PDF data. If ``None`` no images are sent.
+        missing_fields : dict
+            Mapping of field names to prompt instructions.
+        report_url : str, optional
+            URL of the report for logging. Defaults to ``None``.
+        verbose : bool, optional
+            When ``True`` log prompt and output. Defaults to ``False``.
+        tqdm_extra_kwargs : dict or None, optional
+            Extra keyword arguments passed to ``tqdm``. Defaults to ``None``.
 
-        Returns:
-            dict: Extracted values keyed by the original field names.
+        Returns
+        -------
+        dict
+            Extracted values keyed by the original field names.
         """
         base64_images_list: List[str] = []  # This will be a list of base64 strings
         if pdf_bytes:
