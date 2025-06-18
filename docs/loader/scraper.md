@@ -4,9 +4,9 @@
 
 ## Why run a custom scrape?
 
-The weekly datasets shipped with the package cover the majority of use cases. However there are two scenarios when direct scraping may be is preferable:
+The weekly datasets shipped with the package cover the majority of use cases. However there are two scenarios when direct scraping may be preferable:
 
-- **Rapid updates** – the official dataset lags up to a week behind new publications. Running your own scrape means you can see the newest reports immediately.
+- **Rapid updates** – the PFD Toolkit dataset lags up to a week behind new publications. Running your own scrape means you can see the newest reports immediately.
 - **Custom logic** – while the dataset bundled with the package is a product of Vision-LLM scraping, you may also wish to enable HTML and .pdf scraping.
 
 ## Creating a scraper
@@ -16,6 +16,7 @@ from pfd_toolkit import Scraper
 
 scraper = Scraper(
     category="suicide",           # judiciary.uk slug or "all"
+    llm=llm_client,         # assumes you've already set up your LLM client
     start_date="2024-01-01",
     end_date="2024-12-31",
     scraping_strategy=[1, 2, 3],   # html → pdf → llm
@@ -26,11 +27,17 @@ scraper = Scraper(
 
 Pass in a category slug (or use `"all"`), a date range and any optional settings such as worker count, request delay or timeout. The `scraping_strategy` list defines which stages run and in what order. Each entry refers to the HTML, PDF and LLM steps respectively – set an index to `-1` to skip a step entirely.
 
+!!! note
+    For example, setting `scraping_strategy` to `[2, 1, -1]` runs HTML scraping first, .pdf scraping second, and disables Vision-LLM scraping. Setting it to `[2, -1, 1]` runs Vision-LLM scraping first, HTML scraping second, and disables .pdf scraping. 
+    
+    This latter configuration is exactly what PFD Toolkit uses under the hood to construct the dataset you see when you call `load_reports()`.
+
 ### A closer look at the pipeline
 
-1. **HTML scraping** collects metadata directly from the web page. This is the fastest approach and usually recovers most fields.
-2. **PDF fallback** downloads the report PDF and extracts text with *PyMuPDF*. Missing fields from the HTML stage are filled in here if possible.
-3. **LLM fallback** hands off any unresolved blanks to an `LLM` client. This final pass is optional but can be invaluable for tricky reports where automated parsing fails.
+1. **HTML scraping** collects data directly from the report landing page. This is the fastest approach and usually recovers most metadata fields (e.g. coroner name, area, receiver) but struggles where the HTML make up of a given report differs, even slightly, from the majority of reports.
+2. **.pdf scraping** downloads the report .pdf and extracts text with *PyMuPDF*. This approach also recovers most fields, but will often scrape page numbers, footnotes and other .pdf 'juice'. It will fail where a report uses a non-standard heading (e.g. uses just "Concerns" instead of the more common "Coroner's concerns").
+3. **LLM scraping** is by far the most reliable method, but also the longest. The LLM understands the reports _in context_, meaning it doesn't matter if a report is configured slightly differently.
+
 
 The stages cascade automatically—if HTML scraping gathers everything you need, the PDF and LLM steps are skipped. You can reorder or disable steps entirely by tweaking `scraping_strategy`.
 
@@ -64,10 +71,12 @@ llm_df = scraper.run_llm_fallback(df)
 
 ### Inspecting results
 
-Every scrape writes a timestamp column when `include_time_stamp=True`. This can be useful for auditing or for merging multiple scrapes. All fields that could not be extracted are set to mising values, making gaps explicit in the final dataset. Use standard pandas operations to analyse or filter the DataFrame.
+Every scrape writes a timestamp column when `include_time_stamp=True`. This can be useful for auditing your scraping pipeline. 
+
+All fields that could not be extracted are set to mising values, making gaps explicit in the final dataset.
 
 ### Caveats
 
-Since scraping relies on the judiciary.uk website, any changes to layout could easily break parsers. The toolkit aims to handle common edge cases, but if you rely on scraping for production work you should keep an eye on logs and be ready to adapt your strategy. Also remember that running the LLM stage incurs API costs if you use a paid provider.
+Since scraping relies on the judiciary.uk website, any changes to layout could easily break parsers. The toolkit aims to handle common edge cases, but if you rely on scraping for production work you should keep an eye on logs and be ready to adapt your strategy. Also remember that running the LLM scraping stage incurs API costs if you use a paid provider.
 
 See the [API reference](../reference/scraper.md) for a detailed breakdown of every argument and attribute.
