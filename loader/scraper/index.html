@@ -270,7 +270,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../usage/" class="md-tabs__link">
+        <a href="../../getting_started/load_and_screen/" class="md-tabs__link">
           
   
   
@@ -370,15 +370,8 @@
   
     
     
-      
-  
-  
-  
-  
-    
-    
       <li class="md-tabs__item">
-        <a href="../../reference/loader/" class="md-tabs__link">
+        <a href="../../changelog/" class="md-tabs__link">
           
   
   
@@ -386,9 +379,6 @@
 
         </a>
       </li>
-    
-  
-
     
   
 
@@ -498,7 +488,7 @@
   
   
   <span class="md-ellipsis">
-    Home
+    Overview
     
   </span>
   
@@ -521,7 +511,7 @@
   
   
   <span class="md-ellipsis">
-    More about PFD reports
+    About the data
     
   </span>
   
@@ -612,12 +602,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/" class="md-nav__link">
+      <a href="../../getting_started/load_and_screen/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Getting started
+    Load & screen reports
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/discover_themes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Discover themes
     
   </span>
   
@@ -1280,6 +1293,75 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feedback & contributions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contact/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contact
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
     
     
     
@@ -1294,10 +1376,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_4" >
         
           
-          <label class="md-nav__link" for="__nav_7_1" id="__nav_7_1_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7_4" id="__nav_7_4_label" tabindex="0">
             
   
   
@@ -1310,8 +1392,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7_1">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_4">
             <span class="md-nav__icon md-icon"></span>
             API Reference
           </label>
@@ -1463,52 +1545,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Changelog
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../contribute/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Feedback & contributions
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1642,9 +1678,9 @@
 <h1 id="scraping-module">Scraping module<a class="headerlink" href="#scraping-module" title="Permanent link">&para;</a></h1>
 <p><code>Scraper</code> lets you download PFD reports straight from the judiciary website and control each step of the extraction process. For most projects <a href="../load_reports/"><code>load_reports()</code></a> is sufficient, but the scraping module gives you full transparency over how reports are gathered and how missing values are filled in. Use it when you need to customise request behaviour, adjust fallback logic or troubleshoot tricky reports.</p>
 <h2 id="why-run-a-custom-scrape">Why run a custom scrape?<a class="headerlink" href="#why-run-a-custom-scrape" title="Permanent link">&para;</a></h2>
-<p>The weekly datasets shipped with the package cover the majority of use cases. However there are two scenarios when direct scraping may be is preferable:</p>
+<p>The weekly datasets shipped with the package cover the majority of use cases. However there are two scenarios when direct scraping may be preferable:</p>
 <ul>
-<li><strong>Rapid updates</strong> – the official dataset lags up to a week behind new publications. Running your own scrape means you can see the newest reports immediately.</li>
+<li><strong>Rapid updates</strong> – the PFD Toolkit dataset lags up to a week behind new publications. Running your own scrape means you can see the newest reports immediately.</li>
 <li><strong>Custom logic</strong> – while the dataset bundled with the package is a product of Vision-LLM scraping, you may also wish to enable HTML and .pdf scraping.</li>
 </ul>
 <h2 id="creating-a-scraper">Creating a scraper<a class="headerlink" href="#creating-a-scraper" title="Permanent link">&para;</a></h2>
@@ -1652,19 +1688,25 @@
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">scraper</span> <span class="o">=</span> <span class="n">Scraper</span><span class="p">(</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">category</span><span class="o">=</span><span class="s2">&quot;suicide&quot;</span><span class="p">,</span>           <span class="c1"># judiciary.uk slug or &quot;all&quot;</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;2024-12-31&quot;</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">scraping_strategy</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>   <span class="c1"># html → pdf → llm</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">max_workers</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">delay_range</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="p">)</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">llm</span><span class="o">=</span><span class="n">llm_client</span><span class="p">,</span>         <span class="c1"># assumes you&#39;ve already set up your LLM client</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;2024-01-01&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;2024-12-31&quot;</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">scraping_strategy</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span>   <span class="c1"># html → pdf → llm</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">max_workers</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">delay_range</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Pass in a category slug (or use <code>"all"</code>), a date range and any optional settings such as worker count, request delay or timeout. The <code>scraping_strategy</code> list defines which stages run and in what order. Each entry refers to the HTML, PDF and LLM steps respectively – set an index to <code>-1</code> to skip a step entirely.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>For example, setting <code>scraping_strategy</code> to <code>[2, 1, -1]</code> runs HTML scraping first, .pdf scraping second, and disables Vision-LLM scraping. Setting it to <code>[2, -1, 1]</code> runs Vision-LLM scraping first, HTML scraping second, and disables .pdf scraping. </p>
+<p>This latter configuration is exactly what PFD Toolkit uses under the hood to construct the dataset you see when you call <code>load_reports()</code>.</p>
+</div>
 <h3 id="a-closer-look-at-the-pipeline">A closer look at the pipeline<a class="headerlink" href="#a-closer-look-at-the-pipeline" title="Permanent link">&para;</a></h3>
 <ol>
-<li><strong>HTML scraping</strong> collects metadata directly from the web page. This is the fastest approach and usually recovers most fields.</li>
-<li><strong>PDF fallback</strong> downloads the report PDF and extracts text with <em>PyMuPDF</em>. Missing fields from the HTML stage are filled in here if possible.</li>
-<li><strong>LLM fallback</strong> hands off any unresolved blanks to an <code>LLM</code> client. This final pass is optional but can be invaluable for tricky reports where automated parsing fails.</li>
+<li><strong>HTML scraping</strong> collects data directly from the report landing page. This is the fastest approach and usually recovers most metadata fields (e.g. coroner name, area, receiver) but struggles where the HTML make up of a given report differs, even slightly, from the majority of reports.</li>
+<li><strong>.pdf scraping</strong> downloads the report .pdf and extracts text with <em>PyMuPDF</em>. This approach also recovers most fields, but will often scrape page numbers, footnotes and other .pdf 'juice'. It will fail where a report uses a non-standard heading (e.g. uses just "Concerns" instead of the more common "Coroner's concerns").</li>
+<li><strong>LLM scraping</strong> is by far the most reliable method, but also the longest. The LLM understands the reports <em>in context</em>, meaning it doesn't matter if a report is configured slightly differently.</li>
 </ol>
 <p>The stages cascade automatically—if HTML scraping gathers everything you need, the PDF and LLM steps are skipped. You can reorder or disable steps entirely by tweaking <code>scraping_strategy</code>.</p>
 <h3 id="running-a-scrape">Running a scrape<a class="headerlink" href="#running-a-scrape" title="Permanent link">&para;</a></h3>
@@ -1682,9 +1724,10 @@
 <h3 id="threading-and-polite-scraping">Threading and polite scraping<a class="headerlink" href="#threading-and-polite-scraping" title="Permanent link">&para;</a></h3>
 <p><code>Scraper</code> uses a thread pool to speed up network requests. The <code>max_workers</code> and <code>delay_range</code> settings let you tune throughput and avoid overloading the server. The default one–two second delay between requests mirrors human browsing behaviour and greatly reduces the risk of your IP address being flagged.</p>
 <h3 id="inspecting-results">Inspecting results<a class="headerlink" href="#inspecting-results" title="Permanent link">&para;</a></h3>
-<p>Every scrape writes a timestamp column when <code>include_time_stamp=True</code>. This can be useful for auditing or for merging multiple scrapes. All fields that could not be extracted are set to mising values, making gaps explicit in the final dataset. Use standard pandas operations to analyse or filter the DataFrame.</p>
+<p>Every scrape writes a timestamp column when <code>include_time_stamp=True</code>. This can be useful for auditing your scraping pipeline. </p>
+<p>All fields that could not be extracted are set to mising values, making gaps explicit in the final dataset.</p>
 <h3 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h3>
-<p>Since scraping relies on the judiciary.uk website, any changes to layout could easily break parsers. The toolkit aims to handle common edge cases, but if you rely on scraping for production work you should keep an eye on logs and be ready to adapt your strategy. Also remember that running the LLM stage incurs API costs if you use a paid provider.</p>
+<p>Since scraping relies on the judiciary.uk website, any changes to layout could easily break parsers. The toolkit aims to handle common edge cases, but if you rely on scraping for production work you should keep an eye on logs and be ready to adapt your strategy. Also remember that running the LLM scraping stage incurs API costs if you use a paid provider.</p>
 <p>See the <a href="../../reference/scraper/">API reference</a> for a detailed breakdown of every argument and attribute.</p>
 
 
@@ -1706,7 +1749,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="June 17, 2025 17:46:23 UTC">June 17, 2025</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="June 18, 2025 15:54:11 UTC">June 18, 2025</span>
   </span>
 
     

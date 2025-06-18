@@ -270,7 +270,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../usage/" class="md-tabs__link">
+        <a href="../../getting_started/load_and_screen/" class="md-tabs__link">
           
   
   
@@ -370,17 +370,8 @@
   
     
     
-      
-  
-  
-  
-    
-  
-  
-    
-    
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../loader/" class="md-tabs__link">
+        <a href="../../changelog/" class="md-tabs__link">
           
   
   
@@ -388,9 +379,6 @@
 
         </a>
       </li>
-    
-  
-
     
   
 
@@ -500,7 +488,7 @@
   
   
   <span class="md-ellipsis">
-    Home
+    Overview
     
   </span>
   
@@ -523,7 +511,7 @@
   
   
   <span class="md-ellipsis">
-    More about PFD reports
+    About the data
     
   </span>
   
@@ -614,12 +602,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/" class="md-nav__link">
+      <a href="../../getting_started/load_and_screen/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Getting started
+    Load & screen reports
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/discover_themes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Discover themes
     
   </span>
   
@@ -1160,6 +1171,75 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feedback & contributions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contact/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contact
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1181,10 +1261,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_7_1" id="__nav_7_1_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7_4" id="__nav_7_4_label" tabindex="">
             
   
   
@@ -1197,8 +1277,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7_1">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7_4">
             <span class="md-nav__icon md-icon"></span>
             API Reference
           </label>
@@ -1437,52 +1517,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Changelog
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../contribute/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Feedback & contributions
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1592,7 +1626,7 @@
 
 
         <p>Scrape UK “Prevention of Future Death” (PFD) reports into a
-:class:<code>pandas.DataFrame</code>.</p>
+pandas.DataFrame.</p>
 <p>The extractor runs in three cascading layers
 (<code>html → pdf → llm</code>), each independently switchable.</p>
 <ol>
@@ -1778,7 +1812,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>url</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1794,7 +1828,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>id</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1810,7 +1844,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>date</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1826,7 +1860,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>coroner</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1842,7 +1876,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>area</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1858,7 +1892,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>receiver</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1874,7 +1908,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>investigation</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1890,7 +1924,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Include the <code>circumstances</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1906,7 +1940,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flags controlling which columns appear in the output DataFrame.</p>
+                <p>Include the <code>concerns</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1922,11 +1956,11 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flags controlling which columns appear in the output DataFrame.</p>
+                <p>Include a <code>date_scraped</code> column. Defaults to <code>False</code>.</p>
               </div>
             </td>
             <td>
-                  <code>True</code>
+                  <code>False</code>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -1966,8 +2000,7 @@ then PDF, and disables LLM scraping.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Cached result of the last call to <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />meth:<code>scrape_reports</code>
-or <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />meth:<code>top_up</code>.</p>
+                <p>Cached result of the last call to <code>scrape_reports</code> or <code>top_up</code>.</p>
               </div>
             </td>
           </tr>
@@ -1978,7 +2011,7 @@ or <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/
             </td>
             <td>
               <div class="doc-md-description">
-                <p>URLs discovered by <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />meth:<code>get_report_links</code>.</p>
+                <p>URLs discovered by <code>get_report_links</code>.</p>
               </div>
             </td>
           </tr>
@@ -2090,7 +2123,7 @@ the given category/date window.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Ask the LLM to fill cells still set to <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.NOT_FOUND_TEXT</code>.</p>
+        <p>Ask the LLM to fill cells still set to <code>self.NOT_FOUND_TEXT</code>.</p>
 <p>Only the missing fields requested via <code>include_*</code> flags are sent to
 the model, along with the report’s PDF bytes (when available).</p>
 
@@ -2115,7 +2148,7 @@ the model, along with the report’s PDF bytes (when available).</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>DataFrame to process.  Defaults to <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.reports</code>.</p>
+                <p>DataFrame to process. Defaults to <code>self.reports</code>.</p>
               </div>
             </td>
             <td>
@@ -2142,7 +2175,7 @@ the model, along with the report’s PDF bytes (when available).</p>
             <td>
               <div class="doc-md-description">
                 <p>Same shape as <code>reports_df</code>, updated in place and re-cached to
-<img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.reports</code>.</p>
+<code>self.reports</code>.</p>
               </div>
             </td>
           </tr>
@@ -2202,9 +2235,9 @@ the model, along with the report’s PDF bytes (when available).</p>
 <details class="workflow" open>
   <summary>Workflow</summary>
   <ol>
-<li>Call <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />meth:<code>get_report_links</code>.</li>
+<li>Call <code>get_report_links</code>.</li>
 <li>Extract each report according to <code>scraping_strategy</code>.</li>
-<li>Cache the final DataFrame to <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.reports</code>.</li>
+<li>Cache the final DataFrame to <code>self.reports</code>.</li>
 </ol>
 </details>
 
@@ -2263,7 +2296,7 @@ df.columns
 
         <p>Check for and append new PFD reports within the current parameters.</p>
 <p>If new links are found they are scraped and appended to
-<img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.reports</code>.  Any URL (or ID) already present in
+<code>self.reports</code>. Any URL (or ID) already present in
 <em>old_reports</em> is skipped.</p>
 <p>Optionally, you can override the <em>start_date</em> and <em>end_date</em>
 parameters from <code>self</code> for this call only.</p>
@@ -2289,7 +2322,7 @@ parameters from <code>self</code> for this call only.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Existing DataFrame.  Defaults to <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.reports</code>.</p>
+                <p>Existing DataFrame. Defaults to <code>self.reports</code>.</p>
               </div>
             </td>
             <td>
@@ -2337,7 +2370,7 @@ parameters from <code>self</code> for this call only.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>When <code>True</code>, run :class:<code>~pfd_toolkit.Cleaner</code> on the newly
+                <p>When <code>True</code>, run the <code>Cleaner</code> on the newly
 scraped rows before merging them with existing reports.</p>
               </div>
             </td>

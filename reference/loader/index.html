@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://sam-osian.github.io/pfd-toolkit/reference/loader/">
       
       
-        <link rel="prev" href="../../extractor/caching/">
+        <link rel="prev" href="../../contact/">
       
       
         <link rel="next" href="../screener/">
@@ -270,7 +270,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../usage/" class="md-tabs__link">
+        <a href="../../getting_started/load_and_screen/" class="md-tabs__link">
           
   
   
@@ -370,17 +370,8 @@
   
     
     
-      
-  
-  
-  
-    
-  
-  
-    
-    
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="./" class="md-tabs__link">
+        <a href="../../changelog/" class="md-tabs__link">
           
   
   
@@ -388,9 +379,6 @@
 
         </a>
       </li>
-    
-  
-
     
   
 
@@ -500,7 +488,7 @@
   
   
   <span class="md-ellipsis">
-    Home
+    Overview
     
   </span>
   
@@ -523,7 +511,7 @@
   
   
   <span class="md-ellipsis">
-    More about PFD reports
+    About the data
     
   </span>
   
@@ -614,12 +602,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/" class="md-nav__link">
+      <a href="../../getting_started/load_and_screen/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Getting started
+    Load & screen reports
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/discover_themes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Discover themes
     
   </span>
   
@@ -1160,6 +1171,75 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feedback & contributions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contact/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contact
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1181,10 +1261,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_7_1" id="__nav_7_1_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7_4" id="__nav_7_4_label" tabindex="">
             
   
   
@@ -1197,8 +1277,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7_1">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7_4">
             <span class="md-nav__icon md-icon"></span>
             API Reference
           </label>
@@ -1401,52 +1481,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Changelog
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../contribute/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Feedback & contributions
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1518,8 +1552,7 @@
 <a id="pfd_toolkit.load_reports"></a>
     <div class="doc doc-contents first">
 
-        <p>Utility for loading the fully-cleaned <strong>Prevention of Future Death</strong>
-report dataset shipped with <em>pfd_toolkit</em> as a :class:<code>pandas.DataFrame</code>.</p>
+        <p>Load the bundled Prevention of Future Death reports as a DataFrame.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1535,6 +1568,22 @@ report dataset shipped with <em>pfd_toolkit</em> as a :class:<code>pandas.DataFr
       <tbody>
           <tr class="doc-section-item">
             <td>
+                <code>category</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Judiciary category slug. Defaults to <code>"all"</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;all&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>start_date</code>
             </td>
             <td>
@@ -1542,8 +1591,8 @@ report dataset shipped with <em>pfd_toolkit</em> as a :class:<code>pandas.DataFr
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Inclusive lower bound for the <strong>report date</strong> in the <code>YYYY-MM-DD</code>
-format.</p>
+                <p>Inclusive lower bound for the report date in <code>YYYY-MM-DD</code> format.
+Defaults to <code>"2000-01-01"</code>.</p>
               </div>
             </td>
             <td>
@@ -1559,8 +1608,8 @@ format.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Inclusive upper bound for the <strong>report date</strong> in the <code>YYYY-MM-DD</code>
-format.</p>
+                <p>Inclusive upper bound for the report date in <code>YYYY-MM-DD</code> format.
+Defaults to <code>"2050-01-01"</code>.</p>
               </div>
             </td>
             <td>
@@ -1576,9 +1625,8 @@ format.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If given, keep only the most recent <em>n_reports</em> (based on the “Date” column)
-after filtering by date. If <code>None</code> (the default), return all reports
-in the specified date range.</p>
+                <p>Keep only the most recent <code>n_reports</code> rows after filtering by date.
+<code>None</code> (the default) returns all rows.</p>
               </div>
             </td>
             <td>
@@ -1604,8 +1652,8 @@ in the specified date range.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Reports filtered by date, sorted newest-first, and (optionally) truncated
-to the first <em>n_reports</em> rows.</p>
+                <p>Reports filtered by date, sorted newest first and optionally
+limited to <code>n_reports</code> rows.</p>
               </div>
             </td>
           </tr>
@@ -1638,7 +1686,7 @@ to the first <em>n_reports</em> rows.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If the bundled CSV cannot be located (i.e. a package-level error).</p>
+                <p>If the bundled CSV cannot be located.</p>
               </div>
             </td>
           </tr>
@@ -1707,7 +1755,7 @@ to the first <em>n_reports</em> rows.</p>
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../extractor/caching/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Caching and exporting results">
+          <a href="../../contact/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Contact">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -1717,7 +1765,7 @@ to the first <em>n_reports</em> rows.</p>
                 Previous
               </span>
               <div class="md-ellipsis">
-                Caching and exporting results
+                Contact
               </div>
             </div>
           </a>

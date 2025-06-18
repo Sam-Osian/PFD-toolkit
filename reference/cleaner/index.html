@@ -270,7 +270,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../usage/" class="md-tabs__link">
+        <a href="../../getting_started/load_and_screen/" class="md-tabs__link">
           
   
   
@@ -370,17 +370,8 @@
   
     
     
-      
-  
-  
-  
-    
-  
-  
-    
-    
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../loader/" class="md-tabs__link">
+        <a href="../../changelog/" class="md-tabs__link">
           
   
   
@@ -388,9 +379,6 @@
 
         </a>
       </li>
-    
-  
-
     
   
 
@@ -500,7 +488,7 @@
   
   
   <span class="md-ellipsis">
-    Home
+    Overview
     
   </span>
   
@@ -523,7 +511,7 @@
   
   
   <span class="md-ellipsis">
-    More about PFD reports
+    About the data
     
   </span>
   
@@ -614,12 +602,35 @@
   
   
     <li class="md-nav__item">
-      <a href="../../usage/" class="md-nav__link">
+      <a href="../../getting_started/load_and_screen/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Getting started
+    Load & screen reports
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting_started/discover_themes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Discover themes
     
   </span>
   
@@ -1160,6 +1171,75 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../changelog/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Changelog
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contribute/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Feedback & contributions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contact/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contact
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1181,10 +1261,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_4" checked>
         
           
-          <label class="md-nav__link" for="__nav_7_1" id="__nav_7_1_label" tabindex="">
+          <label class="md-nav__link" for="__nav_7_4" id="__nav_7_4_label" tabindex="">
             
   
   
@@ -1197,8 +1277,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7_1">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7_4">
             <span class="md-nav__icon md-icon"></span>
             API Reference
           </label>
@@ -1419,52 +1499,6 @@
 
               
             
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Changelog
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../contribute/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Feedback & contributions
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
           </ul>
         </nav>
       
@@ -1556,9 +1590,8 @@
 
 
         <p>Batch-clean PFD report fields with an LLM.</p>
-<p>The cleaner loops over selected columns, builds field-specific prompts,
-calls <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>llm.generate</code>, and writes the returned text back into
-a copy of the DataFrame.</p>
+<p>The cleaner loops over selected columns, builds field-specific prompts and
+writes the returned text back into a copy of the DataFrame.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1581,8 +1614,7 @@ a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Input DataFrame returned by :class:<code>~pfd_toolkit.scraper.PFDScraper</code>
-or similar.</p>
+                <p>Input DataFrame to clean.</p>
               </div>
             </td>
             <td>
@@ -1598,7 +1630,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Instance of :class:<code>~pfd_toolkit.llm.LLM</code> used for prompting.</p>
+                <p>Instance of the <code>LLM</code> helper used for prompting.</p>
               </div>
             </td>
             <td>
@@ -1614,7 +1646,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Clean the <code>Coroner</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1630,7 +1662,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Clean the <code>Receiver</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1646,7 +1678,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Clean the <code>Area</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1662,7 +1694,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flags controlling which columns are processed.</p>
+                <p>Clean the <code>InvestigationAndInquest</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1678,7 +1710,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flags controlling which columns are processed.</p>
+                <p>Clean the <code>CircumstancesOfDeath</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1694,7 +1726,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flags controlling which columns are processed.</p>
+                <p>Clean the <code>MattersOfConcern</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1706,11 +1738,11 @@ or similar.</p>
                 <code>coroner_prompt</code>
             </td>
             <td>
-                  <code><span title="str">str</span></code>
+                  <code><span title="str">str</span> or None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Custom prompt for the coroner field. Defaults to <code>None</code>.</p>
               </div>
             </td>
             <td>
@@ -1722,11 +1754,11 @@ or similar.</p>
                 <code>area_prompt</code>
             </td>
             <td>
-                  <code><span title="str">str</span></code>
+                  <code><span title="str">str</span> or None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Custom prompt for the area field. Defaults to <code>None</code>.</p>
               </div>
             </td>
             <td>
@@ -1738,11 +1770,11 @@ or similar.</p>
                 <code>receiver_prompt</code>
             </td>
             <td>
-                  <code><span title="str">str</span></code>
+                  <code><span title="str">str</span> or None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Custom prompt for the receiver field. Defaults to <code>None</code>.</p>
               </div>
             </td>
             <td>
@@ -1754,11 +1786,11 @@ or similar.</p>
                 <code>investigation_prompt</code>
             </td>
             <td>
-                  <code><span title="str">str</span></code>
+                  <code><span title="str">str</span> or None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                
+                <p>Custom prompt for the investigation field. Defaults to <code>None</code>.</p>
               </div>
             </td>
             <td>
@@ -1774,8 +1806,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Custom prompt templates.  When <code>None</code>, defaults based on
-:attr:<code>CLEANER_PROMPT_CONFIG</code>.</p>
+                <p>Custom prompt for the circumstances field. Defaults to <code>None</code>.</p>
               </div>
             </td>
             <td>
@@ -1791,8 +1822,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Custom prompt templates.  When <code>None</code>, defaults based on
-:attr:<code>CLEANER_PROMPT_CONFIG</code>.</p>
+                <p>Custom prompt for the concerns field. Defaults to <code>None</code>.</p>
               </div>
             </td>
             <td>
@@ -1808,7 +1838,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Emit info-level logs for each batch when <code>True</code>.</p>
+                <p>Emit info-level logs for each batch when <code>True</code>. Defaults to <code>False</code>.</p>
               </div>
             </td>
             <td>
@@ -1836,7 +1866,7 @@ or similar.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Result of the last call to <img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />meth:<code>clean_reports</code>.</p>
+                <p>Result of the last call to <code>clean_reports</code>.</p>
               </div>
             </td>
           </tr>
@@ -1895,8 +1925,8 @@ cleaned_df.head()
     <div class="doc doc-contents ">
 
         <p>Run LLM-based cleaning for the configured columns.</p>
-<p>The method operates <strong>in place on a copy</strong> of
-<img alt="🇵🇾" class="twemoji" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/1f1f5-1f1fe.svg" title=":py:" />attr:<code>self.reports</code>, so the original DataFrame is never mutated.</p>
+<p>The method operates <strong>in place on a copy</strong> of <code>self.reports</code> so the
+original DataFrame is never mutated.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
@@ -1944,10 +1974,9 @@ returns an error marker).</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>When <code>True</code> append an instruction to the prompts for the
-investigation, circumstances and concerns fields telling the
-language model to replace any personal names and pronouns with
-they/them/their.</p>
+                <p>When <code>True</code> append an instruction to anonymise names and pronouns
+in the investigation, circumstances and concerns fields. Defaults to
+<code>False</code>.</p>
               </div>
             </td>
             <td>
@@ -1983,9 +2012,9 @@ cleaned.equals(df)
     <div class="doc doc-contents ">
 
         <p>Return the prompt templates used for each field.</p>
-<p>The returned dictionary maps DataFrame column names to the full
-prompt text with a <code>[TEXT]</code> placeholder appended to illustrate how the
-prompt will look during :meth:<code>clean_reports</code>.</p>
+<p>The returned dictionary maps DataFrame column names to the full prompt
+text with a <code>[TEXT]</code> placeholder appended to illustrate how the
+prompt will look during <code>clean_reports</code>.</p>
 
 
     </div>
