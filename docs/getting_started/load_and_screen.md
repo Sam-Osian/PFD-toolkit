@@ -60,7 +60,7 @@ PFD Toolkit lets you query reports in plain English — no need to know precise 
 
 Screening and other advanced features use AI, and require you to first set up an LLM client. You'll need to head to [platform.openai.com](https://platform.openai.com/docs/overview) and create an API key. Once you've got this, simply feed it to the `LLM`.
 
-For more information, see [Settting up an LLM client](../llm_setup.md).
+For more information, see [Setting up an LLM client](../llm_setup.md).
 
 ```python
 from pfd_toolkit import LLM

@@ -73,7 +73,7 @@ llm_df = scraper.run_llm_fallback(df)
 
 Every scrape writes a timestamp column when `include_time_stamp=True`. This can be useful for auditing your scraping pipeline. 
 
-All fields that could not be extracted are set to mising values, making gaps explicit in the final dataset.
+All fields that could not be extracted are set to missing values, making gaps explicit in the final dataset.
 
 ### Caveats
 

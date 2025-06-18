@@ -30,7 +30,7 @@ result = extractor.extract_features(
 result
 ```
 
-The quotes returned in the spans are kept as short as possible but should always match the original text verbatum. Multiple snippets are separated with semicolons.
+The quotes returned in the spans are kept as short as possible but should always match the original text verbatim. Multiple snippets are separated with semicolons.
 
 ---
 

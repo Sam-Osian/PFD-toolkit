@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <title>404 - Page not found</title>
-    <link rel="stylesheet" href="{{ base_url }}stylesheets/404.css">
+    <link rel="stylesheet" href="{{ 'stylesheets/404.css' | url }}">
 </head>
 <body>
     <h1>404 Error: Page not found</h1>
     <p>(The only thing more inaccessible than this page is the original judiciary.uk data 😉 )</p>
-    <p><a href="{{ base_url }}index.html">Return home</a></p>
+    <p><a href="{{ '' | url }}">Return home</a></p>
 </body>
 </html>
