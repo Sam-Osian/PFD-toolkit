@@ -1,29 +1,5 @@
-/* Ubuntu */
-@import url('https://fonts.googleapis.com/css?family=Ubuntu:400,500,700&display=swap'); 
-
-/* Inter */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
-
-/* Manrope */
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&display=swap');
-
-/* Lexend */
-@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@100..900&display=swap');
-
 /* IBM Plex Sans */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@100..700&display=swap');
-
-/* Poppins (variable) */
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@100..900&display=swap');
-
-/* Barlow (variable) */
-@import url('https://fonts.googleapis.com/css2?family=Barlow:wght@100..900&display=swap');
-
-/* Red Hat Text (variable) */
-@import url('https://fonts.googleapis.com/css2?family=Red+Hat+Text:wght@300..900&display=swap');
-
-/* Be Vietnam Pro (variable) */
-@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@100..900&display=swap');
 
 
 body,
@@ -72,3 +48,17 @@ html {
     color: #bd93f9;  /* Example highlight on hover */
   }
   
+  .md-tabs__link {
+    font-weight: bold;
+  }
+  .md-tabs__link--active {
+    color: var(--md-primary-fg-color);
+  }
+/* Clickable dropdown for navigation tabs */
+.md-tabs__item .md-tabs__dropdown {
+  display: none;
+}
+.md-tabs__item--active .md-tabs__dropdown {
+  display: block;
+}
+

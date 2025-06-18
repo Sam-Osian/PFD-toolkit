@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from typing import Dict
+import pandas as pd
 
 from bs4 import BeautifulSoup
 import requests
@@ -204,7 +205,7 @@ class HtmlExtractor:
                 
             # Special handling for the report reference number
             # ...which requires unique format validation
-            if cfg.key == "id" and raw != self.not_found_text:
+            if cfg.key == "id" and pd.notna(raw):
                 m = self.id_pattern.search(raw)
                 fields["id"] = m.group(1) if m else self.not_found_text
             else:

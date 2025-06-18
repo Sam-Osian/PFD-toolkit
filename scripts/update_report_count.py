@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Helper script for retrieving the number of reports contained
-within the dataset bundled with PFD Toolkit and updating index.md to reflect the current count.
+within the dataset bundled with PFD Toolkit and updating 
+index.md to reflect the current count.
 """
 
 import re

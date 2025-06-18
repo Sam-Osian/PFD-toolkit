@@ -13,6 +13,7 @@ from datetime import datetime
 
 from .html_extractor import HtmlExtractor
 from .pdf_extractor import PdfExtractor
+from ..cleaner import Cleaner
 
 from .llm_extractor import run_llm_fallback as _run_llm_fallback
 from ..llm import LLM
@@ -24,9 +25,9 @@ from ..config import GeneralConfig, ScraperConfig
 logger = logging.getLogger(__name__)
 
 
-class PFDScraper:
+class Scraper:
     """Scrape UK “Prevention of Future Death” (PFD) reports into a
-    :class:`pandas.DataFrame`.
+    pandas.DataFrame.
 
     The extractor runs in three cascading layers
     (`html → pdf → llm`), each independently switchable.
@@ -38,13 +39,13 @@ class PFDScraper:
     3. **LLM fallback** – delegate unresolved gaps to a Large Language
        Model supplied via *llm*.
 
-    All three layers are optional and independently switchable.
+    Each layer can be enabled or disabled via ``scraping_strategy``.
 
     Parameters
     ----------
     llm : LLM | None
-        Client implementing ``_call_llm_fallback()``; required only when
-        *llm_fallback* is *True*.
+        Client implementing ``_call_llm_fallback()``; required only when the
+        LLM stage is enabled.
     category : str
         Judiciary category slug (e.g. ``"suicide"``, ``"hospital_deaths"``)
         or ``"all"``.
@@ -63,34 +64,57 @@ class PFDScraper:
         Use ``None`` to disable (not recommended).
     timeout : int
         Per-request timeout in seconds.
-    html_scraping, pdf_fallback, llm_fallback : bool
-        Toggles for the three extraction layers.
-    include_* : bool
-        Flags that control which columns appear in the output DataFrame.
+    scraping_strategy : list[int] | tuple[int, int, int]
+        Defines the order in which HTML, PDF and LLM scraping are attempted.
+        The sequence indexes correspond to ``(HTML, PDF, LLM)``. Provide
+        ``-1`` to disable a stage.  For example ``[1, 2, -1]`` runs HTML first,
+        then PDF, and disables LLM scraping.
+    include_url : bool, optional
+        Include the ``url`` column. Defaults to ``True``.
+    include_id : bool, optional
+        Include the ``id`` column. Defaults to ``True``.
+    include_date : bool, optional
+        Include the ``date`` column. Defaults to ``True``.
+    include_coroner : bool, optional
+        Include the ``coroner`` column. Defaults to ``True``.
+    include_area : bool, optional
+        Include the ``area`` column. Defaults to ``True``.
+    include_receiver : bool, optional
+        Include the ``receiver`` column. Defaults to ``True``.
+    include_investigation : bool, optional
+        Include the ``investigation`` column. Defaults to ``True``.
+    include_circumstances : bool, optional
+        Include the ``circumstances`` column. Defaults to ``True``.
+    include_concerns : bool, optional
+        Include the ``concerns`` column. Defaults to ``True``.
+    include_time_stamp : bool, optional
+        Include a ``date_scraped`` column. Defaults to ``False``.
     verbose : bool
         Emit debug-level logs when *True*.
 
     Attributes
     ----------
     reports : pandas.DataFrame | None
-        Cached result of the last call to :py:meth:`scrape_reports`
-        or :py:meth:`top_up`.
+        Cached result of the last call to ``scrape_reports`` or ``top_up``.
     report_links : list[str]
-        URLs discovered by :py:meth:`get_report_links`.
+        URLs discovered by ``get_report_links``.
     NOT_FOUND_TEXT : str
         Placeholder value set when a field cannot be extracted.
 
     Examples
     --------
-    >>> from pfd_toolkit import PFDScraper
-    >>> scraper = PFDScraper(category="suicide",
-    ...                      start_date="2020-01-01",
-    ...                      end_date="2022-12-31",
-    ...                      llm_fallback=True,
-    ...                      llm=my_llm_client)         # Configured in LLM class
-    >>> df = scraper.scrape_reports()          # full scrape
-    >>> newer_df = scraper.top_up(df)             # later "top-up"
-    >>> added_llm_df = scraper.run_llm_fallback(df)   # apply LLM retro-actively
+
+        from pfd_toolkit import Scraper
+        scraper = Scraper(
+            category="suicide",
+            start_date="2020-01-01",
+            end_date="2022-12-31",
+            scraping_strategy=[1, 2, 3],
+            llm=my_llm_client,
+        )
+        df = scraper.scrape_reports()          # full scrape
+        newer_df = scraper.top_up(df)          # later "top-up"
+        added_llm_df = scraper.run_llm_fallback(df)  # apply LLM retro-actively
     """
 
     # Constants for reused strings and keys to ensure consistency and avoid typos
@@ -133,9 +157,7 @@ class PFDScraper:
         delay_range: tuple[int | float, int | float] | None = (1, 2),
         timeout: int = 60,
         # Scraping strategy configuration
-        html_scraping: bool = True,
-        pdf_fallback: bool = True,
-        llm_fallback: bool = False,
+        scraping_strategy: list[int] | tuple[int, int, int] = [1, 2, 3],
         # Output DataFrame column inclusion flags
         include_url: bool = True,
         include_id: bool = True,
@@ -183,11 +205,13 @@ class PFDScraper:
         self.delay_range = self.cfg.delay_range
         self.timeout = self.cfg.timeout
 
-        # Store scraping strategy flags
-        self.html_scraping = html_scraping
-        self.pdf_fallback = pdf_fallback
-        self.llm_fallback = llm_fallback
+        # Prepare scraping order container before parsing strategy
+        self._scraping_order: list[str] | None = None
+
+        # Parse scraping strategy
+        self.scraping_strategy = scraping_strategy
         self.llm = llm
+        self._parse_scraping_strategy(scraping_strategy)
 
         # Store output column inclusion flags
         self.include_url = include_url
@@ -245,43 +269,43 @@ class PFDScraper:
                 self.include_date,
                 self.COL_DATE,
                 self.LLM_KEY_DATE,
-                "[Date of the report, not the death]",
+                f"[Date of the report, not the death. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_coroner,
                 self.COL_CORONER_NAME,
                 self.LLM_KEY_CORONER,
-                "[Name of the coroner. Provide the name only.]",
+                f"[Name of the coroner. Provide the name only. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_area,
                 self.COL_AREA,
                 self.LLM_KEY_AREA,
-                "[Area/location of the Coroner. Provide the location itself only.]",
+                f"[Area/location of the Coroner. Provide the location itself only. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_receiver,
                 self.COL_RECEIVER,
                 self.LLM_KEY_RECEIVER,
-                "[Name or names of the recipient(s) as provided in the report.]",
+                f"[Name or names of the recipient(s) as provided in the report. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_investigation,
                 self.COL_INVESTIGATION,
                 self.LLM_KEY_INVESTIGATION,
-                "[The text from the Investigation/Inquest section.]",
+                f"[The text from the Investigation/Inquest section. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_circumstances,
                 self.COL_CIRCUMSTANCES,
                 self.LLM_KEY_CIRCUMSTANCES,
-                "[The text from the Circumstances of Death section.]",
+                f"[The text from the Circumstances of Death section. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
             (
                 self.include_concerns,
                 self.COL_CONCERNS,
                 self.LLM_KEY_CONCERNS,
-                "[The text from the Coroner's Concerns section.]",
+                f"[The text from the Coroner's Concerns section. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
             ),
         ]
 
@@ -322,6 +346,43 @@ class PFDScraper:
             "concerns": self.include_concerns,
         }
 
+
+
+    def _parse_scraping_strategy(self, strategy: list[int] | tuple[int, int, int]) -> None:
+        """Parse ``scraping_strategy`` into flags and ordered stages."""
+        if (
+            not isinstance(strategy, (list, tuple))
+            or len(strategy) != 3
+            or not all(isinstance(i, int) for i in strategy)
+        ):
+            raise ValueError(
+                "scraping_strategy must be a list or tuple of three integers"
+            )
+
+        stage_map = {0: "html", 1: "pdf", 2: "llm"}
+
+        self.html_scraping = strategy[0] != -1
+        self.pdf_fallback = strategy[1] != -1
+        self.llm_fallback = strategy[2] != -1
+
+        provided = [(val, stage_map[idx]) for idx, val in enumerate(strategy) if val != -1]
+        # Sort by provided order
+        ordered = sorted(provided, key=lambda x: x[0])
+        self._scraping_order = [name for _, name in ordered]
+
+        numbers = [num for num, _ in provided]
+        valid_seq = sorted(numbers) == list(range(1, len(numbers) + 1)) and len(numbers) == len(set(numbers))
+        if not valid_seq:
+            enabled = [s.upper() for s in self._scraping_order]
+            disabled = [stage_map[i].upper() for i in range(3) if strategy[i] == -1]
+            logger.warning(
+                "Unexpected scraping_strategy %s interpreted as: enabled=%s; disabled=%s; order=%s",
+                strategy,
+                ", ".join(enabled) if enabled else "None",
+                ", ".join(disabled) if disabled else "None",
+                " > ".join(enabled) if enabled else "None",
+            )
+
     # ──────────────────────────────────────────────────────────────────────────
     # Public API
     # ──────────────────────────────────────────────────────────────────────────
@@ -340,7 +401,7 @@ class PFDScraper:
             the given category/date window.
         """
         self.report_links = []
-        pbar = tqdm(desc="Fetching pages", unit="page", leave=False)
+        pbar = tqdm(desc="Fetching pages", unit="", leave=False)
         for page in count(self.start_page):
             # Build the search page URL
             page_url = self.page_template.format(page=page, **self.date_params)
@@ -359,23 +420,22 @@ class PFDScraper:
 
         Workflow
         --------
-        1. Call :py:meth:`get_report_links`.
-        2. Extract each report in parallel via
-           :py:meth:`_extract_report_info`.
-        3. Optionally invoke :py:meth:`run_llm_fallback`.
-        4. Cache the final DataFrame to :pyattr:`self.reports`.
+        1. Call ``get_report_links``.
+        2. Extract each report according to ``scraping_strategy``.
+        3. Cache the final DataFrame to ``self.reports``.
 
         Returns
         -------
         pandas.DataFrame
-            One row per report.  Column presence matches the *include_* flags.
+            One row per report.  Column presence matches the ``include_*`` flags.
             The DataFrame is empty if nothing was scraped.
 
         Examples
         --------
-        >>> df = scraper.scrape_reports()
-        >>> df.columns
-        Index(['URL', 'ID', 'Date', ...], dtype='object')
+        Scrape reports and inspect columns::
+
+            df = scraper.scrape_reports()
+            df.columns
         """
         # Check to see if get_report_links() has already been run; if not, run it.
         if not self.report_links:
@@ -387,12 +447,6 @@ class PFDScraper:
         report_data = self._scrape_report_details(self.report_links)
         reports_df = pd.DataFrame(report_data)
 
-        # Run the LLM fallback if enabled
-        if self.llm_fallback and self.llm:
-            reports_df = self.run_llm_fallback(
-                reports_df if not reports_df.empty else None
-            )
-
         # Output the timestamp of scraping completion for each report, if enabled
         if self.include_date:
             reports_df = reports_df.sort_values(by=[self.COL_DATE], ascending=False)
@@ -401,21 +455,21 @@ class PFDScraper:
         return reports_df
 
     def run_llm_fallback(self, reports_df: pd.DataFrame | None = None) -> pd.DataFrame:
-        """Ask the LLM to fill cells still set to :pyattr:`self.NOT_FOUND_TEXT`.
+        """Ask the LLM to fill cells still set to ``self.NOT_FOUND_TEXT``.
 
-        Only the missing fields requested via *include_* flags are sent to
+        Only the missing fields requested via ``include_*`` flags are sent to
         the model, along with the report’s PDF bytes (when available).
 
         Parameters
         ----------
         reports_df : pandas.DataFrame | None
-            DataFrame to process.  Defaults to :pyattr:`self.reports`.
+            DataFrame to process. Defaults to ``self.reports``.
 
         Returns
         -------
         pandas.DataFrame
-            Same shape as *reports_df*, updated in place and re-cached to
-            :pyattr:`self.reports`.
+            Same shape as ``reports_df``, updated in place and re-cached to
+            ``self.reports``.
 
         Raises
         ------
@@ -424,7 +478,9 @@ class PFDScraper:
 
         Examples
         --------
-        >>> updated_df = scraper.run_llm_fallback()
+        Run the fallback step after scraping::
+
+            updated_df = scraper.run_llm_fallback()
         """
         # Make sure llm param is set
         if not self.llm:
@@ -462,23 +518,26 @@ class PFDScraper:
         old_reports: pd.DataFrame | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        clean: bool = False,
     ) -> pd.DataFrame | None:
-        """Checks to see if there are any unscraped PFD reports within Class instance parameters.
+        """Check for and append new PFD reports within the current parameters.
 
-        If so, it reruns the scraper and appends new reports to
-        :pyattr:`self.reports` under Class instance parameters.
-
-        Any URL (or ID) already present in *old_reports* is skipped.
+        If new links are found they are scraped and appended to
+        ``self.reports``. Any URL (or ID) already present in
+        *old_reports* is skipped.
 
         Optionally, you can override the *start_date* and *end_date*
-        parameters from `self`.
+        parameters from ``self`` for this call only.
 
         Parameters
         ----------
         old_reports : pandas.DataFrame | None
-            Existing DataFrame.  Defaults to :pyattr:`self.reports`.
+            Existing DataFrame. Defaults to ``self.reports``.
         start_date, end_date : str | None
             Optionally override the scraper’s date window *for this call only*.
+        clean : bool, optional
+            When ``True``, run the ``Cleaner`` on the newly
+            scraped rows before merging them with existing reports.
 
         Returns
         -------
@@ -493,9 +552,10 @@ class PFDScraper:
 
         Examples
         --------
-        >>> updated = scraper.top_up(df, end_date="2023-01-01")
-        >>> len(updated) - len(df)     # number of new reports
-        3
+        Add new reports to an existing DataFrame::
+
+            updated = scraper.top_up(df, end_date="2023-01-01")
+            len(updated) - len(df)  # number of new reports
         """
         logger.info("Attempting to 'top up' the existing reports with new data.")
 
@@ -570,20 +630,30 @@ class PFDScraper:
         if not new_links:
             return None if base_df is None and old_reports is None else base_df
 
-        # Scrape details for new links
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            new_results = list(
-                tqdm(
-                    executor.map(self._extract_report_info, new_links),
-                    total=len(new_links),
-                    desc="Topping up reports",
-                    position=0,
-                    leave=True,
-                )
-            )
-        new_records = [record for record in new_results if record is not None]
+        # Scrape details for new links using existing helpers
+        new_records = self._scrape_report_details(new_links)
         if new_records:
             new_df = pd.DataFrame(new_records)
+            # Apply LLM fallback if configured
+            if self.llm_fallback and self.llm:
+                new_df = self.run_llm_fallback(new_df)
+            if clean:
+                if not self.llm:
+                    raise ValueError(
+                        "LLM client (self.llm) required when clean=True."
+                    )
+                cleaner = Cleaner(
+                    reports=new_df,
+                    llm=self.llm,
+                    include_coroner=self.include_coroner,
+                    include_receiver=self.include_receiver,
+                    include_area=self.include_area,
+                    include_investigation=self.include_investigation,
+                    include_circumstances=self.include_circumstances,
+                    include_concerns=self.include_concerns,
+                    verbose=self.verbose,
+                )
+                new_df = cleaner.clean_reports()
             updated_reports_df = (
                 pd.concat([base_df, new_df], ignore_index=True)
                 if base_df is not None
@@ -628,7 +698,7 @@ class PFDScraper:
             )
         if not (self.html_scraping or self.pdf_fallback or self.llm_fallback):
             raise ValueError(
-                "At least one of 'html_scraping', 'pdf_fallback', or 'llm_fallback' must be enabled."
+                "scraping_strategy disables all stages. Enable at least one of HTML, PDF or LLM."
             )
         if not any(
             [
@@ -722,25 +792,144 @@ class PFDScraper:
 
 
     # ──────────────────────────────────────────────────────────────────────────
+    # Internal helpers for staged scraping
+    # ──────────────────────────────────────────────────────────────────────────
+
+    def _fetch_initial_record(self, url: str) -> dict[str, Any] | None:
+        """Fetch the report page and initialise scraping fields."""
+        fields: dict[str, str] = {
+            "id": self.NOT_FOUND_TEXT,
+            "date": self.NOT_FOUND_TEXT,
+            "receiver": self.NOT_FOUND_TEXT,
+            "coroner": self.NOT_FOUND_TEXT,
+            "area": self.NOT_FOUND_TEXT,
+            "investigation": self.NOT_FOUND_TEXT,
+            "circumstances": self.NOT_FOUND_TEXT,
+            "concerns": self.NOT_FOUND_TEXT,
+        }
+
+        soup = self._html_extractor.fetch_report_page(url)
+        if soup is None:
+            return None
+
+        pdf_link = self._pdf_extractor.get_pdf_link(soup)
+        if not pdf_link:
+            logger.error("No .pdf links found on %s", url)
+            return None
+
+        return {"url": url, "pdf_link": pdf_link, "fields": fields, "soup": soup}
+
+    def _apply_html_stage(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Extract fields from HTML if still missing."""
+        soup = record.get("soup")
+        if soup is None or not self.html_scraping:
+            return record
+
+        temp_fields = {key: self.NOT_FOUND_TEXT for key in record["fields"].keys()}
+        self._html_extractor.extract_fields_from_html(soup, temp_fields, self._include_flags)
+        for key, value in temp_fields.items():
+            if pd.isna(record["fields"][key]) or record["fields"][key] is self.NOT_FOUND_TEXT:
+                record["fields"][key] = value
+        return record
+
+    def _apply_pdf_fallback_stage(self, record: dict[str, Any]) -> dict[str, Any]:
+        """Apply PDF fallback extraction for a single record."""
+        pdf_link = record.get("pdf_link")
+        if not pdf_link:
+            return record
+
+        pdf_text = self._pdf_extractor.extract_text_from_pdf(pdf_link)
+        fields = record["fields"]
+        if pd.notna(pdf_text) and pdf_text != "N/A: Source file not PDF":
+            if any(
+                pd.isna(fields[key])
+                for key in [
+                    "coroner",
+                    "area",
+                    "receiver",
+                    "investigation",
+                    "circumstances",
+                    "concerns",
+                ]
+            ):
+                if self.verbose:
+                    logger.debug(
+                        f"Initiating .pdf fallback for URL: {record['url']} because one or more fields are missing."
+                    )
+                self._pdf_extractor.apply_pdf_fallback(pdf_text, fields, self._include_flags)
+        return record
+
+    def _apply_llm_stage(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Run the LLM fallback on the current records."""
+        if not self.llm_fallback or not self.llm or not records:
+            return records
+
+        df = pd.DataFrame([self._assemble_report(r["url"], r["fields"]) for r in records])
+        df_updated = self.run_llm_fallback(df)
+        mapping = {
+            "id": self.COL_ID,
+            "date": self.COL_DATE,
+            "coroner": self.COL_CORONER_NAME,
+            "area": self.COL_AREA,
+            "receiver": self.COL_RECEIVER,
+            "investigation": self.COL_INVESTIGATION,
+            "circumstances": self.COL_CIRCUMSTANCES,
+            "concerns": self.COL_CONCERNS,
+        }
+        for rec, (_, row) in zip(records, df_updated.iterrows()):
+            for key, col in mapping.items():
+                if col in df_updated.columns:
+                    rec["fields"][key] = row[col]
+        return records
+
+
+    # ──────────────────────────────────────────────────────────────────────────
     # Utilities: text-cleaning & assembly
     # ──────────────────────────────────────────────────────────────────────────
 
     def _scrape_report_details(self, urls: list[str]) -> list[dict[str, Any]]:
-        """Handles the mechanics of scraping PFD reports for all given URLs using multithreading,
-        returning a list of result dicts."""
-        # Use a thread pool to fetch each report
+        """Scrape reports according to ``scraping_strategy``."""
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            raw_results = list(
+            initial = list(
                 tqdm(
-                    executor.map(self._extract_report_info, urls),
+                    executor.map(self._fetch_initial_record, urls),
                     total=len(urls),
-                    desc="Scraping reports",
+                    desc="Fetching pages",
                     position=0,
                     leave=False,
                 )
             )
-        # filter out any None failures
-        return [r for r in raw_results if r is not None]
+
+        records = [r for r in initial if r is not None]
+
+        for stage in self._scraping_order:
+            if stage == "html":
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    records = list(
+                        tqdm(
+                            executor.map(self._apply_html_stage, records),
+                            total=len(records),
+                            desc="HTML scraping",
+                            position=0,
+                            leave=False,
+                        )
+                    )
+            elif stage == "pdf":
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    records = list(
+                        tqdm(
+                            executor.map(self._apply_pdf_fallback_stage, records),
+                            total=len(records),
+                            desc=".pdf scraping",
+                            position=0,
+                            leave=False,
+                        )
+                    )
+            elif stage == "llm":
+                records = self._apply_llm_stage(records)
+
+        return [self._assemble_report(r["url"], r["fields"]) for r in records]
 
     def _assemble_report(self, url: str, fields: dict[str, str]) -> dict[str, Any]:
         """Assemble a single report's data into a dictionary based on included fields."""
@@ -773,68 +962,20 @@ class PFDScraper:
         return report
 
     def _extract_report_info(self, url: str) -> dict[str, Any] | None:
-        """
-        Extracts text from a single PFD report page (given by URL).
+        """Extract full report information for a single URL."""
 
-        The process involves:
-          1. Fetching and parsing the HTML of the report page.
-          2. Identifying and downloading the associated PDF report.
-          3. Extracting all text from the PDF.
-          4. If `html_scraping` is enabled, attempting to extract all configured fields from the HTML.
-          5. If `pdf_fallback` is enabled and any fields are still missing, attempting to extract them
-             from the PDF text using keyword-based section extraction.
-          6. (LLM fallback is handled by `run_llm_fallback` method if enabled globally).
+        record = self._fetch_initial_record(url)
+        if record is None:
+            return None
 
-        :param url: The URL of the PFD report's HTML page.
-        :return: A dictionary containing the extracted report information.
-                 Returns None if the page fetch fails or essential components (like PDF link) are missing.
-        """
-        # Initialise all fields with default "not found" text
-        fields: dict[str, str] = {
-            "id": self.NOT_FOUND_TEXT,
-            "date": self.NOT_FOUND_TEXT,
-            "receiver": self.NOT_FOUND_TEXT,
-            "coroner": self.NOT_FOUND_TEXT,
-            "area": self.NOT_FOUND_TEXT,
-            "investigation": self.NOT_FOUND_TEXT,
-            "circumstances": self.NOT_FOUND_TEXT,
-            "concerns": self.NOT_FOUND_TEXT,
-        }
-        # Fetch HTML page
-        soup = self._html_extractor.fetch_report_page(url)
-        if soup is None:
-            return None
-        # Find PDF download link
-        pdf_link = self._pdf_extractor.get_pdf_link(soup)
-        if not pdf_link:
-            logger.error("No .pdf links found on %s", url)
-            return None
-        # Download and extract PDF text
-        pdf_text = self._pdf_extractor.extract_text_from_pdf(pdf_link)
-        # Extract fields from HTML if enabled
-        if self.html_scraping:
-            self._html_extractor.extract_fields_from_html(soup, fields, self._include_flags)
-        # Use PDF fallback if enabled and PDF text is available
-        if self.pdf_fallback and pdf_text not in (
-            self.NOT_FOUND_TEXT,
-            "N/A: Source file not PDF",
-        ):
-            if any( # ...only trigger when one of the main fields is missing
-                fields[key] == self.NOT_FOUND_TEXT
-                for key in [
-                    "coroner",
-                    "area",
-                    "receiver",
-                    "investigation",
-                    "circumstances",
-                    "concerns",
-                ]
-            ):
-                if self.verbose:
-                    logger.debug(
-                        f"Initiating .pdf fallback for URL: {url} because one or more fields are missing."
-                    )
-                self._pdf_extractor.apply_pdf_fallback(pdf_text, fields, self._include_flags)
-        # Assemble result dictionary
-        report = self._assemble_report(url, fields)
-        return report
+        records = [record]
+        for stage in self._scraping_order:
+            if stage == "html":
+                records = [self._apply_html_stage(records[0])]
+            elif stage == "pdf":
+                records = [self._apply_pdf_fallback_stage(records[0])]
+            elif stage == "llm":
+                records = self._apply_llm_stage(records)
+
+        record = records[0]
+        return self._assemble_report(record["url"], record["fields"])

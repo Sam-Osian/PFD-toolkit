@@ -20,7 +20,7 @@ def run_llm_fallback(
     llm_field_config: List[Tuple[bool, str, str, str]],
     llm_to_df_mapping: Dict[str, str],
     col_url: str,
-    not_found_text: str,
+    not_found_text: object,
     llm_key_date: str,
     verbose: bool = False,
 ) -> pd.DataFrame:
@@ -35,7 +35,7 @@ def run_llm_fallback(
         # Build dict of fields still missing
         missing_fields: Dict[str, str] = {}
         for include_flag, df_col_name, llm_key, llm_prompt in llm_field_config:
-            if include_flag and row_data.get(df_col_name, "") == not_found_text:
+            if include_flag and pd.isna(row_data.get(df_col_name)):
                 missing_fields[llm_key] = llm_prompt
         if not missing_fields:
             return idx, {}
@@ -73,7 +73,7 @@ def run_llm_fallback(
             for future in tqdm(
                 as_completed(future_to_idx),
                 total=len(future_to_idx),
-                desc="Running LLM fallback",
+                desc="LLM scraping",
                 position=0,
                 leave=True,
             ):
@@ -106,7 +106,7 @@ def run_llm_fallback(
             df_col_name = llm_to_df_mapping.get(llm_key)
             if df_col_name:
                 if llm_key == llm_key_date:
-                    if value_from_llm != not_found_text:
+                    if not pd.isna(value_from_llm):
                         df.at[idx, df_col_name] = normalise_date(value_from_llm, verbose=verbose)
                 else:
                     df.at[idx, df_col_name] = value_from_llm

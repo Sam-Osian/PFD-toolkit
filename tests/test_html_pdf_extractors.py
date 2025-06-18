@@ -6,7 +6,7 @@ from pfd_toolkit.config import ScraperConfig, GeneralConfig
 
 def make_html_extractor():
     cfg = ScraperConfig()
-    return HtmlExtractor(cfg, timeout=1, id_pattern=None, not_found_text="N/A")
+    return HtmlExtractor(cfg, timeout=1, id_pattern=None, not_found_text=GeneralConfig.NOT_FOUND_TEXT)
 
 
 def test_extract_html_paragraph():
@@ -26,7 +26,7 @@ def test_extract_html_section():
 
 
 def test_extract_pdf_section():
-    extractor = PdfExtractor(ScraperConfig(), timeout=1, not_found_text='N/A')
+    extractor = PdfExtractor(ScraperConfig(), timeout=1, not_found_text=GeneralConfig.NOT_FOUND_TEXT)
     sample = 'start text KEY1 middle KEY2 end'
     result = extractor.extract_pdf_section(sample, ['KEY1'], ['KEY2'])
     assert result.strip() == 'middle'
@@ -34,7 +34,7 @@ def test_extract_pdf_section():
 
 def test_extract_fields_from_html_id_and_date():
     cfg = ScraperConfig()
-    extractor = HtmlExtractor(cfg, timeout=1, id_pattern=GeneralConfig.ID_PATTERN, not_found_text="N/A")
+    extractor = HtmlExtractor(cfg, timeout=1, id_pattern=GeneralConfig.ID_PATTERN, not_found_text=GeneralConfig.NOT_FOUND_TEXT)
     html = """
         <p>Ref: 2024-1234</p>
         <p>Date of report: 1 May 2024</p>
@@ -49,11 +49,11 @@ def test_extract_fields_from_html_id_and_date():
 
 def test_apply_pdf_fallback_updates_fields():
     cfg = ScraperConfig()
-    extractor = PdfExtractor(cfg, timeout=1, not_found_text='N/A')
+    extractor = PdfExtractor(cfg, timeout=1, not_found_text=GeneralConfig.NOT_FOUND_TEXT)
     pdf_text = (
         "INVESTIGATION and INQUEST some investigation text that is quite long and clearly exceeds thirty characters CIRCUMSTANCES "
     )
-    fields = {'investigation': 'N/A'}
+    fields = {'investigation': GeneralConfig.NOT_FOUND_TEXT}
     flags = {'investigation': True}
     extractor.apply_pdf_fallback(pdf_text, fields, flags)
     assert fields['investigation'].startswith('some investigation text')

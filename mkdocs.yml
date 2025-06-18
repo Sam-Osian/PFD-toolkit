@@ -1,6 +1,11 @@
 site_name: PFD Toolkit
+site_description: "Turn raw PFD reports into structured insights — fast."
 site_url: https://sam-osian.github.io/pfd-toolkit/
+repo_url: https://github.com/Sam-Osian/PFD-toolkit/
+edit_uri: edit/main/docs/
 theme:
+  icon:
+    repo: fontawesome/brands/github
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
@@ -22,14 +27,22 @@ theme:
   features:
     - navigation.instant
     - navigation.sections
+    - navigation.footer
+    - navigation.tabs
+    - navigation.tabs.sticky
     - content.code.copy
     - search.suggest
     - search.highlight
+    - social
+    - content.tooltips
 extra_css:
   - stylesheets/extra.css
+extra_templates:
+  - 404.html
 
 
 markdown_extensions:
+  - tables
   - admonition
   - codehilite
   - toc:
@@ -41,9 +54,28 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - abbr
+  - attr_list
+  - pymdownx.snippets
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
 plugins:
+  - git-revision-date-localized:
+      type: date
+      fallback_to_build_date: false
   - search
+  - social:
+      cards: true
+      cards_dir: assets/images/social
+      cards_layout_options:
+        font_family: "IBM Plex Sans"
+        background_color: "#ffffff"
+        color: "#000000"
   - autorefs
   - mkdocstrings:
       default_handler: python
@@ -61,17 +93,39 @@ plugins:
               - "!^_" # Exclude private methods
 
 nav:
-  - Home: index.md
-  - Getting started: usage.md
-  - Loading reports: loader.md
+  - Home: 
+      - Overview: index.md
+      - About the data: pfd_reports.md
+      - Not a coder?: non_coders.md
+  - Getting started:
+      - Load & screen reports: getting_started/load_and_screen.md
+      - Discover themes: getting_started/discover_themes.md
+  - Load PFD reports:
+      - Overview: loader/index.md
+      - Loading report data: loader/load_reports.md
+      - Scraping module: loader/scraper.md
   - Creating an LLM client: llm_setup.md
-  - Screening relevant reports: screener.md
-  - API Reference:
-      - Data loader: reference/loader.md
-      - Screener: reference/screener.md
-      - Scraper: reference/scraper.md
-      - Cleaner: reference/cleaner.md
-      - LLM: reference/llm.md
+  - Screening relevant reports:
+      - Overview: screener/index.md
+      - Getting started: screener/basics.md
+      - Additional options: screener/options.md
+      - Tips for writing a good user query: screener/tips.md
+  - Analysing reports:
+      - Overview: extractor/index.md
+      - Basic usage: extractor/basics.md
+      - Summaries & token counts: extractor/summarising.md
+      - Tagging reports with themes: extractor/themes.md
+      - Capturing text spans: extractor/spans.md
+      - Caching and exporting results: extractor/caching.md
   - Extra:
       - Changelog: changelog.md
       - Feedback & contributions: contribute.md
+      - Contact: contact.md
+      - API Reference:
+          - Data loader: reference/loader.md
+          - Screener: reference/screener.md
+          - Extractor: reference/extractor.md
+          - Scraper: reference/scraper.md
+          - Cleaner: reference/cleaner.md
+          - LLM: reference/llm.md
+

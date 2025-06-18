@@ -1,0 +1,39 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.0, pluggy-1.6.0
+rootdir: /home/sam/Documents/PhD/PFD-toolkit
+configfile: pyproject.toml
+plugins: cov-6.1.1, anyio-4.8.0
+collected 57 items
+
+tests/test_cleaner_screener.py ......                                    [ 10%]
+tests/test_config.py .....                                               [ 19%]
+tests/test_extractor.py ...................                              [ 52%]
+tests/test_html_pdf_extractors.py .....                                  [ 61%]
+tests/test_llm_extractor.py ..                                           [ 64%]
+tests/test_llm_methods.py ....                                           [ 71%]
+tests/test_loader.py ...                                                 [ 77%]
+tests/test_network_scraper.py ...                                        [ 82%]
+tests/test_scraper_misc.py .                                             [ 84%]
+tests/test_text_utils.py .........                                       [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.3-final-0 ________________
+
+Name                                        Stmts   Miss  Cover
+---------------------------------------------------------------
+src/pfd_toolkit/__init__.py                    10      0   100%
+src/pfd_toolkit/cleaner.py                    119     23    81%
+src/pfd_toolkit/config.py                      70      0   100%
+src/pfd_toolkit/extractor.py                  272     35    87%
+src/pfd_toolkit/llm.py                        144     70    51%
+src/pfd_toolkit/loader.py                      24      2    92%
+src/pfd_toolkit/scraper/__init__.py             5      0   100%
+src/pfd_toolkit/scraper/html_extractor.py      67      7    90%
+src/pfd_toolkit/scraper/llm_extractor.py       56     14    75%
+src/pfd_toolkit/scraper/pdf_extractor.py      121     48    60%
+src/pfd_toolkit/scraper/scraper.py            256    118    54%
+src/pfd_toolkit/screener.py                   148     47    68%
+src/pfd_toolkit/text_utils.py                  45      6    87%
+---------------------------------------------------------------
+TOTAL                                        1337    370    72%
+============================== 57 passed in 2.90s ==============================

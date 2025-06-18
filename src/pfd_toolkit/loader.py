@@ -12,48 +12,44 @@ _DATA_FILE: Final[str] = "all_reports.csv"
 
 
 def load_reports(
-    category: str = "all",
     start_date: str = "2000-01-01",
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
 ) -> pd.DataFrame:
-    """Utility for loading the fully-cleaned **Prevention of Future Death**
-    report dataset shipped with *pfd_toolkit* as a :class:`pandas.DataFrame`.
+    """Load the bundled Prevention of Future Death reports as a DataFrame.
 
     Parameters
     ----------
-    category : str, optional
-        PFD category slug (e.g. ``"suicide"``) or ``"all"``.
     start_date : str, optional
-        Inclusive lower bound for the **report date** in the ``YYYY-MM-DD``
-        format.
+        Inclusive lower bound for the report date in ``YYYY-MM-DD`` format.
+        Defaults to ``"2000-01-01"``.
     end_date : str, optional
-        Inclusive upper bound for the **report date** in the ``YYYY-MM-DD``
-        format.
+        Inclusive upper bound for the report date in ``YYYY-MM-DD`` format.
+        Defaults to ``"2050-01-01"``.
     n_reports : int or None, optional
-        If given, keep only the most recent *n_reports* (based on the “Date” column)
-        after filtering by date. If `None` (the default), return all reports
-        in the specified date range.
+        Keep only the most recent ``n_reports`` rows after filtering by date.
+        ``None`` (the default) returns all rows.
 
     Returns
     -------
     pandas.DataFrame
-        Reports filtered by date, sorted newest-first, and (optionally) truncated
-        to the first *n_reports* rows.
+        Reports filtered by date, sorted newest first and optionally
+        limited to ``n_reports`` rows.
 
     Raises
     ------
     ValueError
         If *start_date* is after *end_date*.
     FileNotFoundError
-        If the bundled CSV cannot be located (i.e. a package-level error).
+        If the bundled CSV cannot be located.
 
     Examples
     --------
-    >>> from pfd_toolkit import load_reports
-    >>> df = load_reports(start_date="2020-01-01", end_date="2022-12-31", n_reports=1000)
-    >>> df.head()
+        from pfd_toolkit import load_reports
+        df = load_reports(start_date="2020-01-01", end_date="2022-12-31", n_reports=100)
+        df.head()
     """
+    
     # Date param reading
     date_from = _date_parser.parse(start_date)
     date_to = _date_parser.parse(end_date)
@@ -75,13 +71,13 @@ def load_reports(
 
     # Cleaning
     # ...Parse the Date column, drop rows with invalid dates, and filter window
-    reports["Date"] = pd.to_datetime(
-        reports["Date"], format="%Y-%m-%d", errors="coerce"
+    reports["date"] = pd.to_datetime(
+        reports["date"], format="%Y-%m-%d", errors="coerce"
     )
     reports = (
-        reports.dropna(subset=["Date"])
-        .loc[lambda df: (df["Date"] >= date_from) & (df["Date"] <= date_to)]
-        .sort_values("Date", ascending=False)
+        reports.dropna(subset=["date"])
+        .loc[lambda df: (df["date"] >= date_from) & (df["date"] <= date_to)]
+        .sort_values("date", ascending=False)
         .reset_index(drop=True)
     )
 
@@ -89,8 +85,5 @@ def load_reports(
     if n_reports is not None:
         # .head(n) will return all rows if n > len(reports)
         reports = reports.head(n_reports).reset_index(drop=True)
-
-    # Category filtering placeholder
-    # _ = category.lower()
 
     return reports

@@ -1,10 +1,10 @@
-from .scraper import PFDScraper
+from .scraper import Scraper
 from .html_extractor import HtmlExtractor, HtmlFieldConfig, DEFAULT_HTML_FIELDS
 from .pdf_extractor import PdfExtractor, PdfSectionConfig, DEFAULT_PDF_SECTIONS
 from .llm_extractor import run_llm_fallback
 
 __all__ = [
-    "PFDScraper",
+    "Scraper",
     "HtmlExtractor",
     "PdfExtractor",
     "run_llm_fallback",
