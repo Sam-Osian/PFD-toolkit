@@ -1646,7 +1646,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'Date' column is included. Defaults to False.</p>
+                <p>Flag to determine if the 'date' column is included. Defaults to False.</p>
               </div>
             </td>
             <td>
@@ -1662,7 +1662,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'CoronerName' column is included. Defaults to False.</p>
+                <p>Flag to determine if the 'coroner' column is included. Defaults to False.</p>
               </div>
             </td>
             <td>
@@ -1678,7 +1678,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'Area' column is included. Defaults to False.</p>
+                <p>Flag to determine if the 'area' column is included. Defaults to False.</p>
               </div>
             </td>
             <td>
@@ -1694,7 +1694,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'Receiver' column is included. Defaults to False.</p>
+                <p>Flag to determine if the 'receiver' column is included. Defaults to False.</p>
               </div>
             </td>
             <td>
@@ -1710,7 +1710,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'InvestigationAndInquest' column is included. Defaults to True.</p>
+                <p>Flag to determine if the 'investigation' column is included. Defaults to True.</p>
               </div>
             </td>
             <td>
@@ -1726,7 +1726,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'CircumstancesOfDeath' column is included. Defaults to True.</p>
+                <p>Flag to determine if the 'circumstances' column is included. Defaults to True.</p>
               </div>
             </td>
             <td>
@@ -1742,7 +1742,7 @@ add a classification column to the original DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Flag to determine if the 'MattersOfConcern' column is included. Defaults to True.</p>
+                <p>Flag to determine if the 'concerns' column is included. Defaults to True.</p>
               </div>
             </td>
             <td>
@@ -1754,8 +1754,7 @@ add a classification column to the original DataFrame.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <p>Basic usage::</p>
-<div class="codehilite"><pre><span></span><code>user_topic = &quot;medication errors&quot;
+    <div class="codehilite"><pre><span></span><code>user_topic = &quot;medication errors&quot;
 llm_client = LLM()
 screener = Screener(llm=llm_client, reports=reports_df)
 screened_reports = screener.screen_reports(user_query=user_topic)
@@ -1947,8 +1946,7 @@ original DataFrame with an added classification column.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <p>Example session::</p>
-<div class="codehilite"><pre><span></span><code>reports_df = pd.DataFrame(data)
+    <div class="codehilite"><pre><span></span><code>reports_df = pd.DataFrame(data)
 screener = Screener(LLM(), reports=reports_df)
 
 <span class="gh">#</span> Screen reports with the initial query

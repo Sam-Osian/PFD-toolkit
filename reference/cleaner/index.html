@@ -1646,7 +1646,7 @@ writes the returned text back into a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Clean the <code>Coroner</code> column. Defaults to <code>True</code>.</p>
+                <p>Clean the <code>coroner</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1662,7 +1662,7 @@ writes the returned text back into a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Clean the <code>Receiver</code> column. Defaults to <code>True</code>.</p>
+                <p>Clean the <code>receiver</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1678,7 +1678,7 @@ writes the returned text back into a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Clean the <code>Area</code> column. Defaults to <code>True</code>.</p>
+                <p>Clean the <code>area</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1694,7 +1694,7 @@ writes the returned text back into a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Clean the <code>InvestigationAndInquest</code> column. Defaults to <code>True</code>.</p>
+                <p>Clean the <code>investigation</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1710,7 +1710,7 @@ writes the returned text back into a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Clean the <code>CircumstancesOfDeath</code> column. Defaults to <code>True</code>.</p>
+                <p>Clean the <code>circumstances</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1726,7 +1726,7 @@ writes the returned text back into a copy of the DataFrame.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Clean the <code>MattersOfConcern</code> column. Defaults to <code>True</code>.</p>
+                <p>Clean the <code>concerns</code> column. Defaults to <code>True</code>.</p>
               </div>
             </td>
             <td>
@@ -1886,8 +1886,7 @@ writes the returned text back into a copy of the DataFrame.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <p>Basic usage::</p>
-<div class="codehilite"><pre><span></span><code>cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
+    <div class="codehilite"><pre><span></span><code>cleaner = Cleaner(df, llm, include_coroner=False, verbose=True)
 cleaned_df = cleaner.clean_reports()
 cleaned_df.head()
 </code></pre></div>
@@ -1988,9 +1987,8 @@ in the investigation, circumstances and concerns fields. Defaults to
 
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <p>Basic usage::</p>
-<div class="codehilite"><pre><span></span><code>cleaned = cleaner.clean_reports()
-cleaned.equals(df)
+    <div class="codehilite"><pre><span></span><code>cleaner = Cleaner(llm=llm_client, reports=reports)
+cleaned = cleaner.clean_reports()
 </code></pre></div>
 
 

@@ -1568,22 +1568,6 @@
       <tbody>
           <tr class="doc-section-item">
             <td>
-                <code>category</code>
-            </td>
-            <td>
-                  <code><span title="str">str</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Judiciary category slug. Defaults to <code>"all"</code>.</p>
-              </div>
-            </td>
-            <td>
-                  <code>&#39;all&#39;</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
                 <code>start_date</code>
             </td>
             <td>
@@ -1695,9 +1679,8 @@ limited to <code>n_reports</code> rows.</p>
 
 
 <p><span class="doc-section-title">Examples:</span></p>
-    <p>Load reports for a specific period::</p>
-<div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pfd_toolkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_reports</span>
-<span class="n">df</span> <span class="o">=</span> <span class="n">load_reports</span><span class="p">(</span><span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;2020-01-01&quot;</span><span class="p">,</span> <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;2022-12-31&quot;</span><span class="p">,</span> <span class="n">n_reports</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <div class="codehilite"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">pfd_toolkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_reports</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">load_reports</span><span class="p">(</span><span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;2020-01-01&quot;</span><span class="p">,</span> <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;2022-12-31&quot;</span><span class="p">,</span> <span class="n">n_reports</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
 <span class="n">df</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </code></pre></div>
 
