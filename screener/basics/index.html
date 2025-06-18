@@ -1557,23 +1557,21 @@
 
 <h1 id="getting-started">Getting started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h1>
 <p>Natural-language filtering is one of the headline features of PFD Toolkit. The <code>Screener</code> class lets you describe a topic in plain English – e.g. "deaths in police custody" – and have an LLM screen reports, delivering you a curated dataset.</p>
-<p>You do not have to use <code>Screener</code> to benefit from the toolkit. If the built-in category tags are good enough, the <code>load_reports()</code> helper will give you a ready-made dataset without any LLM calls. <code>Screener</code> is offered for those projects that need something more nuanced than the provided broad category tags.</p>
-<p>To use the <code>Screener</code> you'll need to <a href="../../llm_setup/">set up an LLM client</a>.</p>
+<p>To use the <code>Screener</code> you'll first need to <a href="../../llm_setup/">set up an LLM client</a> if you haven't already.</p>
 <hr />
 <h2 id="a-minimal-example">A minimal example<a class="headerlink" href="#a-minimal-example" title="Permanent link">&para;</a></h2>
 <p>First, import the necessary modules, load reports and set up an <code>LLM</code> client:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pfd_toolkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_reports</span><span class="p">,</span> <span class="n">LLM</span><span class="p">,</span> <span class="n">Screener</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Grab the pre-processed April 2025 dataset</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">reports</span> <span class="o">=</span> <span class="n">load_reports</span><span class="p">(</span><span class="n">category</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                       <span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;2025-04-01&quot;</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>                       <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;2025-04-30&quot;</span><span class="p">)</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># Set up your LLM client (see “Creating an LLM client” for details)</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">llm_client</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="s2">&quot;YOUR-API-KEY&quot;</span><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Grab all reports from 2024</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">reports</span> <span class="o">=</span> <span class="n">load_reports</span><span class="p">(</span><span class="n">start_date</span><span class="o">=</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>                       <span class="n">end_date</span><span class="o">=</span><span class="s2">&quot;2023-12-31&quot;</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="c1"># Set up your LLM client</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">llm_client</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span><span class="n">api_key</span><span class="o">=</span><span class="n">YOUR</span><span class="o">-</span><span class="n">API</span><span class="o">-</span><span class="n">KEY</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Then describe the reports you're interested in, pass the query to <code>Screener</code> and you'll be given a filtered dataset containing matching reports.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">user_query</span> <span class="o">=</span> <span class="s2">&quot;deaths in police custody&quot;</span>
+<p>Then define a <code>user_query</code> which describes the reports you're interested in. Pass this query as an argument to <code>screen_reports()</code> and you'll be given a filtered dataset containing matching reports.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">user_query</span> <span class="o">=</span> <span class="s2">&quot;Deaths in police custody.&quot;</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">screener</span> <span class="o">=</span> <span class="n">Screener</span><span class="p">(</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">llm</span><span class="o">=</span><span class="n">llm_client</span><span class="p">,</span>
@@ -1581,18 +1579,16 @@
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="n">police_df</span> <span class="o">=</span> <span class="n">screener</span><span class="o">.</span><span class="n">screen_reports</span><span class="p">(</span><span class="n">user_query</span><span class="o">=</span><span class="n">user_query</span><span class="p">,</span> <span class="n">filter_df</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">police_df</span><span class="p">)</span><span class="si">}</span><span class="s2"> reports matched.&quot;</span><span class="p">)</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="o">&gt;&gt;</span> <span class="s2">&quot;13 reports matched.&quot;</span>
 </span></code></pre></div>
+<p><code>police_df</code> will now only contain reports which the LLM believes matches your query.</p>
 <hr />
 <h2 id="why-not-just-have-a-normal-search-function">Why not just have a normal "search" function?<a class="headerlink" href="#why-not-just-have-a-normal-search-function" title="Permanent link">&para;</a></h2>
 <p>A keyword search is only as good as the exact words you type. Coroners, however, don't always follow a shared vocabulary. The same idea can surface in wildly different forms:</p>
 <ul>
 <li><em>Under-staffing</em> might be written as <strong>"staff shortages," "inadequate nurse cover,"</strong> or even <strong>"resource constraints."</strong></li>
-<li><em>Suicide in prisons</em> may masquerade as <strong>"self-inflicted injury while remanded,"</strong> <strong>"ligature event in cell,"</strong> or appear across separate sentences.</li>
+<li><em>Suicide in prisons</em> may masquerade as <strong>"self-inflicted injury while remanded,"</strong> <strong>"ligature event in cell,"</strong> or may not even appear together in the same sentence.</li>
 </ul>
-<p>A keyword filter misses these variants unless you guess every synonym in advance. By contrast, an <code>LLM</code> understands the context behind your query and links the phrasing for you, which is exactly what <code>Screener</code> taps into.</p>
+<p>A keyword filter misses these variants unless you identify every synonym in advance. By contrast, an <code>LLM</code> understands the context behind your query and links the phrasing for you, which is exactly what <code>Screener</code> taps into.</p>
 
 
 

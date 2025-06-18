@@ -842,9 +842,27 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-do-i-need-an-llm-client-anyway" class="md-nav__link">
+  <a href="#speed-up-your-llm" class="md-nav__link">
     <span class="md-ellipsis">
-      Why do I need an LLM client anyway?
+      Speed up your LLM
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#change-your-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Change your model
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-a-custom-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Use a custom endpoint
     </span>
   </a>
   
@@ -1541,9 +1559,27 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#why-do-i-need-an-llm-client-anyway" class="md-nav__link">
+  <a href="#speed-up-your-llm" class="md-nav__link">
     <span class="md-ellipsis">
-      Why do I need an LLM client anyway?
+      Speed up your LLM
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#change-your-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      Change your model
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#use-a-custom-endpoint" class="md-nav__link">
+    <span class="md-ellipsis">
+      Use a custom endpoint
     </span>
   </a>
   
@@ -1595,9 +1631,33 @@
 <li>Add credit to your account (just $5 is enough for most research uses).</li>
 </ol>
 <p>For more information about usage costs, see <a href="https://openai.com/api/pricing/">OpenAI pricing</a>.</p>
-<h2 id="why-do-i-need-an-llm-client-anyway">Why do I need an LLM client anyway?<a class="headerlink" href="#why-do-i-need-an-llm-client-anyway" title="Permanent link">&para;</a></h2>
-<p>Many toolkit features - like advanced cleaning, screening, and assigning themes - rely on AI, which goes far beyond what’s possible with rule-based scripts. If you want to use these features, you’ll need to set up an LLM client as described above.</p>
-<p>We’ve made the setup as simple as possible, especially if you’re new to APIs. If you get stuck, please <a href="../contact/">reach out</a>: we’re happy to help.</p>
+<h2 id="speed-up-your-llm">Speed up your LLM<a class="headerlink" href="#speed-up-your-llm" title="Permanent link">&para;</a></h2>
+<p>Process more reports in parallel by increasing the <code>max_workers</code> parameter. By default, this is set to <code>8</code>, but larger values can lead to faster run-times.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">llm_client</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">api_key</span><span class="o">=</span><span class="n">openai_api_key</span><span class="p">,</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    <span class="n">max_workers</span><span class="o">=</span><span class="mi">30</span>      <span class="c1"># Increase parallelisation</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="p">)</span>
+</span></code></pre></div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>OpenAI enforces rate limits for each account and model. If you set <code>max_workers</code> too high, you may hit these limits and see errors or slowdowns. PFD Toolkit will automatically pause and retry if a rate limit is reached, but it’s best to keep <code>max_workers</code> within a reasonable range (usually 8 to 20 for most users). </p>
+<p>Your exact rate limit may depend on the 'tier' of your OpenAI account as well as the model you're using. If you need higher limits, you may be able to apply for an increase in your OpenAI account settings.</p>
+</div>
+<h2 id="change-your-model">Change your model<a class="headerlink" href="#change-your-model" title="Permanent link">&para;</a></h2>
+<p>By default, PFD Toolkit uses <code>gpt-4.1-mini</code>. We love this model as it balances cost, speed, and accuracy. We also recommend its larger equivalent, <code>gpt-4.1</code>, which may offer improved performance, though with additional API costs and less forgiving rate limits.</p>
+<p><div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">llm_client</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">api_key</span><span class="o">=</span><span class="n">openai_api_key</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">model</span><span class="o">=</span><span class="s2">&quot;gpt-4.1&quot;</span>     <span class="c1"># Set model here</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span>
+</span></code></pre></div>
+See OpenAI's <a href="https://platform.openai.com/docs/models">documentation</a> for a complete list of their models.</p>
+<h2 id="use-a-custom-endpoint">Use a custom endpoint<a class="headerlink" href="#use-a-custom-endpoint" title="Permanent link">&para;</a></h2>
+<p>You can set a custom endpoint (e.g. for Azure, Ollama, etc.) if it supports the OpenAI SDK:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">llm_client</span> <span class="o">=</span> <span class="n">LLM</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">api_key</span><span class="o">=</span><span class="n">openai_api_key</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">base_url</span><span class="o">=</span><span class="s2">&quot;https://...&quot;</span>   <span class="c1"># Set your custom endpoint</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
+</span></code></pre></div>
 
 
 
