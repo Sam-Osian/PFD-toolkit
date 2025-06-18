@@ -97,9 +97,9 @@ nav:
       - Overview: index.md
       - About the data: pfd_reports.md
       - Not a coder?: non_coders.md
-  - Getting started: 
+  - Getting started:
       - Load & screen reports: getting_started/load_and_screen.md
-      - Discover themes: discover_themes.md
+      - Discover themes: getting_started/discover_themes.md
   - Load PFD reports:
       - Overview: loader/index.md
       - Loading report data: loader/load_reports.md

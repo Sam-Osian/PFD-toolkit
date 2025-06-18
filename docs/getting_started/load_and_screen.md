@@ -1,6 +1,8 @@
 # Getting started
 
-This page talks you through an example workflow using PFD Toolkit: loading a dataset and screening for relevant cases.
+This page talks you through an example workflow using PFD Toolkit: loading a dataset and screening for relevant cases related to "detention under the Mental Health Act". 
+
+This is just an example. PFD reports contain a breadth of information across a whole range of topics and domains.
 
 It doesn't cover everything: for more, we strongly suggest browsing through the pages in the top panel.
 
@@ -15,7 +17,7 @@ pip install pfd_toolkit
 ```
 
 !!! Note
-    PFD Toolkit is not currently available via Anaconda. If you'd like this to change, please make a [GitHub Issue](https://github.com/Sam-Osian/PFD-toolkit/issues). We strongly recommend [`uv`](https://docs.astral.sh/uv/concepts/projects/dependencies/) for dependency management.
+    PFD Toolkit is not currently available via Anaconda. If you'd like this to change, please make a [GitHub Issue](https://github.com/Sam-Osian/PFD-toolkit/issues). Personally, we love using [`uv`](https://docs.astral.sh/uv/concepts/projects/dependencies/) as an alternative to (Ana)conda for dependency management.
 
 ---
 
@@ -58,7 +60,7 @@ PFD Toolkit lets you query reports in plain English — no need to know precise 
 
 Screening and other advanced features use AI, and require you to first set up an LLM client. You'll need to head to [platform.openai.com](https://platform.openai.com/docs/overview) and create an API key. Once you've got this, simply feed it to the `LLM`.
 
-For more information, see [Settting up an LLM client](llm_setup.md).
+For more information, see [Settting up an LLM client](../llm_setup.md).
 
 ```python
 from pfd_toolkit import LLM
@@ -88,7 +90,7 @@ filtered_reports = screener.screen_reports(user_query=user_query)
 `filtered_reports` returns a DataFrame, only containing reports that matched your query.
 
 
-For more information on Screening reports, see [Screening relevant reports](screener/index.md).
+For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
 
 
 
