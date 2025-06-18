@@ -1,0 +1,64 @@
+/* IBM Plex Sans */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@100..700&display=swap');
+
+
+body,
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+body,
+h1, h2, h3, h4, h5, h6,
+.md-typeset,
+.md-typeset .md-typeset,
+.md-content,
+.md-content h1,
+.md-content h2,
+.md-content h3 {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+}
+
+
+/* Typical reading size */
+.md-content {
+  font-variation-settings: 'wght' 400, 'opsz' 16; /* 16 px optical size */
+  letter-spacing: 0.01em; 
+}
+
+/* Headings a bit bolder */
+h1, h2, h3 {
+  font-variation-settings: 'wght' 600, 'opsz' 32;
+}
+
+html {
+  -webkit-font-smoothing: antialiased; /* macOS & iOS */
+  -moz-osx-font-smoothing: grayscale;  /* old Firefox */
+}
+
+
+
+.md-content__heading .headerlink {
+    font-size: 0.8em;      /* Slightly smaller */
+    color: #6272a4;        /* Example subtle color from Dracula palette */
+    opacity: 0.7;
+    text-decoration: none;
+  }
+  .md-content__heading .headerlink:hover {
+    opacity: 1;
+    color: #bd93f9;  /* Example highlight on hover */
+  }
+  
+  .md-tabs__link {
+    font-weight: bold;
+  }
+  .md-tabs__link--active {
+    color: var(--md-primary-fg-color);
+  }
+/* Clickable dropdown for navigation tabs */
+.md-tabs__item .md-tabs__dropdown {
+  display: none;
+}
+.md-tabs__item--active .md-tabs__dropdown {
+  display: block;
+}
+
