@@ -2,9 +2,8 @@ name: Auto PFD Top-Up
 
 on:
   workflow_dispatch:
-  # Automatically trigger every Monday at 1:00 AM UTC
   schedule:
-    - cron: '0 1 * * 1'  # ...Format: Minute Hour Day Month Weekday (UTC timezone)
+    - cron: '0 1 * * 1'  # Automatically trigger every Monday at 1:00 AM UTC
 
 permissions:
   contents: write
@@ -14,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check if on main branch  # ...exit if not on main branch
+      - name: Check if on main branch
         if: github.ref != 'refs/heads/main'
         run: |
           echo "This workflow is designed to run on main only."
@@ -23,11 +22,19 @@ jobs:
       - name: Checkout Repository Code
         uses: actions/checkout@v4
 
+      - name: Scan for committed secrets
+        uses: zricethezav/gitleaks-action@v2
+        with:
+          args: --exit-on-found
+
+      - name: Mask OpenAI key
+        run: echo "::add-mask::${{ secrets.OPENAI_API_KEY }}"
+
       - name: Install UV
         uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true  # ...caches installed dependencies for faster subsequent runs
-          cache-dependency-glob: "uv.lock"  # ...cache is invalidated if uv.lock changes
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -37,11 +44,13 @@ jobs:
       - name: Install Project Dependencies via UV
         run: uv sync
 
-      - name: Run the PFD Top-Up Script
+      - name: Run the PFD Top-Up Script securely
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
+          set +x
           uv run python scripts/update_reports.py
+          set -x
 
       - name: Display Summary in Actions UI
         if: always()
@@ -57,9 +66,8 @@ jobs:
 
       - name: Update report count in docs
         run: uv run python scripts/update_report_count.py
-  
+
       - name: Commit & Push Changes
-        # (...only if the script indicated changes by creating the summary file)
         if: github.ref == 'refs/heads/main'
         uses: EndBug/add-and-commit@v9
         with:
@@ -68,5 +76,5 @@ jobs:
             docs/index.md
           default_author: github_actions
           message: "🤖 Auto PFD dataset top-up"
-          pull: '--rebase --autostash' # ...pull from origin before pushing
+          pull: '--rebase --autostash'
           push: true
