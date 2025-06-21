@@ -28,6 +28,8 @@ screener = Screener(llm=llm_client, reports=reports)
 online_med_reports = screener.screen_reports(user_query=query)
 ```
 
+---
+
 ## How do I get an OpenAI API key?
 
 1. Sign up or log in at [OpenAI Platform](https://platform.openai.com).
@@ -37,6 +39,7 @@ online_med_reports = screener.screen_reports(user_query=query)
 5. Add credit to your account (just $5 is enough for most research uses).
 
 For more information about usage costs, see [OpenAI pricing](https://openai.com/api/pricing/).
+---
 
 ## Speed up your LLM
 
@@ -54,6 +57,7 @@ llm_client = LLM(
     
     Your exact rate limit may depend on the 'tier' of your OpenAI account as well as the model you're using. If you need higher limits, you may be able to apply for an increase in your OpenAI account settings.
 
+---
 
 ## Change your model
 
@@ -66,6 +70,7 @@ llm_client = LLM(
     model="gpt-4.1"     # Set model here
 )
 ```
+
 See OpenAI's [documentation](https://platform.openai.com/docs/models) for a complete list of their models.
 
 ## Use a custom endpoint

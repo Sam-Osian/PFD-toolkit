@@ -101,9 +101,7 @@ nav:
       - Load & screen reports: getting_started/load_and_screen.md
       - Discover themes: getting_started/discover_themes.md
   - Load PFD reports:
-      - Overview: loader/index.md
       - Loading report data: loader/load_reports.md
-      - Scraping module: loader/scraper.md
   - Creating an LLM client: llm_setup.md
   - Screening relevant reports:
       - Overview: screener/index.md
@@ -117,6 +115,9 @@ nav:
       - Tagging reports with themes: extractor/themes.md
       - Capturing text spans: extractor/spans.md
       - Caching and exporting config: extractor/caching.md
+  - Scraping module:
+      - Scraping reports: loader/scraper.md
+      - Cleaning scraped data: loader/cleaner.md
   - Extra:
       - Changelog: changelog.md
       - Feedback & contributions: contribute.md

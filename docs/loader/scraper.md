@@ -65,6 +65,13 @@ Sometimes you may want to review scraped results before running the LLM stage. `
 llm_df = scraper.run_llm_fallback(df)
 ```
 
+### Cleaning scraped data
+
+To tidy up scraped fields using the same language model, see
+the dedicated [Cleaner](cleaner.md) page. It explains how to batch correct
+scraped text, anonymise personal information and fine‑tune prompts for each
+column.
+
 ### Threading and polite scraping
 
 `Scraper` uses a thread pool to speed up network requests. The `max_workers` and `delay_range` settings let you tune throughput and avoid overloading the server. The default one–two second delay between requests mirrors human browsing behaviour and greatly reduces the risk of your IP address being flagged.
