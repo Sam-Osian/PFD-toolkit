@@ -4,9 +4,14 @@ Welcome to the project changelog. All notable changes to this project will be do
 
 ---
 
-## 0.3.0 - <small>2025-07-01</small>
+## 0.3.1 - <small>2025-06-19</small>
+Improve reliability of weekly dataset top-ups.
 
+
+## 0.3.0 - <small>2025-06-18</small>
 First public release! ✨
+
+
 <!-- 
 ## [0.3.0] – 2025-07-01
 
