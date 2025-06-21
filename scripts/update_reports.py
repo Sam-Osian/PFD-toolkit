@@ -16,7 +16,7 @@ DATA_PATH = Path("./src/pfd_toolkit/data/all_reports.csv")
 llm_client = LLM(api_key=os.environ["OPENAI_API_KEY"], max_workers=30)
 
 # Initialise scraper
-scraper = Scraper(llm=llm_client, scraping_strategy=[-1,-1,1])
+scraper = Scraper(llm=llm_client, scraping_strategy=[2,-1,1])
 
 # Load existing reports
 if DATA_PATH.exists():
