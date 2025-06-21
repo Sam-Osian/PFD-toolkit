@@ -1,3 +1,8 @@
+[![Latest release](https://img.shields.io/github/v/release/sam-osian/PFD-toolkit?sort=semver&label=release&logo=github)](https://github.com/sam-osian/PFD-toolkit/releases)
+<!-- [![Python](https://img.shields.io/pypi/pyversions/pfd-toolkit)](https://pypi.org/project/pfd-toolkit/) -->
+[![PyTest](https://github.com/sam-osian/pfd-toolkit/actions/workflows/test.yml/badge.svg?label=pytest)](https://github.com/sam-osian/pfd-toolkit/actions/workflows/test.yml)
+[![Licence](https://img.shields.io/github/license/sam-osian/PFD-toolkit)](LICENSE)
+
 # PFD Toolkit <a href='https://github.com/sam-osian/pfd-toolkit'><img src='docs/assets/badge.png' align="right" height="120" /></a>
 
 Turn raw PFD reports into structured insights — fast.
