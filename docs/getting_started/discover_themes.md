@@ -133,15 +133,7 @@ Finally, we can count how often a theme appears in our collection of reports:
 
 
 ```python
-from pfd_toolkit import _tabulate
-
-_tabulate(labelled_reports, columns=[
-    "bed_shortage",
-    "risk_assessment",
-    "communication_failures",
-    "staff_training",
-    "policy_implementation",
-    "observation_monitoring"])
+extractor.tabulate()
 ```
 
 ```
@@ -154,10 +146,6 @@ _tabulate(labelled_reports, columns=[
 | policy_compliance     | 58    | 59.18      |
 | environmental_safety  | 17    | 17.35      |
 ```
-
-!!! note
-    Please note that `_tabulate()` is in early development and will be replaced with a separate `tabulate()` function in the future. We will serve a deprecation notice before making any script-breaking changes.
-
 That's it! You've gone from a mass of PFD reports, to a focused set of cases relating to Mental Health Act detention, to a theme‑tagged dataset ready for deeper exploration - all in a matter of minutes.
 
 From here, you might want to export your curated dataset to a .csv for qualitative analysis:
