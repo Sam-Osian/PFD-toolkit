@@ -46,3 +46,13 @@ extractor = Extractor(
 ```
 
 In this example only the investigation and circumstances sections are provided to the LLM. The coroner's concerns are omitted entirely. Limiting the excerpt like this often improves accuracy and drastically reduces token costs. However, be careful you're not turning 'off' a report section which is genuinely useful for your query.
+
+## Re-run the extraction
+
+By default, the `Extractor` class won't run on the same data with the same configuration twice. 
+
+If you want to start fresh, call `reset()` to clear cached feature values and token estimates, and chain it into a new `extract_features()` call:
+
+```python
+clean_df = extractor.reset().extract_features(feature_model=NewModel)
+```

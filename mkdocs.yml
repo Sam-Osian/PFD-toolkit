@@ -116,7 +116,7 @@ nav:
       - Summaries & token counts: extractor/summarising.md
       - Tagging reports with themes: extractor/themes.md
       - Capturing text spans: extractor/spans.md
-      - Caching and exporting results: extractor/caching.md
+      - Caching and exporting config: extractor/caching.md
   - Extra:
       - Changelog: changelog.md
       - Feedback & contributions: contribute.md

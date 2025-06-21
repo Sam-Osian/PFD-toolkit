@@ -1,51 +1,8 @@
 ![PFD Toolkit](assets/header.png)
 
----
-
-## Background
-
 *PFD Toolkit* is an open-source Python package created to transform how researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.
 
-### The problem
-
-PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This is for one simple reason: PFD reports are a pain to analyse. 
-
-Common issues include:
-
- * No straightforward way to download report content in bulk
-
- * Wildly inconsistent formats, making traditional web scraping unreliable
-
- * No reliable way of automatically screening/filtering reports based on a custom query
-
- * No system for surfacing recurring themes, or extracting other key pieces of information
-
- * Widespread miscategorisation of reports, creating research limitations
-
-
-As a result, valuable insights often end up buried beneath months or even years of manual admin. Researchers are forced to sift through hundreds or even thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. 
-
-
-### Our solution
-
-PFD Toolkit acts as a one-stop-shop for extracting, screening and analysing PFD report data.
-
-The package brings together every PFD report (currently just under 6000) and makes them available in a single, downloadable dataset, ready for instant analysis. 
-
-Here is a sample of the PFD dataset:
-
-| url                        | date       | coroner    | area                        | receiver                | investigation           | circumstances                 | concerns                   |
-|----------------------------|------------|------------|-----------------------------|-------------------------|-------------------------|-------------------------------|----------------------------|
-| [...]            | 2025-05-01 | A. Hodson  | Birmingham and...    | NHS England; The Rob... | On 9th December 2024... | At 10.45am on 23rd November...| To The Robert Jones... |
-| [...]           | 2025-04-30 | J. Andrews | West Sussex, Br...| West Sussex C... | On 2 November 2024 I... | They drove their car into...   | The inquest was told t...  |
-| [...]            | 2025-04-30 | A. Mutch   | Manchester Sou...            | Fluxton Road Medical... | On 1 October 2024 I...  | They were prescribed long...   | The inquest heard evide... |
-| [...]            | 2025-04-25 | J. Heath   | North Yorkshire...   | Townhead Surgery        | On 4th June 2024 I...   | On 15 March 2024, Richar...    | When a referral docume...  |
-| [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
-
-
-
----
-PFD Toolkit was built to break down every major barrier to PFD report analysis. Out of the box, you can:
+Out of the box, you can:
 
 1. Load live PFD data in seconds
 
@@ -58,6 +15,42 @@ PFD Toolkit was built to break down every major barrier to PFD report analysis. 
 5. Extract other kinds of information, such as age, sex and cause of death
 
 
+Here is a sample of the PFD dataset:
+
+| url                        | date       | coroner    | area                        | receiver                | investigation           | circumstances                 | concerns                   |
+|----------------------------|------------|------------|-----------------------------|-------------------------|-------------------------|-------------------------------|----------------------------|
+| [...]            | 2025-05-01 | A. Hodson  | Birmingham and...    | NHS England; The Rob... | On 9th December 2024... | At 10.45am on 23rd November...| To The Robert Jones... |
+| [...]           | 2025-04-30 | J. Andrews | West Sussex, Br...| West Sussex C... | On 2 November 2024 I... | They drove their car into...   | The inquest was told t...  |
+| [...]            | 2025-04-30 | A. Mutch   | Manchester Sou...            | Fluxton Road Medical... | On 1 October 2024 I...  | They were prescribed long...   | The inquest heard evide... |
+| [...]            | 2025-04-25 | J. Heath   | North Yorkshire...   | Townhead Surgery        | On 4th June 2024 I...   | On 15 March 2024, Richar...    | When a referral docume...  |
+| [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
+
+
+Each row is a unique report, while each column reflects a section of the report. For more information on the structure of these reports, see [here](pfd_reports.md#what-do-pfd-reports-look-like).
+
+---
+
+## Why does this package exist?
+
+PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This is for one simple reason: PFD reports are a _pain_ to analyse. 
+
+Common issues include:
+
+ * No straightforward way to download report content in bulk
+
+ * No reliable way of querying reports to find cases relevant to a specific research question
+
+ * Reports being inconsistent in format (e.g. many reports are low quality digital scans)
+
+ * No system for surfacing recurring issues raised across multiple reports
+
+ * Widespread miscategorisation of reports, creating research limitations
+
+
+As a result, research involving PFD reports demands months, or even years, of manual admin. Researchers are forced to sift through hundreds/thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. 
+
+PFD Toolkit offers a solution to each of these issues, helping researchers load, screen and analyse PFD report data - all in a matter of minutes.
+
 ---
 
 ## Installation
@@ -69,6 +62,16 @@ pip install pfd_toolkit
 ```
 
 ---
+
+## Licence
+
+This project is distributed under the GNU Affero General Public License v3.0 (AGPL-3.0), available [here](https://github.com/Sam-Osian/PFD-toolkit?tab=AGPL-3.0-1-ov-file).
+
+
+!!! note
+    * You are welcome to use, modify, and share this code under the terms of the AGPL-3.0.
+    * If you use this code to provide a networked service, you are required to make the complete source code available to users of that service.
+    * Some project dependencies may have their own licence terms, which could affect certain types of use (e.g. commercial use).
 
 ## Contribute
 

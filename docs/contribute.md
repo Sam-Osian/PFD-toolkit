@@ -22,16 +22,24 @@ Submit a feature request as a [GitHub issue](https://github.com/Sam-Osian/PFD-to
 
 ---
 
-### Code contributions 🧑‍💻
+### Code contributions
 
 Contributions are welcome - whether fixing bugs, adding new features, improving documentation, or expanding tests.
-
-Please fork & clone the repository, create a new branch for your work, and submit a pull request with a clear description of your changes.
 
 If your change is significant, consider opening an issue first to discuss it.
 
 !!! note
-    Once you've forked and cloned the repo, you'll need to activate dependencies with `uv`. Once `uv` is installed, run:
+    Code contributors should: 
+
+    * Fork the repository on GitHub using the **Fork** button on the [repo home page](https://github.com/Sam-Osian/PFD-toolkit).
+    * Clone your fork locally:
+
+    ```bash
+    git clone https://github.com/<your-username>/PFD-toolkit.git
+    ```
+
+    * [Install `uv`](https://docs.astral.sh/uv/getting-started/installation/)
+    * Install project dependencies with `uv`:
 
     ```bash
     uv sync

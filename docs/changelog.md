@@ -4,6 +4,10 @@ Welcome to the project changelog. All notable changes to this project will be do
 
 ---
 
+## 0.3.2 - <small>2025-06-23</small>
+* Fix typos and improve documentation.
+* Small tweaks to the source code.
+
 ## 0.3.1 - <small>2025-06-19</small>
 Improve reliability of weekly dataset top-ups.
 
