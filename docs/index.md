@@ -23,7 +23,7 @@ Common issues include:
  * Widespread miscategorisation of reports, creating research limitations
 
 
-As a result, valuable insights often ends up buried beneath months or even years of manual admin. Researchers are forced to sift through thousands of reports, one-by-one, wrestle with absent metadata, and code themes by hand. 
+As a result, valuable insights often end up buried beneath months or even years of manual admin. Researchers are forced to sift through hundreds or even thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. 
 
 
 ### Our solution

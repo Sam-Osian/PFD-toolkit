@@ -2,9 +2,7 @@
 
 This page talks you through an example workflow using PFD Toolkit: loading a dataset and screening for relevant cases related to "detention under the Mental Health Act". 
 
-This is just an example. PFD reports contain a breadth of information across a whole range of topics and domains.
-
-It doesn't cover everything: for more, we strongly suggest browsing through the pages in the top panel.
+This is just an example. PFD reports contain a breadth of information across a whole range of topics and domains. But in this workflow, we hope to give you a sense of how the toolkit can be used, and how it might support your own project.
 
 ---
 

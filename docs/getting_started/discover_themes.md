@@ -1,6 +1,6 @@
 # Discover themes in your filtered dataset
 
-With your subset of reports screened for Mental Health Act detention concerns, the next step is to uncover the underlying themes. This lets you see 'at a glance' what issues the coroners keep raising.
+With our subset of reports screened for Mental Health Act detention concerns (see previous page), we will now uncover underlying themes contained within these reports. This lets you see 'at a glance' what issues the coroners keep raising.
 
 We'll use the `Extractor` class to automatically identify themes from the *concerns* section of each report.
 
@@ -8,7 +8,7 @@ We'll use the `Extractor` class to automatically identify themes from the *conce
 
 ## Set up the Extractor
 
-The Extractor reads the text from the reports you provide. Each `include_*` flag controls which report columns are sent to the LLM. Here we are only interested in the coroner's concerns, so we turn everything else off:
+The Extractor reads the text from the reports you provide. Each `include_*` flag controls which sections of the reports are sent to the LLM for analysis. In this example, we are only interested in the coroner's concerns, so we turn everything else off:
 
 ```python
 from pfd_toolkit import Extractor
@@ -16,51 +16,58 @@ from pfd_toolkit import Extractor
 extractor = Extractor(
     llm=llm_client,             # The same client you created earlier
     reports=filtered_reports,   # Your screened DataFrame
+
     include_date=False,
     include_coroner=False,
     include_area=False,
     include_receiver=False,
     include_investigation=False,
     include_circumstances=False,
-    include_concerns=True       # Only supply the 'concerns' text
+    include_concerns=True       # <--- Only supply the 'concerns' text
 )
 ```
 
-Keeping the prompt focused on the coroner's concerns reduces cost and may result in more cohesive themes.
+!!! note
+    The main reason why we're turning 'off' all reports sections other than the coroners' concerns is to help keep the LLM's instructions short & focused. LLMs often perform better when they are only given relevant information.
+
+    The sections you'll want to draw from will depend on your specific research question. To understand more about what information is contained within each of the report sections, please see: [About the data](../pfd_reports.md#what-do-pfd-reports-look-like).
+
 
 ---
 
 ## Summarise then discover themes
 
-Before discovering themes, we need to summarise each report. 
+Before discovering themes, we first need to summarise each report. 
 
-We do this because the length of PFD report varies from coroner-to-coroner. By summarising the reports, we're centering on the key messages, keeping the prompt short for the LLM.
-    
+We do this because the length of PFD reports vary from coroner to coroner. By summarising the reports, we're centering on the key messages, keeping the prompt short for the LLM. This improves performance and increases speed.
+
+The report sections that are summarised depend on the `include_*` flags you set earlier. So, in our example, we are only summarising the *concerns* section.
+
 
 
 ```python
 # Create short summaries of the concerns
-extractor.summarise(trim_intensity="medium")
+extractor.summarise(trim_intensity="low")
 
 # Ask the LLM to propose recurring themes
-IdentifiedThemes = extractor.discover_themes(
+ThemeInstructions = extractor.discover_themes(
     max_themes=6,  # Limit the list to keep things manageable
 )
 ```
 
 !!! note
-    `Extractor` will warn you if the word count of your summaries is too high. In these cases, you might want to set your `trim_intensity` to `high` or `very high` (though please note that the more we trim, the more detail we lose).
+    `Extractor` will warn you if the word count of your summaries is too high. In these cases, you might want to set your `trim_intensity` to `medium`, `high` or `very high` (though please note that the more we trim, the more detail we lose).
 
 
-`IdentifiedThemes` is a Pydantic model containing our list of themes.
+`ThemeInstructions` is a Pydantic model containing a set of detailed instructions for the LLM. We'll need this later to categorise each of the reports by theme.
 
-It is not printable in itself, but it is internally replicated as a JSON which we can print:
+But first, you'll likely want to see which themes the model has identified. To see the list of themes (plus a short, automatically generated description for each) we can run:
 
 ```python
 print(extractor.identified_themes)
 ```
 
-This gives us a record of each proposed theme with an accompanying description:
+...which gives us a JSON with our themes & descriptions:
 
 ```json
 {
@@ -93,21 +100,34 @@ This gives us a record of each proposed theme with an accompanying description:
 
 ---
 
-## Tag the reports
+## Tag the reports with our themes
 
-Above, we've only identified the themes: we haven't assigned these themes to each of our the reports.
+Above, we've only _identified_ a list of themes: we haven't yet assigned these themes to each of our reports.
 
-Once you have the theme model, pass it back into the extractor to assign themes to every report in the dataset:
+Here, we take `ThemeInstructions` that we created earlier and pass it back into the extractor to assign themes to every report in the dataset:
 
 ```python
 labelled_reports = extractor.extract_features(
-    feature_model=IdentifiedThemes,
+    feature_model=ThemeInstructions,
     force_assign=True,
-    allow_multiple=True  # A single report might touch on several themes
+    allow_multiple=True  # (A single report might touch on several themes)
 )
+
+labelled_reports.head()
 ```
 
-The resulting DataFrame now contains a column for each discovered theme, filled with `True` or `False` depending on whether that theme was present in the coroner's concerns.
+The resulting DataFrame now contains a column for each discovered theme, filled with `True` or `False` depending on whether that theme was present in the coroner's concerns:
+
+| url    | date       | coroner    | area              | receiver                   | investigation            | circumstances           | concerns               | bed_shortage | risk_assessment | communication_failures | staff_training | policy_implementation | observation_monitoring |
+|--------|------------|------------|-------------------|----------------------------|--------------------------|-------------------------|------------------------|--------------|-----------------|-----------------------|----------------|-----------------------|-----------------------|
+| [...]  | 2025-04-24 | S. Marsh   | Somerset          | Somerset Foundation Trust... | On sixth December...     | Anne first presented... | Anne was not sent...   | False        | True            | True                  | True           | False                | False                |
+| [...]  | 2025-04-07 | S. Reeves  | South London      | South London and Maudsley... | On 21 March 2023...      | Christopher McDonald... | The evidence heard...  | False        | False           | False                 | True           | True                 | False                |
+| [...]  | 2025-03-25 | F. Wilcox  | Inner West London | Commissioner of the Police... | From third March...      | Mr Omishore had been... | That there is an...    | False        | True            | True                  | True           | False                | False                |
+| [...]  | 2025-03-24 | T. Rawden  | South Yorkshire West | South West Yorkshire Partnership... | On 27 September...     | Claire Louise Driver... | The inquest heard...   | False        | True            | True                  | True           | False                | False                |
+| [...]  | 2025-03-17 | S. Horstead| Essex             | Chief Executive Officer...   | On 31 October 2023...    | On the 23rd September... | (a) Failures in care... | False        | True            | True                  | False          | True                 | False                |
+
+
+## Tabulate reports
 
 Finally, we can count how often a theme appears in our collection of reports:
 
@@ -135,13 +155,15 @@ _tabulate(labelled_reports, columns=[
 | environmental_safety  | 17    | 17.35      |
 ```
 
-That's it! You've gone from a mass of PFD reports, to a focused set of cases relating to Mental Health Act detention, to a theme‑tagged dataset ready for deeper exploration.
+!!! note
+    Please note that `_tabulate()` is in early development and will be replaced with a separate `tabulate()` function in the future. We will serve a deprecation notice before making any script-breaking changes.
 
-From here we can either save our `labelled_reports` dataset via `pandas` for qualitative analysis, or we can use *even more* analytical features of PFD Toolkit.
+That's it! You've gone from a mass of PFD reports, to a focused set of cases relating to Mental Health Act detention, to a theme‑tagged dataset ready for deeper exploration - all in a matter of minutes.
+
+From here, you might want to export your curated dataset to a .csv for qualitative analysis:
 
 ```python
 labelled_reports.to_csv()
 ```
 
-!!! note
-    On our machine, the entire workflow contained within this page and [Load & screen reports](load_and_screen.md) took just 1 minute and 5 seconds. Adjust the `max_workers` parameter in the `LLM` class to control concurrency, but note that higher values could result in rate limit errors.
+Alternatively, you might want to check out the other analytical features that PFD Toolkit offers.
