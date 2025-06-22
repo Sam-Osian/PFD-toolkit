@@ -7,9 +7,23 @@ index.md to reflect the current count.
 
 import re
 import pandas as pd
+import requests
 
-csv_path = "src/pfd_toolkit/data/all_reports.csv"
+DATA_URL = (
+    "https://github.com/Sam-Osian/PFD-toolkit/releases/download/"
+    "dataset-latest/all_reports.csv"
+)
+csv_path = "all_reports.csv"
 md_path = "docs/index.md"
+
+# Download dataset
+try:
+    resp = requests.get(DATA_URL, timeout=30)
+    resp.raise_for_status()
+    with open(csv_path, "wb") as f:
+        f.write(resp.content)
+except Exception:
+    pass
 
 # Count number of rows/reports
 df = pd.read_csv(csv_path)
