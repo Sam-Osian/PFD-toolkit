@@ -58,7 +58,6 @@ PFD Toolkit lets you query reports in plain English — no need to know precise 
 
 Screening and other advanced features use AI, and require you to first set up an LLM client. You'll need to head to [platform.openai.com](https://platform.openai.com/docs/overview) and create an API key. Once you've got this, simply feed it to the `LLM`.
 
-For more information, see [Setting up an LLM client](../llm_setup.md).
 
 ```python
 from pfd_toolkit import LLM
@@ -66,6 +65,10 @@ from pfd_toolkit import LLM
 # Set up LLM client
 llm_client = LLM(api_key=YOUR-API-KEY) # Replace with actual API key
 ```
+
+!!! note
+    For a more detailed guide on using LLMs in this toolkit, see [Setting up an LLM client](../llm_setup.md).
+
 
 ### Screen reports in plain English
 
@@ -85,10 +88,10 @@ screener = Screener(llm = llm_client,
 filtered_reports = screener.screen_reports(user_query=user_query)
 ```
 
-`filtered_reports` returns a DataFrame, only containing reports that matched your query.
+`filtered_reports` returns a filtered version of your original DataFrame, only containing reports that the LLM believed matched your query.
+
+!!! note
+    For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
 
 
-For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
-
-
-
+In the next page, we'll go through how to discover recurring themes in these screened PFD reports.

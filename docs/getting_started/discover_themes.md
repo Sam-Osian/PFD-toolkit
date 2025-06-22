@@ -8,14 +8,16 @@ We'll use the `Extractor` class to automatically identify themes from the *conce
 
 ## Set up the Extractor
 
-The Extractor reads the text from the reports you provide. Each `include_*` flag controls which sections of the reports are sent to the LLM for analysis. In this example, we are only interested in the coroner's concerns, so we turn everything else off:
+The Extractor reads the text from the screened reports you provide. Each `include_*` flag controls which sections of the reports are sent to the LLM for analysis. 
+
+In this example, we are only interested in the coroner's *concerns*, so we set `include_concerns` to `True`, while everything else is set to `False`:
 
 ```python
 from pfd_toolkit import Extractor
 
 extractor = Extractor(
     llm=llm_client,             # The same client you created earlier
-    reports=filtered_reports,   # Your screened DataFrame
+    reports=filtered_reports,   # Your screened reports
 
     include_date=False,
     include_coroner=False,
@@ -28,9 +30,9 @@ extractor = Extractor(
 ```
 
 !!! note
-    The main reason why we're turning 'off' all reports sections other than the coroners' concerns is to help keep the LLM's instructions short & focused. LLMs often perform better when they are only given relevant information.
+    The main reason why we're hiding all reports sections other than the coroners' concerns is to help keep the LLM's instructions short & focused. LLMs often perform better when they are given only relevant information.
 
-    The sections you'll want to draw from will depend on your specific research question. To understand more about what information is contained within each of the report sections, please see: [About the data](../pfd_reports.md#what-do-pfd-reports-look-like).
+    The sections you'll want to draw from will depend on your specific research question. To understand more about what information is contained within each of the report sections, please see [About the data](../pfd_reports.md#what-do-pfd-reports-look-like).
 
 
 ---
@@ -39,10 +41,9 @@ extractor = Extractor(
 
 Before discovering themes, we first need to summarise each report. 
 
-We do this because the length of PFD reports vary from coroner to coroner. By summarising the reports, we're centering on the key messages, keeping the prompt short for the LLM. This improves performance and increases speed.
+We do this because the length of PFD reports vary from coroner to coroner. By summarising the reports, we're centering on the key messages, keeping the prompt short for the LLM. This may improve performance and increase speed.
 
-The report sections that are summarised depend on the `include_*` flags you set earlier. So, in our example, we are only summarising the *concerns* section.
-
+The report sections that are summarised depend on the `include_*` flags you set earlier. In this tutorial, we are only summarising the *concerns* section.
 
 
 ```python
