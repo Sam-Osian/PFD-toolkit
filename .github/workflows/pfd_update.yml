@@ -13,10 +13,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check if on main branch
-        if: github.ref != 'refs/heads/main'
+      - name: Ensure main branch for scheduled runs
+        if: github.event_name != 'workflow_dispatch' && github.ref != 'refs/heads/main'
         run: |
-          echo "This workflow is designed to run on main only."
+          echo "This workflow is designed to run automatically on main only."
           exit 0
 
       - name: Checkout Repository Code
