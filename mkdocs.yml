@@ -102,7 +102,9 @@ nav:
       - Discover themes: getting_started/discover_themes.md
   - Load PFD reports:
       - Loading report data: loader/load_reports.md
-  - Creating an LLM client: llm_setup.md
+  - Creating an LLM client: 
+      - Working with LLMs: llm_setup.md
+      - Advanced LLM usage: llm_advanced.md
   - Screening relevant reports:
       - Overview: screener/index.md
       - Getting started: screener/basics.md

@@ -39,6 +39,7 @@ online_med_reports = screener.screen_reports(user_query=query)
 5. Add credit to your account (just $5 is enough for most research uses).
 
 For more information about usage costs, see [OpenAI pricing](https://openai.com/api/pricing/).
+
 ---
 
 ## Speed up your LLM
@@ -72,14 +73,3 @@ llm_client = LLM(
 ```
 
 See OpenAI's [documentation](https://platform.openai.com/docs/models) for a complete list of their models.
-
-## Use a custom endpoint
-
-You can set a custom endpoint (e.g. for Azure, Ollama, etc.) if it supports the OpenAI SDK:
-
-```python
-llm_client = LLM(
-    api_key=openai_api_key,
-    base_url="https://..."   # Set your custom endpoint
-)
-```
