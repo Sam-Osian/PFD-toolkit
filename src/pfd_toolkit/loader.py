@@ -3,12 +3,40 @@ from __future__ import annotations
 import importlib.resources as resources
 from typing import Final
 
+from pathlib import Path
+import requests
+
 import pandas as pd
 from dateutil import parser as _date_parser
 
 # Path to the embedded CSV
 _DATA_PACKAGE: Final[str] = "pfd_toolkit.data"
 _DATA_FILE: Final[str] = "all_reports.csv"
+
+# Location of the latest dataset release
+_DATA_URL: Final[str] = (
+    "https://github.com/Sam-Osian/PFD-toolkit/releases/download/"
+    "dataset-latest/all_reports.csv"
+)
+
+# Cache path for the downloaded dataset
+_CACHE_DIR: Final[Path] = Path.home() / ".cache" / "pfd_toolkit"
+_CACHE_FILE: Final[Path] = _CACHE_DIR / _DATA_FILE
+
+
+def _ensure_dataset() -> Path:
+    """Download the dataset if not already cached and return its path."""
+    if not _CACHE_FILE.exists():
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            resp = requests.get(_DATA_URL, timeout=30)
+            resp.raise_for_status()
+            _CACHE_FILE.write_bytes(resp.content)
+        except Exception as exc:  # pragma: no cover - network failure
+            raise FileNotFoundError(
+                "Failed to download dataset from GitHub release"
+            ) from exc
+    return _CACHE_FILE
 
 
 def load_reports(
@@ -56,18 +84,17 @@ def load_reports(
     if date_from > date_to:
         raise ValueError("start_date must be earlier than or equal to end_date")
 
-    # Read CSV
-    csv_path = resources.files(_DATA_PACKAGE).joinpath(_DATA_FILE)
+    # Read CSV from release cache, falling back to bundled data
     try:
+        csv_path = _ensure_dataset()
+        reports = pd.read_csv(csv_path)
+    except Exception:
+        csv_path = resources.files(_DATA_PACKAGE).joinpath(_DATA_FILE)
         with csv_path.open("r", encoding="utf-8") as fh:
             reports = pd.read_csv(fh)
-            # Drop any Unnamed columns
-            reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
 
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"Bundled dataset {_DATA_FILE!r} not found in package " f"{_DATA_PACKAGE!r}"
-        ) from exc
+    # Drop any Unnamed columns
+    reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
 
     # Cleaning
     # ...Parse the Date column, drop rows with invalid dates, and filter window

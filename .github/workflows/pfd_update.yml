@@ -64,15 +64,17 @@ jobs:
             echo "Python script output (from previous step) should indicate reason." >> $GITHUB_STEP_SUMMARY
           fi
 
-      - name: Update report count in docs
-        run: uv run python scripts/update_report_count.py
+
+      - name: Upload dataset to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload dataset-latest all_reports.csv --clobber
 
       - name: Commit & Push Changes
         if: github.ref == 'refs/heads/main'
         uses: EndBug/add-and-commit@v9
         with:
           add: |
-            src/pfd_toolkit/data/all_reports.csv
             docs/index.md
           default_author: github_actions
           message: "🤖 Auto PFD dataset top-up"
