@@ -58,7 +58,7 @@ def test_load_reports_clear_cache(use_local_dataset):
     fake_cache = use_local_dataset
     fake_cache.write_text("dummy")
 
-    df = loader.load_reports(n_reports=1, clear_cache=True)
+    df = loader.load_reports(n_reports=1, refresh=True)
     assert not df.empty
     assert fake_cache.exists()
     assert fake_cache.stat().st_size > len("dummy")
