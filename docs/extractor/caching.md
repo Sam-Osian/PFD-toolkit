@@ -1,4 +1,4 @@
-# Caching and exporting configuration
+# Caching and resetting output
 
 `Extractor` caches every LLM response so repeated calls with the same configuration reuse previous results.
 

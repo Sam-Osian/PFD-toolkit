@@ -112,11 +112,11 @@ nav:
       - Tips for writing a good user query: screener/tips.md
   - Analyse reports:
       - Overview: extractor/index.md
-      - Basic usage: extractor/basics.md
-      - Summaries & token counts: extractor/summarising.md
-      - Tagging reports with themes: extractor/themes.md
-      - Capturing text spans: extractor/spans.md
-      - Caching and exporting config: extractor/caching.md
+      - Produce summaries: extractor/summarising.md
+      - Discover recurring themes: extractor/themes.md
+      - Pull out structured data: extractor/basics.md
+      - Capture text spans: extractor/spans.md
+      - Cache and reset output: extractor/caching.md
   - Scraping module:
       - Scraping reports: loader/scraper.md
       - Cleaning scraped data: loader/cleaner.md

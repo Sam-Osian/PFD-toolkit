@@ -13,7 +13,7 @@ llm_client = LLM(
 
 LLMs are highly stochastic, and may produce slightly different outputs for identical calls. 
 
-We can reduce variation in responses through supplying `temperature` and `seed` paratmeters:
+We can reduce variation in responses through supplying `temperature` and `seed` parameters:
 
 ```py
 llm_client = LLM(api_key=openai_api_key, 

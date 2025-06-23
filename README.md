@@ -72,3 +72,7 @@ This project is distributed under the GNU Affero General Public License v3.0 (AG
 - You are welcome to use, modify, and share this code under the terms of the AGPL-3.0.
 - If you use this code to provide a networked service, you are required to make the complete source code available to users of that service.
 - Some project dependencies may have their own licence terms, which could affect certain types of non-research use (e.g. commercial use). Please review all relevant licences to ensure compliance.
+
+## Collaborate
+
+We welcome feedback as well as code collaborators! Please read our collaboration page [here](https://sam-osian.github.io/PFD-toolkit/contribute/)
