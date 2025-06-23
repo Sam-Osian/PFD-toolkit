@@ -21,24 +21,25 @@ reports = load_reports(start_date="2023-01-01",
 llm_client = LLM(api_key=YOUR-API-KEY)
 ```
 
-Then define a `user_query` which describes the reports you're interested in. Pass this query as an argument to `screen_reports()` and you'll be given a filtered dataset containing matching reports.
+Then define a `user_query` which describes the reports you're interested in. Pass this query as an argument to `screen_reports()` and you'll be given a filtered dataset containing only reports which the LLM judged to have matched your query.
 
 ```python
-user_query = "Deaths in police custody."
+user_query = "Deaths in police custody **only**."
 
 screener = Screener(
     llm=llm_client,
     reports=reports
 )
 
-police_df = screener.screen_reports(user_query=user_query, filter_df=True)
+police_df = screener.screen_reports(
+    user_query=user_query)
 ```
 
-`police_df` will now only contain reports which the LLM believes matches your query.
+`police_df` will now only contain reports related to your query.
 
 ---
 
-## Why not just have a normal "search" function?
+## Why not just have a "normal" search function?
 
 A keyword search is only as good as the exact words you type. Coroners, however, don't always follow a shared vocabulary. The same idea can surface in wildly different forms:
 

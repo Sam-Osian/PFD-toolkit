@@ -1,6 +1,6 @@
 # Capturing text spans
 
-Sometimes you want to know exactly which lines from the report led the model to a assign a particular value to a given report's field. 
+Sometimes you want to know exactly which lines from the report led the model to assign a particular value to a given report's field. 
 
 For example, say we asked the model to identify whether the deceased is a child and the model outputs `True` for a particular report, we might want to know whether this was because age is explicitly recorded (e.g. "The deceased was aged 16") or implied based on context (e.g. "The deceased was being seen by CAMHS prior to their death").
 

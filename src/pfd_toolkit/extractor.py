@@ -838,77 +838,90 @@ Here is the report excerpt:
         self.token_cache.clear()
         self.identified_themes = None
         return self
-    
-    
-def _tabulate(
-    df: pd.DataFrame,
-    columns: Union[str, List[str]],
-    labels: Optional[Union[str, List[str]]] = None,
-    *,
-    count_col: str = "Count",
-    pct_col: str = "Percentage",
-) -> pd.DataFrame:
-    """Return a simple frequency table for one or more columns.
-    
-    This function is currently in development, and we recommend that users
-    refrain from use right now.
 
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        The DataFrame containing the columns to tabulate.
-    columns : str or list[str]
-        Name of the column or list of column names to summarise.
-    labels : str or list[str], optional
-        Human friendly label or list of labels corresponding to ``columns``. If
-        omitted, column names are used.
-    count_col, pct_col : str, optional
-        Column names for the count and percentage values in the output
-        DataFrame. Defaults to ``"Count"`` and ``"Percentage"``.
 
-    Returns
-    -------
-    pandas.DataFrame
-        A DataFrame with one row per supplied column (or per unique value when
-        the column is not boolean). Columns ``count_col`` and ``pct_col`` contain
-        the absolute and percentage frequencies calculated over ``len(df)``.
-    """
+    # ------------------------------------------------------------------
+    def tabulate(
+        self,
+        columns: Optional[Union[str, List[str]]] = None,
+        labels: Optional[Union[str, List[str]]] = None,
+        *,
+        count_col: str = "Count",
+        pct_col: str = "Percentage",
+        df: Optional[pd.DataFrame] = None,
+    ) -> pd.DataFrame:
+        """Return a simple frequency table for extracted feature columns.
 
-    if isinstance(columns, str):
-        columns = [columns]
-    if labels is None:
-        labels = columns
-    elif isinstance(labels, str):
-        labels = [labels]
+        Parameters
+        ----------
+        columns : str or list[str], optional
+            Column name or list of column names to summarise. Defaults to all
+            feature columns added by :meth:`extract_features` (excluding any
+            ``spans_`` columns).
+        labels : str or list[str], optional
+            Human friendly label or list of labels corresponding to ``columns``.
+            If omitted, column names are used.
+        count_col, pct_col : str, optional
+            Column names for the count and percentage values in the output
+            DataFrame. Defaults to ``"Count"`` and ``"Percentage"``.
+        df : pandas.DataFrame, optional
+            DataFrame containing the columns to tabulate. Defaults to the
+            reports stored on the instance.
 
-    if len(columns) != len(labels):
-        raise ValueError("labels must match the number of columns")
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame summarising the frequencies of the specified columns.
 
-    total = len(df)
-    rows: List[Dict[str, object]] = []
+        Raises
+        ------
+        RuntimeError
+            If :meth:`extract_features` has not been run yet.
+        """
 
-    for col, label in zip(columns, labels):
-        if col not in df.columns:
-            raise KeyError(f"Column {col!r} not found in DataFrame")
+        if not self.feature_names:
+            raise RuntimeError("extract_features() must be run before tabulate()")
 
-        series = df[col]
-        non_na = series.dropna()
+        if df is None:
+            df = self.reports
 
-        # Determine if we should treat the column as boolean
-        unique_vals = set(non_na.unique())
-        bool_like = unique_vals.issubset({True, False, 1, 0}) or series.dtype == bool
+        if columns is None:
+            columns = [c for c in self.feature_names if not c.startswith("spans_") and c in df.columns]
+        elif isinstance(columns, str):
+            columns = [columns]
 
-        if bool_like:
-            count = int((series == True).sum())
-            percentage = (count / total * 100) if total else 0.0
-            rows.append({"Category": label, count_col: count, pct_col: percentage})
-            continue
+        if labels is None:
+            labels = columns
+        elif isinstance(labels, str):
+            labels = [labels]
 
-        value_counts = non_na.value_counts()
-        for val, count in value_counts.items():
-            row_label = f"{label}: {val}"
-            percentage = (count / total * 100) if total else 0.0
-            rows.append({"Category": row_label, count_col: int(count), pct_col: percentage})
+        if len(columns) != len(labels):
+            raise ValueError("labels must match the number of columns")
 
-    return pd.DataFrame(rows)
+        total = len(df)
+        rows: List[Dict[str, object]] = []
+
+        for col, label in zip(columns, labels):
+            if col not in df.columns:
+                raise KeyError(f"Column {col!r} not found in DataFrame")
+
+            series = df[col]
+            non_na = series.dropna()
+
+            unique_vals = set(non_na.unique())
+            bool_like = unique_vals.issubset({True, False, 1, 0}) or series.dtype == bool
+
+            if bool_like:
+                count = int((series == True).sum())
+                percentage = (count / total * 100) if total else 0.0
+                rows.append({"Category": label, count_col: count, pct_col: percentage})
+                continue
+
+            value_counts = non_na.value_counts()
+            for val, count in value_counts.items():
+                row_label = f"{label}: {val}"
+                percentage = (count / total * 100) if total else 0.0
+                rows.append({"Category": row_label, count_col: int(count), pct_col: percentage})
+
+        return pd.DataFrame(rows)
 

@@ -79,7 +79,7 @@ class LLM:
         temperature: float = 0.0,
         seed: Optional[int] = None,
         validation_attempts: int = 2,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx.Timeout = 120,
     ):
         self.api_key = api_key
         self.model = model
@@ -182,7 +182,7 @@ class LLM:
     ) -> List[BaseModel | str]:
         """Run many prompts either sequentially or in parallel.
 
-        Parameters
+        Parameters:
         ----------
         prompts : list[str]
             List of user prompts. One prompt per model call.
@@ -200,12 +200,12 @@ class LLM:
             Thread count just for this batch. ``None`` uses the instance-wide
             ``max_workers`` value. Defaults to ``None``.
 
-        Returns
+        Returns:
         -------
         list[Union[pydantic.BaseModel, str]]
             Results in the same order as `prompts`.
 
-        Raises
+        Raises:
         ------
         openai.RateLimitError
             Raised only if the exponential back-off exhausts all retries.
@@ -214,12 +214,10 @@ class LLM:
         openai.APITimeoutError
             Raised if the API repeatedly times out.
 
-        Examples
+        Examples:
         --------
-        Generate multiple summaries::
-
             msgs = ["Summarise:\n" + txt for txt in docs]
-            summaries = llm.generate(msgs, max_workers=8)
+            summaries = llm.generate(msgs)
         """
         tqdm_kwargs = dict(tqdm_extra_kwargs or {})
         if len(prompts) == 1:

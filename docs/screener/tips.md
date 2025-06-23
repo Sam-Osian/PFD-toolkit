@@ -5,6 +5,7 @@
 3. **Let the model handle synonyms.** You don’t need “defective, faulty, malfunctioning” all in the same query; “malfunctioning defibrillators” is enough.
 4. **Use positive phrasing.** Negations (e.g. “not related to COVID-19”) can flip the model’s reasoning. Screen positively, set [`filter_df`](http://127.0.0.1:8000/pfd-toolkit/screener/options/#annotation-vs-filtering) to False, then drop rows in pandas.
 5. **Keep it readable.** If your query needs multiple commas or parentheses, break it up. A one-line statement without side notes usually performs best.
+6. **Use limiting words to restrict scope.** Words like “only" can focus the LLM on a specific case, reducing the chance it will infer extra details. For example, “falls from beds \*\*only\*\*” signals to the model not to include corridor or bathroom falls. However, avoid overusing them; too many limiters can make the model miss relevant edge cases.
 
 Examples:
 
