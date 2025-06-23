@@ -1,5 +1,8 @@
 # Screen reports for relevancy
 
+![Screener](../assets/screener.png)
+
+
 The `Screener` class filters PFD reports according to a plain‑English query. This class lets you submit a user-query (e.g. "Deaths in police custody") and have the model screen thousands of reports for possible matches.
 
 The following pages cover how to use it:

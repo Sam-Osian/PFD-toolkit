@@ -61,6 +61,13 @@ You can install PFD Toolkit using pip:
 pip install pfd_toolkit
 ```
 
+To update, run:
+
+```bash
+pip install -U pfd_toolkit
+
+```
+
 ---
 
 ## Licence

@@ -35,15 +35,19 @@ If your change is significant, consider opening an issue first to discuss it.
     * Clone your fork locally:
 
     ```bash
-    git clone https://github.com/<your-username>/PFD-toolkit.git
+    git clone https://github.com/sam-osian/PFD-toolkit.git
     ```
 
-    * [Install `uv`](https://docs.astral.sh/uv/getting-started/installation/)
-    * Install project dependencies with `uv`:
+    * [Install `uv`](https://docs.astral.sh/uv/getting-started/installation/) and sync project dependencies:
 
     ```bash
     uv sync
     ```
+
+    * Create a branch for your work
+
+    * Submit a pull request when you're ready
+
 
 ---
 

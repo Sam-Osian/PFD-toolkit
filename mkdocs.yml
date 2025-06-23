@@ -97,20 +97,20 @@ nav:
       - Overview: index.md
       - About the data: pfd_reports.md
       - Not a coder?: non_coders.md
-  - Getting started:
+  - Basic tutorial:
       - Load & screen reports: getting_started/load_and_screen.md
       - Discover themes: getting_started/discover_themes.md
-  - Load PFD reports:
+  - Load reports:
       - Loading report data: loader/load_reports.md
   - Creating an LLM client: 
       - Working with LLMs: llm_setup.md
       - Advanced LLM usage: llm_advanced.md
-  - Screening relevant reports:
+  - Screen reports:
       - Overview: screener/index.md
       - Getting started: screener/basics.md
       - Additional options: screener/options.md
       - Tips for writing a good user query: screener/tips.md
-  - Analysing reports:
+  - Analyse reports:
       - Overview: extractor/index.md
       - Basic usage: extractor/basics.md
       - Summaries & token counts: extractor/summarising.md
@@ -120,9 +120,9 @@ nav:
   - Scraping module:
       - Scraping reports: loader/scraper.md
       - Cleaning scraped data: loader/cleaner.md
+  - Feedback & contributions: contribute.md
   - Extra:
       - Changelog: changelog.md
-      - Feedback & contributions: contribute.md
       - Contact: contact.md
       - API Reference:
           - Data loader: reference/loader.md

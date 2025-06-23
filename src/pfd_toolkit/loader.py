@@ -51,7 +51,7 @@ def load_reports(
     start_date: str = "2000-01-01",
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
-    clear_cache: bool = False,
+    refresh: bool = False,
 ) -> pd.DataFrame:
     """Load Prevention of Future Death reports as a DataFrame.
 
@@ -66,7 +66,7 @@ def load_reports(
     n_reports : int or None, optional
         Keep only the most recent ``n_reports`` rows after filtering by date.
         ``None`` (the default) returns all rows.
-    clear_cache : bool, optional
+    refresh : bool, optional
         If ``True``, force a fresh download of the dataset instead of using the
         cached copy. Defaults to ``False``.
 
@@ -97,7 +97,7 @@ def load_reports(
         raise ValueError("start_date must be earlier than or equal to end_date")
 
     # Read CSV from the cached release asset
-    csv_path = _ensure_dataset(force_download=clear_cache)
+    csv_path = _ensure_dataset(force_download=refresh)
     reports = pd.read_csv(csv_path)
 
     # Drop any Unnamed columns

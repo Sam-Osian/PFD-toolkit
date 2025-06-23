@@ -1,7 +1,8 @@
-## Get reports
+## Load live report data
 
-`load_reports()` is the quickest way to access PFD reports.  It loads a clean CSV and returns a pandas
-`DataFrame`. Each row represents a single report, with columns reflect the main sections of the report.
+`load_reports()` is the quickest way to access PFD reports.  While before, researchers would have to manually download reports one-by-one, this function allows users to immediately access all reports immediately.
+
+The function returns a pandas `DataFrame`, with each row representing an individual report and the columns representing the main report sections.
 
 ```py
 from pfd_toolkit import load_reports
@@ -23,8 +24,16 @@ reports.head()
 | [...]            | 2025-04-25 | J. Heath   | North Yorkshire...   | Townhead Surgery        | On 4th June 2024 I...   | On 15 March 2024, Richar...    | When a referral docume...  |
 | [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
-Pass a `start_date` and `end_date` to restrict the date range, and optionally use
-`n_reports` to trim the DataFrame to the most recent *n* entries. For example...
+If you don't pass `start_date` or `end_date` parameters, `load_reports()` will pull the entire collection of PFD reports.
+
+!!! note
+    Please note that the date ranges denote when the report was published, not the date of death.
+
+---
+
+## Get *n* latest reports
+
+Optionally, use `n_reports` to trim the DataFrame to the most recent *n* entries. For example...
 
 ```py
 reports = load_reports(
@@ -33,17 +42,18 @@ reports = load_reports(
 
 ...loads the 1000 latest reports.
 
+You can combine this with the date parameters to get the most recent *n* entries within a given date range.
+
 
 ---
 
 ## Refresh reports
 
-Reports are updated once a week (Monday 1:00am, universal time). `load_reports()` caches reports for faster loading, so to retrieve the latest reports you'll need to set `clear_cache` to `True`:
+Reports are updated once a week (Monday 1:00am, universal time). `load_reports()` caches reports for faster loading, so to retrieve the latest reports you may need to set `refresh` to `True`:
 
 ```py
-reports = load_reports(clear_cache=True)
+reports = load_reports(refresh=True)
 ```
-
 
 
 !!! note

@@ -1,5 +1,7 @@
 # Analysing PFD reports
 
+![Extractor](../assets/extractor.png)
+
 PFD Toolkit ships with an `Extractor` class to pull "features" (i.e. key pieces of information) from Prevention of Future Death (PFD) reports. 
 
 These features could be recurring themes, or more specific bits of information (e.g. age, sex, cause of death, etc.).
