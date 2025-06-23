@@ -112,6 +112,6 @@ len(filtered_reports)
     For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
 
 
-Now, that we've loaded and screened our reports for relevance to being _detained under the Mental Health Act_, our next step is to discover recurring themes. In other words, concerns that coroners keep raising.
+Now that we've loaded and screened our reports for relevance to being _detained under the Mental Health Act_, our next step is to discover recurring themes. In other words, concerns that coroners keep raising.
 
 Head to the next page to discover how to do this.

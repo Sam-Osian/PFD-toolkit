@@ -44,7 +44,7 @@ extractor = Extractor(
 
 Before discovering themes, we first need to summarise each report. 
 
-We do this because the length of PFD reports vary from coroner to coroner. By summarising the reports, we're centering on the key messages, keeping the prompt short for the LLM. This may improve performance and increase speed.
+We do this because the length of PFD reports varies from coroner to coroner. By summarising the reports, we're centering on the key messages, keeping the prompt short for the LLM. This may improve performance and increase speed.
 
 The report sections that are summarised depend on the `include_*` flags you set earlier. In this tutorial, we are only summarising the *concerns* section.
 
