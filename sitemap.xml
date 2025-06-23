@@ -2,114 +2,118 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/changelog/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/contact/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/contribute/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
+    </url>
+    <url>
+         <loc>https://sam-osian.github.io/pfd-toolkit/llm_advanced/</loc>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/llm_setup/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/non_coders/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/pfd_reports/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/extractor/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/extractor/basics/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/extractor/caching/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/extractor/spans/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/extractor/summarising/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/extractor/themes/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/getting_started/discover_themes/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/getting_started/load_and_screen/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/loader/cleaner/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/loader/load_reports/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/loader/scraper/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/reference/cleaner/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/reference/extractor/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/reference/llm/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/reference/loader/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/reference/scraper/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/reference/screener/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/screener/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/screener/basics/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/screener/options/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
     <url>
          <loc>https://sam-osian.github.io/pfd-toolkit/screener/tips/</loc>
-         <lastmod>2025-06-22</lastmod>
+         <lastmod>2025-06-23</lastmod>
     </url>
 </urlset>
