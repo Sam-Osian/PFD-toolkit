@@ -6,7 +6,8 @@ If `filter_df` is True (the default) `Screener` returns a trimmed DataFrame that
 
 Setting it to False activates annotate mode: every report/row from your original DataFrame is kept, and a boolean column is added denoting whether the report met your query or not. You can also rename this column with `result_col_name`.
 
-A common workflow is to screen once with `filter_df=False`, inspect a few borderline cases, then rerun with `filter_df=True` once you trust the settings.
+Annotate mode is useful where you want to add a column denoting whether the report matched your query, but you don't want to lose the non-matching reports from your dataset.
+
 
 ```py
 screener = Screener(
@@ -16,7 +17,7 @@ screener = Screener(
 
 annotated = screener.screen_reports(
     user_query=user_query,
-    filter_df=False,    # <--- create annotation column; don't filter out
+    filter_df=False,    # <--- create annotation column instead of filtering
     result_col_name='custody_match'     # <--- name of annotation column
 )
 ```
@@ -114,16 +115,23 @@ result = screener.screen_reports(user_query=user_query)
   </tbody>
 </table>
 
+---
+
 ### Returning text spans
 
-Set `produce_spans=True` when calling `.screen_reports()` to capture the exact
-lines from the report that justified each classification. A new column called
-`spans_matches_topic` will be created containing these verbatim snippets. If you
-only want to use the spans internally, pass `drop_spans=True` to remove the
-column from the returned DataFrame after screening.
+Set `produce_spans=True` when calling `screen_reports()` to capture the exact snippets from the report text that justified whether or not a report was returned as relevant or not. A new column called `spans_matches_topic` will be created containing these verbatim snippets. 
 
 ```python
-screener = Screener(llm=llm_client,
-                    reports=reports)
-annotated = screener.screen_reports(user_query="needle", produce_spans=True, drop_spans=False)
+screener = Screener(llm=llm_client, reports=reports)
+
+filtered_reports = screener.screen_reports(
+    user_query="Where the cause of death was determined to be suicide", 
+    produce_spans=True, 
+    drop_spans=False)
+
 ```
+
+If you only want to use the spans internally, pass `drop_spans=True` to remove the column from the returned dataset after screening.
+
+!!! note
+    Producing but then dropping spans might seem a bit pointless, but it's actually likely a great way of improving performance. The LLM will generate these spans *before* deciding whether a report matches the query, allowing it to judge whether these spans truly capture the search criteria.

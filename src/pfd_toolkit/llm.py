@@ -79,7 +79,7 @@ class LLM:
         temperature: float = 0.0,
         seed: Optional[int] = None,
         validation_attempts: int = 2,
-        timeout: float | httpx.Timeout | None = None,
+        timeout: float | httpx.Timeout = 120,
     ):
         self.api_key = api_key
         self.model = model

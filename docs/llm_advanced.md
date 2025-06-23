@@ -27,3 +27,14 @@ The `seed` parameter works similarly to random seed parameters used for other pa
 
 !!! warning
     While we can reduce randomness in LLM responses, these models are non-deterministic and therefore may still produce varying responses even when the `seed` is set and `temperature` reduced to `0`.
+
+
+## Set timeout
+
+The `timeout` parameters dictates the maximum number of seconds the LLM should spend on processing each report. Essentially, if the LLM hasn't provided a response by the specified `timeout` value, then it gives up and moves on to the next.
+
+
+```python
+llm_client = LLM(api_key=openai_api_key, 
+                 timeout=60)
+```

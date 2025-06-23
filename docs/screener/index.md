@@ -1,4 +1,4 @@
-# Screen reports for relevancy
+# Screen or filter reports based on a query
 
 ![Screener](../assets/screener.png)
 
