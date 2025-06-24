@@ -80,6 +80,30 @@ This project is distributed under the GNU Affero General Public License v3.0 (AG
     * If you use this code to provide a networked service, you are required to make the complete source code available to users of that service.
     * Some project dependencies may have their own licence terms, which could affect certain types of use (e.g. commercial use).
 
+---
+
 ## Contribute
 
 PFD Toolkit is designed as a research-enabling tool, and we’re keen to work with the community to make sure it genuinely meets your needs. If you have feedback, ideas, or want to get involved, head to our [Feedback & contributions](contribute.md) page.
+
+
+---
+
+## How to cite
+
+If you use PFD Toolkit in your research, please cite the archived release:
+
+> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.2) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
+
+Or, in BibTeX:
+
+```bibtex
+@software{osian2025pfdtoolkit,
+  author       = {Sam Osian and Jonathan Pytches},
+  title        = {PFD Toolkit: Unlocking Prevention of Future Death Reports for Research},
+  year         = {2025},
+  version      = {0.3.2},
+  doi          = {10.5281/zenodo.15729717},
+  url          = {https://github.com/sam-osian/PFD-toolkit}
+}
+```

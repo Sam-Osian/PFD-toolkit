@@ -1,6 +1,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/pfd-toolkit)](https://pypi.org/project/pfd-toolkit/)
 [![PyTest](https://github.com/sam-osian/pfd-toolkit/actions/workflows/test.yml/badge.svg?label=pytest)](https://github.com/sam-osian/pfd-toolkit/actions/workflows/test.yml)
 [![Licence](https://img.shields.io/github/license/sam-osian/PFD-toolkit)](LICENCE)
+[![DOI](https://zenodo.org/badge/941220174.svg)](https://doi.org/10.5281/zenodo.15729717)
 
 # PFD Toolkit <a href='https://github.com/sam-osian/pfd-toolkit'><img src='docs/assets/badge.png' align="right" height="120" /></a>
 
@@ -46,10 +47,10 @@ reports = load_reports(
 | [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
 
-PFD Toolkit updates each week with freshly published reports. To retrieve the latest reports, run `load_reports()` with `clear_cache`:
+PFD Toolkit updates each week with freshly published reports. To retrieve the latest reports, run `load_reports()` with `refresh`:
 
 ```py
-reports = load_reports(clear_cache=True)
+reports = load_reports(refresh=True)
 ```
 
 ### Key features
@@ -58,7 +59,7 @@ Beyond loading reports, PFD Toolkit lets you:
  * Screen reports: find cases relevant to your specific research question.
  * Summarise text: distill full-length reports into a custom summary.
  * Discover themes: uncover recurring topics contained within a selection of reports.
- * Tabulate reports: categorise & tabulate reports by discovered themes — or provide your own themes.
+ * Categorise: assign and tabulate reports by discovered or user-defined themes.
 
 To get started with these features, please check out the [documentation](https://sam-osian.github.io/PFD-toolkit/).
 
@@ -72,6 +73,31 @@ This project is distributed under the GNU Affero General Public License v3.0 (AG
 - If you use this code to provide a networked service, you are required to make the complete source code available to users of that service.
 - Some project dependencies may have their own licence terms, which could affect certain types of non-research use (e.g. commercial use). Please review all relevant licences to ensure compliance.
 
+
+
 ## Collaborate
 
 We welcome feedback as well as code collaborators! Please read our collaboration page [here](https://sam-osian.github.io/PFD-toolkit/contribute/)
+
+
+
+---
+
+## How to cite
+
+If you use PFD Toolkit in your research, please cite the archived release:
+
+Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.2) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
+
+Or, in BibTeX:
+
+```bibtex
+@software{osian2025pfdtoolkit,
+  author       = {Sam Osian and Jonathan Pytches},
+  title        = {PFD Toolkit: Unlocking Prevention of Future Death Reports for Research},
+  year         = {2025},
+  version      = {0.3.2},
+  doi          = {10.5281/zenodo.15729717},
+  url          = {https://github.com/sam-osian/PFD-toolkit}
+}
+```
