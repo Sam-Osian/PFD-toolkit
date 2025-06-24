@@ -11,7 +11,7 @@ license = "AGPL-3.0-or-later"
 license-files = ["LICENCE"]
 authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
-  { name = "Jonathan Pytches", email = "Search-me@on-Linkedin.co.uk" }
+  { name = "Jonathan Pytches", email = "jonathan.pytches@gmail.com" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
