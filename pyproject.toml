@@ -110,6 +110,7 @@ dependencies = [
     "tornado>=6.5.1",
     "tqdm>=4.67.1",
     "traitlets>=5.14.3",
+    "twine>=6.1.0",
     "typing-extensions>=4.12.2",
     "tzdata>=2025.1",
     "urllib3>=2.3.0",
