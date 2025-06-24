@@ -1,22 +1,59 @@
 from __future__ import annotations
 
-import importlib.resources as resources
 from typing import Final
+
+from pathlib import Path
+import requests
 
 import pandas as pd
 from dateutil import parser as _date_parser
 
-# Path to the embedded CSV
-_DATA_PACKAGE: Final[str] = "pfd_toolkit.data"
+# Path within the package used for tests
 _DATA_FILE: Final[str] = "all_reports.csv"
+
+# Location of the latest dataset release
+_DATA_URL: Final[str] = (
+    "https://github.com/Sam-Osian/PFD-toolkit/releases/download/"
+    "dataset-latest/all_reports.csv"
+)
+
+# Cache path for the downloaded dataset
+_CACHE_DIR: Final[Path] = Path.home() / ".cache" / "pfd_toolkit"
+_CACHE_FILE: Final[Path] = _CACHE_DIR / _DATA_FILE
+
+
+def _ensure_dataset(force_download: bool = False) -> Path:
+    """Download the dataset if not already cached and return its path.
+
+    Parameters
+    ----------
+    force_download : bool, optional
+        If ``True``, delete any cached file before downloading a fresh copy.
+        Defaults to ``False``.
+    """
+    if force_download and _CACHE_FILE.exists():
+        _CACHE_FILE.unlink()
+
+    if not _CACHE_FILE.exists():
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            resp = requests.get(_DATA_URL, timeout=30)
+            resp.raise_for_status()
+            _CACHE_FILE.write_bytes(resp.content)
+        except Exception as exc:  # pragma: no cover - network failure
+            raise FileNotFoundError(
+                "Failed to download dataset from GitHub release"
+            ) from exc
+    return _CACHE_FILE
 
 
 def load_reports(
     start_date: str = "2000-01-01",
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
+    refresh: bool = False,
 ) -> pd.DataFrame:
-    """Load the bundled Prevention of Future Death reports as a DataFrame.
+    """Load Prevention of Future Death reports as a DataFrame.
 
     Parameters
     ----------
@@ -29,6 +66,9 @@ def load_reports(
     n_reports : int or None, optional
         Keep only the most recent ``n_reports`` rows after filtering by date.
         ``None`` (the default) returns all rows.
+    refresh : bool, optional
+        If ``True``, force a fresh download of the dataset instead of using the
+        cached copy. Defaults to ``False``.
 
     Returns
     -------
@@ -41,7 +81,7 @@ def load_reports(
     ValueError
         If *start_date* is after *end_date*.
     FileNotFoundError
-        If the bundled CSV cannot be located.
+        If the dataset cannot be downloaded.
 
     Examples
     --------
@@ -56,18 +96,12 @@ def load_reports(
     if date_from > date_to:
         raise ValueError("start_date must be earlier than or equal to end_date")
 
-    # Read CSV
-    csv_path = resources.files(_DATA_PACKAGE).joinpath(_DATA_FILE)
-    try:
-        with csv_path.open("r", encoding="utf-8") as fh:
-            reports = pd.read_csv(fh)
-            # Drop any Unnamed columns
-            reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
+    # Read CSV from the cached release asset
+    csv_path = _ensure_dataset(force_download=refresh)
+    reports = pd.read_csv(csv_path)
 
-    except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"Bundled dataset {_DATA_FILE!r} not found in package " f"{_DATA_PACKAGE!r}"
-        ) from exc
+    # Drop any Unnamed columns
+    reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
 
     # Cleaning
     # ...Parse the Date column, drop rows with invalid dates, and filter window

@@ -5,18 +5,33 @@ Prevention of Future Death (PFD) reports which is bundled with
 the repo (`../pfd_toolkit/data`).
 """
 
-import pandas as pd
-from pfd_toolkit import Scraper, LLM
-from pathlib import Path
 import os
+from pathlib import Path
 
-DATA_PATH = Path("./src/pfd_toolkit/data/all_reports.csv")
+import pandas as pd
+import requests
+from pfd_toolkit import LLM, Scraper
+
+DATA_URL = (
+    "https://github.com/Sam-Osian/PFD-toolkit/releases/download/"
+    "dataset-latest/all_reports.csv"
+)
+DATA_PATH = Path("all_reports.csv")
 
 # Initialise LLM client
 llm_client = LLM(api_key=os.environ["OPENAI_API_KEY"], max_workers=30)
 
 # Initialise scraper
-scraper = Scraper(llm=llm_client, scraping_strategy=[-1,-1,1])
+scraper = Scraper(llm=llm_client, scraping_strategy=[2,-1,1])
+
+# Retrieve the latest dataset from the GitHub release
+try:
+    resp = requests.get(DATA_URL, timeout=30)
+    resp.raise_for_status()
+    DATA_PATH.write_bytes(resp.content)
+    print(f"DEBUG: Downloaded dataset from {DATA_URL}")
+except Exception:
+    print(f"DEBUG: Failed to download dataset from {DATA_URL}")
 
 # Load existing reports
 if DATA_PATH.exists():

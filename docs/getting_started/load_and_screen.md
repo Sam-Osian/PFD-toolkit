@@ -2,9 +2,7 @@
 
 This page talks you through an example workflow using PFD Toolkit: loading a dataset and screening for relevant cases related to "detention under the Mental Health Act". 
 
-This is just an example. PFD reports contain a breadth of information across a whole range of topics and domains.
-
-It doesn't cover everything: for more, we strongly suggest browsing through the pages in the top panel.
+This is just an example. PFD reports contain a breadth of information across a whole range of topics and domains. But in this workflow, we hope to give you a sense of how the toolkit can be used, and how it might support your own project.
 
 ---
 
@@ -14,6 +12,13 @@ PFD Toolkit can be installed from pip as `pfd_toolkit`:
 
 ```bash
 pip install pfd_toolkit
+```
+
+Or, to update an existing installation:
+
+```bash
+pip install -U pfd_toolkit
+
 ```
 
 !!! Note
@@ -58,9 +63,10 @@ PFD Toolkit lets you query reports in plain English — no need to know precise 
 
 ### Set up an LLM client
 
-Screening and other advanced features use AI, and require you to first set up an LLM client. You'll need to head to [platform.openai.com](https://platform.openai.com/docs/overview) and create an API key. Once you've got this, simply feed it to the `LLM`.
+Before screening reports, we first need to set up an LLM client. Screening and other toolkit features require an LLM to work.
 
-For more information, see [Setting up an LLM client](../llm_setup.md).
+You'll need to head to [platform.openai.com](https://platform.openai.com/docs/overview) and create an API key. Once you've got this, simply feed it to the `LLM`.
+
 
 ```python
 from pfd_toolkit import LLM
@@ -69,28 +75,43 @@ from pfd_toolkit import LLM
 llm_client = LLM(api_key=YOUR-API-KEY) # Replace with actual API key
 ```
 
+!!! note
+    For a more detailed guide on using LLMs in this toolkit, see [Setting up an LLM client](../llm_setup.md).
+
+
 ### Screen reports in plain English
 
-Now, all we need to do is specify our `user_query` (the statement the LLM will use to filter reports), and set up our `Screener` engine.
+Now, all we need to do is specify our `user_query` (the statement the LLM will use to filter reports), and set up our `Screener`.
 
 
 ```python
 from pfd_toolkit import Screener
 
-# Create a user query to filter
-user_query = "Concerns related to detention under the Mental Health Act **only**"
+# Create a user query to screen/filter reports by
+user_query = "Concerns about detention under the Mental Health Act **only**"
 
-# Screen reports
-screener = Screener(llm = llm_client,
+# Set up & run our Screener
+screener = Screener(llm = llm_client, # LLM client you set up above
                         reports = reports) # Reports that you loaded earlier
 
-filtered_reports = screener.screen_reports(user_query=user_query)
+filtered_reports = screener.screen_reports(
+    user_query=user_query)
+
+# Count number of identified reports
+len(filtered_reports)
 ```
 
-`filtered_reports` returns a DataFrame, only containing reports that matched your query.
+```sh
+>> 51
+```
+
+`filtered_reports` returns a filtered version of our original PFD dataset, containing the 51 reports that the LLM believed matches our query.
 
 
-For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
+!!! note
+    For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
 
 
+Now that we've loaded and screened our reports for relevance to being _detained under the Mental Health Act_, our next step is to discover recurring themes. In other words, concerns that coroners keep raising.
 
+Head to the next page to discover how to do this.

@@ -1,6 +1,8 @@
-# Caching and exporting results
+# Caching and resetting output
 
-`Extractor` caches every LLM response so repeated calls with the same prompt reuse previous results. Export the cache before you shut down and import it in a future session to avoid paying for the same completions twice.
+`Extractor` caches every LLM response so repeated calls with the same configuration reuse previous results.
+
+Export the cache before you shut down and import it in a future session to avoid running the model on reports that have already been extracted:
 
 ```python
 extractor.export_cache("my_cache.pkl")

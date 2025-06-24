@@ -1,53 +1,162 @@
-# Tagging reports with themes
+# Searching for themes
 
-`Extractor` can be used to label reports with your own themes. Each field on the feature model represents a potential tag. In the model below the `falls_in_custody` field indicates whether a death occurred in police custody.
+Spotting common themes across many reports helps reveal systemic problems and policy gaps. `Extractor` be used to identify these themes.
 
-Set `force_assign=True` so the LLM always returns either `True` or `False` for each field. `allow_multiple=True` lets a single report be marked with more than one theme if required.
-
-```python
-# For themes, we recommend always using the `bool` flag
-class Themes(BaseModel):
-    falls_in_custody: bool = Field(description="Death occurred in police custody")
-    medication_error: bool = Field(description="Issues with medication or dosing")
-
-extractor = Extractor(
-    llm=llm_client,
-    feature_model=Themes,
-    reports=reports,
-    force_assign=True,
-    allow_multiple=True,
-)
-
-labelled = extractor.extract_features()
-```
-
-The returned DataFrame includes a boolean column for each theme.
+!!! important
+    Extracting themes works best if you've already screened for reports that are relevant to your research. For more information, see the `Screener` guidance [here](../screener/index.md).
 
 ---
 
-## Discovering themes automatically
+## Discovering themes
 
-Instead of having a prescribed list of themes ahead of time, you may wish to automatically discover themes contained within your selection of reports.
+The `discover_themes()` method allows you to identify recurring topics contained within a selection of PFD reports. 
 
-Once summaries are available you can call `.discover_themes()` to let the LLM propose a list of recurring themes. `.discover_themes()` reads the `summary` column created by `.summarise()` (see [Summaries & token counts](summarising.md)).
+Once summaries are available, you can instruct the LLM to identify a list of recurring themes. This method expects that the `summary` column has already been created by `summarise()` (see [Produce summaries of report text](summarising.md)).
 
-The function returns a `pydantic` model describing the discovered themes. You can immediately feed that model back into `extract_features` to label each report.
 
 ```python
+
+from pfd_toolkit import Extractor, LLM
+
+# Set up Extractor
+extractor = Extractor(
+    llm=llm_client,
+    reports=reports
+)
+
+summary_df = extractor.summarise(trim_intensity="medium")
+
 IdentifiedThemes = extractor.discover_themes()
 
-# Optionally, inspect the newly identified themes:
-# print(IdentifiedThemes)
+# Optionally, inspect the themes that the model has identified:
+#print(extractor.identified_themes)
+```
 
+`IdentifiedThemes` is essentially a set of detailed instructions that you can pass to the LLM via `extract_features()`:
+
+```python
 assigned_reports = extractor.extract_features(
                               feature_model=IdentifiedThemes,
                               force_assign=True,
                               allow_multiple=True)
 ```
 
-`discover_themes` accepts several parameters:
+`assigned_reports` now contains your original dataset, along with new fields denoting whether the LLM assigned each report to a particular theme or not.  
 
-* `warn_exceed` and `error_exceed` – soft and hard limits for the estimated token count of the combined summaries. Exceeding `error_exceed` raises an exception.
-* `max_themes` / `min_themes` – bound the number of themes the model should return.
-* `seed_topics` – either a string, list or `BaseModel` of starter topics. The LLM will incorporate these into the final list.
-* `extra_instructions` – free‑form text appended to the prompt, allowing you to steer the LLM towards particular areas of interest.
+---
+
+## More customisation
+
+`Extractor` contains a suite of options to help you customise the thematic discovery process.
+
+
+### Choosing which sections the LLM reads
+
+`Extractor` lets you decide exactly which parts of the report are presented to the model. Each `include_*` flag mirrors one of the columns loaded by `load_reports`. Turning fields off reduces the amount of text sent to the LLM which often speeds up requests and lowers token usage.
+
+```python
+extractor = Extractor(
+    llm=llm_client,
+    reports=reports,
+    include_investigation=True,
+    include_circumstances=True,
+    include_concerns=False  # Skip coroner's concerns if not relevant
+)
+```
+
+### Guided topic modelling
+
+Guided topic modelling is a strategy of discovering themes where you provide a number of topics that are sure to be in your selection of reports. 
+
+We can set one or more `seed_topics`, which the model will draw from while *also* discovering new themes. For example:
+
+
+```python
+# Set up Extractor
+extractor = Extractor(
+    llm=llm_client,
+    reports=reports
+)
+
+summary_df = extractor.summarise(trim_intensity="medium")
+
+IdentifiedThemes = extractor.discover_themes(
+    seed_topics="Risk assessment failures; understaffing; information sharing failures"
+)
+```
+
+Above, we provide 3 seed topics. The model will try to identify these topics in the text, while also searching for other topics.
+
+---
+
+### Providing additional instructions
+
+You can also provide additional instructions to help guide the model. This is somewhat similar to above, except instead of providing examples of themes, you can provide other kinds of guidance. For example:
+
+
+```python
+summary_df = extractor.summarise(trim_intensity="medium")
+
+extra_instructions="""
+My research question is: What are the various consequences of transitioning from youth to adult mental health services?"
+"""
+
+IdentifiedThemes = extractor.discover_themes(
+    extra_instructions=extra_instructions
+)
+```
+
+Above, we guide the model by specifying our specific area of interest. 
+
+
+### Controlling the number of themes
+
+You can control how many themes the model discovers through `min_themes` and `max_themes` arguments:
+
+```python
+summary_df = extractor.summarise(trim_intensity="medium")
+
+IdentifiedThemes = extractor.discover_themes(
+    min_theme=8,
+    max_theme=12
+)
+```
+
+`discover_themes` will now produce at least 8 themes, but not more than 12.
+
+
+
+### Manual topic modelling
+
+Finally, you can bypass `discover_themes()` altogether by providing a complete set of themes to extract via a feature model. Here, the model only *assigns* the themes; it does not *identify* the themes.
+
+You should provide 3 pieces of information: the column name (e.g. `falls_in_custody`), its type (e.g. `bool`) and a brief description.
+
+Set `force_assign=True` so the LLM always returns either `True` or `False` for each field. `allow_multiple=True` lets a single report be marked with more than one theme if required.
+
+
+
+```python
+from pydantic import BaseModel, Field
+
+# For themes, we recommend always setting the type to `bool`
+class Themes(BaseModel):
+    falls_in_custody: bool = Field(description="Death occurred in police custody")
+    medication_error: bool = Field(description="Issues with medication or dosing")
+
+extractor = Extractor(
+    llm=llm_client,
+    reports=reports,
+)
+
+labelled = extractor.extract_features(
+    feature_model=Themes,
+    force_assign=True,
+    allow_multiple=True)
+
+```
+
+The returned DataFrame includes a boolean column for each of your themes.
+
+---
+
