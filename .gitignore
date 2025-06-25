@@ -22,3 +22,6 @@ site/
 docs/assets/images/social/*
 !docs/assets/images/social/.gitkeep
 .cache
+
+# Build
+/dist/*

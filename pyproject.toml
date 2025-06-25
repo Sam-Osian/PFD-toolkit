@@ -7,11 +7,11 @@ name = "pfd_toolkit"
 version = "0.3.2"
 description = "A toolkit for using Prevention of Future Death (PFD) Reports for Research and Policy Projects."
 readme = "README.md"
-license = { file = "LICENCE" }
-
+license = "AGPL-3.0-or-later"
+license-files = ["LICENCE"]
 authors = [
   { name = "Samuel Osian", email = "soandrews98@gmail.com" },
-  { name = "Jonathan Pytches", email = "Search-me@on-Linkedin.co.uk" }
+  { name = "Jonathan Pytches", email = "jonathan.pytches@gmail.com" }
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -58,6 +58,8 @@ dependencies = [
     "ipython-pygments-lexers>=1.1.1",
     "isodate>=0.6.1",
     "itsdangerous>=2.2.0",
+    "jaraco-classes>=3.4.0",
+    "jaraco-context>=6.0.1",
     "jedi>=0.19.2",
     "jiter>=0.10.0",
     "jupyter-client>=8.6.3",
@@ -108,6 +110,7 @@ dependencies = [
     "tornado>=6.5.1",
     "tqdm>=4.67.1",
     "traitlets>=5.14.3",
+    "twine>=6.1.0",
     "typing-extensions>=4.12.2",
     "tzdata>=2025.1",
     "urllib3>=2.3.0",
@@ -129,5 +132,5 @@ dev = [
 ]
 
 [project.urls]
-"Source" = "https://github.com/Sam-Osian/PFD-toolkit"
+"Homepage" = "https://github.com/Sam-Osian/PFD-toolkit"
 "Issues" = "https://github.com/Sam-Osian/PFD-toolkit/issues"
