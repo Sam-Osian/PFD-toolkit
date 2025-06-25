@@ -81,8 +81,6 @@ We welcome feedback as well as code collaborators! Please read our collaboration
 
 
 
----
-
 ## How to cite
 
 If you use PFD Toolkit in your research, please cite the archived release:
@@ -96,7 +94,7 @@ Or, in BibTeX:
   author       = {Sam Osian and Jonathan Pytches},
   title        = {PFD Toolkit: Unlocking Prevention of Future Death Reports for Research},
   year         = {2025},
-  version      = {0.3.2},
+  version      = {0.3.3},
   doi          = {10.5281/zenodo.15729717},
   url          = {https://github.com/sam-osian/PFD-toolkit}
 }
