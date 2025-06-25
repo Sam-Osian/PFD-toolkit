@@ -38,10 +38,10 @@ If your change is significant, consider opening an issue first to discuss it.
     git clone https://github.com/sam-osian/PFD-toolkit.git
     ```
 
-    * [Install `uv`](https://docs.astral.sh/uv/getting-started/installation/) and sync project dependencies:
+    * [Install `uv`](https://docs.astral.sh/uv/getting-started/installation/) and sync project dependencies, including developer-only dependencies:
 
     ```bash
-    uv sync
+    uv sync --dev
     ```
 
     * Create a branch for your work
