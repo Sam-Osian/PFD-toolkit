@@ -38,7 +38,7 @@ class LLM:
         OpenAI (or proxy) API key. Defaults to ``None`` which expects the
         environment variable to be set.
     model : str, optional
-        Chat model name. Defaults to ``"gpt-4.1-mini"``.
+        Chat model name. Defaults to ``"gpt-4.1"``.
     base_url : str or None, optional
         Override the OpenAI endpoint. Defaults to ``None``.
     max_workers : int, optional
@@ -73,7 +73,7 @@ class LLM:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model: str = "gpt-4.1-mini",
+        model: str = "gpt-4.1",
         base_url: Optional[str] = None,
         max_workers: int = 8,
         temperature: float = 0.0,

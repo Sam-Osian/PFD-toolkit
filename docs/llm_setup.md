@@ -102,8 +102,7 @@ llm_client = LLM(
 
 ## Change your model
 
-By default, PFD Toolkit uses `gpt-4.1-mini`. We love this model as it balances cost, speed, and accuracy. We also recommend its larger equivalent, `gpt-4.1`, which may offer improved performance, though with additional API costs and less forgiving rate limits.
-
+By default, PFD Toolkit uses `gpt-4.1`. We love this model as it balances cost, speed, and accuracy. We also recommend its smaller equivalent, `gpt-4.1-mini`, which offers decent performance at a lower API cost. 
 
 ```python
 llm_client = LLM(
