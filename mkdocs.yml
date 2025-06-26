@@ -97,9 +97,9 @@ nav:
       - Overview: index.md
       - About the data: pfd_reports.md
       - Not a coder?: non_coders.md
-  - Basic tutorial:
-      - Load & screen reports: getting_started/load_and_screen.md
-      - Discover themes: getting_started/discover_themes.md
+  - Getting started:
+      - Key features: getting_started/key_features.md
+      - Basic tutorial: getting_started/basic_tutorial.md
   - Load reports:
       - Loading report data: loader/load_reports.md
   - Creating an LLM client: 
