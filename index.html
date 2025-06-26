@@ -270,11 +270,11 @@
     
     
       <li class="md-tabs__item">
-        <a href="getting_started/load_and_screen/" class="md-tabs__link">
+        <a href="getting_started/key_features/" class="md-tabs__link">
           
   
   
-  Basic tutorial
+  Getting started
 
         </a>
       </li>
@@ -706,7 +706,7 @@
   
   
   <span class="md-ellipsis">
-    Basic tutorial
+    Getting started
     
   </span>
   
@@ -717,7 +717,7 @@
         <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_2">
             <span class="md-nav__icon md-icon"></span>
-            Basic tutorial
+            Getting started
           </label>
           <ul class="md-nav__list" data-md-scrollfix>
             
@@ -728,12 +728,12 @@
   
   
     <li class="md-nav__item">
-      <a href="getting_started/load_and_screen/" class="md-nav__link">
+      <a href="getting_started/key_features/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Load & screen reports
+    Key features
     
   </span>
   
@@ -751,12 +751,12 @@
   
   
     <li class="md-nav__item">
-      <a href="getting_started/discover_themes/" class="md-nav__link">
+      <a href="getting_started/basic_tutorial/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
-    Discover themes
+    Basic tutorial
     
   </span>
   
@@ -1768,24 +1768,16 @@
 
 <p><img alt="PFD Toolkit" src="assets/header.png" /></p>
 <p><em>PFD Toolkit</em> is an open-source Python package created to transform how researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.</p>
-<p>Out of the box, you can:</p>
+<p>What used to take months (or even years!) of manual work can now be reduced to a matter of minutes. PFD Toolkit lets you:</p>
 <ol>
-<li>
-<p>Load live PFD data in seconds</p>
-</li>
-<li>
-<p>Query and filter reports with natural language</p>
-</li>
-<li>
-<p>Summarise reports to highlight key messages</p>
-</li>
-<li>
-<p>Automatically discover recurring themes</p>
-</li>
-<li>
-<p>Extract other kinds of information, such as age, sex and cause of death</p>
-</li>
+<li>Fetch PFD reports by date range</li>
+<li>Load them into a pandas DataFrame for easy analysis</li>
+<li>Filter by user-defined topics (just type in a phrase like “road safety”)</li>
+<li>Generate short summaries of reports</li>
+<li>Automatically discover recurring topics or themes</li>
+<li>Output clean tables ready for charts or further analysis</li>
 </ol>
+<hr />
 <p>Here is a sample of the PFD dataset:</p>
 <table>
 <thead>
@@ -1853,10 +1845,11 @@
 </tr>
 </tbody>
 </table>
-<p>Each row is a unique report, while each column reflects a section of the report. For more information on the structure of these reports, see <a href="pfd_reports/#what-do-pfd-reports-look-like">here</a>.</p>
+<p>Each row is an individual report, while each column reflects a section of the report. For more information on the structure of these reports, see <a href="pfd_reports/#what-do-pfd-reports-look-like">here</a>.</p>
 <hr />
 <h2 id="why-does-this-package-exist">Why does this package exist?<a class="headerlink" href="#why-does-this-package-exist" title="Permanent link">&para;</a></h2>
-<p>PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This is for one simple reason: PFD reports are a <em>pain</em> to analyse. </p>
+<p>PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. </p>
+<p>This is for one simple reason: PFD reports are a <em>pain</em> to analyse. </p>
 <p>Common issues include:</p>
 <ul>
 <li>
@@ -1875,7 +1868,7 @@
 <p>Widespread miscategorisation of reports, creating research limitations</p>
 </li>
 </ul>
-<p>As a result, research involving PFD reports demands months, or even years, of manual admin. Researchers are forced to sift through hundreds/thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. </p>
+<p>As a result, research involving PFD reports demanded months, or even years, of manual admin. Researchers were forced to sift through hundreds/thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. </p>
 <p>PFD Toolkit offers a solution to each of these issues, helping researchers load, screen and analyse PFD report data - all in a matter of minutes.</p>
 <hr />
 <h2 id="installation">Installation<a class="headerlink" href="#installation" title="Permanent link">&para;</a></h2>
@@ -1903,14 +1896,14 @@
 <h2 id="how-to-cite">How to cite<a class="headerlink" href="#how-to-cite" title="Permanent link">&para;</a></h2>
 <p>If you use PFD Toolkit in your research, please cite the archived release:</p>
 <blockquote>
-<p>Osian, S., &amp; Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.2) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717</p>
+<p>Osian, S., &amp; Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.3) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717</p>
 </blockquote>
 <p>Or, in BibTeX:</p>
 <div class="language-bibtex highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nc">@software</span><span class="p">{</span><span class="nl">osian2025pfdtoolkit</span><span class="p">,</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="na">author</span><span class="w">       </span><span class="p">=</span><span class="w"> </span><span class="s">{Sam Osian and Jonathan Pytches}</span><span class="p">,</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="na">title</span><span class="w">        </span><span class="p">=</span><span class="w"> </span><span class="s">{PFD Toolkit: Unlocking Prevention of Future Death Reports for Research}</span><span class="p">,</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="na">year</span><span class="w">         </span><span class="p">=</span><span class="w"> </span><span class="s">{2025}</span><span class="p">,</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="na">version</span><span class="w">      </span><span class="p">=</span><span class="w"> </span><span class="s">{0.3.2}</span><span class="p">,</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="na">version</span><span class="w">      </span><span class="p">=</span><span class="w"> </span><span class="s">{0.3.3}</span><span class="p">,</span>
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="na">doi</span><span class="w">          </span><span class="p">=</span><span class="w"> </span><span class="s">{10.5281/zenodo.15729717}</span><span class="p">,</span>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="na">url</span><span class="w">          </span><span class="p">=</span><span class="w"> </span><span class="s">{https://github.com/sam-osian/PFD-toolkit}</span>
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="p">}</span>
@@ -1935,7 +1928,7 @@
     <span class="md-icon" title="Last update">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M21 13.1c-.1 0-.3.1-.4.2l-1 1 2.1 2.1 1-1c.2-.2.2-.6 0-.8l-1.3-1.3c-.1-.1-.2-.2-.4-.2m-1.9 1.8-6.1 6V23h2.1l6.1-6.1zM12.5 7v5.2l4 2.4-1 1L11 13V7zM11 21.9c-5.1-.5-9-4.8-9-9.9C2 6.5 6.5 2 12 2c5.3 0 9.6 4.1 10 9.3-.3-.1-.6-.2-1-.2s-.7.1-1 .2C19.6 7.2 16.2 4 12 4c-4.4 0-8 3.6-8 8 0 4.1 3.1 7.5 7.1 7.9l-.1.2z"/></svg>
     </span>
-    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="June 24, 2025 12:59:46 UTC">June 24, 2025</span>
+    <span class="git-revision-date-localized-plugin git-revision-date-localized-plugin-date" title="June 26, 2025 13:47:59 UTC">June 26, 2025</span>
   </span>
 
     
