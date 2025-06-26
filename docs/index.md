@@ -2,18 +2,16 @@
 
 *PFD Toolkit* is an open-source Python package created to transform how researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.
 
-Out of the box, you can:
+What used to take months (or even years!) of manual work can now be reduced to a matter of minutes. PFD Toolkit lets you:
 
-1. Load live PFD data in seconds
+1. Fetch PFD reports by date range
+2. Load them into a pandas DataFrame for easy analysis
+3. Filter by user-defined topics (just type in a phrase like “road safety”)
+4. Generate short summaries of reports
+5. Automatically discover recurring topics or themes
+6. Output clean tables ready for charts or further analysis
 
-2. Query and filter reports with natural language
-
-3. Summarise reports to highlight key messages
-
-4. Automatically discover recurring themes
-
-5. Extract other kinds of information, such as age, sex and cause of death
-
+---
 
 Here is a sample of the PFD dataset:
 
@@ -26,13 +24,15 @@ Here is a sample of the PFD dataset:
 | [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
 
-Each row is a unique report, while each column reflects a section of the report. For more information on the structure of these reports, see [here](pfd_reports.md#what-do-pfd-reports-look-like).
+Each row is an individual report, while each column reflects a section of the report. For more information on the structure of these reports, see [here](pfd_reports.md#what-do-pfd-reports-look-like).
 
 ---
 
 ## Why does this package exist?
 
-PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. This is for one simple reason: PFD reports are a _pain_ to analyse. 
+PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. 
+
+This is for one simple reason: PFD reports are a _pain_ to analyse. 
 
 Common issues include:
 
@@ -47,7 +47,7 @@ Common issues include:
  * Widespread miscategorisation of reports, creating research limitations
 
 
-As a result, research involving PFD reports demands months, or even years, of manual admin. Researchers are forced to sift through hundreds/thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. 
+As a result, research involving PFD reports demanded months, or even years, of manual admin. Researchers were forced to sift through hundreds/thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. 
 
 PFD Toolkit offers a solution to each of these issues, helping researchers load, screen and analyse PFD report data - all in a matter of minutes.
 
@@ -93,7 +93,7 @@ PFD Toolkit is designed as a research-enabling tool, and we’re keen to work wi
 
 If you use PFD Toolkit in your research, please cite the archived release:
 
-> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.2) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
+> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.3) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
 
 Or, in BibTeX:
 
@@ -102,7 +102,7 @@ Or, in BibTeX:
   author       = {Sam Osian and Jonathan Pytches},
   title        = {PFD Toolkit: Unlocking Prevention of Future Death Reports for Research},
   year         = {2025},
-  version      = {0.3.2},
+  version      = {0.3.3},
   doi          = {10.5281/zenodo.15729717},
   url          = {https://github.com/sam-osian/PFD-toolkit}
 }

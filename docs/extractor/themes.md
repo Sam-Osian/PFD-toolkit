@@ -43,6 +43,14 @@ assigned_reports = extractor.extract_features(
 
 `assigned_reports` now contains your original dataset, along with new fields denoting whether the LLM assigned each report to a particular theme or not.  
 
+## Tabulate themes
+
+To create a table containing counts and percentages for each of your themes, run:
+
+```python
+extractor.tabulate()
+```
+
 ---
 
 ## More customisation
@@ -130,10 +138,9 @@ IdentifiedThemes = extractor.discover_themes(
 
 Finally, you can bypass `discover_themes()` altogether by providing a complete set of themes to extract via a feature model. Here, the model only *assigns* the themes; it does not *identify* the themes.
 
-You should provide 3 pieces of information: the column name (e.g. `falls_in_custody`), its type (e.g. `bool`) and a brief description.
+For each of your themes, you should provide 3 pieces of information: the column name (e.g. `falls_in_custody`), its type (e.g. `bool`) and a brief description.
 
 Set `force_assign=True` so the LLM always returns either `True` or `False` for each field. `allow_multiple=True` lets a single report be marked with more than one theme if required.
-
 
 
 ```python
@@ -156,7 +163,9 @@ labelled = extractor.extract_features(
 
 ```
 
-The returned DataFrame includes a boolean column for each of your themes.
+!!! note
+    Tip: always select type `bool` for your themes for more reliable performance.
 
----
+
+The returned DataFrame includes a boolean column for each of your themes.
 

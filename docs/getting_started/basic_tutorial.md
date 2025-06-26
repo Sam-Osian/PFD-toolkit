@@ -1,6 +1,8 @@
-# Basic tutorial
+# Tutorial: Detention under the Mental Health Act
 
-This page talks you through an example workflow using PFD Toolkit. Here, we will load a dataset and screen for relevant cases related to "detention under the Mental Health Act". We will also discover themes to understand more about the issues coroners keep raising.
+This page talks you through an example workflow using PFD Toolkit. Here, we will load a dataset and screen for relevant cases related to "detention under the Mental Health Act" (often referring to as 'being sectioned'). 
+
+We will also discover themes to understand more about the issues coroners keep raising.
 
 This is just an example. PFD reports contain a breadth of information across a whole range of topics and domains. Through this workflow, we hope to give you a sense of how the toolkit can be used, and how it might support your own project.
 
@@ -56,8 +58,6 @@ llm_client = LLM(api_key=YOUR-API-KEY) # Replace with actual API key
 ## Screen for relevant reports
 
 You're likely using PFD Toolkit because you want to answer a specific question. In our example, we're asking: "Do any PFD reports raise concerns related to detention under the Mental Health Act?"
-
-*[detention]: Often referred to as 'being sectioned'
 
 PFD Toolkit lets you query reports in plain English — no need to know precise keywords or categories. Just describe the cases you care about, and the toolkit will return matching reports.
 
