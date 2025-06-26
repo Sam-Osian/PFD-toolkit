@@ -29,6 +29,13 @@ from pfd_toolkit import LLM
 llm_client = LLM(api_key=YOUR_API_KEY)
 ```
 
+For more information on working with LLMs (including how to set up an OpenAI API key) see [Working with LLMs](../llm_setup.md).
+
+
+!!! warning
+    OpenAI currently mandate that your account must be at least than 48 hours old before being able to run LLMs as normal. If you're setting up your account for this first time, you might have to wait a couple of days before using PFD Toolkit's advanced features.
+
+
 ### Hiding your API key
 
 We heavily recommend keeping your API key safe by hiding it from your script. Create a separate file called `api.env` which contains:
@@ -51,8 +58,6 @@ openai_api_key = os.getenv("OPENAI_API_KEY")
 # Initialise LLM client
 llm_client = LLM(api_key=openai_api_key)
 ```
-
-For extra options (e.g. changing model, speeding up requests) see [Working with LLMs](../llm_setup.md).
 
 
 ---

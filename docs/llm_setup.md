@@ -40,6 +40,9 @@ online_med_reports = screener.screen_reports(user_query=query)
 
 For more information about usage costs, see [OpenAI pricing](https://openai.com/api/pricing/).
 
+!!! warning
+    OpenAI currently mandate that your account must be at least than 48 hours old before being able to run LLMs as normal. If you're setting up your account for this first time, you might have to wait a couple of days before using PFD Toolkit's advanced features.
+
 ---
 
 ## Hide your API key
