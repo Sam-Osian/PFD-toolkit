@@ -1,6 +1,6 @@
 site_name: PFD Toolkit
 site_description: "Turn raw PFD reports into structured insights — fast."
-site_url: https://sam-osian.github.io/pfd-toolkit/
+site_url: https://pfdtoolkit.org
 repo_url: https://github.com/Sam-Osian/PFD-toolkit/
 edit_uri: edit/main/docs/
 theme:

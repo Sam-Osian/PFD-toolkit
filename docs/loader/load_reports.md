@@ -9,7 +9,7 @@ from pfd_toolkit import load_reports
 
 # Load all PFD reports from January 2024 to May 2025
 reports = load_reports(
-    start_date="2024-01-01",
+    start_date="2024-01-01", # YYYY-MM-DD format
     end_date="2025-05-01")
 
 reports.head()

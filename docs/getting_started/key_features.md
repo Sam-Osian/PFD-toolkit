@@ -12,7 +12,9 @@ Access the latest PFD reports in a single line. `load_reports()` returns a `Data
 from pfd_toolkit import load_reports
 
 # Load reports from January 2024 onwards
-reports = load_reports(start_date="2024-01-01")
+reports = load_reports(
+    start_date="2024-01-01" # YYYY-MM-DD format
+)
 ```
 
 Learn more on the [loading report data](../loader/load_reports.md) page.
