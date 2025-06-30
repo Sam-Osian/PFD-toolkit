@@ -1,21 +1,20 @@
 ---
 title: "PFD Toolkit – Turn PFD reports into structured insights"
 description: |
-  Open-source Python package that extracts, cleans and analyses UK Prevention of Future Death (PFD) reports
+  A Python Package for Accessing and Analysing Prevention of Future Death (PFD) Reports
 ---
 
-![PFD Toolkit](assets/header.png)
+![PFD Toolkit: Open-source software for Prevention of Future Death reports](assets/header.png)
 
-*PFD Toolkit* is an open-source Python package created to transform how researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.
+*PFD Toolkit* is an open-source Python package for bulk extraction and analysis of Prevention of Future Death (PFD) reports from coroners in England and Wales. Designed for researchers, policymakers, and analysts, it transforms manual, fragmented report analysis into an automated workflow.
 
 What used to take months (or even years!) of manual work can now be reduced to a matter of minutes. PFD Toolkit lets you:
 
-1. Fetch PFD reports by date range
-2. Load them into a pandas DataFrame for easy analysis
-3. Filter by user-defined topics (just type in a phrase like “road safety”)
-4. Generate short summaries of reports
-5. Automatically discover recurring topics or themes
-6. Output clean tables ready for charts or further analysis
+1. Download structured PFD report datasets
+2. Filter reports to identify research-relevant cases (just type in a phrase such as "road safety")
+3. Generate short summaries of reports
+4. Automatically discover recurring topics or themes
+5. Output clean tables ready for charts or further analysis
 
 ---
 
@@ -34,7 +33,7 @@ Each row is an individual report, while each column reflects a section of the re
 
 ---
 
-## Why does this package exist?
+## Why use PFD Toolkit for PFD Report Analysis?
 
 PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. 
 
@@ -78,7 +77,7 @@ pip install -U pfd_toolkit
 
 ## Licence
 
-This project is distributed under the GNU Affero General Public License v3.0 (AGPL-3.0), available [here](https://github.com/Sam-Osian/PFD-toolkit?tab=AGPL-3.0-1-ov-file).
+This project is distributed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](https://github.com/Sam-Osian/PFD-toolkit?tab=AGPL-3.0-1-ov-file).
 
 
 !!! note
