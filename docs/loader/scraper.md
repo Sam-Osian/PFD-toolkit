@@ -1,3 +1,9 @@
+---
+title: "Scraping module"
+description: |
+  Download reports directly from the judiciary website with full control.
+---
+
 # Scraping module
 
 `Scraper` lets you download PFD reports straight from the judiciary website and control each step of the extraction process. For most projects [`load_reports()`](load_reports.md) is sufficient, but the scraping module gives you full transparency over how reports are gathered and how missing values are filled in. Use it when you need to customise request behaviour, adjust fallback logic or troubleshoot tricky reports.

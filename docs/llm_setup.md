@@ -1,3 +1,9 @@
+---
+title: "Creating an LLM Client"
+description: |
+  Set up the LLM client and obtain an API key for advanced features.
+---
+
 # Creating an LLM Client
 
 PFD Toolkit uses a Large Language Model (LLM) client for advanced features. This page explains how to set up your LLM, including how to get an API key.

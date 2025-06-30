@@ -1,3 +1,9 @@
+---
+title: "PFD Toolkit – Turn PFD reports into structured insights"
+description: |
+  Open-source Python package that extracts, cleans and analyses UK Prevention of Future Death (PFD) reports
+---
+
 ![PFD Toolkit](assets/header.png)
 
 *PFD Toolkit* is an open-source Python package created to transform how researchers, policymakers, and analysts access and analyse Prevention of Future Death (PFD) reports from coroners in England and Wales.

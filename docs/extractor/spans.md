@@ -1,3 +1,9 @@
+---
+title: "Capturing text spans"
+description: |
+  Identify the source text that supports each extracted value.
+---
+
 # Capturing text spans
 
 Sometimes you want to know exactly which lines from the report led the model to assign a particular value to a given report's field. 

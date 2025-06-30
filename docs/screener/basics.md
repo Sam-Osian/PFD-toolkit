@@ -1,3 +1,9 @@
+---
+title: "Getting started"
+description: |
+  Run your first Screener query and learn why it beats keyword search.
+---
+
 # Getting started
 
 Natural-language filtering is one of the headline features of PFD Toolkit. The `Screener` class lets you describe a topic in plain English – e.g. "deaths in police custody" – and have an LLM screen reports, delivering you a curated dataset.

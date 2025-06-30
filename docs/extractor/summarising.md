@@ -1,3 +1,9 @@
+---
+title: "Produce summaries of report text"
+description: |
+  Generate concise summaries to quickly scan large numbers of reports.
+---
+
 # Produce summaries of report text
 
 Short, consistent summaries make it possible to skim hundreds or even of thousands of reports. You might use these summaries to quickly identify notable case studies, or to get an 'at a glance' understanding of the breadth contained within PFD reports.

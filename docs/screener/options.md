@@ -1,3 +1,9 @@
+---
+title: "Additional options"
+description: |
+  Control annotation, filtering and other Screener behaviour.
+---
+
 # Additional options
 
 ### Annotation vs. filtering

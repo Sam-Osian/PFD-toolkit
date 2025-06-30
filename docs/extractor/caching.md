@@ -1,3 +1,9 @@
+---
+title: "Caching and resetting output"
+description: |
+  Reuse previous LLM results by exporting and importing the cache.
+---
+
 # Caching and resetting output
 
 `Extractor` caches every LLM response so repeated calls with the same configuration reuse previous results.

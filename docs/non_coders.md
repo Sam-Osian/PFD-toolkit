@@ -1,3 +1,9 @@
+---
+title: "For Non-Coders"
+description: |
+  Guidance for researchers who want results without writing Python code.
+---
+
 # For Non-Coders
 
 We appreciate that not all researchers are Python coders, and we also believe that this shouldn't stop you from unlocking the insights contained within PFD reports.

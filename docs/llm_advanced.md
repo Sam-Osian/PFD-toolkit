@@ -1,3 +1,9 @@
+---
+title: "Advanced LLM options"
+description: |
+  Configure custom endpoints, temperature, seed and other advanced settings.
+---
+
 ## Use a custom endpoint
 
 You can set a custom endpoint (e.g. for Azure, Ollama, etc.). Your endpoint must support the OpenAI SDK. 

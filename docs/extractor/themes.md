@@ -1,3 +1,9 @@
+---
+title: "Searching for themes"
+description: |
+  Discover recurring topics across many PFD reports.
+---
+
 # Searching for themes
 
 Spotting common themes across many reports helps reveal systemic problems and policy gaps. `Extractor` be used to identify these themes.

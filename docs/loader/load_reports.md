@@ -1,3 +1,9 @@
+---
+title: "Load live report data"
+description: |
+  Fetch PFD reports as a pandas DataFrame using load_reports().
+---
+
 ## Load live report data
 
 `load_reports()` is the quickest way to access PFD reports.  While before, researchers would have to manually download reports one-by-one, this function allows users to immediately access all reports.

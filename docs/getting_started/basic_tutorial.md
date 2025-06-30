@@ -1,3 +1,9 @@
+---
+title: "Tutorial: Detention under the Mental Health Act"
+description: |
+  Step-by-step example showing how to load data, screen cases and analyse themes.
+---
+
 # Tutorial: Detention under the Mental Health Act
 
 This page talks you through an example workflow using PFD Toolkit. Here, we will load a dataset and screen for relevant cases related to "detention under the Mental Health Act" (often referring to as 'being sectioned'). 

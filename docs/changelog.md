@@ -1,3 +1,9 @@
+---
+title: "Changelog"
+description: |
+  Record of notable changes and updates to the PFD Toolkit project.
+---
+
 # 📆 Changelog
 
 Welcome to the project changelog. All notable changes to this project will be documented below.

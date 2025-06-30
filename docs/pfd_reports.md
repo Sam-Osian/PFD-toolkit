@@ -1,3 +1,9 @@
+---
+title: "More about PFD reports"
+description: |
+  Background on Prevention of Future Death reports and their impact.
+---
+
 # More about PFD reports
 
 Prevention of Future Death (PFD) reports are a unique, under-recognised mechanism within the English and Welsh legal system for flagging hazards that threaten lives. These documents, written by coroners at the close of certain inquests, have the potential to drive real change — but only if their warnings are heard and acted upon.

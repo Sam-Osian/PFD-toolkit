@@ -1,3 +1,9 @@
+---
+title: "Feedback & contributions"
+description: |
+  Guidelines for providing feedback and contributing to the toolkit.
+---
+
 # Feedback & contributions
 
 Thank you for your interest in contributing to PFD Toolkit! We welcome input from researchers, data scientists, developers, and anyone passionate about improving access to coroners’ Prevention of Future Death reports.

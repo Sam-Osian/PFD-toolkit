@@ -1,3 +1,9 @@
+---
+title: "Analysing PFD reports"
+description: |
+  Overview of the Extractor tool for making sense of Prevention of Future Death reports.
+---
+
 # Analysing PFD reports
 
 ![Extractor](../assets/extractor.png)

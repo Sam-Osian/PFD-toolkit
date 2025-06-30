@@ -1,3 +1,9 @@
+---
+title: "Pull out structured data from reports"
+description: |
+  Learn how the Extractor converts free text into structured columns.
+---
+
 # Pull out structured data from reports
 
 `Extractor` lets you turn free text into structured columns. This is useful for running statistics, tracking patterns, and comparing cases at scale.

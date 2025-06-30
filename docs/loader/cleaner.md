@@ -1,3 +1,9 @@
+---
+title: "Cleaning scraped data"
+description: |
+  Polish scraped reports using the Cleaner for consistent data.
+---
+
 # Cleaning scraped data
 
 `Cleaner` provides an optional step for polishing scraped reports with the same

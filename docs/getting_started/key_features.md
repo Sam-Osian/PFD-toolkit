@@ -1,3 +1,9 @@
+---
+title: "Key features"
+description: |
+  Short tour of the main capabilities of PFD Toolkit.
+---
+
 # Key features
 
 PFD Toolkit turns raw PFD reports into structured insights. This page provides a short tour of the core features so you can hit the ground running. Each section links to more detailed guidance.
