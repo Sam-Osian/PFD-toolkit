@@ -9,7 +9,7 @@ Turn raw PFD reports into structured insights — fast.
 
 PFD Toolkit is a suite of tools that replaces the manual effort involved in the collection, screening, and thematic discovery of PFD reports. It helps researchers, journalists, and public health analysts turn raw reports into actionable insights.
 
-For more information, please consult package [documentation](https://sam-osian.github.io/PFD-toolkit/).
+For more information, please consult package [documentation](https://pfdtoolkit.org/).
 
 ## Getting started
 
@@ -61,7 +61,7 @@ Beyond loading reports, PFD Toolkit lets you:
  * Discover themes: uncover recurring topics contained within a selection of reports.
  * Categorise: assign and tabulate reports by discovered or user-defined themes.
 
-To get started with these features, please check out the [documentation](https://sam-osian.github.io/PFD-toolkit/).
+To get started with these features, please check out the [documentation](https://pfdtoolkit.org/).
 
 
 ## Licence
@@ -77,7 +77,7 @@ This project is distributed under the GNU Affero General Public License v3.0 (AG
 
 ## Collaborate
 
-We welcome feedback as well as code collaborators! Please read our collaboration page [here](https://sam-osian.github.io/PFD-toolkit/contribute/)
+We welcome feedback as well as code collaborators! Please read our collaboration page [here](https://pfdtoolkit.org/contribute/)
 
 
 
