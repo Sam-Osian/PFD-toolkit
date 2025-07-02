@@ -109,7 +109,7 @@ nav:
       - Overview: screener/index.md
       - Getting started: screener/basics.md
       - Additional options: screener/options.md
-      - Tips for writing a good user query: screener/tips.md
+      - Tips for writing a good search query: screener/tips.md
   - Analyse reports:
       - Overview: extractor/index.md
       - Produce summaries: extractor/summarising.md

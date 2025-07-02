@@ -22,7 +22,7 @@ screener = Screener(
 )
 
 annotated = screener.screen_reports(
-    user_query=user_query,
+    search_query=search_query,
     filter_df=False,    # <--- create annotation column instead of filtering
     result_col_name='custody_match'     # <--- name of annotation column
 )
@@ -39,7 +39,7 @@ For example, if you are screening based on a specific *cause of death*, then you
 By contrast, if you are searching for a specific concern, then setting `include_investigation` and `include_circumstances` to False may improve accuracy, speed up your code, and lead to cheaper LLM calls.
 
 ```py
-user_query = "Death from insulin overdose due to misprogrammed insulin pumps."
+search_query = "Death from insulin overdose due to misprogrammed insulin pumps."
 
 screener = Screener(
     llm=llm_client,
@@ -47,13 +47,13 @@ screener = Screener(
     include_concerns=False    # <--- Our query doesn't need this section
 )
 
-result = screener.screen_reports(user_query=user_query)
+result = screener.screen_reports(search_query=search_query)
 ```
 
 In another example, let's say we are only interested in reports sent to a *Member of Parliament*. We'll want to turn off all default sections and only read from the receiver column.
 
 ```py
-user_query = "Whether the report was sent to a Member of Parliament (MP)"
+search_query = "Whether the report was sent to a Member of Parliament (MP)"
 
 screener = Screener(
     llm=llm_client,
@@ -67,7 +67,7 @@ screener = Screener(
     include_receiver=True       # <--- Read from receiver section
 )
 
-result = screener.screen_reports(user_query=user_query)
+result = screener.screen_reports(search_query=search_query)
 ```
 
 #### All options and defaults
@@ -131,7 +131,7 @@ Set `produce_spans=True` when calling `screen_reports()` to capture the exact sn
 screener = Screener(llm=llm_client, reports=reports)
 
 filtered_reports = screener.screen_reports(
-    user_query="Where the cause of death was determined to be suicide", 
+    search_query="Where the cause of death was determined to be suicide", 
     produce_spans=True, 
     drop_spans=False)
 

@@ -1,10 +1,10 @@
 ---
-title: "Tips for writing a good user query"
+title: "Tips for writing a good search query"
 description: |
   Best practices for crafting clear queries when screening reports.
 ---
 
-# Tips for writing a good user query
+# Tips for writing a good search query
 
 1. **Stick to one core idea.** Give the LLM a single, clear subject: “falls from hospital beds,” “carbon-monoxide poisoning at home.” In general, the shorter the prompt, the less room for misinterpretation.
 2. **Avoid nested logic.** Complex clauses like “suicide *and* medication error *but not* in custody” dilute the signal. Consider running separate screens (suicide; medication error; in custody) and combine or subtract results later with pandas.

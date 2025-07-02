@@ -71,15 +71,15 @@ PFD Toolkit lets you query reports in plain English — no need to know precise 
 ```python
 from pfd_toolkit import Screener
 
-# Create a user query to screen/filter reports by
-user_query = "Concerns about detention under the Mental Health Act **only**"
+# Create a search query to screen/filter reports by
+search_query = "Concerns about detention under the Mental Health Act **only**"
 
 # Set up & run our Screener
 screener = Screener(llm = llm_client, # LLM client you set up above
                         reports = reports) # Reports that you loaded earlier
 
 filtered_reports = screener.screen_reports(
-    user_query=user_query)
+    search_query=search_query)
 
 # Optionally, count number of identified reports
 len(filtered_reports)

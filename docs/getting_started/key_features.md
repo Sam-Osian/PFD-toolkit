@@ -80,7 +80,7 @@ from pfd_toolkit import Screener
 query = "Deaths in police custody **only**."
 
 screener = Screener(llm=llm_client, reports=reports)
-police_reports = screener.screen_reports(user_query=query)
+police_reports = screener.screen_reports(search_query=query)
 ```
 
 `police_reports` only contains reports that the LLM believed matched your query.

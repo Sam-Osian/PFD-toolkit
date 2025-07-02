@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pfd_toolkit"
-version = "0.3.3"
+version = "0.3.4"
 description = "A toolkit for using Prevention of Future Death (PFD) Reports for Research and Policy Projects."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
 license-files = ["LICENCE"]
 authors = [
-  { name = "Samuel Osian", email = "soandrews98@gmail.com" },
+  { name = "Sam Osian", email = "samoand@liverpool.ac.uk" },
   { name = "Jonathan Pytches", email = "jonathan.pytches@gmail.com" }
 ]
 classifiers = [

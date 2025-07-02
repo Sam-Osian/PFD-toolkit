@@ -27,8 +27,8 @@ reports = load_reports()
 # Set up your LLM client
 llm_client = LLM(api_key=YOUR-API-KEY)
 
-# Screen reports by user query
-user_query = "Deaths in police custody **only**."
+# Screen reports by search query
+search_query = "Deaths in police custody **only**."
 
 screener = Screener(
     llm=llm_client,
@@ -36,7 +36,7 @@ screener = Screener(
 )
 
 police_df = screener.screen_reports(
-    user_query=user_query)
+    search_query=search_query)
 
 ```
 

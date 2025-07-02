@@ -104,7 +104,7 @@ def test_screener_basic():
     df = pd.DataFrame(data)
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
-    filtered = screener.screen_reports(user_query="needle")
+    filtered = screener.screen_reports(search_query="needle")
     assert len(filtered) == 1
 
 
@@ -117,7 +117,7 @@ def test_screener_add_column_no_filter():
     df = pd.DataFrame(data)
     llm = DummyLLM(keywords=["zzz"])  # no match
     screener = Screener(llm=llm, reports=df)
-    result = screener.screen_reports(user_query="zzz", filter_df=False, result_col_name="match")
+    result = screener.screen_reports(search_query="zzz", filter_df=False, result_col_name="match")
     assert "match" in result.columns
     assert result["match"].iloc[0] is False
 
@@ -126,7 +126,7 @@ def test_screener_produce_spans():
     df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["needle info"]})
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
-    result = screener.screen_reports(user_query="needle", filter_df=False, produce_spans=True)
+    result = screener.screen_reports(search_query="needle", filter_df=False, produce_spans=True)
     assert "spans_matches_query" in result.columns
     assert result["spans_matches_query"].iloc[0] == "span"
     assert result["matches_query"].iloc[0] is True
@@ -136,7 +136,7 @@ def test_screener_drop_spans():
     df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["needle info"]})
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
-    result = screener.screen_reports(user_query="needle", filter_df=False, produce_spans=True, drop_spans=True)
+    result = screener.screen_reports(search_query="needle", filter_df=False, produce_spans=True, drop_spans=True)
     assert "spans_matches_topic" not in result.columns
 
 def test_cleaner_summarise():

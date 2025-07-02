@@ -1,5 +1,6 @@
 from typing import Literal, Dict, List, Tuple, Any, Optional, Union
 import logging
+import warnings
 from pydantic import BaseModel, Field, ConfigDict, create_model
 import pandas as pd
 
@@ -54,7 +55,7 @@ class Screener:
     """
     Classifies a list of report texts against a user-defined topic using an LLM.
 
-    This class takes a DataFrame of reports, a user query, and various
+    This class takes a DataFrame of reports, a search query, and various
     configuration options to classify whether each report matches the query.
     It can either filter the DataFrame to return only matching reports or
     add a classification column to the original DataFrame.
@@ -88,7 +89,7 @@ class Screener:
         user_topic = "medication errors"
         llm_client = LLM()
         screener = Screener(llm=llm_client, reports=reports_df)
-        screened_reports = screener.screen_reports(user_query=user_topic)
+        screened_reports = screener.screen_reports(search_query=user_topic)
         print(f"Found {len(screened_reports)} report(s) on '{user_topic}'.")
 
     """
@@ -135,21 +136,21 @@ class Screener:
             reports.copy() if reports is not None else pd.DataFrame()
         )
 
-        self.user_query: Optional[str] = None
+        self.search_query: Optional[str] = None
         self.prompt_template: Optional[str] = None
 
         if self.verbose:
             logger.debug(
-                "Screener initialised without a user query. Prompt will be built on first screen_reports call."
+                "Screener initialised without a search query. Prompt will be built on first screen_reports call."
             )
 
         if self.verbose:
             if self.reports is not None:
                 logger.debug(f"Initial reports DataFrame shape: {self.reports.shape}")
 
-    def _build_prompt_template(self, current_user_query: str) -> str:
+    def _build_prompt_template(self, current_search_query: str) -> str:
         """
-        Constructs the prompt template based on the user query and match approach.
+        Constructs the prompt template based on the search query and match approach.
         """
         span_line = (
             "Text spans should be **extremely concise**, but always **verbatim** from the source. "
@@ -170,7 +171,7 @@ class Screener:
     "- Make sure any user query related to the deceased is concerned with them *only*, not other persons.\n"
     "- Your response must be a JSON object in which 'matches_topic' can be either 'Yes' or 'No'. \n\n"
     f"{span_line}"
-    f"**User query:** \n'{current_user_query}'"
+    f"**User query:** \n'{current_search_query}'"
 )
 
         # Add the placeholder for the report text (adding right at the end should support caching!)
@@ -184,7 +185,7 @@ Here is the PFD report excerpt:
 
         if self.verbose:
             logger.debug(
-                f"Building prompt template for user query: '{current_user_query}'."
+                f"Building prompt template for search query: '{current_search_query}'."
             )
             logger.debug(
                 f"Base prompt template created:\n{full_template_text.replace('{report_excerpt}', '[REPORT_TEXT_WILL_GO_HERE]')}"
@@ -194,6 +195,7 @@ Here is the PFD report excerpt:
     def screen_reports(
         self,
         reports: Optional[pd.DataFrame] = None,
+        search_query: Optional[str] = None,
         user_query: Optional[str] = None,
         filter_df: bool = True,
         result_col_name: str = "matches_query",
@@ -208,9 +210,13 @@ Here is the PFD report excerpt:
         reports : pd.DataFrame, optional
             If provided, this DataFrame will be used for screening, replacing any
             DataFrame stored in the instance for this call.
+        search_query : str, optional
+            Query string describing the reports you want to find. Overrides any
+            query stored on the instance for this call. The prompt template will
+            be rebuilt.
         user_query : str, optional
-            If provided, this query will be used, overriding any query stored
-            in the instance for this call. The prompt template will be rebuilt.
+            Deprecated alias for ``search_query``. Will be removed in a future
+            release.
         filter_df : bool, optional
             If ``True`` the returned DataFrame is filtered to only matching
             reports. Defaults to ``True``.
@@ -238,11 +244,22 @@ Here is the PFD report excerpt:
             screener = Screener(LLM(), reports=reports_df)
 
             # Screen reports with the initial query
-            filtered_df = screener.screen_reports(user_query="medication safety")
+            filtered_df = screener.screen_reports(search_query="medication safety")
 
             # Screen the same reports with a new query and add a classification column
-            classified_df = screener.screen_reports(user_query="tree safety", filter_df=False)
+            classified_df = screener.screen_reports(search_query="tree safety", filter_df=False)
         """
+        if search_query is None and user_query is not None:
+            warnings.warn(
+                "'user_query' is deprecated; please use 'search_query' instead. This parameter will be removed in a future update.",
+                DeprecationWarning,
+            )
+            search_query = user_query
+        elif search_query is not None and user_query is not None:
+            warnings.warn(
+                "'user_query' is deprecated and will be ignored as 'search_query' was also provided.",
+                DeprecationWarning,
+            )
         # Update produce_spans flag and prompt if needed
         if produce_spans != self.produce_spans:
             self.produce_spans = produce_spans
@@ -266,34 +283,34 @@ Here is the PFD report excerpt:
                     f"Using instance's DataFrame for screen_reports (shape: {current_reports.shape})."
                 )
 
-        # Determine the user query for this call
-        active_user_query = user_query if user_query is not None else self.user_query
+        # Determine the search query for this call
+        active_search_query = search_query if search_query is not None else self.search_query
 
-        if not active_user_query:
-            logger.error("User query is not set. Cannot screen reports.")
+        if not active_search_query:
+            logger.error("Search query is not set. Cannot screen reports.")
             raise ValueError(
-                "User query must be provided either at initialisation or to screen_reports."
+                "Search query must be provided either at initialisation or to screen_reports."
             )
 
         # Rebuild prompt if the active query is different from the one used for the current template,
         # or if the template hasn't been built yet.
         if not self.prompt_template or (
-            user_query is not None and user_query != self.user_query
+            search_query is not None and search_query != self.search_query
         ):
             if (
                 self.verbose
-                and user_query is not None
-                and user_query != self.user_query
+                and search_query is not None
+                and search_query != self.search_query
             ):
                 logger.debug(
-                    f"New user query provided to screen_reports: '{user_query}'. Rebuilding prompt template."
+                    f"New search query provided to screen_reports: '{search_query}'. Rebuilding prompt template."
                 )
             elif self.verbose and not self.prompt_template:
                 logger.debug(
-                    f"Prompt template not yet built. Building for query: '{active_user_query}'."
+                    f"Prompt template not yet built. Building for query: '{active_search_query}'."
                 )
-            self.prompt_template = self._build_prompt_template(active_user_query)
-            self.user_query = active_user_query
+            self.prompt_template = self._build_prompt_template(active_search_query)
+            self.search_query = active_search_query
 
         result_col = result_col_name
 
@@ -309,9 +326,9 @@ Here is the PFD report excerpt:
             if self.verbose:
                 logger.error("Reports DataFrame is empty. Nothing to screen.")
 
-        if not self.prompt_template:  # (Should be built if active_user_query is valid)
+        if not self.prompt_template:  # (Should be built if active_search_query is valid)
             logger.error(
-                "Prompt template not built. This should not happen if user_query is set. Cannot screen reports."
+                "Prompt template not built. This should not happen if search_query is set. Cannot screen reports."
             )
 
         # --- Prepare prompts ---
