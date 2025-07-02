@@ -322,10 +322,11 @@ Here is the report excerpt:
             When ``True``, create ``spans_`` versions of each feature to capture
             the supporting text snippets. Defaults to ``False``.
         drop_spans : bool, optional
-            When ``True`` and ``produce_spans`` is also ``True``, remove all
-            ``spans_`` columns from the returned DataFrame after extraction.
-            If ``produce_spans`` is ``False`` a warning is emitted and no columns
-            are dropped. Defaults to ``False``.
+            When ``True`` and ``produce_spans`` is also ``True``, remove any
+            ``spans_`` columns created during this call from the returned
+            DataFrame. Spans columns from other sources (e.g. Screener) are
+            preserved. If ``produce_spans`` is ``False`` a warning is emitted and
+            no columns are dropped. Defaults to ``False``.
         force_assign : bool, optional
             When ``True``, the LLM is instructed to avoid returning
             :data:`GeneralConfig.NOT_FOUND_TEXT` for any feature.
@@ -447,7 +448,11 @@ Here is the report excerpt:
                     UserWarning,
                 )
             else:
-                span_cols = [c for c in result_df.columns if c.startswith("spans_")]
+                span_cols = [
+                    feat
+                    for feat in self.feature_names
+                    if feat.startswith("spans_") and feat in result_df.columns
+                ]
                 if span_cols:
                     result_df = result_df.drop(columns=span_cols)
 

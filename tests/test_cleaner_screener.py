@@ -139,6 +139,28 @@ def test_screener_drop_spans():
     result = screener.screen_reports(search_query="needle", filter_df=False, produce_spans=True, drop_spans=True)
     assert "spans_matches_topic" not in result.columns
 
+
+def test_screener_drop_spans_preserves_existing():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_INVESTIGATION: ["needle info"],
+            "spans_age": ["span"],
+            "age": [30],
+        }
+    )
+    llm = DummyLLM(keywords=["needle"])
+    screener = Screener(llm=llm, reports=df)
+    result = screener.screen_reports(
+        search_query="needle",
+        filter_df=False,
+        produce_spans=True,
+        drop_spans=True,
+    )
+
+    assert "spans_matches_query" not in result.columns
+    assert "spans_age" in result.columns
+    assert result["spans_age"].iloc[0] == "span"
+
 def test_cleaner_summarise():
     df = pd.DataFrame({
         GeneralConfig.COL_CORONER_NAME: ["john"],

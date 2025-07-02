@@ -119,6 +119,32 @@ def test_extract_drop_spans_warns():
     assert result["ethnicity"].iloc[0] == "White"
 
 
+def test_extract_drop_spans_preserves_existing():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_INVESTIGATION: ["text"],
+            "spans_matches_query": ["span"],
+        }
+    )
+    llm = DummyLLM(
+        values={
+            "spans_age": "age 30",
+            "age": 30,
+            "spans_ethnicity": "white",
+            "ethnicity": "White",
+        }
+    )
+    extractor = Extractor(llm=llm, reports=df, include_investigation=True)
+    result = extractor.extract_features(
+        feature_model=DemoModel, produce_spans=True, drop_spans=True
+    )
+
+    assert "spans_matches_query" in result.columns
+    assert result["spans_matches_query"].iloc[0] == "span"
+    assert "spans_age" not in result.columns
+    assert "spans_ethnicity" not in result.columns
+
+
 def test_extract_spans_blank_replaced():
     df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["text"]})
     llm = DummyLLM(

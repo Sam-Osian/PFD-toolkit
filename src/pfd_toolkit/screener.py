@@ -228,8 +228,9 @@ Here is the PFD report excerpt:
             the text snippet that justified the classification. Defaults to ``False``.
         drop_spans : bool, optional
             When ``True`` and ``produce_spans`` is also ``True``, the
-            ``spans_matches_topic`` column is removed from the returned
-            DataFrame. Defaults to ``False``.
+            ``spans_`` column corresponding to ``result_col_name`` created during
+            this call is removed from the returned DataFrame. Spans columns from
+            other sources remain intact. Defaults to ``False``.
 
         Returns
         ----------
