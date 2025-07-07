@@ -8,7 +8,7 @@ description: |
 
 PFD Toolkit turns raw PFD reports into structured insights. This page provides a short tour of the core features so you can hit the ground running. Each section links to more detailed guidance.
 
-This is only an overview — for full walkthroughs see the [Explore PFD Toolkit](../learn.md) section of the docs.
+This is only an overview — for full walkthroughs start with the [Load live report data](../loader/load_reports.md) guide in the Explore section.
 
 ---
 

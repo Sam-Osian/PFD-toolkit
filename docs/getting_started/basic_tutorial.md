@@ -249,3 +249,5 @@ labelled_reports.to_csv()
 ```
 
 Alternatively, you might want to check out the other analytical features that PFD Toolkit offers.
+
+For a deeper dive into each capability, head over to the [Explore](../loader/load_reports.md) section.

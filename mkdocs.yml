@@ -97,10 +97,10 @@ nav:
       - Overview: index.md
       - About the data: pfd_reports.md
       - Not a coder?: non_coders.md
-  - Key features: getting_started/key_features.md
-  - Explore:
-      - Overview: learn.md
+  - Key features:
+      - Overview: getting_started/key_features.md
       - Example project: getting_started/basic_tutorial.md
+  - Explore:
       - Load reports:
           - Loading report data: loader/load_reports.md
       - Creating an LLM client:
