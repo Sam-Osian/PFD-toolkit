@@ -10,6 +10,9 @@ Welcome to the project changelog. All notable changes to this project will be do
 
 ---
 
+### 0.3.5 - <small>2025-07-07</small>
+* Attempt to fix issue where PFD Toolkit refused to run in Google Colab
+
 ### 0.3.4 - <small>2025-07-07</small>
 * Deprecate `user_query` in `Screener` in favour of `search_query`. `user_query` will be removed in a future release.
 * Dropping spans in `extract_features()` no longer removes spans added during screening.
