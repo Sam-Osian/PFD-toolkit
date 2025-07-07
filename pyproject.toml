@@ -30,7 +30,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "httpx>=0.28.1",
     "openai>=1.88.0",
-    "pandas>=2.2.3",
+    "pandas==2.2.2",
     "pydantic>=2.11.7",
     "pymupdf>=1.26.1",
     "python-dateutil>=2.9.0.post0",
