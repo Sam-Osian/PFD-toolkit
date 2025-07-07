@@ -93,42 +93,42 @@ plugins:
               - "!^_" # Exclude private methods
 
 nav:
-  - Home: 
+  - Home:
       - Overview: index.md
       - About the data: pfd_reports.md
       - Not a coder?: non_coders.md
-  - Getting started:
-      - Key features: getting_started/key_features.md
-      - Basic tutorial: getting_started/basic_tutorial.md
-  - Load reports:
-      - Loading report data: loader/load_reports.md
-  - Creating an LLM client: 
-      - Working with LLMs: llm_setup.md
-      - Advanced LLM usage: llm_advanced.md
-  - Screen reports:
-      - Overview: screener/index.md
-      - Getting started: screener/basics.md
-      - Additional options: screener/options.md
-      - Tips for writing a good search query: screener/tips.md
-  - Analyse reports:
-      - Overview: extractor/index.md
-      - Produce summaries: extractor/summarising.md
-      - Discover recurring themes: extractor/themes.md
-      - Pull out structured data: extractor/basics.md
-      - Capture text spans: extractor/spans.md
-      - Cache and reset output: extractor/caching.md
-  - Scraping module:
-      - Scraping reports: loader/scraper.md
-      - Cleaning scraped data: loader/cleaner.md
+  - Key features: getting_started/key_features.md
+  - Explore:
+      - Overview: learn.md
+      - Example project: getting_started/basic_tutorial.md
+      - Load reports:
+          - Loading report data: loader/load_reports.md
+      - Creating an LLM client:
+          - Working with LLMs: llm_setup.md
+          - Advanced LLM usage: llm_advanced.md
+      - Screen reports:
+          - Overview: screener/index.md
+          - Getting started: screener/basics.md
+          - Additional options: screener/options.md
+          - Tips for writing a good search query: screener/tips.md
+      - Analyse reports:
+          - Overview: extractor/index.md
+          - Produce summaries: extractor/summarising.md
+          - Discover recurring themes: extractor/themes.md
+          - Pull out structured data: extractor/basics.md
+          - Capture text spans: extractor/spans.md
+          - Cache and reset output: extractor/caching.md
+      - Scraping module:
+          - Scraping reports: loader/scraper.md
+          - Cleaning scraped data: loader/cleaner.md
   - Feedback & contributions: contribute.md
-  - Extra:
-      - Changelog: changelog.md
-      - Contact: contact.md
-      - API Reference:
-          - Data loader: reference/loader.md
-          - Screener: reference/screener.md
-          - Extractor: reference/extractor.md
-          - Scraper: reference/scraper.md
-          - Cleaner: reference/cleaner.md
-          - LLM: reference/llm.md
+  - Changelog: changelog.md
+  - Contact: contact.md
+  - API Reference:
+        - Data loader: reference/loader.md
+        - Screener: reference/screener.md
+        - Extractor: reference/extractor.md
+        - Scraper: reference/scraper.md
+        - Cleaner: reference/cleaner.md
+        - LLM: reference/llm.md
 
