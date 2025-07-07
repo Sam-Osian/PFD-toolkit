@@ -1480,7 +1480,7 @@ requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "openai", specifier = ">=1.88.0" },
-    { name = "pandas", specifier = "==2.2.2" },
+    { name = "pandas", specifier = ">=2.2.2,<2.2.4" },
     { name = "pydantic", specifier = ">=2.11.7" },
     { name = "pymupdf", specifier = ">=1.26.1" },
     { name = "python-dateutil", specifier = ">=2.9.0.post0" },
