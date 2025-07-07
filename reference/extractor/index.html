@@ -984,7 +984,7 @@
   
   
   <span class="md-ellipsis">
-    Tips for writing a good user query
+    Tips for writing a good search query
     
   </span>
   
@@ -2505,10 +2505,11 @@ the supporting text snippets. Defaults to <code>False</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>When <code>True</code> and <code>produce_spans</code> is also <code>True</code>, remove all
-<code>spans_</code> columns from the returned DataFrame after extraction.
-If <code>produce_spans</code> is <code>False</code> a warning is emitted and no columns
-are dropped. Defaults to <code>False</code>.</p>
+                <p>When <code>True</code> and <code>produce_spans</code> is also <code>True</code>, remove any
+<code>spans_</code> columns created during this call from the returned
+DataFrame. Spans columns from other sources (e.g. Screener) are
+preserved. If <code>produce_spans</code> is <code>False</code> a warning is emitted and
+no columns are dropped. Defaults to <code>False</code>.</p>
               </div>
             </td>
             <td>

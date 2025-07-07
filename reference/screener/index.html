@@ -984,7 +984,7 @@
   
   
   <span class="md-ellipsis">
-    Tips for writing a good user query
+    Tips for writing a good search query
     
   </span>
   
@@ -1738,7 +1738,7 @@
 
 
         <p>Classifies a list of report texts against a user-defined topic using an LLM.</p>
-<p>This class takes a DataFrame of reports, a user query, and various
+<p>This class takes a DataFrame of reports, a search query, and various
 configuration options to classify whether each report matches the query.
 It can either filter the DataFrame to return only matching reports or
 add a classification column to the original DataFrame.</p>
@@ -1923,7 +1923,7 @@ add a classification column to the original DataFrame.</p>
     <div class="codehilite"><pre><span></span><code>user_topic = &quot;medication errors&quot;
 llm_client = LLM()
 screener = Screener(llm=llm_client, reports=reports_df)
-screened_reports = screener.screen_reports(user_query=user_topic)
+screened_reports = screener.screen_reports(search_query=user_topic)
 print(f&quot;Found {len(screened_reports)} report(s) on &#39;{user_topic}&#39;.&quot;)
 </code></pre></div>
 
@@ -1956,12 +1956,13 @@ print(f&quot;Found {len(screened_reports)} report(s) on &#39;{user_topic}&#39;.&
 <a href="#pfd_toolkit.Screener.screen_reports" class="headerlink" title="Permanent link">&para;</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">screen_reports</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">reports</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">user_query</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">filter_df</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">result_col_name</span><span class="o">=</span><span class="s2">&quot;matches_query&quot;</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">produce_spans</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">drop_spans</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">search_query</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">user_query</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">filter_df</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">result_col_name</span><span class="o">=</span><span class="s2">&quot;matches_query&quot;</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">produce_spans</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">drop_spans</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -1999,6 +2000,24 @@ DataFrame stored in the instance for this call.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
+                <code>search_query</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Query string describing the reports you want to find. Overrides any
+query stored on the instance for this call. The prompt template will
+be rebuilt.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
                 <code>user_query</code>
             </td>
             <td>
@@ -2006,8 +2025,8 @@ DataFrame stored in the instance for this call.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If provided, this query will be used, overriding any query stored
-in the instance for this call. The prompt template will be rebuilt.</p>
+                <p>Deprecated alias for <code>search_query</code>. Will be removed in a future
+release.</p>
               </div>
             </td>
             <td>
@@ -2075,8 +2094,9 @@ the text snippet that justified the classification. Defaults to <code>False</cod
             <td>
               <div class="doc-md-description">
                 <p>When <code>True</code> and <code>produce_spans</code> is also <code>True</code>, the
-<code>spans_matches_topic</code> column is removed from the returned
-DataFrame. Defaults to <code>False</code>.</p>
+<code>spans_</code> column corresponding to <code>result_col_name</code> created during
+this call is removed from the returned DataFrame. Spans columns from
+other sources remain intact. Defaults to <code>False</code>.</p>
               </div>
             </td>
             <td>
@@ -2116,10 +2136,10 @@ original DataFrame with an added classification column.</p>
 screener = Screener(LLM(), reports=reports_df)
 
 <span class="gh">#</span> Screen reports with the initial query
-filtered_df = screener.screen_reports(user_query=&quot;medication safety&quot;)
+filtered_df = screener.screen_reports(search_query=&quot;medication safety&quot;)
 
 <span class="gh">#</span> Screen the same reports with a new query and add a classification column
-classified_df = screener.screen_reports(user_query=&quot;tree safety&quot;, filter_df=False)
+classified_df = screener.screen_reports(search_query=&quot;tree safety&quot;, filter_df=False)
 </code></pre></div>
 
 
