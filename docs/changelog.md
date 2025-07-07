@@ -10,6 +10,13 @@ Welcome to the project changelog. All notable changes to this project will be do
 
 ---
 
+### 0.3.4 - <small>2025-07-07</small>
+* Deprecate `user_query` in `Screener` in favour of `search_query`. `user_query` will be removed in a future release.
+* Dropping spans in `extract_features()` no longer removes spans added during screening.
+* Downgrade pandas from 2.3.0 to 2.2.2
+* Fix text cleaning bug that expanded dates and removed paragraph spacing.
+* Added tests covering span removal behaviour.
+
 ### 0.3.3 - <small>2025-06-25</small>
 * Improve package installation time
 * Changed default LLM model from GPT-4.1-mini to GPT-4.1
