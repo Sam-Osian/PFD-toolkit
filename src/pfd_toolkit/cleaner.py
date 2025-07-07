@@ -138,7 +138,8 @@ class Cleaner:
             "field_contents_and_rules": "only the details of the investigation and inquest -- nothing else",
             "extra_instructions": (
                 "If the string appears to need no cleaning, return it as is. "
-                "If a date is used, convert it into British long format. "
+                "If a date is used, put it in numerical form (e.g. '1 January 2024'). "
+                "Keep any existing paragraph formatting (e.g. spacing). "
             ),
         },
         "CircumstancesOfDeath": {
@@ -146,7 +147,8 @@ class Cleaner:
             "field_contents_and_rules": "only the circumstances of death -- nothing else",
             "extra_instructions": (
                 "If the string appears to need no cleaning, return it as is. "
-                "If a date is used, convert it into British long format. "
+                "If a date is used, put it in numerical form (e.g. '1 January 2024'). "
+                "Keep any existing paragraph formatting (e.g. spacing). "
             ),
         },
         "MattersOfConcern": {
@@ -155,7 +157,8 @@ class Cleaner:
             "extra_instructions": (
                 'Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with "...The Matters of Concern are as follows:" (which should also be removed). '
                 "If the string appears to need no cleaning, return it as is. "
-                "If a date is used, convert it into British long format. "
+                "If a date is used, put it in numerical form (e.g. '1 January 2024'). "
+                "Keep any existing paragraph formatting (e.g. spacing). "
             ),
         },
     }
