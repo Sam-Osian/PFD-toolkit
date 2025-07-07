@@ -41,7 +41,7 @@ police_df = screener.screen_reports(
 ```
 
 !!! note
-    For more information on screening reports, see [here](../screener/index.md).
+    For more information on filtering reports, see [Filter reports with a query](../screener/index.md).
 
 Following this, we can generate summaries of our screened/filtered reports:
 

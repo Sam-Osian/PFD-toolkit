@@ -8,6 +8,8 @@ description: |
 
 PFD Toolkit turns raw PFD reports into structured insights. This page provides a short tour of the core features so you can hit the ground running. Each section links to more detailed guidance.
 
+This is only an overview — for full walkthroughs see the [Explore PFD Toolkit](../learn.md) section of the docs.
+
 ---
 
 ## Load live report data
@@ -37,7 +39,7 @@ from pfd_toolkit import LLM
 llm_client = LLM(api_key=YOUR_API_KEY)
 ```
 
-For more information on working with LLMs (including how to set up an OpenAI API key) see [Working with LLMs](../llm_setup.md).
+For more information on LLM setup (including how to get an OpenAI API key) see [Setting up an LLM](../llm_setup.md).
 
 
 !!! warning
@@ -85,7 +87,7 @@ police_reports = screener.screen_reports(search_query=query)
 
 `police_reports` only contains reports that the LLM believed matched your query.
 
-See [Screen reports](../screener/index.md) for further tips and options.
+See [Filter reports with a query](../screener/index.md) for further tips and options.
 
 ---
 

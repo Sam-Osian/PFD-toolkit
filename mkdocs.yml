@@ -104,11 +104,12 @@ nav:
       - Load reports:
           - Loading report data: loader/load_reports.md
       - Creating an LLM client:
-          - Working with LLMs: llm_setup.md
-          - Advanced LLM usage: llm_advanced.md
+          - Setting up an LLM: llm_setup.md
+          - Speed up your LLM: llm_speed.md
+          - Change the model: llm_change_model.md
+          - Advanced usage: llm_advanced.md
       - Screen reports:
-          - Overview: screener/index.md
-          - Getting started: screener/basics.md
+          - Search for matching cases: screener/index.md
           - Additional options: screener/options.md
           - Tips for writing a good search query: screener/tips.md
       - Analyse reports:

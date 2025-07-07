@@ -1,5 +1,5 @@
 ---
-title: "Advanced LLM options"
+title: "Advanced usage"
 description: |
   Configure custom endpoints, temperature, seed and other advanced settings.
 ---

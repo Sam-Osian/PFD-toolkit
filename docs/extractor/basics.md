@@ -29,7 +29,7 @@ class MyFeatures(BaseModel):
     `Extractor` accepts any valid BaseModel configuration. For more customisation, please read [Pydantic's documentation](https://docs.pydantic.dev/latest/concepts/fields/).
 
 
-Next, load some report data and [set up your LLM client](../llm_setup.md). You then pass the feature model, the reports and the LLM client to an `Extractor` instance and call `extract_features()`:
+Next, load some report data and [set up your LLM](../llm_setup.md). You then pass the feature model, the reports and the LLM client to an `Extractor` instance and call `extract_features()`:
 
 ```python
 reports = load_reports(start_date="2024-01-01", end_date="2024-12-31")

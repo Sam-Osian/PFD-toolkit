@@ -57,7 +57,7 @@ llm_client = LLM(api_key=YOUR-API-KEY) # Replace with actual API key
 ```
 
 !!! note
-    For a more detailed guide on using LLMs in this toolkit, see [Setting up an LLM client](../llm_setup.md).
+    For a more detailed guide on using LLMs in this toolkit, see [Setting up an LLM](../llm_setup.md).
 
 ---
 
@@ -93,7 +93,7 @@ len(filtered_reports)
 
 
 !!! note
-    For more information on Screening reports, see [Screening relevant reports](../screener/index.md).
+    For more information on filtering reports, see [Filter reports with a query](../screener/index.md).
 
 ---
 

@@ -6,10 +6,10 @@ description: |
 
 # Searching for themes
 
-Spotting common themes across many reports helps reveal systemic problems and policy gaps. `Extractor` be used to identify these themes.
+Spotting common themes across many reports helps reveal systemic problems and policy gaps. `Extractor` can be used to identify & label these themes easily.
 
 !!! important
-    Extracting themes works best if you've already screened for reports that are relevant to your research. For more information, see the `Screener` guidance [here](../screener/index.md).
+    Extracting themes works best if you've already screened for reports that are relevant to your research. For more information, see the guide on [search for matching cases](../screener/index.md).
 
 ---
 
@@ -99,13 +99,13 @@ IdentifiedThemes = extractor.discover_themes(
 )
 ```
 
-Above, we provide 3 seed topics. The model will try to identify these topics in the text, while also searching for other topics.
+Above, we provide 3 seed topics. The model will attempt to identify these topics in the text, while also searching for other, unspecified topics.
 
 ---
 
 ### Providing additional instructions
 
-You can also provide additional instructions to help guide the model. This is somewhat similar to above, except instead of providing examples of themes, you can provide other kinds of guidance. For example:
+You can also provide additional instructions to help guide the model. This is somewhat similar to the guided topic modelling above, except instead of providing examples of themes, we can provide other kinds of guidance. For example:
 
 
 ```python
@@ -120,7 +120,7 @@ IdentifiedThemes = extractor.discover_themes(
 )
 ```
 
-Above, we guide the model by specifying our specific area of interest. 
+Above, we guide the model by specifying our specific area of interest. This will help to keep themes focused around our core research question. 
 
 
 ### Controlling the number of themes
@@ -136,7 +136,7 @@ IdentifiedThemes = extractor.discover_themes(
 )
 ```
 
-`discover_themes` will now produce at least 8 themes, but not more than 12.
+`discover_themes` will now produce at least 8 themes, but not more than 12, themes.
 
 
 

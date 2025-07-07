@@ -1,10 +1,10 @@
 ---
-title: "Creating an LLM Client"
+title: "Setting up an LLM"
 description: |
-  Set up the LLM client and obtain an API key for advanced features.
+  Create an LLM client and obtain an API key for advanced features.
 ---
 
-# Creating an LLM Client
+# Setting up an LLM
 
 PFD Toolkit uses a Large Language Model (LLM) client for advanced features. This page explains how to set up your LLM, including how to get an API key.
 
@@ -87,37 +87,3 @@ path/to/your/api.env/file
 This tells GitHub not to commit your `api.env` file, keeping it protected.
 
 For more information on `.gitignore`, see [here](https://www.w3schools.com/git/git_ignore.asp).
-
----
-
-
-## Speed up your LLM
-
-Process more reports in parallel by increasing the `max_workers` parameter. By default, this is set to `8`, but larger values can lead to faster run-times.
-
-```python
-llm_client = LLM(
-    api_key=openai_api_key,
-    max_workers=20      # Increase parallelisation
-)
-```
-
-!!! note
-    OpenAI enforces rate limits for each account and model. If you set `max_workers` too high, you may hit these limits and see errors or slowdowns. PFD Toolkit will automatically pause and retry if a rate limit is reached, but it’s best to keep `max_workers` within a reasonable range (usually 8 to 20 for most users). 
-    
-    Your exact rate limit may depend on the 'tier' of your OpenAI account as well as the model you're using. If you need higher limits, you may be able to apply for an increase in your OpenAI account settings.
-
----
-
-## Change your model
-
-By default, PFD Toolkit uses `gpt-4.1`. We love this model as it balances cost, speed, and accuracy. We also recommend its smaller equivalent, `gpt-4.1-mini`, which offers decent performance at a lower API cost. 
-
-```python
-llm_client = LLM(
-    api_key=openai_api_key,
-    model="gpt-4.1"     # Set model here
-)
-```
-
-See OpenAI's [documentation](https://platform.openai.com/docs/models) for a complete list of their models.
