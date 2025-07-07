@@ -99,7 +99,7 @@ nav:
       - Not a coder?: non_coders.md
   - Key features:
       - Overview: getting_started/key_features.md
-      - Example project: getting_started/basic_tutorial.md
+  - Tutorial: getting_started/basic_tutorial.md
   - Explore:
       - Load reports:
           - Loading report data: loader/load_reports.md
