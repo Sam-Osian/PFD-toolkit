@@ -52,6 +52,32 @@ The CSV containing live PFD report data is not held inside the repo itself, but 
 
 ---
 
+## Dependencies
+
+We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for depependency management. Once installed, load dependencies with:
+
+```bash
+uv sync --dev
+```
+
+`uv` is used for all CLI operations that rely on project dependencies. 
+
+For example, to add new dependencies, replace `pip install` with:
+
+```bash
+uv add <package-name>
+```
+
+For everything else, append `uv run` to the start of each line. For example, to serve project documentation:
+
+```bash
+uv run mkdocs serve
+```
+
+...And so on.
+
+---
+
 ## Tests
 
 Unit tests live in the `tests/` directory and cover the major components:
@@ -61,14 +87,16 @@ Unit tests live in the `tests/` directory and cover the major components:
 - Cleaning and screening pipelines
 - Config defaults and text utilities
 
-Tests use `uv run pytest` with coverage reports enabled. Fixtures in `tests/fixtures/` provide very minimal sample data for deterministic testing.
+Tests use `pytest` with coverage reports enabled. Fixtures in `tests/fixtures/` provide very minimal sample data for deterministic testing.
 
 To run the tests locally, install [`uv`](https://docs.astral.sh/uv/getting-started/installation/) and run:
 
 ```bash
 uv sync --dev   # install dependencies (requires `uv`)
-ruv run pytest
+uv run pytest
 ```
+
+---
 
 ## GitHub workflows
 
@@ -86,7 +114,7 @@ Continuous integration runs automatically via GitHub Actions:
 2. **Create a branch** – Develop new features or fixes on a feature branch.
 3. **Run tests** – Use `pytest` to ensure existing functionality remains stable. Add new tests for any new behaviour.
 4. **Style checks** – `ruff` is included in the dev dependencies. Run `ruff check .` to lint and `ruff format .` to apply formatting.
-5. **Open a pull request** – Open a pull request on GitHub, describing your changes and including steps to reproduce the issue or feature.
+5. **Open a pull request** – Open a pull request on GitHub, describing your changes and including steps to reproduce the issue or feature, if relevant. 
 
 
 ---
@@ -97,9 +125,7 @@ Continuous integration runs automatically via GitHub Actions:
 - Try to use the configuration objects in `config.py` rather than hard-coding values, particularly where these values are used cross-module. This keeps defaults consistent across the package.
 - Unit tests provide concrete examples of how each class is expected to behave. Reviewing them may be the quickest way to understand the code.
 
----
-
-## Commit messages
+### Commit messages
 
 Write short, focused commit messages that list the concrete changes made.
 Each commit should explain what was changed and why. 
