@@ -2,7 +2,6 @@
 title: "PFD Toolkit – Turn PFD reports into actionable insights"
 description: |
   A Python Package for Accessing and Analysing Prevention of Future Deaths (PFD) Reports
-canonical_url: https://pfdtoolkit.org/
 ---
 
 ![PFD Toolkit: Open-source software for Prevention of Future Death reports](assets/header.png)

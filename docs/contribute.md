@@ -41,7 +41,7 @@ If your change is significant, consider opening an issue first to discuss it.
     * Clone your fork locally:
 
     ```bash
-    git clone https://github.com/sam-osian/PFD-toolkit.git
+    git clone https://github.com/<your-github-username>/PFD-toolkit.git
     ```
 
     * [Install `uv`](https://docs.astral.sh/uv/getting-started/installation/) and sync project dependencies, including developer-only dependencies:
