@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 Helper script for continuously updating the CSV containing all
-Prevention of Future Death (PFD) reports which is bundled with
-the repo (`../pfd_toolkit/data`).
+Prevention of Future Deaths (PFD) reports.
 """
 
 import os

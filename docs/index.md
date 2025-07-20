@@ -6,19 +6,25 @@ description: |
 
 ![PFD Toolkit: Open-source software for Prevention of Future Death reports](assets/header.png)
 
-*PFD Toolkit* is an open-source Python package for bulk extraction and analysis of Prevention of Future Deaths (PFD) reports from coroners in England and Wales. Designed for researchers, policymakers, and analysts, it converts PFD reports into an 'engine of insight'.
+**PFD Toolkit** is a _text-to-table_ engine for Prevention of Future Deaths (PFD) reports. It’s an open-source Python package that lets you automatically extract, structure, and analyse PFD reports from coroners in England and Wales — turning an unwieldy archive into a clean, research-ready dataset in minutes.
 
-What used to take months (or even years!) of manual work can now be reduced to a matter of minutes. PFD Toolkit lets you:
+PFD reports are vital public warnings, but until now, they’ve been a nightmare to analyse: inconsistent formats, missing metadata, no way to mass download report content into a neat, tabular dataset – among many other issues.
 
-1. Download structured PFD report datasets
-2. Filter reports to identify research-relevant cases (just type in a phrase such as "road safety")
-3. Generate short summaries of reports
-4. Automatically discover recurring topics or themes
-5. Output clean tables ready for charts or further analysis
+PFD Toolkit solves this by using AI (including LLMs and Vision models) to read, clean, and standardise every report, whether typed or scanned.
+
+What does this mean in practice? Instead of weeks of manual coding, you get instant access to:
+
+- **Bulk-download structured datasets** of PFD reports
+- **Screen and filter** reports by any research question (e.g. “road safety”, “suicide”, or any other query)
+- **Generate concise summaries** and extract key variables, themes, or concerns
+- **Automatically spot patterns** and recurring issues across reports
+- **Output ready-to-use tables** for charts, analysis, or policy work
+
+
 
 ---
 
-Here is a sample of the PFD dataset:
+Here’s a sample of the PFD dataset you can load:
 
 | url                        | date       | coroner    | area                        | receiver                | investigation           | circumstances                 | concerns                   |
 |----------------------------|------------|------------|-----------------------------|-------------------------|-------------------------|-------------------------------|----------------------------|
@@ -29,32 +35,16 @@ Here is a sample of the PFD dataset:
 | [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
 
-Each row is an individual report, while each column reflects a section of the report. For more information on the structure of these reports, see [here](pfd_reports.md#what-do-pfd-reports-look-like).
+Each row is an individual report, while each column reflects a section of the report. For more information on each of these columns, see [here](pfd_reports.md#what-do-pfd-reports-look-like).
 
 ---
 
-## Why use PFD Toolkit for PFD Report Analysis?
+## Why does this matter? 
 
-PFD reports have long served as urgent public warnings — issued when coroners identified risks that could, if ignored, lead to further deaths. Yet despite being freely available, these reports are chronically underused. 
+Despite being public warnings, PFD reports are chronically underused. That’s because they’ve historically been a pain to work with: scattered formats, inconsistent categorisation, and a lack of easy access for researchers. As a result, it’s been almost impossible to spot trends or respond to risks quickly.
 
-This is for one simple reason: PFD reports are a _pain_ to analyse. 
+**PFD Toolkit changes this.** By automating the messy admin typically involved in a PFD research project, it transforms unstructured coroners’ text into neat datasets — making it finally practical to do timely systematic research, policy analysis, or audit work on preventable deaths.
 
-Common issues include:
-
- * No straightforward way to download report content in bulk
-
- * No reliable way of querying reports to find cases relevant to a specific research question
-
- * Reports being inconsistent in format (e.g. many reports are low quality digital scans)
-
- * No system for surfacing recurring issues raised across multiple reports
-
- * Widespread miscategorisation of reports, creating research limitations
-
-
-As a result, research involving PFD reports demanded months, or even years, of manual admin. Researchers were forced to sift through hundreds/thousands of reports one-by-one, wrestle with absent metadata, and code themes by hand. 
-
-PFD Toolkit offers a solution to each of these issues, helping researchers load, screen and analyse PFD report data - all in a matter of minutes.
 
 ---
 
