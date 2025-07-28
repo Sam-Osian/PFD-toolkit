@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import os
 
 # Load OpenAI API key
-load_dotenv("../notebooks/api.env")
+load_dotenv("../api.env")
 openai_api_key = os.getenv("OPENAI_API_KEY")
 llm_client = LLM(api_key=openai_api_key, max_workers=25,
                  timeout=150, seed=123)
