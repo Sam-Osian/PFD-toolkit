@@ -364,9 +364,9 @@ class LLM:
 
         prompt = (
             "You will be presented with screenshots of a Prevention of Future Deaths (PFD) report. \n\n"
-            
+
             "Your goal is to transcribe verbatim text from this report. \n\n"
-            
+
             "Please extract the following report elements: \n\n"
         )
         response_fields: List[str] = []
@@ -377,6 +377,8 @@ class LLM:
             "\n\nFurther instructions:\n\n - You must not respond in your own 'voice'; output verbatim text from the reports **only**.\n"
             f" - If you are unable to identify the text for any section, respond exactly: {GeneralConfig.NOT_FOUND_TEXT}.\n"
             " - Transcribe redacted text (black rectangles) as '[REDACTED]'.\n"
+            " - Confirm the PDF is the coroner's PFD report and not a response document. If it is a response document, return "
+            f"{GeneralConfig.NOT_FOUND_TEXT} for all sections.\n"
             " - You must extract the *full* and verbatim text for each given section - no shortening or partial extractions.\n"
         )
 
