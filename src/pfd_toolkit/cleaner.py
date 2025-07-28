@@ -89,14 +89,14 @@ class Cleaner:
 
     # Base prompt template used for all cleaning operations
     CLEANER_BASE_PROMPT = (
-        "You are an expert in extracting and cleaning specific information from UK Coronal Prevention of Future Death Reports.\n\n"
+        "You are an expert in extracting and cleaning specific information from UK Coronal Prevention of Future Deaths (PFD) reports.\n\n"
         "Task:\n"
         "1. **Extract** only the information related to {field_description}.\n"
         "2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, if any occur.\n"
-        "3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Do not replace any acronyms.\n"
+        "3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Keep any existing acronyms if used; do not expand them.\n"
         "4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.\n"
         f"5. **If extraction fails**, return only and exactly: {GeneralConfig.NOT_FOUND_TEXT}\n"
-        "6. **Do not** change any content of the string unless it explicitly relates to the instructions above or below. **Do not ever** summarise, *nor* edit for conciseness or flow.\n\n"
+        "6. **Do not** modify or remove any content of the string unless it explicitly relates to the instructions above or below.\n\n"
         "Extra instructions:\n"
         "{extra_instructions}\n\n"
         "Input Text:\n"
