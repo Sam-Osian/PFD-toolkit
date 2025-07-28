@@ -18,15 +18,23 @@ class DummyLLM:
             if response_format is None:
                 outputs.append(text.upper())
             else:
-                match = any(kw in text.lower() for kw in self.keywords)
-                val = "Yes" if match else "No"
-                if hasattr(response_format, "model_fields") and "spans_matches_topic" in response_format.model_fields:
-                    span = "span" if match else ""
-                    outputs.append(
-                        response_format(matches_topic=val, spans_matches_topic=span)
-                    )
+                fields = getattr(response_format, "model_fields", {})
+                if "matches_topic" in fields:
+                    match = any(kw in text.lower() for kw in self.keywords)
+                    val = "Yes" if match else "No"
+                    if "spans_matches_topic" in fields:
+                        span = "span" if match else ""
+                        outputs.append(
+                            response_format(matches_topic=val, spans_matches_topic=span)
+                        )
+                    else:
+                        outputs.append(response_format(matches_topic=val))
                 else:
-                    outputs.append(response_format(matches_topic=val))
+                    field_name = next(iter(fields))
+                    if field_name == "area":
+                        outputs.append(response_format(area="Other"))
+                    else:
+                        outputs.append(response_format(**{field_name: text.upper()}))
         return outputs
 
 

@@ -10,8 +10,12 @@ Welcome to the project changelog. All notable changes to this project will be do
 
 ---
 
+### 0.3.6 - <small>2025-07-29</small>
+* Improve reliability and performance of the Scraper module. 
+* The Cleaner module now standardises each report 'area' to one of 76 official jurisdictions (e.g. "Liverpool and the Wirral"), so minor variations and typos are automatically corrected for consistent regional filtering.
+
 ### 0.3.5 - <small>2025-07-07</small>
-* Attempt to fix issue where PFD Toolkit refused to run in Google Colab
+* Fix issue where PFD Toolkit refused to run in Google Colab
 
 ### 0.3.4 - <small>2025-07-07</small>
 * Deprecate `user_query` in `Screener` in favour of `search_query`. `user_query` will be removed in a future release.

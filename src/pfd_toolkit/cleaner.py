@@ -1,8 +1,10 @@
 import logging
-import pandas as pd
-from tqdm import tqdm
-
 import warnings
+from typing import Literal
+
+import pandas as pd
+from pydantic import BaseModel, Field, ConfigDict
+from tqdm import tqdm
 from tqdm import TqdmWarning
 
 from pfd_toolkit.llm import LLM
@@ -20,6 +22,21 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
 
 warnings.filterwarnings("ignore", category=TqdmWarning)
+
+
+# ---------------------------------------------------------------------------
+# Area validation model
+# ---------------------------------------------------------------------------
+
+AllowedAreas = Literal[*GeneralConfig.ALLOWED_AREAS]
+
+
+class AreaModel(BaseModel):
+    """Pydantic model restricting the area field."""
+
+    area: AllowedAreas = Field(..., description="Name of the coroner area")
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class Cleaner:
@@ -443,8 +460,11 @@ class Cleaner:
                 "leave": False,
             }
 
+            response_model = AreaModel if config_key == "Area" else None
             cleaned_results_batch = self.llm.generate(
-                prompts=prompts_for_batch, tqdm_extra_kwargs=inner_tqdm_config
+                prompts=prompts_for_batch,
+                tqdm_extra_kwargs=inner_tqdm_config,
+                response_format=response_model,
             )
 
             if len(cleaned_results_batch) != len(prompts_for_batch):
@@ -461,6 +481,9 @@ class Cleaner:
                 original_text = original_texts_list[i]
                 df_index = original_indices[i]
 
+                if isinstance(cleaned_text_output, BaseModel):
+                    cleaned_text_output = getattr(cleaned_text_output, "area", "")
+
                 final_text_to_write = cleaned_text_output  # Assume success initially
 
                 # Logic to revert to original if cleaning "failed" or LLM indicated "N/A"
@@ -470,21 +493,19 @@ class Cleaner:
                         or cleaned_text_output.startswith("Error:")
                         or cleaned_text_output.startswith("N/A: LLM Error")
                         or cleaned_text_output.startswith("N/A: Unexpected LLM output")
-                    ):  # Match potential error strings from llm.py
+                    ):
                         if self.verbose:
                             logger.info(
                                 f"Reverting to original for column '{column_name}', index {df_index}. LLM output: '{cleaned_text_output}'"
                             )
-                        final_text_to_write = original_text  # Revert to original
+                        final_text_to_write = original_text
                     elif cleaned_text_output != original_text:
                         modifications_count += 1
-                elif (
-                    cleaned_text_output is None and original_text is not None
-                ):  # If LLM returned None for actual text
+                elif cleaned_text_output is None and original_text is not None:
                     logger.warning(
                         f"LLM returned None for non-null original text (index {df_index}, col '{column_name}'). Reverting to original."
                     )
-                    final_text_to_write = original_text  # Revert
+                    final_text_to_write = original_text
 
                 cleaned_df.loc[df_index, column_name] = final_text_to_write
 
