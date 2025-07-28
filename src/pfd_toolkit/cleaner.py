@@ -109,11 +109,11 @@ class Cleaner:
         "You are an expert in extracting and cleaning specific information from UK Coronal Prevention of Future Deaths (PFD) reports.\n\n"
         "Task:\n"
         "1. **Extract** only the information related to {field_description}.\n"
-        "2. **Clean** the input text by removing extraneous details such as rogue numbers, punctuation, HTML tags, if any occur.\n"
+        "2. **Clean** the input text by fixing typos and removing clearly spurious characters (e.g. rogue numbers, stray punctuation, HTML tags). Do not delete any valid sentences or shorten the text.\n"
         "3. **Correct** any misspellings, ensuring the text is in sentence-case **British English**. Keep any existing acronyms if used; do not expand them.\n"
         "4. **Return** exactly and only the cleaned data for {field_contents_and_rules}. You must only return the cleaned string, without adding additional commentary, summarisation, or headings.\n"
         f"5. **If extraction fails**, return only and exactly: {GeneralConfig.NOT_FOUND_TEXT}\n"
-        "6. **Do not** modify or remove any content of the string unless it explicitly relates to the instructions above or below.\n\n"
+        "6. **Do not** remove or summarise any of the original content other than the minimal fixes described above.\n\n"
         "Extra instructions:\n"
         "{extra_instructions}\n\n"
         "Input Text:\n"
@@ -152,30 +152,33 @@ class Cleaner:
         },
         "InvestigationAndInquest": {
             "field_description": "the details of the investigation and inquest",
-            "field_contents_and_rules": "only the details of the investigation and inquest -- nothing else",
+            "field_contents_and_rules": "the entire text",
             "extra_instructions": (
                 "If the string appears to need no cleaning, return it as is. "
                 "If a date is used, put it in numerical form (e.g. '1 January 2024'). "
                 "Keep any existing paragraph formatting (e.g. spacing). "
+                "Do not summarise or shorten the text."
             ),
         },
         "CircumstancesOfDeath": {
             "field_description": "the circumstances of death",
-            "field_contents_and_rules": "only the circumstances of death -- nothing else",
+            "field_contents_and_rules": "the entire text",
             "extra_instructions": (
                 "If the string appears to need no cleaning, return it as is. "
                 "If a date is used, put it in numerical form (e.g. '1 January 2024'). "
                 "Keep any existing paragraph formatting (e.g. spacing). "
+                "Do not summarise or shorten the text."
             ),
         },
         "MattersOfConcern": {
             "field_description": "the matters of concern",
-            "field_contents_and_rules": "only the matters of concern, nothing else",
+            "field_contents_and_rules": "the entire text",
             "extra_instructions": (
                 'Remove reference to boilerplate text, if any occurs. This is usually 1 or 2 non-specific sentences at the start of the string often ending with "...The Matters of Concern are as follows:" (which should also be removed). '
                 "If the string appears to need no cleaning, return it as is. "
                 "If a date is used, put it in numerical form (e.g. '1 January 2024'). "
                 "Keep any existing paragraph formatting (e.g. spacing). "
+                "Do not summarise or shorten the text."
             ),
         },
     }
@@ -201,7 +204,6 @@ class Cleaner:
         concerns_prompt: str = None,
         verbose: bool = False,
     ) -> None:
-
         self.reports = reports
         self.llm = llm
 
@@ -516,4 +518,3 @@ class Cleaner:
 
         self.cleaned_reports = cleaned_df
         return cleaned_df
-
