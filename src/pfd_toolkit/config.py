@@ -157,13 +157,13 @@ class ScraperConfig:
     # Default field-specific guidance prompts for LLM text extraction
     LLM_PROMPTS: Dict[str, str] = field(
         default_factory=lambda: {
-            "date of report": "[Date of the report, not the death]",
+            "date of report": "[Date of the report, not the death (YYYY-MM-DD format)]",
             "coroner's name": "[Name of the coroner. Provide the name only.]",
             "area": "[Area/location of the Coroner. Provide the location itself only.]",
-            "receiver": "[Name or names of the recipient(s) as provided in the report.]",
-            "investigation and inquest": "[The text from the Investigation/Inquest section.]",
-            "circumstances of death": "[The text from the Circumstances of Death section.]",
-            "coroner's concerns": "[The text from the Coroner's Concerns section.]",
+            "receiver": "[Name or names of the recipient(s) of the report.]",
+            "investigation and inquest": "[The full text from the entire Investigation and Inquest section.]",
+            "circumstances of death": "[The full text from the entire Circumstances of (the) Death section.]",
+            "coroner's concerns": "[The full text from the entire Coroner's Concerns / Matters of Concern section.]",
         }
     )
 
