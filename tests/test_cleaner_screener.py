@@ -7,7 +7,6 @@ from pfd_toolkit.config import GeneralConfig
 
 
 class DummyLLM:
-
     def __init__(self, keywords=None):
         self.keywords = [k.lower() for k in (keywords or [])]
 
@@ -39,28 +38,32 @@ class DummyLLM:
 
 
 def test_cleaner_basic():
-    df = pd.DataFrame({
-        GeneralConfig.COL_CORONER_NAME: ["john doe"],
-        GeneralConfig.COL_AREA: ["area"],
-        GeneralConfig.COL_RECEIVER: ["x"],
-        GeneralConfig.COL_INVESTIGATION: ["inv"],
-        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
-        GeneralConfig.COL_CONCERNS: ["conc"],
-    })
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john doe"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
     cleaner = Cleaner(df, DummyLLM())
     cleaned = cleaner.clean_reports()
     assert cleaned[GeneralConfig.COL_CORONER_NAME].iloc[0] == "JOHN DOE"
 
 
 def test_cleaner_anonymise_prompts():
-    df = pd.DataFrame({
-        GeneralConfig.COL_CORONER_NAME: ["john"],
-        GeneralConfig.COL_AREA: ["area"],
-        GeneralConfig.COL_RECEIVER: ["x"],
-        GeneralConfig.COL_INVESTIGATION: ["inv"],
-        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
-        GeneralConfig.COL_CONCERNS: ["conc"],
-    })
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
 
     captured = []
 
@@ -83,14 +86,16 @@ def test_cleaner_anonymise_prompts():
 
 
 def test_generate_prompt_template():
-    df = pd.DataFrame({
-        GeneralConfig.COL_CORONER_NAME: ["john doe"],
-        GeneralConfig.COL_AREA: ["area"],
-        GeneralConfig.COL_RECEIVER: ["x"],
-        GeneralConfig.COL_INVESTIGATION: ["inv"],
-        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
-        GeneralConfig.COL_CONCERNS: ["conc"],
-    })
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john doe"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
     cleaner = Cleaner(df, DummyLLM())
     tmpl = cleaner.generate_prompt_template()
     assert GeneralConfig.COL_CORONER_NAME in tmpl
@@ -125,7 +130,9 @@ def test_screener_add_column_no_filter():
     df = pd.DataFrame(data)
     llm = DummyLLM(keywords=["zzz"])  # no match
     screener = Screener(llm=llm, reports=df)
-    result = screener.screen_reports(search_query="zzz", filter_df=False, result_col_name="match")
+    result = screener.screen_reports(
+        search_query="zzz", filter_df=False, result_col_name="match"
+    )
     assert "match" in result.columns
     assert result["match"].iloc[0] is False
 
@@ -134,7 +141,9 @@ def test_screener_produce_spans():
     df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["needle info"]})
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
-    result = screener.screen_reports(search_query="needle", filter_df=False, produce_spans=True)
+    result = screener.screen_reports(
+        search_query="needle", filter_df=False, produce_spans=True
+    )
     assert "spans_matches_query" in result.columns
     assert result["spans_matches_query"].iloc[0] == "span"
     assert result["matches_query"].iloc[0] is True
@@ -144,7 +153,9 @@ def test_screener_drop_spans():
     df = pd.DataFrame({GeneralConfig.COL_INVESTIGATION: ["needle info"]})
     llm = DummyLLM(keywords=["needle"])
     screener = Screener(llm=llm, reports=df)
-    result = screener.screen_reports(search_query="needle", filter_df=False, produce_spans=True, drop_spans=True)
+    result = screener.screen_reports(
+        search_query="needle", filter_df=False, produce_spans=True, drop_spans=True
+    )
     assert "spans_matches_topic" not in result.columns
 
 
@@ -169,15 +180,50 @@ def test_screener_drop_spans_preserves_existing():
     assert "spans_age" in result.columns
     assert result["spans_age"].iloc[0] == "span"
 
+
+def test_cleaner_area_synonyms():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class SynonymLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    if field_name == "area":
+                        outputs.append(response_format(area="West London"))
+                    else:
+                        outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, SynonymLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_AREA].iloc[0] == "London West"
+
+
 def test_cleaner_summarise():
-    df = pd.DataFrame({
-        GeneralConfig.COL_CORONER_NAME: ["john"],
-        GeneralConfig.COL_AREA: ["area"],
-        GeneralConfig.COL_RECEIVER: ["x"],
-        GeneralConfig.COL_INVESTIGATION: ["inv"],
-        GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
-        GeneralConfig.COL_CONCERNS: ["conc"],
-    })
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
     extractor = Extractor(llm=DummyLLM(), reports=df)
     out = extractor.summarise()
     assert "summary" in out.columns

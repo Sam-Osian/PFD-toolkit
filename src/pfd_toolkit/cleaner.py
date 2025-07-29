@@ -3,7 +3,7 @@ import warnings
 from typing import Literal
 
 import pandas as pd
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from tqdm import tqdm
 from tqdm import TqdmWarning
 
@@ -37,6 +37,12 @@ class AreaModel(BaseModel):
     area: AllowedAreas = Field(..., description="Name of the coroner area")
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("area", mode="before")
+    @classmethod
+    def apply_synonyms(cls, v: str) -> str:
+        """Normalise location names using :class:`Cleaner` synonyms."""
+        return Cleaner.map_area_synonym(v)
 
 
 class Cleaner:
@@ -103,6 +109,22 @@ class Cleaner:
     COL_INVESTIGATION = GeneralConfig.COL_INVESTIGATION
     COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
     COL_CONCERNS = GeneralConfig.COL_CONCERNS
+
+    # Mapping of location synonyms to canonical area names
+    _AREA_SYNONYMS = {
+        "West London": "London West",
+        "East London": "London East",
+        "North London": "London North",
+        "South London": "London South",
+        "Inner West London": "London Inner West",
+        "Inner North London": "London Inner North",
+        "Inner South London": "London Inner South",
+    }
+
+    @classmethod
+    def map_area_synonym(cls, area: str) -> str:
+        """Return canonical name for an area synonym."""
+        return cls._AREA_SYNONYMS.get(area, area)
 
     # Base prompt template used for all cleaning operations
     CLEANER_BASE_PROMPT = (
