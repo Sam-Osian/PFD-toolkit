@@ -3,11 +3,7 @@ Central configuration for pfd_toolkit. This module contains two classes:
 
 * `GeneralConfig` – constants that are useful package-wide
 * `ScraperConfig` – network, retry, throttling and LLM-prompt settings
-  that the `PFDScraper` class will import and use internally
-
-'Why does this exist?'
-The intention is to keep the other modules as lean as possible to improve readability
-and maintainability.
+  that the `Scraper` class will import and use internally
 
 """
 
@@ -133,15 +129,8 @@ class GeneralConfig:
         "Yorkshire South West",
         "Yorkshire West Eastern",
         "Yorkshire West Western",
-        "Other",
+        "N/A",
     ]
-
-
-# --------------------------------------------------------------------------- #
-# HTML & PDF extraction logic row types
-# Configuration classes live in pfd_toolkit.scraper.html_extractor and
-# pfd_toolkit.scraper.pdf_extractor
-# --------------------------------------------------------------------------- #
 
 # --------------------------------------------------------------------------- #
 # Scraper-specific configuration & helpers
