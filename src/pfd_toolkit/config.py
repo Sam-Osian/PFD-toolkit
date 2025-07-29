@@ -129,7 +129,7 @@ class GeneralConfig:
         "Yorkshire South West",
         "Yorkshire West Eastern",
         "Yorkshire West Western",
-        "N/A",
+        "Other",
     ]
 
 # --------------------------------------------------------------------------- #
