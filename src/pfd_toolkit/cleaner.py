@@ -155,11 +155,10 @@ class Cleaner:
             ),
         },
         "Area": {
-            "field_description": "the area where the inquest took place",
-            "field_contents_and_rules": "only the name of the area -- nothing else",
+            "field_description": "the area where the coroner's inquest took place",
+            "field_contents_and_rules": "only the name of the coroner's area -- nothing else",
             "extra_instructions": (
-                'For example, if the string is "Area: West London", return "West London". '
-                'If the string is "Hampshire, Portsmouth and Southampton", return it as is.'
+                'For example, if the string is "Area: West London", return "London West". '
             ),
         },
         "Receiver": {
