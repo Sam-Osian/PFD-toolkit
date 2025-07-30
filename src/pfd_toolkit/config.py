@@ -109,6 +109,7 @@ class GeneralConfig:
         "Northumberland",
         "Nottinghamshire",
         "Oxfordshire",
+        "Powys, Bridgend and Glamorgan",
         "Rutland and North Leicestershire",
         "Sefton, Knowsley and St Helens",
         "Shropshire, Telford and Wrekin",
