@@ -110,21 +110,10 @@ class Cleaner:
     COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
     COL_CONCERNS = GeneralConfig.COL_CONCERNS
 
-    # Mapping of location synonyms to canonical area names
-    _AREA_SYNONYMS = {
-        "West London": "London West",
-        "East London": "London East",
-        "North London": "London North",
-        "South London": "London South",
-        "Inner West London": "London Inner West",
-        "Inner North London": "London Inner North",
-        "Inner South London": "London Inner South",
-    }
-
     @classmethod
     def map_area_synonym(cls, area: str) -> str:
         """Return canonical name for an area synonym."""
-        return cls._AREA_SYNONYMS.get(area, area)
+        return GeneralConfig.AREA_SYNONYMS.get(area, area)
 
     # Base prompt template used for all cleaning operations
     CLEANER_BASE_PROMPT = (

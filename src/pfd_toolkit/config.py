@@ -133,6 +133,19 @@ class GeneralConfig:
         "Other",
     ]
 
+    # Mapping of location synonyms to canonical area names
+    AREA_SYNONYMS: Dict[str, str] = {
+        "West London": "London West",
+        "East London": "London East",
+        "North London": "London North",
+        "South London": "London South",
+        "Inner West London": "London Inner West",
+        "Inner North London": "London Inner North",
+        "Inner South London": "London Inner South",
+        "Cardiff and the Vale of Glamorgan": "South Wales Central",
+        "Cardiff and Vale of Glamorgan": "South Wales Central",
+    }
+
 # --------------------------------------------------------------------------- #
 # Scraper-specific configuration & helpers
 # --------------------------------------------------------------------------- #
