@@ -51,7 +51,7 @@ def load_reports(
     start_date: str = "2000-01-01",
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
-    refresh: bool = False,
+    refresh: bool = True,
 ) -> pd.DataFrame:
     """Load Prevention of Future Death reports as a DataFrame.
 
@@ -67,8 +67,8 @@ def load_reports(
         Keep only the most recent ``n_reports`` rows after filtering by date.
         ``None`` (the default) returns all rows.
     refresh : bool, optional
-        If ``True``, force a fresh download of the dataset instead of using the
-        cached copy. Defaults to ``False``.
+        If ``True`` (the default), force a fresh download of the dataset. Set to
+        ``False`` to reuse the previously cached copy.
 
     Returns
     -------

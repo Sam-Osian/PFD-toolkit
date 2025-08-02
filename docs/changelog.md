@@ -8,11 +8,12 @@ description: |
 
 Welcome to the project changelog. All notable changes to this project will be documented below.
 
----
 
 ### 0.3.6 - <small>2025-07-29</small>
 * Improve reliability and performance of the Scraper and Cleaner modules. 
 * The Cleaner module now standardises each report 'area' to one of 77 official jurisdictions (e.g. "Liverpool and the Wirral"), so minor variations and typos are automatically corrected for consistent regional filtering.
+* `load_reports()` now refreshes the dataset by default. Pass `refresh=False` to use a previously cached copy instead of downloading again.
+
 
 ### 0.3.5 - <small>2025-07-07</small>
 * Fix issue where PFD Toolkit refused to run in Google Colab

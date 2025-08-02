@@ -55,10 +55,12 @@ You can combine this with the date parameters to get the most recent *n* entries
 
 ## Refresh reports
 
-Reports are updated daily (1:00am, universal time). `load_reports()` caches reports for faster loading, so to retrieve the latest reports you may need to set `refresh` to `True`:
+Reports are updated daily (1:00am, universal time) and `load_reports()` fetches
+the newest dataset by default. If you want to reuse the previously cached copy
+to avoid a download on subsequent calls, set `refresh` to `False`:
 
 ```py
-reports = load_reports(refresh=True)
+reports = load_reports(refresh=False)
 ```
 
 
