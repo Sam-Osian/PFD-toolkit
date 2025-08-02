@@ -55,7 +55,7 @@ You can combine this with the date parameters to get the most recent *n* entries
 
 ## Refresh reports
 
-Reports are updated once a week (Monday 1:00am, universal time). `load_reports()` caches reports for faster loading, so to retrieve the latest reports you may need to set `refresh` to `True`:
+Reports are updated daily (1:00am, universal time). `load_reports()` caches reports for faster loading, so to retrieve the latest reports you may need to set `refresh` to `True`:
 
 ```py
 reports = load_reports(refresh=True)

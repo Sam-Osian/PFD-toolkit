@@ -8,13 +8,6 @@ description: |
 
 `Scraper` lets you download PFD reports straight from the judiciary website and control each step of the extraction process. For most projects [`load_reports()`](load_reports.md) is sufficient, but the scraping module gives you full transparency over how reports are gathered and how missing values are filled in. Use it when you need to customise request behaviour, adjust fallback logic or troubleshoot tricky reports.
 
-## Why run a custom scrape?
-
-The weekly datasets cover the majority of use cases. However there are two scenarios when direct scraping may be preferable:
-
-- **Rapid updates** – the PFD Toolkit dataset lags up to a week behind new publications. Running your own scrape means you can see the newest reports immediately.
-- **Custom logic** – while the bundled dataset is a product of Vision-LLM scraping, you may also wish to enable HTML and .pdf scraping.
-
 ## Creating a scraper
 
 ```python

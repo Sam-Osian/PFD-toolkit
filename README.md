@@ -47,7 +47,7 @@ reports = load_reports(
 | [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
 
-PFD Toolkit updates each week with freshly published reports. To retrieve the latest reports, run `load_reports()` with `refresh`:
+PFD Toolkit updates daily with freshly published reports. To retrieve the latest reports, run `load_reports()` with `refresh`:
 
 ```py
 reports = load_reports(refresh=True)

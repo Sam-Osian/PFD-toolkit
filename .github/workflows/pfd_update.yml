@@ -3,7 +3,7 @@ name: Auto PFD Top-Up
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 1 * * 1'  # Automatically trigger every Monday at 1:00 AM UTC
+    - cron: '0 1 * * *'  # Automatically trigger every day at 1:00 AM UTC
 
 permissions:
   contents: write
