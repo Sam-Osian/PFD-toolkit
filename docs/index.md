@@ -1,8 +1,9 @@
 ---
-title: "Turn PFD reports into actionable insights"
-description: |
-  A Python Package for Accessing and Analysing Prevention of Future Deaths (PFD) Reports
+title: PFD Toolkit
+description: Turn PFD reports into actionable insights
 image: assets/header.png
+og_title: PFD Toolkit
+og_site_name: PFD Toolkit
 ---
 
 # Turn PFD reports into actionable insights
