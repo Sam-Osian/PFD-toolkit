@@ -1858,8 +1858,10 @@
 <p>You can combine this with the date parameters to get the most recent <em>n</em> entries within a given date range.</p>
 <hr />
 <h2 id="refresh-reports">Refresh reports<a class="headerlink" href="#refresh-reports" title="Permanent link">&para;</a></h2>
-<p>Reports are updated once a week (Monday 1:00am, universal time). <code>load_reports()</code> caches reports for faster loading, so to retrieve the latest reports you may need to set <code>refresh</code> to <code>True</code>:</p>
-<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">reports</span> <span class="o">=</span> <span class="n">load_reports</span><span class="p">(</span><span class="n">refresh</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<p>Reports are updated daily (1:00am, universal time) and <code>load_reports()</code> fetches
+the newest dataset by default. If you want to reuse the previously cached copy
+to avoid a download on subsequent calls, set <code>refresh</code> to <code>False</code>:</p>
+<div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">reports</span> <span class="o">=</span> <span class="n">load_reports</span><span class="p">(</span><span class="n">refresh</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span></code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>

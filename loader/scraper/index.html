@@ -1370,15 +1370,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#why-run-a-custom-scrape" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why run a custom scrape?
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#creating-a-scraper" class="md-nav__link">
     <span class="md-ellipsis">
       Creating a scraper
@@ -1775,15 +1766,6 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#why-run-a-custom-scrape" class="md-nav__link">
-    <span class="md-ellipsis">
-      Why run a custom scrape?
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#creating-a-scraper" class="md-nav__link">
     <span class="md-ellipsis">
       Creating a scraper
@@ -1873,12 +1855,6 @@
 
 <h1 id="scraping-module">Scraping module<a class="headerlink" href="#scraping-module" title="Permanent link">&para;</a></h1>
 <p><code>Scraper</code> lets you download PFD reports straight from the judiciary website and control each step of the extraction process. For most projects <a href="../load_reports/"><code>load_reports()</code></a> is sufficient, but the scraping module gives you full transparency over how reports are gathered and how missing values are filled in. Use it when you need to customise request behaviour, adjust fallback logic or troubleshoot tricky reports.</p>
-<h2 id="why-run-a-custom-scrape">Why run a custom scrape?<a class="headerlink" href="#why-run-a-custom-scrape" title="Permanent link">&para;</a></h2>
-<p>The weekly datasets cover the majority of use cases. However there are two scenarios when direct scraping may be preferable:</p>
-<ul>
-<li><strong>Rapid updates</strong> – the PFD Toolkit dataset lags up to a week behind new publications. Running your own scrape means you can see the newest reports immediately.</li>
-<li><strong>Custom logic</strong> – while the bundled dataset is a product of Vision-LLM scraping, you may also wish to enable HTML and .pdf scraping.</li>
-</ul>
 <h2 id="creating-a-scraper">Creating a scraper<a class="headerlink" href="#creating-a-scraper" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pfd_toolkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Scraper</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>

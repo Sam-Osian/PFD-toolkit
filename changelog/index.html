@@ -1429,6 +1429,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#036-2025-07-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.3.6 - 2025-07-29
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#035-2025-07-07" class="md-nav__link">
     <span class="md-ellipsis">
       0.3.5 - 2025-07-07
@@ -1727,6 +1736,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#036-2025-07-29" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.3.6 - 2025-07-29
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#035-2025-07-07" class="md-nav__link">
     <span class="md-ellipsis">
       0.3.5 - 2025-07-07
@@ -1801,10 +1819,15 @@
 
 <h1 id="changelog">📆 Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
 <p>Welcome to the project changelog. All notable changes to this project will be documented below.</p>
-<hr />
+<h3 id="036-2025-07-29">0.3.6 - <small>2025-07-29</small><a class="headerlink" href="#036-2025-07-29" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Improve reliability and performance of the Scraper and Cleaner modules. </li>
+<li>The Cleaner module now standardises each report 'area' to one of 77 official jurisdictions (e.g. "Liverpool and the Wirral"), so minor variations and typos are automatically corrected for consistent regional filtering.</li>
+<li><code>load_reports()</code> now refreshes the dataset by default. Pass <code>refresh=False</code> to use a previously cached copy instead of downloading again.</li>
+</ul>
 <h3 id="035-2025-07-07">0.3.5 - <small>2025-07-07</small><a class="headerlink" href="#035-2025-07-07" title="Permanent link">&para;</a></h3>
 <ul>
-<li>Attempt to fix issue where PFD Toolkit refused to run in Google Colab</li>
+<li>Fix issue where PFD Toolkit refused to run in Google Colab</li>
 </ul>
 <h3 id="034-2025-07-07">0.3.4 - <small>2025-07-07</small><a class="headerlink" href="#034-2025-07-07" title="Permanent link">&para;</a></h3>
 <ul>
