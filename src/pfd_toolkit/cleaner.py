@@ -46,9 +46,8 @@ class AreaModel(BaseModel):
     def validate_area(cls, v: str) -> str:
         """Ensure the area is one of the allowed values."""
         if v not in GeneralConfig.ALLOWED_AREAS:
-            raise ValueError(
-                f"area must be one of {', '.join(GeneralConfig.ALLOWED_AREAS)}"
-            )
+            # If the provided area is not recognised, default to "Other"
+            return "Other"
         return v
 
 

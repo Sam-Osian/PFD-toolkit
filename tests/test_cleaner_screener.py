@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-from pfd_toolkit.cleaner import Cleaner
+from pfd_toolkit.cleaner import Cleaner, AreaModel
 from pfd_toolkit.screener import Screener, TopicMatch
 from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import GeneralConfig
@@ -179,6 +179,43 @@ def test_screener_drop_spans_preserves_existing():
     assert "spans_matches_query" not in result.columns
     assert "spans_age" in result.columns
     assert result["spans_age"].iloc[0] == "span"
+
+
+def test_area_model_unknown_area_defaults_to_other():
+    model = AreaModel(area="Imaginary Shire")
+    assert model.area == "Other"
+
+
+def test_cleaner_unrecognised_area_defaults_to_other():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class UnknownAreaLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    if field_name == "area":
+                        outputs.append(response_format(area="Atlantis"))
+                    else:
+                        outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, UnknownAreaLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_AREA].iloc[0] == "Other"
 
 
 def test_cleaner_area_synonyms():
