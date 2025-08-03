@@ -52,6 +52,22 @@ jobs:
           uv run python scripts/update_reports.py
           set -x
 
+      - name: Upload dataset to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload dataset-latest all_reports.csv --clobber
+
+      - name: Show sample of updated reports
+        run: |
+          uv run python - <<'PYTHON'
+          from pfd_toolkit import load_reports
+          df = load_reports()
+          print(df.head())
+          with open(".github/workflows/update_summary.txt", "a") as f:
+              f.write("\nHead of updated dataset:\n")
+              f.write(df.head().to_string(index=False) + "\n")
+          PYTHON
+
       - name: Display Summary in Actions UI
         if: always()
         run: |
@@ -64,11 +80,6 @@ jobs:
             echo "Python script output (from previous step) should indicate reason." >> $GITHUB_STEP_SUMMARY
           fi
 
-
-      - name: Upload dataset to release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload dataset-latest all_reports.csv --clobber
 
       - name: Commit & Push Changes
         if: github.ref == 'refs/heads/main'
