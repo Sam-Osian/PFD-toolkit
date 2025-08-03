@@ -1,6 +1,6 @@
 ---
-title: PFD Toolkit
-description: Turn PFD reports into actionable insights
+title: Open-source AI toolkit for Prevention of Future Deaths reports
+description: Open-source AI toolkit for analysing Prevention of Future Deaths (PFD) reports, enabling researchers to automatically extract, structure, and analyse coroners' warnings.
 image: assets/header.png
 og_title: PFD Toolkit
 og_site_name: PFD Toolkit
