@@ -92,7 +92,7 @@ PFD Toolkit is designed as a research-enabling tool, and we’re keen to work wi
 
 If you use PFD Toolkit in your research, please cite the archived release:
 
-> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.5) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
+> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.6) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
 
 Or, in BibTeX:
 
@@ -101,7 +101,7 @@ Or, in BibTeX:
   author       = {Sam Osian and Jonathan Pytches},
   title        = {PFD Toolkit: Unlocking Prevention of Future Death Reports for Research},
   year         = {2025},
-  version      = {0.3.5},
+  version      = {0.3.6},
   doi          = {10.5281/zenodo.15729717},
   url          = {https://github.com/sam-osian/PFD-toolkit}
 }
