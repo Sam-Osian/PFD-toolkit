@@ -3,11 +3,7 @@ Central configuration for pfd_toolkit. This module contains two classes:
 
 * `GeneralConfig` – constants that are useful package-wide
 * `ScraperConfig` – network, retry, throttling and LLM-prompt settings
-  that the `PFDScraper` class will import and use internally
-
-'Why does this exist?'
-The intention is to keep the other modules as lean as possible to improve readability
-and maintainability.
+  that the `Scraper` class will import and use internally
 
 """
 
@@ -54,12 +50,101 @@ class GeneralConfig:
 
     ID_PATTERN = re.compile(r"(\d{4}-\d{4})")
 
+    # Accepted values for the area field used by the Cleaner
+    ALLOWED_AREAS: List[str] = [
+        "Avon",
+        "Bedfordshire and Luton",
+        "Berkshire",
+        "Birmingham and Solihull",
+        "Blackpool and Fylde",
+        "Buckinghamshire",
+        "Cambridgeshire and Peterborough",
+        "Carmarthenshire and Pembrokeshire",
+        "Ceredigion",
+        "Cheshire",
+        "Cornwall and the Isles of Scilly",
+        "County Durham and Darlington",
+        "County of Devon, Plymouth and Torbay",
+        "Coventry",
+        "Cumbria",
+        "Derby and Derbyshire",
+        "Dorset",
+        "East Riding of Yorkshire and Kingston-upon-Hull",
+        "East Sussex",
+        "Essex",
+        "Gateshead and South Tyneside",
+        "Gloucestershire",
+        "Greater Lincolnshire",
+        "Greater Manchester North",
+        "Greater Manchester South",
+        "Greater Manchester West",
+        "Gwent",
+        "Hampshire, Portsmouth and Southampton",
+        "Herefordshire",
+        "Hertfordshire",
+        "Isle of Wight",
+        "Kent Central and South East",
+        "Kent Mid and Medway",
+        "Kent North East",
+        "Kent North West",
+        "Lancashire and Blackburn with Darwen",
+        "Leicester City and South Leicestershire",
+        "Liverpool and the Wirral",
+        "London City",
+        "London East",
+        "London Inner North",
+        "London Inner South",
+        "London Inner West",
+        "London North",
+        "London South",
+        "London West",
+        "Manchester City",
+        "Milton Keynes",
+        "Newcastle and North Tyneside",
+        "Norfolk",
+        "North Wales (East and Central)",
+        "North West Wales",
+        "North Yorkshire and York",
+        "Northamptonshire",
+        "Northumberland",
+        "Nottinghamshire",
+        "Oxfordshire",
+        "Powys, Bridgend and Glamorgan",
+        "Rutland and North Leicestershire",
+        "Sefton, Knowsley and St Helens",
+        "Shropshire, Telford and Wrekin",
+        "Somerset",
+        "South Wales Central",
+        "Staffordshire and Stoke-on-Trent",
+        "Suffolk",
+        "Sunderland",
+        "Surrey",
+        "Swansea and Neath Port Talbot",
+        "Teesside and Hartlepool",
+        "The Black Country Jurisdiction",
+        "Warwickshire",
+        "West Sussex, Brighton and Hove",
+        "Wiltshire and Swindon",
+        "Worcestershire",
+        "Yorkshire South East",
+        "Yorkshire South West",
+        "Yorkshire West Eastern",
+        "Yorkshire West Western",
+        "Other",
+    ]
 
-# --------------------------------------------------------------------------- #
-# HTML & PDF extraction logic row types
-# Configuration classes live in pfd_toolkit.scraper.html_extractor and
-# pfd_toolkit.scraper.pdf_extractor
-# --------------------------------------------------------------------------- #
+    # Mapping of location synonyms to canonical area names
+    AREA_SYNONYMS: Dict[str, str] = {
+        "West London": "London West",
+        "East London": "London East",
+        "North London": "London North",
+        "South London": "London South",
+        "Inner West London": "London Inner West",
+        "Inner North London": "London Inner North",
+        "Inner South London": "London Inner South",
+        "Cardiff and the Vale of Glamorgan": "South Wales Central",
+        "Cardiff and Vale of Glamorgan": "South Wales Central",
+    }
 
 # --------------------------------------------------------------------------- #
 # Scraper-specific configuration & helpers
@@ -157,13 +242,13 @@ class ScraperConfig:
     # Default field-specific guidance prompts for LLM text extraction
     LLM_PROMPTS: Dict[str, str] = field(
         default_factory=lambda: {
-            "date of report": "[Date of the report, not the death]",
+            "date of report": "[Date of the report, not the death (YYYY-MM-DD format)]",
             "coroner's name": "[Name of the coroner. Provide the name only.]",
             "area": "[Area/location of the Coroner. Provide the location itself only.]",
-            "receiver": "[Name or names of the recipient(s) as provided in the report.]",
-            "investigation and inquest": "[The text from the Investigation/Inquest section.]",
-            "circumstances of death": "[The text from the Circumstances of Death section.]",
-            "coroner's concerns": "[The text from the Coroner's Concerns section.]",
+            "receiver": "[Name or names of the recipient(s) of the report.]",
+            "investigation and inquest": "[The full text from the entire Investigation and Inquest section.]",
+            "circumstances of death": "[The full text from the entire Circumstances of (the) Death section.]",
+            "coroner's concerns": "[The full text from the entire Coroner's Concerns / Matters of Concern section.]",
         }
     )
 

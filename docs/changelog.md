@@ -8,29 +8,34 @@ description: |
 
 Welcome to the project changelog. All notable changes to this project will be documented below.
 
----
+
+### 0.3.6 - <small>2025-08-03</small>
+* Improve reliability and performance of the Scraper and Cleaner modules. 
+* The Cleaner module now standardises each report 'area' to one of 77 official jurisdictions (e.g. "Liverpool and the Wirral"), so minor variations and typos are automatically corrected for consistent regional filtering.
+* `load_reports()` now refreshes the dataset by default. Pass `refresh=False` to use a previously cached copy instead of downloading again.
+
 
 ### 0.3.5 - <small>2025-07-07</small>
-* Attempt to fix issue where PFD Toolkit refused to run in Google Colab
+* Fixed issue where PFD Toolkit refused to run in Google Colab
 
 ### 0.3.4 - <small>2025-07-07</small>
-* Deprecate `user_query` in `Screener` in favour of `search_query`. `user_query` will be removed in a future release.
+* Deprecated `user_query` in `Screener` in favour of `search_query`. `user_query` will be removed in a future release.
 * Dropping spans in `extract_features()` no longer removes spans added during screening.
-* Downgrade pandas from 2.3.0 to 2.2.2
-* Fix text cleaning bug that expanded dates and removed paragraph spacing.
+* Downgraded pandas from 2.3.0 to 2.2.2
+* Fixed text cleaning bug that expanded dates and removed paragraph spacing.
 * Added tests covering span removal behaviour.
 
 ### 0.3.3 - <small>2025-06-25</small>
-* Improve package installation time
+* Improved package installation time
 * Changed default LLM model from GPT-4.1-mini to GPT-4.1
 
 ### 0.3.2 - <small>2025-06-23</small>
 * You no longer need to manually update the `pfd_toolkit` package to get access to freshly published reports. Instead, run `load_reports(refresh=True)`.
 * Improve robustness of Scraping module in handling missing data between different scraping strategies.
-* Fix typos and improve documentation.
+* Fixed typos and improve documentation.
 
 ### 0.3.1 - <small>2025-06-19</small>
-* Improve reliability of weekly dataset top-ups.
+* Improved reliability of weekly dataset top-ups.
 
 
 ### 0.3.0 - <small>2025-06-18</small>

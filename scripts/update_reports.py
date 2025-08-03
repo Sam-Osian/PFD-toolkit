@@ -18,7 +18,7 @@ DATA_URL = (
 DATA_PATH = Path("all_reports.csv")
 
 # Initialise LLM client
-llm_client = LLM(api_key=os.environ["OPENAI_API_KEY"], max_workers=30, model="gpt-4.1")
+llm_client = LLM(api_key=os.environ["OPENAI_API_KEY"], max_workers=18, model="gpt-4.1")
 
 # Initialise scraper
 scraper = Scraper(llm=llm_client, scraping_strategy=[2,-1,1])

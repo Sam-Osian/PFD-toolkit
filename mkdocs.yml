@@ -40,6 +40,10 @@ extra_css:
 extra_templates:
   - 404.html
 
+extra:
+  og_title: PFD Toolkit
+  og_site_name: PFD Toolkit
+
 
 markdown_extensions:
   - tables

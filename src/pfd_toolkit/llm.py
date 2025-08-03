@@ -363,18 +363,23 @@ class LLM:
             images_for_batch = [base64_images_list]
 
         prompt = (
-            "Your goal is to transcribe the **exact** text from this report, presented as images.\n\n"
-            "Please extract the following section(s):\n"
+            "You will be presented with screenshots of a Prevention of Future Deaths (PFD) report. \n\n"
+
+            "Your goal is to transcribe verbatim text from this report. \n\n"
+
+            "Please extract the following report elements: \n\n"
         )
         response_fields: List[str] = []
         for field, instruction in missing_fields.items():
             response_fields.append(field)
             prompt += f"\n{field}: {instruction}\n"
         prompt += (
-            "\nRespond with nothing else whatsoever. You must not respond in your own 'voice'...\n"
-            f"If you are unable to identify the text for any section, respond exactly: {GeneralConfig.NOT_FOUND_TEXT}.\n"
-            "Transcribe redactions as '[REDACTED]'.\n"
-            "Do *not* change section titles. Respond in the specified format.\n"
+            "\n\nFurther instructions:\n\n - You must not respond in your own 'voice'; output verbatim text from the reports **only**.\n"
+            f" - If you are unable to identify the text for any section, respond exactly: {GeneralConfig.NOT_FOUND_TEXT}.\n"
+            " - Transcribe redacted text (black rectangles) as '[REDACTED]'.\n"
+            " - Confirm the PDF is the coroner's PFD report and not a response document. If it is a response document, return "
+            f"{GeneralConfig.NOT_FOUND_TEXT} for all sections.\n"
+            " - You must extract the *full* and verbatim text for each given section - no shortening or partial extractions.\n"
         )
 
         schema = {fld: (str, ...) for fld in response_fields}
