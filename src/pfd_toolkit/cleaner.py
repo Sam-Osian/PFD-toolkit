@@ -1,6 +1,5 @@
 import logging
 import warnings
-from typing import Literal
 
 import pandas as pd
 from pydantic import BaseModel, Field, ConfigDict, field_validator
@@ -28,13 +27,11 @@ warnings.filterwarnings("ignore", category=TqdmWarning)
 # Area validation model
 # ---------------------------------------------------------------------------
 
-AllowedAreas = Literal[*GeneralConfig.ALLOWED_AREAS]
-
 
 class AreaModel(BaseModel):
     """Pydantic model restricting the area field."""
 
-    area: AllowedAreas = Field(..., description="Name of the coroner area")
+    area: str = Field(..., description="Name of the coroner area")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -43,6 +40,16 @@ class AreaModel(BaseModel):
     def apply_synonyms(cls, v: str) -> str:
         """Normalise location names using :class:`Cleaner` synonyms."""
         return Cleaner.map_area_synonym(v)
+
+    @field_validator("area")
+    @classmethod
+    def validate_area(cls, v: str) -> str:
+        """Ensure the area is one of the allowed values."""
+        if v not in GeneralConfig.ALLOWED_AREAS:
+            raise ValueError(
+                f"area must be one of {', '.join(GeneralConfig.ALLOWED_AREAS)}"
+            )
+        return v
 
 
 class Cleaner:
