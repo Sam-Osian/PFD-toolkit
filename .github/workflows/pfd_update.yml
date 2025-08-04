@@ -24,8 +24,6 @@ jobs:
 
       - name: Scan for committed secrets
         uses: zricethezav/gitleaks-action@v2
-        with:
-          args: --exit-on-found
 
       - name: Mask OpenAI key
         run: echo "::add-mask::${{ secrets.OPENAI_API_KEY }}"
@@ -61,11 +59,17 @@ jobs:
         run: |
           uv run python - <<'PYTHON'
           from pfd_toolkit import load_reports
+          import pandas as pd
+
+          pd.set_option("display.max_colwidth", None)
           df = load_reports()
-          print(df.head())
+          df_head = df.head()
+
+          print(df_head.to_string(index=False))
           with open(".github/workflows/update_summary.txt", "a") as f:
-              f.write("\nHead of updated dataset:\n")
-              f.write(df.head().to_string(index=False) + "\n")
+              f.write("\n\n---\n\n")
+              f.write("Head of updated dataset:\n\n")
+              f.write(df_head.to_html(index=False) + "\n\n")
           PYTHON
 
       - name: Display Summary in Actions UI
