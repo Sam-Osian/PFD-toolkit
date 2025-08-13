@@ -1,14 +1,10 @@
 ---
-title: Open-source AI toolkit for Prevention of Future Deaths reports
-description: Open-source AI toolkit for analysing Prevention of Future Deaths (PFD) reports, enabling researchers to automatically extract, structure, and analyse coroners' warnings.
+title: PFD Toolkit
+description: AI toolkit for analysing Prevention of Future Deaths (PFD) reports
 image: assets/header.png
-og_title: PFD Toolkit
-og_site_name: PFD Toolkit
 ---
 
-# Turn PFD reports into actionable insights
-
-![PFD Toolkit: Open-source software for Prevention of Future Death reports](assets/header.png)
+![PFD Toolkit: Open-source software for Prevention of Future Deaths reports](assets/header.png)
 
 **PFD Toolkit** is an open-source Python package that lets you automatically extract, structure, and analyse Prevention of Future Deaths (PFD) reports from coroners in England and Wales — turning an unwieldy archive into a clean, research-ready dataset in minutes.
 
