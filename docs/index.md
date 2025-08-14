@@ -1,8 +1,10 @@
 ---
-title: PFD Toolkit
-description: AI toolkit for analysing Prevention of Future Deaths (PFD) reports
+title: PFD Toolkit - AI toolkit for analysing Prevention of Future Deaths (PFD) reports
+description: PFD Toolkit - AI toolkit for analysing Prevention of Future Deaths (PFD) reports
 image: assets/header.png
 ---
+
+# Home
 
 ![PFD Toolkit: Open-source software for Prevention of Future Deaths reports](assets/header.png)
 
