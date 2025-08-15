@@ -1,0 +1,5 @@
+Model: gpt-4.1
+Accuracy:    0.917
+Sensitivity: 0.966
+Specificity: 0.882
+Elapsed (s): 7.33
