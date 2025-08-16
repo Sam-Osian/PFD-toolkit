@@ -85,8 +85,23 @@ mention of being "in Year 10", etc.
 # 3. Run screener for each model and compute metrics
 # ---------------------------------------------------------------------
 out_path = Path(__file__).resolve().parent / "model_comparison.txt"
-with out_path.open("w", encoding="utf-8") as fh:
-    for spec in models:
+
+# Determine which models have already been tested
+existing_models: set[str] = set()
+if out_path.exists():
+    with out_path.open("r", encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith("Model:"):
+                existing_models.add(line.split(":", 1)[1].strip())
+
+# Filter models to only those not yet evaluated
+models_to_run = [spec for spec in models if spec["name"] not in existing_models]
+if not models_to_run:
+    print("All models already tested. Nothing to do.")
+    raise SystemExit
+
+with out_path.open("a", encoding="utf-8") as fh:
+    for spec in models_to_run:
         model = spec["name"]
         temp = spec["temperature"]
         print(f"Testing model: {model}")
