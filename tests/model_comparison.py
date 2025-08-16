@@ -2,14 +2,13 @@
 
 This script reads report sections and ground-truth labels directly from
 ``ons_replication/ONS_master_spreadsheet.xlsx`` and measures the accuracy,
-sensitivity, specificity, and elapsed time for several LLM models. Results are
-written to ``model_comparison.txt``.
+sensitivity, and specificity for several LLM models. Results are written to
+``model_comparison.txt``.
 """
 
 from __future__ import annotations
 
 import os
-import time
 from pathlib import Path
 
 import pandas as pd
@@ -73,6 +72,20 @@ models = [
     {"name": "gpt-5", "temperature": 1},
     {"name": "gpt-5-mini", "temperature": 1},
     {"name": "gpt-5-nano", "temperature": 1},
+    {
+        "name": "olmo2:13b",
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+    },
+    {
+        "name": "gemma3:12b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
 ]
 
 user_query = """
@@ -107,13 +120,16 @@ with out_path.open("a", encoding="utf-8") as fh:
         print(f"Testing model: {model}")
 
         llm_kwargs = {
-            "api_key": os.getenv("OPENAI_API_KEY"),
+            "api_key": spec.get("api_key", os.getenv("OPENAI_API_KEY")),
             "max_workers": 10,
             "model": model,
             "seed": 12345,
-            "timeout": 20,
+            "timeout": spec.get("timeout", 20),
             "temperature": 1 if model.startswith("gpt-5") else temp,
         }
+
+        if "base_url" in spec:
+            llm_kwargs["base_url"] = spec["base_url"]
 
         llm_client = LLM(**llm_kwargs)
 
@@ -125,13 +141,11 @@ with out_path.open("a", encoding="utf-8") as fh:
             include_concerns=True,
         )
 
-        start = time.perf_counter()
         classified = screener.screen_reports(
             search_query=user_query,
             filter_df=False,
             result_col_name="model_pred",
         )
-        elapsed = time.perf_counter() - start
 
         pred = classified["model_pred"].astype(bool)
         truth = classified["consensus"].astype(bool)
@@ -151,6 +165,5 @@ with out_path.open("a", encoding="utf-8") as fh:
         fh.write(f"Accuracy:    {accuracy:.3f}\n")
         fh.write(f"Sensitivity: {sensitivity:.3f}\n")
         fh.write(f"Specificity: {specificity:.3f}\n")
-        fh.write(f"Elapsed (s): {elapsed:.2f}\n")
         fh.write("\n")
 
