@@ -1,0 +1,36 @@
+Model: gpt-4.1
+Accuracy:    0.924
+Sensitivity: 0.983
+Specificity: 0.882
+Elapsed (s): 10.99
+
+Model: gpt-4.1-mini
+Accuracy:    0.903
+Sensitivity: 0.983
+Specificity: 0.847
+Elapsed (s): 28.18
+
+Model: gpt-4.1-nano
+Accuracy:    0.854
+Sensitivity: 0.983
+Specificity: 0.765
+Elapsed (s): 8.63
+
+Model: gpt-5
+Accuracy:    0.979
+Sensitivity: 0.949
+Specificity: 1.000
+Elapsed (s): 107.45
+
+Model: gpt-5-mini
+Accuracy:    0.944
+Sensitivity: 0.983
+Specificity: 0.918
+Elapsed (s): 69.49
+
+Model: gpt-5-nano
+Accuracy:    0.944
+Sensitivity: 0.915
+Specificity: 0.965
+Elapsed (s): 62.86
+
