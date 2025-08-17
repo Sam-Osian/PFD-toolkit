@@ -1,4 +1,4 @@
-Model: gpt-4.1
+Model: gpt-4.1 
 Accuracy:    0.924
 Sensitivity: 0.983
 Specificity: 0.882
@@ -28,15 +28,38 @@ Accuracy:    0.944
 Sensitivity: 0.915
 Specificity: 0.965
 
-Model: olmo2:13b
-Temperature: 0
-Accuracy:    0.590
-Sensitivity: 0.000
-Specificity: 1.000
+Model: o4-mini
+Accuracy:    0.944
+Sensitivity: 0.966
+Specificity: 0.929
+
+Model: gpt-4o
+Accuracy:    0.889
+Sensitivity: 0.932
+Specificity: 0.859
 
 Model: gemma3:12b
-Temperature: 0
 Accuracy:    0.861
 Sensitivity: 0.983
 Specificity: 0.776
+
+Model: gemma2:27b
+Accuracy:    0.847
+Sensitivity: 0.983
+Specificity: 0.753
+
+Model: qwen3:30b
+Accuracy:    0.868
+Sensitivity: 0.831
+Specificity: 0.894
+
+Model: llava:34b
+Accuracy:    0.764
+Sensitivity: 0.508
+Specificity: 0.941
+
+Model: gemma3:27b
+Accuracy:    0.910
+Sensitivity: 0.966
+Specificity: 0.871
 
