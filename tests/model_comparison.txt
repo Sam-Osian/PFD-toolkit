@@ -38,6 +38,11 @@ Accuracy:    0.889
 Sensitivity: 0.932
 Specificity: 0.859
 
+Model: gemma3:27b
+Accuracy:    0.910
+Sensitivity: 0.966
+Specificity: 0.871
+
 Model: gemma3:12b
 Accuracy:    0.861
 Sensitivity: 0.983
@@ -58,8 +63,21 @@ Accuracy:    0.764
 Sensitivity: 0.508
 Specificity: 0.941
 
-Model: gemma3:27b
-Accuracy:    0.910
-Sensitivity: 0.966
-Specificity: 0.871
+Model: phi4:14b
+Temperature: 0
+Accuracy:    0.861
+Sensitivity: 0.763
+Specificity: 0.929
+
+Model: llama3:70b
+Temperature: 0
+Accuracy:    0.861
+Sensitivity: 0.983
+Specificity: 0.776
+
+Model: qwen3:32b
+Temperature: 0
+Accuracy:    0.889
+Sensitivity: 0.932
+Specificity: 0.859
 

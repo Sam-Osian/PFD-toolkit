@@ -116,6 +116,27 @@ models = [
         "api_key": "ollama",
         "timeout": 10**9,
      },
+    {
+        "name": "phi4:14b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    {
+        "name": "llama3:70b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    {
+        "name": "qwen3:32b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
 ]
 
 user_query = """
