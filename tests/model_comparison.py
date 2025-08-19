@@ -81,19 +81,50 @@ models = [
     {"name": "o4-mini", "temperature": 1},
     
     # OPENROUTER API MODELS
+
     {
-        "name": "openai/gpt-oss-20b",
-        "temperature": 1,
+        "name": "mistralai/devstral-small",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "mistralai/devstral-medium",
+        "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
     
-    # {
-    #     "name": "tngtech/deepseek-r1t2-chimera:free",
-    #     "temperature": 0,
-    #     "base_url": OPENROUTER_URL,
-    #     "api_key": OPENROUTER_KEY,
-    # },
+    {
+        "name": "mistralai/mistral-medium-3.1",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "mistralai/mistral-small-24b-instruct-2501",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "mistralai/mistral-large-2411",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "google/gemma-3-4b-it",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "google/gemma-3-12b-it",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
     
     # {
     #     "name": "deepseek/deepseek-r1-0528-qwen3-8b:free",

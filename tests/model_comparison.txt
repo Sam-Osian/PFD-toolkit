@@ -135,3 +135,51 @@ Accuracy:    0.924
 Sensitivity: 1.000
 Specificity: 0.871
 
+Model: mistralai/devstral-small
+Temperature: 0
+Accuracy:    0.903
+Sensitivity: 1.000
+Specificity: 0.835
+
+Model: mistralai/devstral-medium
+Temperature: 0
+Accuracy:    0.938
+Sensitivity: 0.983
+Specificity: 0.906
+
+Model: mistralai/mistral-medium-3.1
+Temperature: 0
+Accuracy:    0.924
+Sensitivity: 0.983
+Specificity: 0.882
+
+Model: qwen/qwen3-235b-a22b-2507
+Temperature: 0
+Accuracy:    0.896
+Sensitivity: 0.966
+Specificity: 0.847
+
+Model: meta-llama/llama-4-maverick
+Temperature: 0
+Accuracy:    0.847
+Sensitivity: 0.949
+Specificity: 0.776
+
+Model: mistralai/mistral-small-24b-instruct-2501
+Temperature: 0
+Accuracy:    0.903
+Sensitivity: 1.000
+Specificity: 0.835
+
+Model: mistralai/mistral-large-2411
+Temperature: 0
+Accuracy:    0.924
+Sensitivity: 0.983
+Specificity: 0.882
+
+Model: google/gemma-3-4b-it
+Temperature: 0
+Accuracy:    0.833
+Sensitivity: 0.780
+Specificity: 0.871
+
