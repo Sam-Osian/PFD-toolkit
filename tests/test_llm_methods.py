@@ -3,6 +3,7 @@ import types
 import pytest
 import backoff
 import time
+from pydantic import BaseModel
 
 # Provide a minimal openai stub before importing LLM
 class DummyClient:
@@ -38,7 +39,7 @@ sys.modules['openai'] = dummy_openai
 import importlib
 import pfd_toolkit.llm as llm_module
 importlib.reload(llm_module)
-from pfd_toolkit.llm import LLM
+from pfd_toolkit.llm import LLM, _strip_json_markdown
 
 
 def test_generate_sequential(monkeypatch):
@@ -77,6 +78,45 @@ def test_generate_parallel(monkeypatch):
 
     results = llm.generate(["a", "b", "c"], max_workers=3)
     assert results == ["A", "B", "C"]
+
+
+def test_generate_markdown_wrapped_json(monkeypatch):
+    """Responses wrapped in markdown code fences should be parsed correctly."""
+
+    class TopicMatch(BaseModel):
+        matches_topic: str
+
+    llm = LLM(api_key="test")
+
+    def fake_parse(**kwargs):
+        content = "```json\n{\n  \"matches_topic\": \"Yes\"\n}\n```"
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(message=types.SimpleNamespace(content=content))
+            ]
+        )
+
+    monkeypatch.setattr(llm, "_parse_with_backoff", fake_parse)
+
+    result = llm.generate(["prompt"], response_format=TopicMatch)
+    assert result[0].matches_topic == "Yes"
+
+
+@pytest.mark.parametrize(
+    "wrapped",
+    [
+        "```json\n{\"a\":1}\n```",
+        "```JSON\n{\n  \"a\": 1\n}\n```",
+        "text before```json\n{\"a\":1}\n```text after",
+        "\ufeff```json\n{\"a\":1}\n```",
+        "```\n{\"a\":1}\n```",
+    ],
+)
+def test_strip_json_markdown_variants(wrapped):
+    import json
+
+    cleaned = _strip_json_markdown(wrapped)
+    assert json.loads(cleaned) == {"a": 1}
 
 
 def test_parse_with_backoff_retries(monkeypatch):

@@ -4,6 +4,7 @@ import httpx
 import tiktoken
 import logging
 import base64
+import re
 from typing import List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model, ConfigDict
 import pymupdf
@@ -19,6 +20,44 @@ logging.basicConfig(level=logging.INFO, force=True)
 
 # Set the log level for the 'httpx' library to WARNING to reduce verbosity
 logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def _strip_json_markdown(text: str) -> str:
+    """Return ``text`` with any surrounding markdown code fences removed.
+
+    Providers such as OpenRouter occasionally return JSON wrapped in `````"
+    blocks (with or without a ``json`` language hint) which causes
+    ``pydantic`` to raise ``json_invalid`` errors.  This helper takes a very
+    permissive approach: if any triple-backtick block is found, the contents of
+    the first block are returned.  All other fences are stripped as well.  The
+    function also handles stray BOM characters or spaces around the fences.
+    """
+
+    text = (text or "").strip().lstrip("\ufeff")
+    if not text:
+        return text
+
+    if "```" not in text:
+        return text
+
+    # Split on fences and grab the first non-empty chunk after the opening
+    # fence.  This avoids fragile regular expressions when providers add extra
+    # newlines or spaces.
+    parts = text.split("```")
+    if len(parts) < 3:
+        # Something odd – drop all fences just in case
+        return text.replace("```", "").strip()
+
+    # parts[1] may contain a language spec like ``json``; remove the first word
+    inner = parts[1]
+    inner = re.sub(r"^json\s*", "", inner, flags=re.IGNORECASE)
+    cleaned = inner.strip()
+
+    if cleaned:
+        return cleaned
+
+    # Fallback: remove all fences globally
+    return text.replace("```", "").strip()
 
 
 class LLM:
@@ -282,8 +321,10 @@ class LLM:
                             response_format=response_format,
                             **({"seed": self.seed} if self.seed is not None else {}),
                         )
+                        raw = resp.choices[0].message.content
+                        cleaned = _strip_json_markdown(raw)
                         validated = response_format.model_validate_json(
-                            resp.choices[0].message.content,
+                            cleaned,
                             strict=True,
                         )
                         return idx, validated
