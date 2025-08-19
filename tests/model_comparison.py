@@ -3,7 +3,7 @@
 This script reads report sections and ground-truth labels directly from
 ``ons_replication/ONS_master_spreadsheet.xlsx`` and measures the accuracy,
 sensitivity, and specificity for several LLM models. Results are written to
-``model_comparison.txt``.
+``model_comparison.csv``.
 """
 
 from __future__ import annotations
@@ -79,9 +79,9 @@ models = [
     {"name": "gpt-5-mini", "temperature": 1},
     {"name": "gpt-5-nano", "temperature": 1},
     {"name": "o4-mini", "temperature": 1},
-    
-    # OPENROUTER API MODELS
+    {"name": "o3", "temperature": 1},
 
+    # OPENROUTER MISTRAL MODELS
     {
         "name": "mistralai/devstral-small",
         "temperature": 0,
@@ -94,7 +94,6 @@ models = [
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
     {
         "name": "mistralai/mistral-medium-3.1",
         "temperature": 0,
@@ -113,6 +112,8 @@ models = [
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
+
+    # OPENROUTER OTHER MODELS
     {
         "name": "google/gemma-3-4b-it",
         "temperature": 0,
@@ -125,162 +126,156 @@ models = [
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
-    # {
-    #     "name": "deepseek/deepseek-r1-0528-qwen3-8b:free",
-    #     "temperature": 0,
-    #     "base_url": OPENROUTER_URL,
-    #     "api_key": OPENROUTER_KEY,
-    # },
-    
     {
         "name": "google/gemini-2.5-flash",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
     {
         "name": "google/gemini-2.0-flash-001",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
     {
         "name": "deepseek/deepseek-chat-v3-0324",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
     {
         "name": "moonshotai/kimi-k2",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
-    # {
-    #     "name": "openai/gpt-oss-120b",
-    #     "temperature": 1,
-    #     "base_url": OPENROUTER_URL,
-    #     "api_key": OPENROUTER_KEY,
-    # },
-    
     {
         "name": "qwen/qwen3-235b-a22b-2507",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
     {
         "name": "meta-llama/llama-4-maverick",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
-    
-    # Local Ollama models (all quantised)
     {
-        "name": "gemma3:12b", 
+        "name": "x-ai/grok-3-mini",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "x-ai/grok-4",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "x-ai/grok-3",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+
+
+    # Mistral models
+    {
+        "name": "mistral-nemo:12b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "gemma2:27b", 
+        "name": "mistral-small:22b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "qwen3:30b", 
+        "name": "mistral-small:24b",
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+
+    # Local models from other providers
+    {
+        "name": "gemma3:12b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "llava:34b", 
+        "name": "gemma3:27b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "gemma3:27b", 
+        "name": "gemma2:27b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "phi4:14b", 
+        "name": "qwen3:32b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "llama3:70b", 
+        "name": "qwen3:30b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "qwen3:32b", 
+        "name": "qwen2.5:72b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "mistral-nemo:12b", 
+        "name": "qwen2.5:32b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "qwen2.5:72b", 
+        "name": "llava:34b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "qwen2.5:32b", 
+        "name": "phi4:14b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
     {
-        "name": "mistral-small:22b", 
+        "name": "llama3:70b",
         "temperature": 0,
         "base_url": "http://localhost:11434/v1",
         "api_key": "ollama",
         "timeout": 10**9,
      },
-    {
-        "name": "mistral-small:24b", 
-        "temperature": 0,
-        "base_url": "http://localhost:11434/v1",
-        "api_key": "ollama",
-        "timeout": 10**9,
-     },
-    # {
-    #     "name": "llama4:16x17b", 
-    #     "temperature": 0,
-    #     "base_url": "http://localhost:11434/v1",
-    #     "api_key": "ollama",
-    #     "timeout": 10**9,
-    #  },
 ]
 
 user_query = """
@@ -292,15 +287,15 @@ mention of being "in Year 10", etc.
 # ---------------------------------------------------------------------
 # 3. Prepare output file and determine models to run
 # ---------------------------------------------------------------------
-out_path = Path(__file__).resolve().parent / "model_comparison.txt"
+out_path = Path(__file__).resolve().parent / "model_comparison.csv"
 
 # Determine which models have already been tested
-existing_models: set[str] = set()
 if out_path.exists():
-    with out_path.open("r", encoding="utf-8") as fh:
-        for line in fh:
-            if line.startswith("Model:"):
-                existing_models.add(line.split(":", 1)[1].strip())
+    results_df = pd.read_csv(out_path)
+else:
+    results_df = pd.DataFrame(columns=["model", "accuracy", "sensitivity", "specificity"])
+
+existing_models: set[str] = set(results_df["model"].astype(str))
 
 # Filter models to only those not yet evaluated
 models_to_run = [spec for spec in models if spec["name"] not in existing_models]
@@ -308,58 +303,69 @@ if not models_to_run:
     print("All models already tested. Nothing to do.")
     raise SystemExit
 
-with out_path.open("a", encoding="utf-8") as fh:
-    for spec in models_to_run:
-        model = spec["name"]
-        temp = spec["temperature"]
-        print(f"Testing model: {model}")
+for spec in models_to_run:
+    model = spec["name"]
+    temp = spec["temperature"]
+    print(f"Testing model: {model}")
 
-        llm_kwargs = { 
-            "api_key": spec.get("api_key", os.getenv("OPENAI_API_KEY")),
-            "max_workers": 8,
-            "model": model,
-            "seed": 12345,
-            "timeout": spec.get("timeout", 20),
-            "temperature": 1 if model.startswith("gpt-5") else temp,
-        }
+    llm_kwargs = {
+        "api_key": spec.get("api_key", os.getenv("OPENAI_API_KEY")),
+        "max_workers": 8,
+        "model": model,
+        "seed": 12345,
+        "timeout": spec.get("timeout", 20),
+        "temperature": 1 if model.startswith("gpt-5") else temp,
+    }
 
-        if "base_url" in spec:
-            llm_kwargs["base_url"] = spec["base_url"]
+    if "base_url" in spec:
+        llm_kwargs["base_url"] = spec["base_url"]
 
-        llm_client = LLM(**llm_kwargs)
+    llm_client = LLM(**llm_kwargs)
 
-        screener = Screener(
-            llm=llm_client,
-            reports=reports,
-            include_investigation=True,
-            include_circumstances=True,
-            include_concerns=True,
-        )
+    screener = Screener(
+        llm=llm_client,
+        reports=reports,
+        include_investigation=True,
+        include_circumstances=True,
+        include_concerns=True,
+    )
 
-        classified = screener.screen_reports(
-            search_query=user_query,
-            filter_df=False,
-            result_col_name="model_pred",
-        )
+    classified = screener.screen_reports(
+        search_query=user_query,
+        filter_df=False,
+        result_col_name="model_pred",
+    )
 
-        pred = classified["model_pred"].astype(bool)
-        truth = classified["consensus"].astype(bool)
+    pred = classified["model_pred"].astype(bool)
+    truth = classified["consensus"].astype(bool)
 
-        tp = (pred & truth).sum()
-        tn = ((~pred) & (~truth)).sum()
-        fp = (pred & ~truth).sum()
-        fn = ((~pred) & truth).sum()
+    tp = (pred & truth).sum()
+    tn = ((~pred) & (~truth)).sum()
+    fp = (pred & ~truth).sum()
+    fn = ((~pred) & truth).sum()
 
-        total = tp + tn + fp + fn
-        accuracy = (tp + tn) / total if total else float("nan")
-        sensitivity = tp / (tp + fn) if (tp + fn) else float("nan")
-        specificity = tn / (tn + fp) if (tn + fp) else float("nan")
+    total = tp + tn + fp + fn
+    accuracy = (tp + tn) / total if total else float("nan")
+    sensitivity = tp / (tp + fn) if (tp + fn) else float("nan")
+    specificity = tn / (tn + fp) if (tn + fp) else float("nan")
 
-        fh.write(f"Model: {model}\n")
-        fh.write(f"Temperature: {temp}\n")
-        fh.write(f"Accuracy:    {accuracy:.3f}\n")
-        fh.write(f"Sensitivity: {sensitivity:.3f}\n")
-        fh.write(f"Specificity: {specificity:.3f}\n")
-        fh.write("\n")
-        fh.flush()
+    results_df = pd.concat(
+        [
+            results_df,
+            pd.DataFrame(
+                [
+                    {
+                        "model": model,
+                        "accuracy": accuracy,
+                        "sensitivity": sensitivity,
+                        "specificity": specificity,
+                    }
+                ]
+            ),
+        ],
+        ignore_index=True,
+    )
+
+    results_df.to_csv(out_path, index=False)
+    with out_path.open("r+") as fh:
         os.fsync(fh.fileno())
