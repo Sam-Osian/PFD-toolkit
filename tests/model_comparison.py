@@ -61,11 +61,16 @@ print(f"Loaded {len(reports)} reports from ONS spreadsheet.")
 # ---------------------------------------------------------------------
 load_dotenv(Path(__file__).resolve().parent.parent / "api.env")
 
+# Settings for OpenRouter models
+OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_URL = "https://openrouter.ai/api/v1"
+
 # List of models and the temperature values to use for each.
 # GPT-5 models do not support a custom temperature parameter, so while a
 # default value is recorded here for completeness, it is not passed to the
 # client when initialising those models.
 models = [
+    # OPENAI API MODELS
     {"name": "gpt-4.1", "temperature": 0},
     {"name": "gpt-4o", "temperature": 0},
     {"name": "gpt-4.1-mini", "temperature": 0},
@@ -74,6 +79,79 @@ models = [
     {"name": "gpt-5-mini", "temperature": 1},
     {"name": "gpt-5-nano", "temperature": 1},
     {"name": "o4-mini", "temperature": 1},
+    
+    # OPENROUTER API MODELS
+    {
+        "name": "openai/gpt-oss-20b",
+        "temperature": 1,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    # {
+    #     "name": "tngtech/deepseek-r1t2-chimera:free",
+    #     "temperature": 0,
+    #     "base_url": OPENROUTER_URL,
+    #     "api_key": OPENROUTER_KEY,
+    # },
+    
+    # {
+    #     "name": "deepseek/deepseek-r1-0528-qwen3-8b:free",
+    #     "temperature": 0,
+    #     "base_url": OPENROUTER_URL,
+    #     "api_key": OPENROUTER_KEY,
+    # },
+    
+    {
+        "name": "google/gemini-2.5-flash",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    {
+        "name": "google/gemini-2.0-flash-001",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    {
+        "name": "deepseek/deepseek-chat-v3-0324",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    {
+        "name": "moonshotai/kimi-k2",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    # {
+    #     "name": "openai/gpt-oss-120b",
+    #     "temperature": 1,
+    #     "base_url": OPENROUTER_URL,
+    #     "api_key": OPENROUTER_KEY,
+    # },
+    
+    {
+        "name": "qwen/qwen3-235b-a22b-2507",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    {
+        "name": "meta-llama/llama-4-maverick",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    
+    # Local Ollama models (all quantised)
     {
         "name": "gemma3:12b", 
         "temperature": 0,
@@ -81,13 +159,6 @@ models = [
         "api_key": "ollama",
         "timeout": 10**9,
      },
-    # {
-    #     "name": "gpt-oss:20b", 
-    #     "temperature": 0,
-    #     "base_url": "http://localhost:11434/v1",
-    #     "api_key": "ollama",
-    #     "timeout": 10**9,
-    #  },
     {
         "name": "gemma2:27b", 
         "temperature": 0,
@@ -137,6 +208,48 @@ models = [
         "api_key": "ollama",
         "timeout": 10**9,
      },
+    {
+        "name": "mistral-nemo:12b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    {
+        "name": "qwen2.5:72b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    {
+        "name": "qwen2.5:32b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    {
+        "name": "mistral-small:22b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    {
+        "name": "mistral-small:24b", 
+        "temperature": 0,
+        "base_url": "http://localhost:11434/v1",
+        "api_key": "ollama",
+        "timeout": 10**9,
+     },
+    # {
+    #     "name": "llama4:16x17b", 
+    #     "temperature": 0,
+    #     "base_url": "http://localhost:11434/v1",
+    #     "api_key": "ollama",
+    #     "timeout": 10**9,
+    #  },
 ]
 
 user_query = """
@@ -146,7 +259,7 @@ mention of being "in Year 10", etc.
 """
 
 # ---------------------------------------------------------------------
-# 3. Run screener for each model and compute metrics
+# 3. Prepare output file and determine models to run
 # ---------------------------------------------------------------------
 out_path = Path(__file__).resolve().parent / "model_comparison.txt"
 
@@ -170,9 +283,9 @@ with out_path.open("a", encoding="utf-8") as fh:
         temp = spec["temperature"]
         print(f"Testing model: {model}")
 
-        llm_kwargs = {
+        llm_kwargs = { 
             "api_key": spec.get("api_key", os.getenv("OPENAI_API_KEY")),
-            "max_workers": 10,
+            "max_workers": 8,
             "model": model,
             "seed": 12345,
             "timeout": spec.get("timeout", 20),
@@ -217,4 +330,5 @@ with out_path.open("a", encoding="utf-8") as fh:
         fh.write(f"Sensitivity: {sensitivity:.3f}\n")
         fh.write(f"Specificity: {specificity:.3f}\n")
         fh.write("\n")
-
+        fh.flush()
+        os.fsync(fh.fileno())
