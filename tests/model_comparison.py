@@ -101,13 +101,13 @@ models = [
         "api_key": OPENROUTER_KEY,
     },
     {
-        "name": "mistralai/mistral-small-24b-instruct-2501",
+        "name": "mistralai/mistral-large-2411",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
     {
-        "name": "mistralai/mistral-large-2411",
+        "name": "mistralai/codestral-2508",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
@@ -116,12 +116,6 @@ models = [
     # OPENROUTER OTHER MODELS
     {
         "name": "google/gemma-3-4b-it",
-        "temperature": 0,
-        "base_url": OPENROUTER_URL,
-        "api_key": OPENROUTER_KEY,
-    },
-    {
-        "name": "google/gemma-3-12b-it",
         "temperature": 0,
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
@@ -180,6 +174,19 @@ models = [
         "base_url": OPENROUTER_URL,
         "api_key": OPENROUTER_KEY,
     },
+    {
+        "name": "google/gemini-2.5-pro-preview",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+    {
+        "name": "cohere/command-a",
+        "temperature": 0,
+        "base_url": OPENROUTER_URL,
+        "api_key": OPENROUTER_KEY,
+    },
+
 
 
     # Mistral models
