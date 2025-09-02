@@ -57,3 +57,25 @@ def test_apply_pdf_fallback_updates_fields():
     flags = {'investigation': True}
     extractor.apply_pdf_fallback(pdf_text, fields, flags)
     assert fields['investigation'].startswith('some investigation text')
+
+
+def test_get_pdf_link_new_structure():
+    cfg = ScraperConfig()
+    extractor = PdfExtractor(cfg, timeout=1, not_found_text=GeneralConfig.NOT_FOUND_TEXT)
+    html = (
+        '<div data-wp-interactive="core/file" class="wp-block-file">'
+        '<a href="https://example.com/new.pdf" class="wp-block-file__button">Download</a>'
+        '</div>'
+    )
+    soup = BeautifulSoup(html, 'html.parser')
+    assert extractor.get_pdf_link(soup) == 'https://example.com/new.pdf'
+
+
+def test_get_pdf_link_old_structure():
+    cfg = ScraperConfig()
+    extractor = PdfExtractor(cfg, timeout=1, not_found_text=GeneralConfig.NOT_FOUND_TEXT)
+    html = (
+        '<a class="govuk-button" href="https://example.com/old.pdf">Download PDF</a>'
+    )
+    soup = BeautifulSoup(html, 'html.parser')
+    assert extractor.get_pdf_link(soup) == 'https://example.com/old.pdf'

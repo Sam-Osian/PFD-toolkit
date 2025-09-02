@@ -108,13 +108,32 @@ class PdfExtractor:
     # Basic helpers
     # ------------------------------------------------------------------
     def get_pdf_link(self, soup: BeautifulSoup) -> str | None:
-        """Grab the first download link on the page"""
-        pdf_links = [
-            a["href"]
-            for a in soup.find_all("a", class_="govuk-button")
-            if a.get("href")
-        ]
-        return pdf_links[0] if pdf_links else None
+        """Grab the first download link on the page."""
+        # Newer reports use a ``wp-block-file`` container with a download button
+        pdf_link = None
+        block = soup.find("div", class_="wp-block-file")
+        if block:
+            anchor = block.find(
+                "a",
+                href=True,
+                class_="wp-block-file__button",
+            )
+            if not anchor:
+                anchor = block.find("a", href=True)
+            if anchor:
+                pdf_link = anchor.get("href")
+
+        # Fallback to the older GOV.UK button format
+        if not pdf_link:
+            pdf_link = next(
+                (
+                    a["href"]
+                    for a in soup.find_all("a", class_="govuk-button")
+                    if a.get("href")
+                ),
+                None,
+            )
+        return pdf_link
 
     def fetch_pdf_bytes(self, report_url: str) -> bytes | None:
         """Download the report page and locate the PDF link"""
@@ -123,10 +142,7 @@ class PdfExtractor:
                 self.cfg.session.get(report_url, timeout=self.timeout).content,
                 "html.parser",
             )
-            pdf_link = next(
-                (a["href"] for a in soup.find_all("a", class_="govuk-button") if a.get("href")),
-                None,
-            )
+            pdf_link = self.get_pdf_link(soup)
         except Exception:
             return None
 
