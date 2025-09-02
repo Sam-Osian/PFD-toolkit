@@ -9,6 +9,9 @@ description: |
 Welcome to the project changelog. All notable changes to this project will be documented below.
 
 
+### 0.3.7 - <small>2025-09-02</small>
+* In August 2025, the judiciary.uk website made some subtle changes that broke PFD Toolkit's scraper, meaning that we were unable to collect newly published reports. This issue has now been resolved, and all previously missed reports have now been added.
+
 ### 0.3.6 - <small>2025-08-03</small>
 * Improve reliability and performance of the Scraper and Cleaner modules. 
 * The Cleaner module now standardises each report 'area' to one of 77 official jurisdictions (e.g. "Liverpool and the Wirral"), so minor variations and typos are automatically corrected for consistent regional filtering.
