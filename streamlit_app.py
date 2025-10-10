@@ -42,7 +42,6 @@ def _init_session_state() -> None:
         "theme_model_schema": None,
         "llm_client": None,
         "extractor": None,
-        "active_view": "Overview",
         "extractor_source_signature": None,
         "extractor_verbose": False,
         "feature_grid": None,
@@ -317,7 +316,7 @@ def _build_sidebar() -> None:
 # Main layout helpers
 # ---------------------------------------------------------------------------
 
-def _render_overview() -> None:
+def _render_load_reports_tab() -> None:
     st.title("PFD Toolkit AI Workbench")
     st.markdown(
         """
@@ -392,7 +391,10 @@ def _render_screener_tab() -> None:
         if not search_query.strip():
             st.error("Describe what the Screener should look for.")
             return
+        progress_placeholder = st.empty()
+        progress_bar = progress_placeholder.progress(0)
         try:
+            progress_bar.progress(10)
             screener = Screener(
                 llm=llm_client,
                 reports=reports_df,
@@ -405,17 +407,28 @@ def _render_screener_tab() -> None:
                 include_circumstances=True,
                 include_concerns=True,
             )
-            result_df = screener.screen_reports(
-                search_query=search_query or None,
-                filter_df=filter_df,
-                result_col_name=result_col_name or "matches_query",
-                produce_spans=produce_spans,
-                drop_spans=drop_spans,
-            )
+            progress_bar.progress(25)
+            with st.spinner("Running the screener..."):
+                result_df = screener.screen_reports(
+                    search_query=search_query or None,
+                    filter_df=filter_df,
+                    result_col_name=result_col_name or "matches_query",
+                    produce_spans=produce_spans,
+                    drop_spans=drop_spans,
+                )
+            progress_bar.progress(100)
             st.session_state["screener_result"] = result_df
+            st.session_state["extractor"] = None
+            st.session_state["extractor_source_signature"] = None
+            st.session_state["extractor_result"] = None
+            st.session_state["summary_result"] = None
+            st.session_state["token_estimate"] = None
+            st.session_state["theme_model_schema"] = None
             st.success("Screening complete. Review the results below.")
         except Exception as exc:  # pragma: no cover - relies on live API
             st.error(f"Screening failed: {exc}")
+        finally:
+            progress_placeholder.empty()
 
     result_df = st.session_state.get("screener_result")
     if isinstance(result_df, pd.DataFrame):
@@ -449,6 +462,33 @@ def _render_extractor_tab() -> None:
         st.info("Load reports from the sidebar before extracting insights.")
         return
 
+    screened_df = st.session_state.get("screener_result")
+    has_screened_df = isinstance(screened_df, pd.DataFrame) and not screened_df.empty
+
+    if has_screened_df:
+        dataset_label_map = {
+            "Use screened reports": "screened",
+            "Use all loaded reports": "loaded",
+        }
+        dataset_choice = st.radio(
+            "Select the reports to analyse",
+            list(dataset_label_map.keys()),
+            index=0,
+            horizontal=True,
+            key="extractor_dataset_choice",
+        )
+        active_reports_df = screened_df if dataset_label_map[dataset_choice] == "screened" else reports_df
+    else:
+        if isinstance(screened_df, pd.DataFrame) and screened_df.empty:
+            st.warning(
+                "The screener did not retain any reports. Falling back to the loaded dataset."
+            )
+        active_reports_df = reports_df
+
+    st.caption(
+        f"Working with {len(active_reports_df)} report(s) based on the current selection."
+    )
+
     with st.form("extractor_setup_form", enter_to_submit=False):
         st.markdown("#### Initial setup")
         verbose = st.checkbox(
@@ -457,7 +497,7 @@ def _render_extractor_tab() -> None:
         )
         initialise = st.form_submit_button("Initialise extractor", use_container_width=True)
 
-    extractor_signature = (len(reports_df), tuple(reports_df.columns))
+    extractor_signature = (len(active_reports_df), tuple(active_reports_df.columns))
     extractor: Optional[Extractor] = st.session_state.get("extractor")
 
     if (
@@ -469,7 +509,7 @@ def _render_extractor_tab() -> None:
         try:
             extractor = Extractor(
                 llm=llm_client,
-                reports=reports_df,
+                reports=active_reports_df,
                 include_date=True,
                 include_coroner=True,
                 include_area=True,
@@ -566,13 +606,17 @@ def _render_extractor_tab() -> None:
             )
 
         if themes_submitted:
+            progress_placeholder = st.empty()
+            progress_bar = progress_placeholder.progress(0)
             try:
+                progress_bar.progress(10)
                 with st.spinner("Summarising the reports..."):
                     summary_df = extractor.summarise(
                         result_col_name=summary_column or "summary",
                         trim_intensity=trim_labels[trim_choice],
                     )
                     st.session_state["summary_result"] = summary_df
+                progress_bar.progress(55)
 
                 seed_topics: Optional[Any] = None
                 if seed_topics_text.strip():
@@ -585,6 +629,7 @@ def _render_extractor_tab() -> None:
                             if line.strip()
                         ]
 
+                progress_bar.progress(70)
                 with st.spinner("Identifying themes..."):
                     ThemeModel = extractor.discover_themes(
                         warn_exceed=int(warning_threshold),
@@ -595,11 +640,14 @@ def _render_extractor_tab() -> None:
                         seed_topics=seed_topics,
                     )
                 st.session_state["theme_model_schema"] = ThemeModel.model_json_schema()
+                progress_bar.progress(100)
                 st.success(
                     "Theme discovery complete. The schema below can be reused when tagging reports."
                 )
             except Exception as exc:  # pragma: no cover - depends on live API
                 st.error(f"Theme discovery failed: {exc}")
+            finally:
+                progress_placeholder.empty()
 
         summary_df = st.session_state.get("summary_result")
         if isinstance(summary_df, pd.DataFrame) and not summary_df.empty:
@@ -719,24 +767,31 @@ def _render_extractor_tab() -> None:
             )
 
         if extract_submitted:
+            progress_placeholder = st.empty()
+            progress_bar = progress_placeholder.progress(0)
             try:
+                progress_bar.progress(10)
                 feature_model = _build_feature_model_from_grid(feature_grid)
                 target_df = uploaded_df if uploaded_df is not None else None
-                result_df = extractor.extract_features(
-                    reports=target_df,
-                    feature_model=feature_model,
-                    produce_spans=produce_spans,
-                    drop_spans=drop_spans,
-                    force_assign=force_assign,
-                    allow_multiple=allow_multiple,
-                    schema_detail=schema_detail_choice.lower(),  # type: ignore[arg-type]
-                    extra_instructions=extra_instructions or None,
-                    skip_if_present=skip_if_present,
-                )
+                with st.spinner("Extracting structured data..."):
+                    result_df = extractor.extract_features(
+                        reports=target_df,
+                        feature_model=feature_model,
+                        produce_spans=produce_spans,
+                        drop_spans=drop_spans,
+                        force_assign=force_assign,
+                        allow_multiple=allow_multiple,
+                        schema_detail=schema_detail_choice.lower(),  # type: ignore[arg-type]
+                        extra_instructions=extra_instructions or None,
+                        skip_if_present=skip_if_present,
+                    )
+                progress_bar.progress(100)
                 st.session_state["extractor_result"] = result_df
                 st.success("Tagging complete. Review the extracted fields below.")
             except Exception as exc:  # pragma: no cover - depends on live API
                 st.error(f"Extraction failed: {exc}")
+            finally:
+                progress_placeholder.empty()
 
         result_df = st.session_state.get("extractor_result")
         if isinstance(result_df, pd.DataFrame):
@@ -771,7 +826,10 @@ def _render_extractor_tab() -> None:
         )
 
     if tokens_submitted:
+        progress_placeholder = st.empty()
+        progress_bar = progress_placeholder.progress(0)
         try:
+            progress_bar.progress(15)
             token_result = extractor.estimate_tokens(
                 col_name=col_name or None,
                 return_series=return_series,
@@ -783,6 +841,9 @@ def _render_extractor_tab() -> None:
                 st.success(f"Estimated total tokens: {token_result:,}")
         except Exception as exc:  # pragma: no cover - depends on live API
             st.error(f"Token estimation failed: {exc}")
+        finally:
+            progress_bar.progress(100)
+            progress_placeholder.empty()
 
     token_result = st.session_state.get("token_estimate")
     if isinstance(token_result, pd.Series):
@@ -824,26 +885,13 @@ def main() -> None:
 
     _build_sidebar()
 
-    nav_labels = ["Overview", "Screen reports", "Extract insights"]
-    current_label = st.session_state.get("active_view", nav_labels[0])
-    if current_label not in nav_labels:
-        current_label = nav_labels[0]
+    tabs = st.tabs(["Load in reports", "Screen reports", "Extract insights"])
 
-    selected_label = st.radio(
-        "Choose a workspace area",
-        nav_labels,
-        index=nav_labels.index(current_label),
-        horizontal=True,
-        key="active_view",
-    )
-
-    st.markdown("---")
-
-    if selected_label == "Overview":
-        _render_overview()
-    elif selected_label == "Screen reports":
+    with tabs[0]:
+        _render_load_reports_tab()
+    with tabs[1]:
         _render_screener_tab()
-    else:
+    with tabs[2]:
         _render_extractor_tab()
 
 
