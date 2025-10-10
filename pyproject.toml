@@ -41,6 +41,11 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 
+[project.optional-dependencies]
+app = [
+    "streamlit>=1.41.1",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/pfd_toolkit"]
 include = ["src/pfd_toolkit/data/*.csv"]
@@ -64,6 +69,9 @@ dev = [
     "openpyxl>=3.1.5",
     "vl-convert-python>=1.8.0",
     "matplotlib>=3.10.5",
+]
+app = [
+    "streamlit>=1.41.1",
 ]
 
 [project.urls]
