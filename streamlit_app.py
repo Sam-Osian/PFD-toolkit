@@ -41,6 +41,12 @@ def _init_session_state() -> None:
         "token_estimate": None,
         "theme_model_schema": None,
         "llm_client": None,
+        "extractor": None,
+        "active_view": "Overview",
+        "extractor_source_signature": None,
+        "extractor_verbose": False,
+        "feature_grid": None,
+        "extractor_mode": "Discover themes in the reports",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -137,6 +143,50 @@ def _build_feature_model(schema_text: str):
     return create_model(model_name, **fields)
 
 
+def _build_feature_model_from_grid(feature_rows: pd.DataFrame):
+    """Create a ``pydantic`` model from the feature editor grid."""
+
+    if feature_rows.empty:
+        raise ValueError("Please add at least one feature to extract.")
+
+    type_mapping: Dict[str, type] = {
+        "Text": str,
+        "Boolean": bool,
+        "Integer": int,
+        "Decimal": float,
+    }
+
+    fields: Dict[str, Tuple[type, Field]] = {}
+    for row in feature_rows.to_dict(orient="records"):
+        raw_name = str(row.get("Field name", "")).strip()
+        description = str(row.get("Description", "")).strip()
+        type_label = str(row.get("Type", "")).strip()
+
+        if not raw_name:
+            continue
+
+        if type_label not in type_mapping:
+            raise ValueError(f"Select a valid type for '{raw_name}'.")
+
+        if raw_name in fields:
+            raise ValueError(f"Duplicate feature name '{raw_name}'. Each feature must be unique.")
+
+        python_type = type_mapping[type_label]
+        fields[raw_name] = (
+            python_type,
+            Field(
+                ...,
+                description=description,
+                title=raw_name.replace("_", " ").title(),
+            ),
+        )
+
+    if not fields:
+        raise ValueError("Please provide a name and type for each feature you want to extract.")
+
+    return create_model("SelectedFeatures", **fields)
+
+
 def _display_dataframe(df: pd.DataFrame, caption: str) -> None:
     """Render a ``DataFrame`` with a consistent caption."""
     if df is None or df.empty:
@@ -231,6 +281,8 @@ def _build_sidebar() -> None:
             st.session_state["summary_result"] = None
             st.session_state["token_estimate"] = None
             st.session_state["theme_model_schema"] = None
+            st.session_state["extractor"] = None
+            st.session_state["extractor_source_signature"] = None
             st.success(f"Loaded {len(df)} reports into the workspace.")
         except Exception as exc:  # pragma: no cover - UI feedback
             st.error(f"Could not load reports: {exc}")
@@ -296,15 +348,15 @@ def _render_overview() -> None:
 
 
 def _render_screener_tab() -> None:
-    st.subheader("Screener")
+    st.subheader("Screen reports")
     st.markdown(
         """
-        Use the Screener to classify reports against a topic. Provide a clear search query, choose which
-        report fields feed into the prompt, and decide whether to filter the results or append a classification column.
+        Ask the Screener to search every report for a topic or scenario. All report fields are sent to the
+        language model so you only need to describe what you are looking for.
         """
     )
     st.caption(
-        "Example query: *Identify reports relating to medication errors involving care homes.*"
+        "Example: *Find reports describing medication errors in care homes.*"
     )
 
     llm_client: Optional[LLM] = st.session_state.get("llm_client")
@@ -318,55 +370,43 @@ def _render_screener_tab() -> None:
         return
 
     with st.form("screener_form", enter_to_submit=False):
-        st.markdown("#### Configuration")
-        cols = st.columns(4)
-        verbose = cols[0].checkbox("Verbose logging", value=False)
-        include_date = cols[1].checkbox("Include date", value=False)
-        include_coroner = cols[2].checkbox("Include coroner", value=False)
-        include_area = cols[3].checkbox("Include area", value=False)
-
-        cols2 = st.columns(4)
-        include_receiver = cols2[0].checkbox("Include receiver", value=False)
-        include_investigation = cols2[1].checkbox("Include investigation", value=True)
-        include_circumstances = cols2[2].checkbox("Include circumstances", value=True)
-        include_concerns = cols2[3].checkbox("Include concerns", value=True)
-
         st.markdown("#### Screening request")
-        search_query = st.text_input(
-            "Primary search query", placeholder="e.g. Reports mentioning delays in ambulance response times"
+        search_query = st.text_area(
+            "Describe what you want to find",
+            placeholder="e.g. Reports mentioning delays in ambulance response times",
         )
-        user_query = st.text_input(
-            "Deprecated user_query parameter (optional)",
-            help="Only use if you rely on legacy code that still passes 'user_query'.",
-        )
-        cols3 = st.columns(3)
-        filter_df = cols3[0].checkbox("Filter to matches", value=True)
-        result_col_name = cols3[1].text_input("Result column", value="matches_query")
-        produce_spans = cols3[2].checkbox("Return supporting spans", value=False)
-        drop_spans = st.checkbox("Drop spans column from the result", value=False)
+        cols3 = st.columns(2)
+        filter_df = cols3[0].checkbox("Only keep matching reports", value=True)
+        result_col_name = cols3[1].text_input("Name for the match column", value="matches_query")
+
+        with st.expander("Advanced options"):
+            verbose = st.checkbox("Show detailed logs in the terminal", value=False)
+            produce_spans = st.checkbox("Return supporting quotes from the reports", value=False)
+            drop_spans = st.checkbox(
+                "Remove the quotes column from the results", value=False
+            )
 
         submitted = st.form_submit_button("Run Screener", use_container_width=True)
 
     if submitted:
-        if not search_query and not user_query:
-            st.error("Provide at least one of 'search_query' or 'user_query'.")
+        if not search_query.strip():
+            st.error("Describe what the Screener should look for.")
             return
         try:
             screener = Screener(
                 llm=llm_client,
                 reports=reports_df,
                 verbose=verbose,
-                include_date=include_date,
-                include_coroner=include_coroner,
-                include_area=include_area,
-                include_receiver=include_receiver,
-                include_investigation=include_investigation,
-                include_circumstances=include_circumstances,
-                include_concerns=include_concerns,
+                include_date=True,
+                include_coroner=True,
+                include_area=True,
+                include_receiver=True,
+                include_investigation=True,
+                include_circumstances=True,
+                include_concerns=True,
             )
             result_df = screener.screen_reports(
                 search_query=search_query or None,
-                user_query=user_query or None,
                 filter_df=filter_df,
                 result_col_name=result_col_name or "matches_query",
                 produce_spans=produce_spans,
@@ -389,17 +429,14 @@ def _render_screener_tab() -> None:
         )
 
 
+
 def _render_extractor_tab() -> None:
-    st.subheader("Extractor")
+    st.subheader("Extract insights")
     st.markdown(
         """
-        The Extractor turns unstructured reports into tailored datasets. Begin by instantiating an Extractor with the
-        report fields you want to provide, then choose from the available public methods to extract features, summarise,
-        estimate tokens, or discover themes.
+        Use the Extractor to surface new themes automatically or to tag reports with an existing classification scheme.
+        All report fields are sent to the language model for richer context.
         """
-    )
-    st.caption(
-        "Tip: start with `summarise()` to generate concise summaries, then run `discover_themes()` to build a theme model that feeds into `extract_features()`."
     )
 
     llm_client: Optional[LLM] = st.session_state.get("llm_client")
@@ -409,173 +446,329 @@ def _render_extractor_tab() -> None:
         st.warning("Add a valid API key in the sidebar to enable the Extractor.")
         return
     if reports_df.empty:
-        st.info("Load reports from the sidebar before extracting features.")
+        st.info("Load reports from the sidebar before extracting insights.")
         return
 
     with st.form("extractor_setup_form", enter_to_submit=False):
-        st.markdown("#### Initial configuration")
-        cols = st.columns(4)
-        include_date = cols[0].checkbox("Include date", value=False)
-        include_coroner = cols[1].checkbox("Include coroner", value=False)
-        include_area = cols[2].checkbox("Include area", value=False)
-        include_receiver = cols[3].checkbox("Include receiver", value=False)
-
-        cols2 = st.columns(4)
-        include_investigation = cols2[0].checkbox("Include investigation", value=True)
-        include_circumstances = cols2[1].checkbox("Include circumstances", value=True)
-        include_concerns = cols2[2].checkbox("Include concerns", value=True)
-        verbose = cols2[3].checkbox("Verbose logging", value=False)
-
+        st.markdown("#### Initial setup")
+        verbose = st.checkbox(
+            "Show detailed logs in the terminal",
+            value=bool(st.session_state.get("extractor_verbose", False)),
+        )
         initialise = st.form_submit_button("Initialise extractor", use_container_width=True)
 
-    if initialise or "extractor" not in st.session_state:
+    extractor_signature = (len(reports_df), tuple(reports_df.columns))
+    extractor: Optional[Extractor] = st.session_state.get("extractor")
+
+    if (
+        initialise
+        or extractor is None
+        or st.session_state.get("extractor_source_signature") != extractor_signature
+        or st.session_state.get("extractor_verbose") != verbose
+    ):
         try:
-            st.session_state["extractor"] = Extractor(
+            extractor = Extractor(
                 llm=llm_client,
                 reports=reports_df,
-                include_date=include_date,
-                include_coroner=include_coroner,
-                include_area=include_area,
-                include_receiver=include_receiver,
-                include_investigation=include_investigation,
-                include_circumstances=include_circumstances,
-                include_concerns=include_concerns,
+                include_date=True,
+                include_coroner=True,
+                include_area=True,
+                include_receiver=True,
+                include_investigation=True,
+                include_circumstances=True,
+                include_concerns=True,
                 verbose=verbose,
             )
+            st.session_state["extractor"] = extractor
+            st.session_state["extractor_source_signature"] = extractor_signature
+            st.session_state["extractor_verbose"] = verbose
             if initialise:
-                st.success("Extractor initialised with the chosen settings.")
+                st.success("Extractor initialised with the loaded reports.")
         except Exception as exc:  # pragma: no cover - depends on live API
             st.error(f"Could not initialise extractor: {exc}")
             return
 
-    extractor: Optional[Extractor] = st.session_state.get("extractor")
+    extractor = st.session_state.get("extractor")
     if extractor is None:
         return
 
     st.markdown("---")
-    st.markdown("#### extract_features")
-    st.write(
-        "Define the features you want to capture using JSON (field name ➜ type, description). "
-        "Supported types: string, bool, int, float. Set `required` to false to keep optional fields."
-    )
-    default_schema = json.dumps(
-        {
-            "risk_factor": {
-                "type": "string",
-                "description": "Primary risk factor contributing to the death.",
-            },
-            "is_healthcare": {
-                "type": "bool",
-                "description": "True if the report involves a healthcare setting.",
-            },
-        },
-        indent=2,
+
+    analysis_mode = st.radio(
+        "How would you like to work with the reports?",
+        ("Discover themes in the reports", "Tag reports with existing themes"),
+        horizontal=True,
+        key="extractor_mode",
     )
 
-    with st.form("extract_features_form", enter_to_submit=False):
-        schema_text = st.text_area("Feature schema (JSON)", value=default_schema, height=220)
-        use_loaded = st.radio(
-            "Reports to process",
-            options=("Use loaded reports", "Upload CSV"),
-            index=0,
-            help="`extract_features` also accepts a custom DataFrame per call.",
+    if analysis_mode == "Discover themes in the reports":
+        st.markdown("#### Discover themes in the reports")
+        st.write(
+            "We will summarise each report and then ask the model to surface recurring themes."
         )
-        uploaded_df: Optional[pd.DataFrame] = None
-        if use_loaded == "Upload CSV":
-            uploaded_file = st.file_uploader("Upload CSV file", type="csv")
-            if uploaded_file is not None:
-                uploaded_df = pd.read_csv(uploaded_file)
-        produce_spans = st.checkbox("Return supporting spans", value=False)
-        drop_spans = st.checkbox("Drop spans columns on return", value=False)
-        force_assign = st.checkbox("Force assign values", value=False)
-        allow_multiple = st.checkbox("Allow multiple categories per feature", value=False)
-        schema_detail = st.selectbox("Schema detail", options=["minimal", "full"], index=0)
-        extra_instructions = st.text_area("Extra prompt instructions", placeholder="Add any additional guidance for the LLM.")
-        skip_if_present = st.checkbox(
-            "Skip rows that already contain feature values", value=True
-        )
-        extract_submitted = st.form_submit_button("Run extract_features", use_container_width=True)
 
-    if extract_submitted:
-        try:
-            feature_model = _build_feature_model(schema_text)
-            target_df = uploaded_df if uploaded_df is not None else None
-            result_df = extractor.extract_features(
-                reports=target_df,
-                feature_model=feature_model,
-                produce_spans=produce_spans,
-                drop_spans=drop_spans,
-                force_assign=force_assign,
-                allow_multiple=allow_multiple,
-                schema_detail=schema_detail,  # type: ignore[arg-type]
-                extra_instructions=extra_instructions or None,
-                skip_if_present=skip_if_present,
+        with st.form("discover_themes_form", enter_to_submit=False):
+            summary_column = st.text_input(
+                "Name for the summary column",
+                value=extractor.summary_col or "summary",
             )
-            st.session_state["extractor_result"] = result_df
-            st.success("Feature extraction complete.")
-        except Exception as exc:  # pragma: no cover - depends on live API
-            st.error(f"Extraction failed: {exc}")
+            extra_theme_instructions = st.text_area(
+                "Add any extra guidance for the themes (optional)",
+                placeholder="e.g. Focus on system-level safety issues.",
+            )
+            seed_topics_text = st.text_area(
+                "Seed topics (optional)",
+                placeholder="Separate each topic on a new line or provide a JSON list.",
+            )
 
-    result_df = st.session_state.get("extractor_result")
-    if isinstance(result_df, pd.DataFrame):
-        _display_dataframe(result_df, "Extractor output")
-        st.download_button(
-            "Download extracted features as CSV",
-            data=result_df.to_csv(index=False).encode("utf-8"),
-            file_name="pfd_extracted_features.csv",
-            mime="text/csv",
+            with st.expander("Advanced options"):
+                trim_labels = {
+                    "Detailed paragraph": "low",
+                    "Concise summary": "medium",
+                    "Short summary": "high",
+                    "One or two sentences": "very high",
+                }
+                trim_choice = st.selectbox(
+                    "How concise should the summaries be?",
+                    list(trim_labels.keys()),
+                    index=1,
+                )
+                warning_threshold = st.number_input(
+                    "Warn if the token estimate exceeds",
+                    min_value=1000,
+                    value=100000,
+                    step=1000,
+                )
+                error_threshold = st.number_input(
+                    "Stop if the token estimate exceeds",
+                    min_value=1000,
+                    value=500000,
+                    step=1000,
+                )
+                max_col, min_col = st.columns(2)
+                max_themes = max_col.number_input(
+                    "Maximum number of themes",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Leave as 0 to let the model decide.",
+                )
+                min_themes = min_col.number_input(
+                    "Minimum number of themes",
+                    min_value=0,
+                    value=0,
+                    step=1,
+                    help="Leave as 0 to let the model decide.",
+                )
+
+            themes_submitted = st.form_submit_button(
+                "Discover themes", use_container_width=True
+            )
+
+        if themes_submitted:
+            try:
+                with st.spinner("Summarising the reports..."):
+                    summary_df = extractor.summarise(
+                        result_col_name=summary_column or "summary",
+                        trim_intensity=trim_labels[trim_choice],
+                    )
+                    st.session_state["summary_result"] = summary_df
+
+                seed_topics: Optional[Any] = None
+                if seed_topics_text.strip():
+                    try:
+                        seed_topics = json.loads(seed_topics_text)
+                    except json.JSONDecodeError:
+                        seed_topics = [
+                            line.strip()
+                            for line in seed_topics_text.splitlines()
+                            if line.strip()
+                        ]
+
+                with st.spinner("Identifying themes..."):
+                    ThemeModel = extractor.discover_themes(
+                        warn_exceed=int(warning_threshold),
+                        error_exceed=int(error_threshold),
+                        max_themes=int(max_themes) or None,
+                        min_themes=int(min_themes) or None,
+                        extra_instructions=extra_theme_instructions or None,
+                        seed_topics=seed_topics,
+                    )
+                st.session_state["theme_model_schema"] = ThemeModel.model_json_schema()
+                st.success(
+                    "Theme discovery complete. The schema below can be reused when tagging reports."
+                )
+            except Exception as exc:  # pragma: no cover - depends on live API
+                st.error(f"Theme discovery failed: {exc}")
+
+        summary_df = st.session_state.get("summary_result")
+        if isinstance(summary_df, pd.DataFrame) and not summary_df.empty:
+            _display_dataframe(summary_df, "Report summaries")
+            st.download_button(
+                "Download summaries as CSV",
+                data=summary_df.to_csv(index=False).encode("utf-8"),
+                file_name="pfd_summaries.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+        theme_schema = st.session_state.get("theme_model_schema")
+        if theme_schema:
+            st.markdown("##### Theme schema")
+            st.json(theme_schema)
+
+    else:
+        st.markdown("#### Tag reports with existing themes")
+        st.write(
+            "Describe the fields you want to capture and the Extractor will populate them for each report."
+        )
+
+        default_grid = st.session_state.get("feature_grid")
+        if default_grid is None:
+            default_grid = pd.DataFrame(
+                [
+                    {
+                        "Field name": "risk_factor",
+                        "Description": "Primary risk factor contributing to the death.",
+                        "Type": "Text",
+                    },
+                    {
+                        "Field name": "is_healthcare",
+                        "Description": "True if the report involves a healthcare setting.",
+                        "Type": "Boolean",
+                    },
+                ]
+            )
+
+        feature_grid = st.data_editor(
+            default_grid,
+            num_rows="dynamic",
             use_container_width=True,
+            column_config={
+                "Field name": st.column_config.TextColumn(
+                    "Field name",
+                    help="This becomes the column name in the output.",
+                ),
+                "Description": st.column_config.TextColumn(
+                    "Description",
+                    help="Optional guidance for the language model.",
+                ),
+                "Type": st.column_config.SelectboxColumn(
+                    "Type",
+                    options=["Text", "Boolean", "Integer", "Decimal"],
+                    help="Choose the data type the extractor should return.",
+                ),
+            },
+            key="feature_editor",
         )
+        st.session_state["feature_grid"] = feature_grid
 
-    st.markdown("---")
-    st.markdown("#### summarise")
-    st.write(
-        "Generate concise summaries of each report. Choose how aggressively to trim details and optionally append your own instructions."
-    )
-
-    with st.form("summarise_form", enter_to_submit=False):
-        result_col_name = st.text_input("Summary column name", value="summary")
-        trim_intensity = st.selectbox(
-            "Trim intensity",
-            options=["low", "medium", "high", "very high"],
-            index=1,
-        )
-        extra_instructions = st.text_area(
-            "Extra summary instructions",
-            placeholder="e.g. Highlight safeguarding lessons learned.",
-        )
-        summarise_submitted = st.form_submit_button("Run summarise", use_container_width=True)
-
-    if summarise_submitted:
-        try:
-            summary_df = extractor.summarise(
-                result_col_name=result_col_name or "summary",
-                trim_intensity=trim_intensity,  # type: ignore[arg-type]
-                extra_instructions=extra_instructions or None,
+        uploaded_df: Optional[pd.DataFrame] = None
+        with st.form("extract_features_form", enter_to_submit=False):
+            dataset_choice = st.radio(
+                "Which reports should be processed?",
+                ("Use the loaded reports", "Upload a CSV"),
+                index=0,
             )
-            st.session_state["summary_result"] = summary_df
-            st.success("Summaries generated.")
-        except Exception as exc:  # pragma: no cover - depends on live API
-            st.error(f"Summarisation failed: {exc}")
+            if dataset_choice == "Upload a CSV":
+                uploaded_file = st.file_uploader(
+                    "Upload a CSV file", type="csv", accept_multiple_files=False
+                )
+                if uploaded_file is not None:
+                    uploaded_df = pd.read_csv(uploaded_file)
 
-    summary_df = st.session_state.get("summary_result")
-    if isinstance(summary_df, pd.DataFrame):
-        _display_dataframe(summary_df, "Summarised reports")
+            with st.expander("Advanced options"):
+                produce_spans = st.checkbox(
+                    "Return supporting quotes from the reports",
+                    value=False,
+                    key="extract_produce_spans",
+                )
+                drop_spans = st.checkbox(
+                    "Remove the quote columns from the results",
+                    value=False,
+                    key="extract_drop_spans",
+                )
+                force_assign = st.checkbox(
+                    "Always assign a value even when unsure",
+                    value=False,
+                    key="extract_force_assign",
+                )
+                allow_multiple = st.checkbox(
+                    "Allow multiple categories for a single field",
+                    value=False,
+                    key="extract_allow_multiple",
+                )
+                schema_detail_choice = st.selectbox(
+                    "Level of schema detail shared with the model",
+                    options=["Minimal", "Full"],
+                    index=0,
+                    key="extract_schema_detail",
+                )
+                extra_instructions = st.text_area(
+                    "Anything else the model should know? (optional)",
+                    key="extract_extra_instructions",
+                )
+                skip_if_present = st.checkbox(
+                    "Skip rows that already contain extracted values",
+                    value=True,
+                    key="extract_skip_if_present",
+                )
+
+            extract_submitted = st.form_submit_button(
+                "Tag the reports", use_container_width=True
+            )
+
+        if extract_submitted:
+            try:
+                feature_model = _build_feature_model_from_grid(feature_grid)
+                target_df = uploaded_df if uploaded_df is not None else None
+                result_df = extractor.extract_features(
+                    reports=target_df,
+                    feature_model=feature_model,
+                    produce_spans=produce_spans,
+                    drop_spans=drop_spans,
+                    force_assign=force_assign,
+                    allow_multiple=allow_multiple,
+                    schema_detail=schema_detail_choice.lower(),  # type: ignore[arg-type]
+                    extra_instructions=extra_instructions or None,
+                    skip_if_present=skip_if_present,
+                )
+                st.session_state["extractor_result"] = result_df
+                st.success("Tagging complete. Review the extracted fields below.")
+            except Exception as exc:  # pragma: no cover - depends on live API
+                st.error(f"Extraction failed: {exc}")
+
+        result_df = st.session_state.get("extractor_result")
+        if isinstance(result_df, pd.DataFrame):
+            _display_dataframe(result_df, "Tagged reports")
+            st.download_button(
+                "Download extracted fields as CSV",
+                data=result_df.to_csv(index=False).encode("utf-8"),
+                file_name="pfd_extracted_features.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
 
     st.markdown("---")
-    st.markdown("#### estimate_tokens")
+    st.markdown("#### Estimate token usage")
     st.write(
-        "Estimate token usage for a summary column before prompting large batches."
+        "Gauge how many tokens a column will use when sent to the model."
     )
 
     with st.form("estimate_tokens_form", enter_to_submit=False):
         col_name = st.text_input(
-            "Column to measure",
+            "Column to analyse",
             value="",
+            placeholder="Defaults to the most recent summary column if left blank.",
             help="Leave blank to reuse the latest summary column name.",
         )
-        return_series = st.checkbox("Return per-row series instead of a total", value=False)
-        tokens_submitted = st.form_submit_button("Estimate tokens", use_container_width=True)
+        return_series = st.checkbox(
+            "Return a token count for every report",
+            value=False,
+        )
+        tokens_submitted = st.form_submit_button(
+            "Estimate tokens", use_container_width=True
+        )
 
     if tokens_submitted:
         try:
@@ -585,7 +778,7 @@ def _render_extractor_tab() -> None:
             )
             st.session_state["token_estimate"] = token_result
             if isinstance(token_result, pd.Series):
-                st.success("Token counts calculated for each row.")
+                st.success("Token counts calculated for each report.")
             else:
                 st.success(f"Estimated total tokens: {token_result:,}")
         except Exception as exc:  # pragma: no cover - depends on live API
@@ -594,54 +787,6 @@ def _render_extractor_tab() -> None:
     token_result = st.session_state.get("token_estimate")
     if isinstance(token_result, pd.Series):
         st.dataframe(token_result.to_frame(), use_container_width=True)
-
-    st.markdown("---")
-    st.markdown("#### discover_themes")
-    st.write(
-        "Automatically identify recurring themes from summaries. The resulting pydantic model can be fed back into `extract_features()`."
-    )
-
-    with st.form("discover_themes_form", enter_to_submit=False):
-        warn_exceed = st.number_input("Warning threshold", min_value=1000, value=100000, step=1000)
-        error_exceed = st.number_input("Error threshold", min_value=1000, value=500000, step=1000)
-        col1, col2 = st.columns(2)
-        max_themes = col1.number_input("Maximum themes", min_value=0, value=0, help="Set 0 to leave unset.")
-        min_themes = col2.number_input("Minimum themes", min_value=0, value=0, help="Set 0 to leave unset.")
-        extra_instructions = st.text_area(
-            "Extra theme instructions",
-            placeholder="e.g. Prioritise system-level safety issues.",
-        )
-        seed_topics_text = st.text_area(
-            "Seed topics (JSON list or newline separated)",
-            placeholder="[\n  \"care_home\",\n  \"medication_errors\"\n]",
-        )
-        themes_submitted = st.form_submit_button("Run discover_themes", use_container_width=True)
-
-    if themes_submitted:
-        try:
-            seed_topics: Optional[Any]
-            seed_topics = None
-            if seed_topics_text.strip():
-                try:
-                    seed_topics = json.loads(seed_topics_text)
-                except json.JSONDecodeError:
-                    seed_topics = [line.strip() for line in seed_topics_text.splitlines() if line.strip()]
-            ThemeModel = extractor.discover_themes(
-                warn_exceed=int(warn_exceed),
-                error_exceed=int(error_exceed),
-                max_themes=int(max_themes) or None,
-                min_themes=int(min_themes) or None,
-                extra_instructions=extra_instructions or None,
-                seed_topics=seed_topics,
-            )
-            st.session_state["theme_model_schema"] = ThemeModel.model_json_schema()
-            st.success("Theme discovery complete. Use the schema below when defining features.")
-        except Exception as exc:  # pragma: no cover - depends on live API
-            st.error(f"Theme discovery failed: {exc}")
-
-    theme_schema = st.session_state.get("theme_model_schema")
-    if theme_schema:
-        st.json(theme_schema)
 
 
 # ---------------------------------------------------------------------------
@@ -679,17 +824,26 @@ def main() -> None:
 
     _build_sidebar()
 
-    overview_tab, screener_tab, extractor_tab = st.tabs([
-        "Overview",
-        "Screener",
-        "Extractor",
-    ])
+    nav_labels = ["Overview", "Screen reports", "Extract insights"]
+    current_label = st.session_state.get("active_view", nav_labels[0])
+    if current_label not in nav_labels:
+        current_label = nav_labels[0]
 
-    with overview_tab:
+    selected_label = st.radio(
+        "Choose a workspace area",
+        nav_labels,
+        index=nav_labels.index(current_label),
+        horizontal=True,
+        key="active_view",
+    )
+
+    st.markdown("---")
+
+    if selected_label == "Overview":
         _render_overview()
-    with screener_tab:
+    elif selected_label == "Screen reports":
         _render_screener_tab()
-    with extractor_tab:
+    else:
         _render_extractor_tab()
 
 
