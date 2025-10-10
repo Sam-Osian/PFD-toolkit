@@ -46,6 +46,7 @@ def _init_session_state() -> None:
         "extractor_verbose": False,
         "feature_grid": None,
         "extractor_mode": "Discover themes in the reports",
+        "active_tab": "Load in reports",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -86,6 +87,23 @@ def _parse_optional_float(value: str) -> Optional[float]:
     except ValueError:
         st.error("Timeout must be numeric (seconds).")
         return None
+
+
+def _parse_optional_non_negative_int(value: str, field_name: str) -> Optional[int]:
+    """Convert ``value`` to ``int`` ensuring it is not negative."""
+
+    value = value.strip()
+    if not value:
+        return None
+    try:
+        parsed_value = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an integer if provided.") from exc
+
+    if parsed_value < 0:
+        raise ValueError(f"{field_name} cannot be negative.")
+
+    return parsed_value
 
 
 def _build_feature_model(schema_text: str):
@@ -586,19 +604,15 @@ def _render_extractor_tab() -> None:
                     step=1000,
                 )
                 max_col, min_col = st.columns(2)
-                max_themes = max_col.number_input(
-                    "Maximum number of themes",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="Leave as 0 to let the model decide.",
+                max_themes_raw = max_col.text_input(
+                    "Maximum number of themes (optional)",
+                    value="",
+                    placeholder="Leave blank to let the model decide.",
                 )
-                min_themes = min_col.number_input(
-                    "Minimum number of themes",
-                    min_value=0,
-                    value=0,
-                    step=1,
-                    help="Leave as 0 to let the model decide.",
+                min_themes_raw = min_col.text_input(
+                    "Minimum number of themes (optional)",
+                    value="",
+                    placeholder="Leave blank to let the model decide.",
                 )
 
             themes_submitted = st.form_submit_button(
@@ -606,48 +620,76 @@ def _render_extractor_tab() -> None:
             )
 
         if themes_submitted:
-            progress_placeholder = st.empty()
-            progress_bar = progress_placeholder.progress(0)
+            input_error = False
             try:
-                progress_bar.progress(10)
-                with st.spinner("Summarising the reports..."):
-                    summary_df = extractor.summarise(
-                        result_col_name=summary_column or "summary",
-                        trim_intensity=trim_labels[trim_choice],
-                    )
-                    st.session_state["summary_result"] = summary_df
-                progress_bar.progress(55)
-
-                seed_topics: Optional[Any] = None
-                if seed_topics_text.strip():
-                    try:
-                        seed_topics = json.loads(seed_topics_text)
-                    except json.JSONDecodeError:
-                        seed_topics = [
-                            line.strip()
-                            for line in seed_topics_text.splitlines()
-                            if line.strip()
-                        ]
-
-                progress_bar.progress(70)
-                with st.spinner("Identifying themes..."):
-                    ThemeModel = extractor.discover_themes(
-                        warn_exceed=int(warning_threshold),
-                        error_exceed=int(error_threshold),
-                        max_themes=int(max_themes) or None,
-                        min_themes=int(min_themes) or None,
-                        extra_instructions=extra_theme_instructions or None,
-                        seed_topics=seed_topics,
-                    )
-                st.session_state["theme_model_schema"] = ThemeModel.model_json_schema()
-                progress_bar.progress(100)
-                st.success(
-                    "Theme discovery complete. The schema below can be reused when tagging reports."
+                max_themes_value = _parse_optional_non_negative_int(
+                    max_themes_raw,
+                    "Maximum number of themes",
                 )
-            except Exception as exc:  # pragma: no cover - depends on live API
-                st.error(f"Theme discovery failed: {exc}")
-            finally:
-                progress_placeholder.empty()
+            except ValueError as exc:
+                st.error(str(exc))
+                input_error = True
+                max_themes_value = None
+
+            try:
+                min_themes_value = _parse_optional_non_negative_int(
+                    min_themes_raw,
+                    "Minimum number of themes",
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+                input_error = True
+                min_themes_value = None
+
+            if not input_error:
+                progress_placeholder = st.empty()
+                progress_bar = progress_placeholder.progress(0)
+                try:
+                    progress_bar.progress(10)
+                    with st.spinner("Summarising the reports..."):
+                        summary_df = extractor.summarise(
+                            result_col_name=summary_column or "summary",
+                            trim_intensity=trim_labels[trim_choice],
+                        )
+                        st.session_state["summary_result"] = summary_df
+                    progress_bar.progress(55)
+
+                    seed_topics: Optional[Any] = None
+                    if seed_topics_text.strip():
+                        try:
+                            seed_topics = json.loads(seed_topics_text)
+                        except json.JSONDecodeError:
+                            seed_topics = [
+                                line.strip()
+                                for line in seed_topics_text.splitlines()
+                                if line.strip()
+                            ]
+
+                    progress_bar.progress(70)
+                    with st.spinner("Identifying themes..."):
+                        ThemeModel = extractor.discover_themes(
+                            warn_exceed=int(warning_threshold),
+                            error_exceed=int(error_threshold),
+                            max_themes=max_themes_value,
+                            min_themes=min_themes_value,
+                            extra_instructions=extra_theme_instructions or None,
+                            seed_topics=seed_topics,
+                        )
+                    if ThemeModel is None or not hasattr(ThemeModel, "model_json_schema"):
+                        st.warning(
+                            "Theme discovery completed but did not return a schema. "
+                            "Check the application logs for more details."
+                        )
+                    else:
+                        st.session_state["theme_model_schema"] = ThemeModel.model_json_schema()
+                    progress_bar.progress(100)
+                    st.success(
+                        "Theme discovery complete. The schema below can be reused when tagging reports."
+                    )
+                except Exception as exc:  # pragma: no cover - depends on live API
+                    st.error(f"Theme discovery failed: {exc}")
+                finally:
+                    progress_placeholder.empty()
 
         summary_df = st.session_state.get("summary_result")
         if isinstance(summary_df, pd.DataFrame) and not summary_df.empty:
@@ -885,13 +927,26 @@ def main() -> None:
 
     _build_sidebar()
 
-    tabs = st.tabs(["Load in reports", "Screen reports", "Extract insights"])
+    tab_labels = ["Load in reports", "Screen reports", "Extract insights"]
+    st.session_state.setdefault("active_tab", tab_labels[0])
 
-    with tabs[0]:
+    if "main_navigation" not in st.session_state:
+        st.session_state["main_navigation"] = st.session_state["active_tab"]
+
+    selected_tab = st.radio(
+        "Choose a workflow",
+        tab_labels,
+        key="main_navigation",
+        horizontal=True,
+        label_visibility="collapsed",
+    )
+    st.session_state["active_tab"] = selected_tab
+
+    if selected_tab == tab_labels[0]:
         _render_load_reports_tab()
-    with tabs[1]:
+    elif selected_tab == tab_labels[1]:
         _render_screener_tab()
-    with tabs[2]:
+    else:
         _render_extractor_tab()
 
 
