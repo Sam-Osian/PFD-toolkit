@@ -162,10 +162,28 @@ def _start_openrouter_login(callback_url: str) -> None:
     }
     auth_url = f"{OPENROUTER_AUTH_URL}?{urlencode(params)}"
 
-    st.markdown(
-        f"<meta http-equiv='refresh' content='0; url={auth_url}'>",
-        unsafe_allow_html=True,
-    )
+    redirect_js = f"""
+        <script>
+            (function() {{
+                const authUrl = {json.dumps(auth_url)};
+                try {{
+                    const target = window.top ?? window.parent ?? window;
+                    if (target.location.href !== authUrl) {{
+                        target.location.href = authUrl;
+                        return;
+                    }}
+                }} catch (err) {{
+                    console.warn('Unable to redirect top window', err);
+                }}
+                window.location.href = authUrl;
+            }})();
+        </script>
+        <noscript>
+            <p>Continue your sign-in with <a href="{auth_url}" target="_blank">OpenRouter</a>.</p>
+        </noscript>
+    """
+
+    st.markdown(redirect_js, unsafe_allow_html=True)
 
 
 def _finish_openrouter_login(code: str, state: Optional[str]) -> None:
