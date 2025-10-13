@@ -16,6 +16,7 @@ from urllib.parse import urlencode
 import httpx
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from pydantic import Field, create_model
 
 ROOT_DIR = Path(__file__).resolve().parent
