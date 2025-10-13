@@ -1,0 +1,1338 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "PFD Toolkit API",
+    "version": "1.0.0",
+    "summary": "Programmatic access to the PFD Toolkit reports, themes, screening datasets, and LLM utilities.",
+    "description": "The PFD Toolkit API powers the public dashboards at https://pfdtoolkit.org and the automation tools documented throughout the site.\n\nSecurity-sensitive endpoints require JWT bearer tokens obtained via the `/v1/auth/token` endpoint. Rate limits are enforced per account and communicated via the `X-RateLimit-*` headers.\n\n> **CORS**: During development the API returns permissive CORS headers (`Access-Control-Allow-Origin`) for Lovable preview origins. Production traffic must supply an Origin that matches an allow-list entry.",
+    "contact": {
+      "name": "PFD Toolkit Support",
+      "email": "support@pfdtoolkit.org",
+      "url": "https://pfdtoolkit.org/contact"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/Peer-Financial-Disclosures/PFD-toolkit/blob/main/LICENCE"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.pfdtoolkit.org/v1",
+      "description": "Production API"
+    },
+    {
+      "url": "https://staging-api.pfdtoolkit.org/v1",
+      "description": "Staging API for integration testing"
+    }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "Authentication and session management" },
+    { "name": "Reports", "description": "Access to public financial disclosure reports" },
+    { "name": "Themes", "description": "Theme catalog for grouping disclosures" },
+    { "name": "Screening", "description": "Screening profiles and exports" },
+    { "name": "LLM", "description": "Language model utilities and prompt scoring" }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/token": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Exchange API key for JWT token",
+        "operationId": "exchangeApiKeyForToken",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthTokenRequest"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Basic token exchange",
+                  "value": {
+                    "client_id": "research-portal",
+                    "client_secret": "pfd_live_XXXXXXXXXXXXXXXX",
+                    "scopes": ["reports:read", "themes:read"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "JWT issued successfully",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthTokenResponse"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Token response",
+                    "value": {
+                      "token_type": "Bearer",
+                      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                      "expires_in": 3600,
+                      "refresh_token": "def50200c63b..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/reports": {
+      "get": {
+        "tags": ["Reports"],
+        "summary": "List disclosure reports",
+        "operationId": "listReports",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Sort"
+          },
+          {
+            "name": "filer_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "Unique identifier for the elected official who filed the report"
+            },
+            "description": "Filter reports to a single filer"
+          },
+          {
+            "name": "year",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 2008,
+              "maximum": 2100
+            },
+            "description": "Filter by filing year"
+          },
+          {
+            "name": "transaction_min",
+            "in": "query",
+            "schema": {
+              "type": "number",
+              "format": "float",
+              "minimum": 0
+            },
+            "description": "Only include reports with transactions >= this USD amount"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated list of disclosure reports",
+            "headers": {
+              "X-RateLimit-Limit": {
+                "$ref": "#/components/headers/X-RateLimit-Limit"
+              },
+              "X-RateLimit-Remaining": {
+                "$ref": "#/components/headers/X-RateLimit-Remaining"
+              },
+              "X-RateLimit-Reset": {
+                "$ref": "#/components/headers/X-RateLimit-Reset"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedReportList"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Reports page",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "RPT-2023-000142",
+                          "filer_name": "Sen. Alex Example",
+                          "filer_id": "S12345",
+                          "filed_at": "2023-10-04",
+                          "summary": "Periodic transaction report covering Q3 2023",
+                          "total_transactions": 23,
+                          "total_value": 456000.0,
+                          "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2023/20024451.pdf"
+                        }
+                      ],
+                      "total": 12842,
+                      "page": 1,
+                      "page_size": 25,
+                      "next_page": "https://api.pfdtoolkit.org/v1/reports?page=2&page_size=25"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Reports"],
+        "summary": "Submit an internal compliance note",
+        "operationId": "createReportNote",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportNoteCreate"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Compliance comment",
+                  "value": {
+                    "report_id": "RPT-2023-000142",
+                    "note": "Flagged for insider trading review due to multiple semiconductor purchases before hearings.",
+                    "severity": "high"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Note recorded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportNote"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Created note",
+                    "value": {
+                      "id": "NOTE-b1f5d7f0",
+                      "report_id": "RPT-2023-000142",
+                      "note": "Flagged for insider trading review due to multiple semiconductor purchases before hearings.",
+                      "severity": "high",
+                      "created_at": "2024-04-16T14:22:00Z",
+                      "created_by": "compliance-bot"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/reports/{report_id}": {
+      "get": {
+        "tags": ["Reports"],
+        "summary": "Retrieve a single disclosure report",
+        "operationId": "getReport",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ReportId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Requested report",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Report details",
+                    "value": {
+                      "id": "RPT-2023-000142",
+                      "filer_name": "Sen. Alex Example",
+                      "filer_id": "S12345",
+                      "filed_at": "2023-10-04",
+                      "summary": "Periodic transaction report covering Q3 2023",
+                      "total_transactions": 23,
+                      "total_value": 456000.0,
+                      "transactions": [
+                        {
+                          "trade_date": "2023-09-18",
+                          "ticker": "NVDA",
+                          "asset_name": "NVIDIA Corporation",
+                          "transaction_type": "purchase",
+                          "amount": 45000.0,
+                          "upper_amount": 100000.0
+                        }
+                      ],
+                      "source_url": "https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2023/20024451.pdf"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/themes": {
+      "get": {
+        "tags": ["Themes"],
+        "summary": "List available investment themes",
+        "operationId": "listThemes",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["macro", "sector", "esg", "custom"]
+            },
+            "description": "Filter themes to a category"
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["name", "-name", "popularity", "-popularity"],
+              "default": "name"
+            },
+            "description": "Sort order; prefix with - for descending"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated theme catalogue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedThemeList"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Themes page",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "thm-semiconductors",
+                          "name": "Semiconductors",
+                          "category": "sector",
+                          "description": "Exposures to semiconductor fabs, equipment, and supply chain.",
+                          "report_count": 482
+                        }
+                      ],
+                      "total": 42,
+                      "page": 1,
+                      "page_size": 50,
+                      "next_page": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/screenings": {
+      "get": {
+        "tags": ["Screening"],
+        "summary": "List saved screening profiles",
+        "operationId": "listScreenings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "updated_after",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Return screenings updated after the given timestamp"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated screenings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedScreeningList"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Screening index",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "scr-long-term-alpha",
+                          "name": "Long Term Alpha",
+                          "created_at": "2023-12-01T09:30:00Z",
+                          "updated_at": "2024-03-16T08:12:00Z",
+                          "filters": {
+                            "min_transactions": 10,
+                            "themes": ["thm-semiconductors", "thm-clean-energy"],
+                            "filer_rank": {
+                              "min": 1,
+                              "max": 25
+                            }
+                          }
+                        }
+                      ],
+                      "total": 12,
+                      "page": 1,
+                      "page_size": 20,
+                      "next_page": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["Screening"],
+        "summary": "Create a new screening profile",
+        "operationId": "createScreening",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScreeningCreate"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Growth screen",
+                  "value": {
+                    "name": "Growth Senators",
+                    "filters": {
+                      "themes": ["thm-artificial-intelligence"],
+                      "min_transactions": 5,
+                      "transaction_value_range": {
+                        "min": 50000,
+                        "max": 250000
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Screening profile created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Screening"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/screenings/{screening_id}": {
+      "get": {
+        "tags": ["Screening"],
+        "summary": "Retrieve screening profile",
+        "operationId": "getScreening",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ScreeningId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Screening detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Screening"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/screenings/{screening_id}/export": {
+      "get": {
+        "tags": ["Screening"],
+        "summary": "Download screening results",
+        "operationId": "exportScreening",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ScreeningId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CSV export of the screening results",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Truncated CSV",
+                    "externalValue": "https://pfdtoolkit.org/assets/examples/screening-export.csv"
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Suggested filename for the export"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/llm/completions": {
+      "post": {
+        "tags": ["LLM"],
+        "summary": "Stream a themed completion",
+        "operationId": "createLlmCompletion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmCompletionRequest"
+              },
+              "examples": {
+                "default": {
+                  "summary": "Generate a prompt assessment",
+                  "value": {
+                    "prompt": "Summarise semiconductor-related trades filed by Sen. Alex Example in Q3 2023.",
+                    "temperature": 0.2,
+                    "max_tokens": 800,
+                    "stream": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Completion payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmCompletionResponse"
+                },
+                "examples": {
+                  "default": {
+                    "summary": "Completion response",
+                    "value": {
+                      "id": "cmpl-2fb2e0f9",
+                      "created": "2024-04-16T14:33:48Z",
+                      "model": "pfd-gpt-4o-mini",
+                      "usage": {
+                        "prompt_tokens": 112,
+                        "completion_tokens": 214,
+                        "total_tokens": 326
+                      },
+                      "output": "Sen. Alex Example executed 3 semiconductor purchases in September 2023..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Provide the token value without the `Bearer` prefix when configuring SDKs"
+      }
+    },
+    "parameters": {
+      "Page": {
+        "name": "page",
+        "in": "query",
+        "description": "Page number starting at 1",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        }
+      },
+      "PageSize": {
+        "name": "page_size",
+        "in": "query",
+        "description": "Number of items per page (max 100)",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 25
+        }
+      },
+      "Sort": {
+        "name": "sort",
+        "in": "query",
+        "description": "Sort expression (e.g., `filed_at` or `-filed_at`)",
+        "schema": {
+          "type": "string",
+          "default": "-filed_at"
+        }
+      },
+      "ReportId": {
+        "name": "report_id",
+        "in": "path",
+        "required": true,
+        "description": "Unique identifier of the report",
+        "schema": {
+          "type": "string",
+          "pattern": "^RPT-\\d{4}-\\d{6}$"
+        }
+      },
+      "ScreeningId": {
+        "name": "screening_id",
+        "in": "path",
+        "required": true,
+        "description": "Unique identifier of the screening profile",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "headers": {
+      "X-RateLimit-Limit": {
+        "description": "Maximum requests allowed in the current window",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "X-RateLimit-Remaining": {
+        "description": "Requests remaining in the current window",
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "X-RateLimit-Reset": {
+        "description": "Epoch seconds when the rate limit resets",
+        "schema": {
+          "type": "integer",
+          "format": "int64"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Request validation failed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "missing": {
+                "summary": "Missing parameter",
+                "value": {
+                  "code": "invalid_request",
+                  "message": "`report_id` is required",
+                  "details": [
+                    {
+                      "field": "report_id",
+                      "issue": "missing"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Authentication required or token invalid",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "expired": {
+                "summary": "Expired token",
+                "value": {
+                  "code": "unauthorized",
+                  "message": "The token has expired"
+                }
+              }
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated user lacks permission",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "scope": {
+                "summary": "Missing scope",
+                "value": {
+                  "code": "forbidden",
+                  "message": "Required scope reports:write not granted"
+                }
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Requested resource not found",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "report": {
+                "summary": "Report not found",
+                "value": {
+                  "code": "not_found",
+                  "message": "Report RPT-2023-000142 was not found"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "Rate limit exceeded",
+        "headers": {
+          "X-RateLimit-Limit": {
+            "$ref": "#/components/headers/X-RateLimit-Limit"
+          },
+          "X-RateLimit-Remaining": {
+            "$ref": "#/components/headers/X-RateLimit-Remaining"
+          },
+          "X-RateLimit-Reset": {
+            "$ref": "#/components/headers/X-RateLimit-Reset"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "limit": {
+                "summary": "Limit hit",
+                "value": {
+                  "code": "rate_limit",
+                  "message": "Too many requests - retry after reset",
+                  "details": [
+                    {
+                      "retry_after": 45
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Unexpected server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "examples": {
+              "default": {
+                "summary": "Generic error",
+                "value": {
+                  "code": "server_error",
+                  "message": "An unexpected error occurred"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "AuthTokenRequest": {
+        "type": "object",
+        "required": ["client_id", "client_secret"],
+        "properties": {
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string",
+            "format": "password"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Scopes to request for the issued token"
+          }
+        }
+      },
+      "AuthTokenResponse": {
+        "type": "object",
+        "required": ["token_type", "access_token", "expires_in"],
+        "properties": {
+          "token_type": {
+            "type": "string",
+            "enum": ["Bearer"]
+          },
+          "access_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Seconds until the token expires"
+          },
+          "refresh_token": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Report": {
+        "type": "object",
+        "required": ["id", "filer_name", "filer_id", "filed_at", "summary", "total_transactions", "total_value", "source_url"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "filer_name": {
+            "type": "string"
+          },
+          "filer_id": {
+            "type": "string"
+          },
+          "filed_at": {
+            "type": "string",
+            "format": "date"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "total_transactions": {
+            "type": "integer"
+          },
+          "total_value": {
+            "type": "number",
+            "format": "float"
+          },
+          "transactions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReportTransaction"
+            }
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "ReportTransaction": {
+        "type": "object",
+        "required": ["trade_date", "transaction_type", "amount"],
+        "properties": {
+          "trade_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "ticker": {
+            "type": "string",
+            "nullable": true
+          },
+          "asset_name": {
+            "type": "string"
+          },
+          "transaction_type": {
+            "type": "string",
+            "enum": ["purchase", "sale", "exchange"]
+          },
+          "amount": {
+            "type": "number",
+            "format": "float"
+          },
+          "upper_amount": {
+            "type": "number",
+            "format": "float",
+            "nullable": true
+          }
+        }
+      },
+      "PaginatedReportList": {
+        "type": "object",
+        "required": ["items", "total", "page", "page_size", "next_page"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Report"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          },
+          "next_page": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          }
+        }
+      },
+      "ReportNoteCreate": {
+        "type": "object",
+        "required": ["report_id", "note"],
+        "properties": {
+          "report_id": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["low", "medium", "high"],
+            "default": "medium"
+          }
+        }
+      },
+      "ReportNote": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReportNoteCreate"
+          },
+          {
+            "type": "object",
+            "required": ["id", "created_at", "created_by"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "created_at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "created_by": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "Theme": {
+        "type": "object",
+        "required": ["id", "name", "category", "description"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": ["macro", "sector", "esg", "custom"]
+          },
+          "description": {
+            "type": "string"
+          },
+          "report_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "PaginatedThemeList": {
+        "type": "object",
+        "required": ["items", "total", "page", "page_size", "next_page"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Theme"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          },
+          "next_page": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          }
+        }
+      },
+      "Screening": {
+        "type": "object",
+        "required": ["id", "name", "filters", "created_at", "updated_at"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ScreeningFilters"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScreeningFilters": {
+        "type": "object",
+        "properties": {
+          "themes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "min_transactions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transaction_value_range": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "number",
+                "format": "float"
+              },
+              "max": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          "filer_rank": {
+            "type": "object",
+            "properties": {
+              "min": {
+                "type": "integer"
+              },
+              "max": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "ScreeningCreate": {
+        "type": "object",
+        "required": ["name", "filters"],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ScreeningFilters"
+          }
+        }
+      },
+      "PaginatedScreeningList": {
+        "type": "object",
+        "required": ["items", "total", "page", "page_size", "next_page"],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Screening"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "page_size": {
+            "type": "integer"
+          },
+          "next_page": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          }
+        }
+      },
+      "LlmCompletionRequest": {
+        "type": "object",
+        "required": ["prompt"],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number",
+            "format": "float",
+            "default": 0.3,
+            "minimum": 0,
+            "maximum": 1
+          },
+          "max_tokens": {
+            "type": "integer",
+            "default": 512,
+            "minimum": 16,
+            "maximum": 4096
+          },
+          "stream": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "LlmCompletionResponse": {
+        "type": "object",
+        "required": ["id", "created", "model", "output", "usage"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output": {
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/TokenUsage"
+          }
+        }
+      },
+      "TokenUsage": {
+        "type": "object",
+        "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+        "properties": {
+          "prompt_tokens": {
+            "type": "integer"
+          },
+          "completion_tokens": {
+            "type": "integer"
+          },
+          "total_tokens": {
+            "type": "integer"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}
