@@ -1,6 +1,7 @@
 """Interactive Streamlit dashboard for the PFD Toolkit API."""
 from __future__ import annotations
 
+import ast
 import json
 import sys
 from datetime import date
@@ -88,6 +89,36 @@ def _parse_optional_non_negative_int(value: str, field_name: str) -> Optional[in
         raise ValueError(f"{field_name} cannot be negative.")
 
     return parsed_value
+
+
+def _format_theme_description(raw: Any) -> str:
+    """Return a user-friendly description extracted from ``raw``."""
+
+    if isinstance(raw, dict):
+        for key in ("description", "details", "detail", "text"):
+            if key in raw:
+                return _format_theme_description(raw[key])
+        return json.dumps(raw, ensure_ascii=False)
+
+    if isinstance(raw, list):
+        return ", ".join(filter(None, (_format_theme_description(item) for item in raw)))
+
+    if isinstance(raw, str):
+        stripped = raw.strip()
+        if stripped.startswith("{") and stripped.endswith("}"):
+            try:
+                parsed = ast.literal_eval(stripped)
+            except (SyntaxError, ValueError):
+                return raw
+            else:
+                if isinstance(parsed, (dict, list)):
+                    return _format_theme_description(parsed)
+        return raw
+
+    if raw is None:
+        return ""
+
+    return str(raw)
 
 
 def _build_feature_model(schema_text: str):
@@ -779,11 +810,6 @@ def _render_extractor_tab() -> None:
                 finally:
                     progress_placeholder.empty()
 
-                with reports_container:
-                    _render_reports_overview(
-                        "Loaded reports in workspace", key_suffix="extractor"
-                    )
-
         seed_topics_last = st.session_state.get("seed_topics_last")
         if seed_topics_last:
             st.markdown("##### Seed topics in use")
@@ -807,7 +833,42 @@ def _render_extractor_tab() -> None:
         theme_schema = st.session_state.get("theme_model_schema")
         if theme_schema:
             st.markdown("##### Theme schema")
-            st.json(theme_schema)
+            properties = (
+                theme_schema.get("properties")
+                if isinstance(theme_schema, dict)
+                else None
+            )
+            if isinstance(properties, dict) and properties:
+                schema_rows = []
+                for theme_key, theme_config in properties.items():
+                    config = theme_config if isinstance(theme_config, dict) else {}
+                    title = config.get("title") or theme_key.replace("_", " ").title()
+                    description = _format_theme_description(config.get("description"))
+                    schema_rows.append({
+                        "Theme": title,
+                        "Description": description,
+                    })
+
+                themes_df = pd.DataFrame(schema_rows)
+                st.table(themes_df)
+            else:
+                st.info("Theme discovery completed but no theme definitions were returned.")
+
+            try:
+                schema_json = json.dumps(
+                    theme_schema, indent=2, ensure_ascii=False, default=str
+                )
+            except TypeError:
+                schema_json = None
+
+            if schema_json:
+                st.download_button(
+                    "Download theme schema (JSON)",
+                    data=schema_json,
+                    file_name="theme_schema.json",
+                    mime="application/json",
+                    use_container_width=True,
+                )
 
     else:
         st.markdown("#### Tag reports with existing themes")
@@ -938,8 +999,7 @@ def _render_extractor_tab() -> None:
             finally:
                 progress_placeholder.empty()
 
-            with reports_container:
-                _render_reports_overview("Loaded reports in workspace", key_suffix="extractor")
+
 
         result_df = st.session_state.get("extractor_result")
         if isinstance(result_df, pd.DataFrame):
