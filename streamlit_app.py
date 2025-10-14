@@ -481,8 +481,6 @@ def _render_screener_tab() -> None:
         return
 
     reports_container = st.container()
-    with reports_container:
-        _render_reports_overview("Loaded reports in workspace", key_suffix="screener")
 
     with st.form("screener_form", enter_to_submit=False):
         st.markdown("#### Screening request")
@@ -550,12 +548,11 @@ def _render_screener_tab() -> None:
         finally:
             progress_placeholder.empty()
 
-        with reports_container:
-            _render_reports_overview("Loaded reports in workspace", key_suffix="screener")
+    with reports_container:
+        _render_reports_overview("Loaded reports in workspace", key_suffix="screener")
 
     result_df = st.session_state.get("screener_result")
-    if isinstance(result_df, pd.DataFrame):
-        _display_dataframe(result_df, "Screener output")
+    if isinstance(result_df, pd.DataFrame) and not result_df.empty:
         st.download_button(
             "Download screener results as CSV",
             data=result_df.to_csv(index=False).encode("utf-8"),
@@ -582,34 +579,19 @@ def _render_extractor_tab() -> None:
         st.warning("Add a valid API key in the sidebar to enable the Extractor.")
         return
     if reports_df.empty:
-        st.info("Load reports from the sidebar before extracting insights.")
+        initial_df = st.session_state.get("reports_df_initial")
+        if isinstance(initial_df, pd.DataFrame) and not initial_df.empty:
+            st.info(
+                "No reports are currently active. Use 'Revert changes' to restore the previous dataset or load new reports."
+            )
+        else:
+            st.info("Load reports from the sidebar before extracting insights.")
         return
 
-    screened_df = st.session_state.get("screener_result")
-    has_screened_df = isinstance(screened_df, pd.DataFrame) and not screened_df.empty
-
-    if has_screened_df:
-        dataset_label_map = {
-            "Use screened reports": "screened",
-            "Use all loaded reports": "loaded",
-        }
-        dataset_choice = st.radio(
-            "Select the reports to analyse",
-            list(dataset_label_map.keys()),
-            index=0,
-            horizontal=True,
-            key="extractor_dataset_choice",
-        )
-        active_reports_df = screened_df if dataset_label_map[dataset_choice] == "screened" else reports_df
-    else:
-        if isinstance(screened_df, pd.DataFrame) and screened_df.empty:
-            st.warning(
-                "The screener did not retain any reports. Falling back to the loaded dataset."
-            )
-        active_reports_df = reports_df
+    active_reports_df = reports_df
 
     st.caption(
-        f"Working with {len(active_reports_df)} report(s) based on the current selection."
+        f"Working with {len(active_reports_df)} report(s) currently loaded."
     )
 
     reports_container = st.container()
