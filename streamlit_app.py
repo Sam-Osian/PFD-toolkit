@@ -1,22 +1,14 @@
 """Interactive Streamlit dashboard for the PFD Toolkit API."""
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
-import os
-import secrets
 import sys
-import time
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+from typing import Any, Dict, Optional, Tuple
 
-import httpx
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from pydantic import Field, create_model
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -32,13 +24,7 @@ from pfd_toolkit.llm import LLM
 from pfd_toolkit.screener import Screener
 
 LOGO_PATH = Path("docs/assets/badge-circle.png")
-OPENROUTER_AUTH_URL = "https://openrouter.ai/auth"
-OPENROUTER_EXCHANGE_URL = "https://openrouter.ai/api/v1/auth/keys"
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
-
-
-# Stores pending PKCE verifiers keyed by OAuth ``state`` plus creation timestamp.
-OPENROUTER_PKCE_PENDING: Dict[str, Tuple[str, float]] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -61,287 +47,15 @@ def _init_session_state() -> None:
         "feature_grid": None,
         "extractor_mode": "Discover themes in the reports",
         "active_tab": "Load in reports",
-        "openrouter_api_key": None,
-        "openrouter_balance_info": None,
-        "openrouter_pkce_verifier": None,
-        "openrouter_pkce_state": None,
-        "openrouter_manual_api_key": "",
-        "openrouter_callback_override": "",
+        "openrouter_api_key": "",
         "openrouter_base_url": OPENROUTER_API_BASE,
         "openai_api_key": "",
         "openai_base_url": "",
-        "provider_override": "OpenRouter OAuth",
+        "provider_override": "OpenAI",
+        "provider_override_select": "OpenAI",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
-
-
-def _get_secret(name: str) -> Optional[str]:
-    """Return ``name`` from ``st.secrets`` when available."""
-
-    secrets_obj = getattr(st, "secrets", None)
-    if secrets_obj is None:
-        return None
-    try:
-        if hasattr(secrets_obj, "get"):
-            return secrets_obj.get(name)
-        return secrets_obj[name]
-    except Exception:  # pragma: no cover - depends on environment
-        return None
-
-
-def _default_callback_url() -> str:
-    """Return the callback URL used for the OpenRouter PKCE flow."""
-
-    override = st.session_state.get("openrouter_callback_override") or ""
-    if override.strip():
-        return override.strip()
-
-    for key in ("PUBLIC_URL", "public_url"):
-        secret = _get_secret(key)
-        if secret:
-            return secret
-
-    env_url = os.getenv("PUBLIC_URL")
-    if env_url:
-        return env_url
-
-    return "http://localhost:8501"
-
-
-def _new_pkce_verifier() -> str:
-    """Return a freshly generated PKCE code verifier."""
-
-    return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip("=")
-
-
-def _pkce_challenge(verifier: str) -> str:
-    """Return the S256 PKCE challenge for ``verifier``."""
-
-    digest = hashlib.sha256(verifier.encode()).digest()
-    return base64.urlsafe_b64encode(digest).decode().rstrip("=")
-
-
-def _new_pkce_state() -> str:
-    """Return a random OAuth state token used to correlate PKCE exchanges."""
-
-    return base64.urlsafe_b64encode(secrets.token_bytes(24)).decode().rstrip("=")
-
-
-def _prune_expired_pkce_entries(max_age_seconds: int = 600) -> None:
-    """Drop any pending PKCE verifiers older than ``max_age_seconds``."""
-
-    if not OPENROUTER_PKCE_PENDING:
-        return
-
-    expiry_cutoff = time.time() - max_age_seconds
-    expired_keys = [
-        state for state, (_, created_at) in OPENROUTER_PKCE_PENDING.items() if created_at < expiry_cutoff
-    ]
-    for state in expired_keys:
-        OPENROUTER_PKCE_PENDING.pop(state, None)
-
-
-def _start_openrouter_login(callback_url: str) -> None:
-    """Begin the OpenRouter PKCE flow by redirecting the browser."""
-
-    _prune_expired_pkce_entries()
-    previous_state = st.session_state.get("openrouter_pkce_state")
-    if previous_state:
-        OPENROUTER_PKCE_PENDING.pop(previous_state, None)
-    verifier = _new_pkce_verifier()
-    state_token = _new_pkce_state()
-    st.session_state["openrouter_pkce_verifier"] = verifier
-    st.session_state["openrouter_pkce_state"] = state_token
-    OPENROUTER_PKCE_PENDING[state_token] = (verifier, time.time())
-
-    params = {
-        "callback_url": callback_url,
-        "code_challenge": _pkce_challenge(verifier),
-        "code_challenge_method": "S256",
-        "state": state_token,
-    }
-    auth_url = f"{OPENROUTER_AUTH_URL}?{urlencode(params)}"
-
-    redirect_js = f"""
-        <script>
-            (function() {{
-                const authUrl = {json.dumps(auth_url)};
-                try {{
-                    const target = window.top ?? window.parent ?? window;
-                    if (target.location.href !== authUrl) {{
-                        target.location.href = authUrl;
-                        return;
-                    }}
-                }} catch (err) {{
-                    console.warn('Unable to redirect top window', err);
-                }}
-                window.location.href = authUrl;
-            }})();
-        </script>
-        <noscript>
-            <p>Continue your sign-in with <a href="{auth_url}" target="_blank">OpenRouter</a>.</p>
-        </noscript>
-    """
-
-    st.markdown(redirect_js, unsafe_allow_html=True)
-
-
-def _finish_openrouter_login(code: str, state: Optional[str]) -> None:
-    """Exchange the returned code for an API key and store it in session state."""
-
-    pending_entry: Optional[Tuple[str, float]] = None
-    if state:
-        pending_entry = OPENROUTER_PKCE_PENDING.pop(state, None)
-
-    verifier = st.session_state.get("openrouter_pkce_verifier")
-    if not verifier and pending_entry:
-        verifier = pending_entry[0]
-
-    if not verifier:
-        st.error("Missing verifier—please try connecting again.")
-        return
-
-    payload = {
-        "code": code,
-        "code_verifier": verifier,
-        "code_challenge_method": "S256",
-    }
-
-    try:
-        response = httpx.post(OPENROUTER_EXCHANGE_URL, json=payload, timeout=30)
-        response.raise_for_status()
-    except httpx.HTTPError as exc:  # pragma: no cover - network
-        st.error(f"Failed to complete OpenRouter sign-in: {exc}")
-        return
-
-    data = response.json()
-    api_key = data.get("key")
-    if not api_key:
-        st.error("OpenRouter did not return an API key. Please try again.")
-        return
-
-    st.session_state["openrouter_api_key"] = api_key
-    st.session_state["openrouter_balance_info"] = None
-    st.session_state["openrouter_pkce_verifier"] = None
-    st.session_state["openrouter_pkce_state"] = None
-    st.session_state["openrouter_manual_api_key"] = ""
-    st.session_state["provider_override"] = "OpenRouter OAuth"
-    st.success("Connected to OpenRouter.")
-
-
-def _get_query_params() -> Dict[str, List[str]]:
-    """Return the current query parameters in a backwards-compatible format."""
-
-    query_params = getattr(st, "query_params", None)
-    if query_params is None:
-        return st.experimental_get_query_params()
-
-    if hasattr(query_params, "to_dict"):
-        try:
-            params_dict = query_params.to_dict(flat=False)
-        except TypeError:
-            params_dict = query_params.to_dict()
-    else:
-        params_dict = dict(query_params)
-
-    normalised: Dict[str, List[str]] = {}
-    for key, value in params_dict.items():
-        if isinstance(value, list):
-            normalised[key] = value
-        elif isinstance(value, tuple):
-            normalised[key] = list(value)
-        elif value is None:
-            normalised[key] = []
-        else:
-            normalised[key] = [str(value)]
-    return normalised
-
-
-def _set_query_params(params: Dict[str, List[str]]) -> None:
-    """Update the page query parameters safely across Streamlit versions."""
-
-    query_params = getattr(st, "query_params", None)
-    if query_params is None:
-        st.experimental_set_query_params(**params)
-        return
-
-    if hasattr(query_params, "clear"):
-        query_params.clear()
-    if params:
-        if hasattr(query_params, "update"):
-            query_params.update(params)
-        elif hasattr(query_params, "from_dict"):
-            query_params.from_dict(params)
-        else:
-            st.experimental_set_query_params(**params)
-
-
-def _fetch_openrouter_key_metadata(api_key: str) -> Optional[Dict[str, Any]]:
-    """Return metadata for the active OpenRouter key, including balance details."""
-
-    base_url = (st.session_state.get("openrouter_base_url") or OPENROUTER_API_BASE).rstrip("/")
-    endpoint = f"{base_url}/key"
-    headers = {"Authorization": f"Bearer {api_key}"}
-
-    try:
-        response = httpx.get(endpoint, headers=headers, timeout=15)
-        if response.status_code != 200:
-            return None
-        return response.json()
-    except (httpx.HTTPError, ValueError):  # pragma: no cover - network / payload
-        return None
-
-
-def _format_openrouter_balance(info: Dict[str, Any]) -> Optional[str]:
-    """Return a human-friendly caption describing balance and limits."""
-
-    if not isinstance(info, dict):
-        return None
-
-    data = info.get("data", info)
-    if not isinstance(data, dict):
-        return None
-
-    credits = data.get("credits") or data.get("balance")
-    limits = data.get("limits") or data.get("limit") or data.get("quota")
-
-    parts: List[str] = []
-    if credits is not None:
-        parts.append(f"Credits: {credits}")
-    if limits is not None:
-        parts.append(f"Limits: {limits}")
-
-    if not parts and data:
-        return json.dumps(data)
-
-    return ", ".join(parts) if parts else None
-
-
-def _handle_openrouter_callback() -> None:
-    """Process PKCE callback parameters present in the URL."""
-
-    _prune_expired_pkce_entries()
-    params = _get_query_params()
-    if not params:
-        return
-
-    error = params.get("error", [None])[0]
-    if error:
-        st.sidebar.error(f"OpenRouter sign-in failed: {error}")
-
-    code = params.get("code", [None])[0]
-    state = params.get("state", [None])[0]
-    if code and not st.session_state.get("openrouter_api_key"):
-        _finish_openrouter_login(code, state)
-
-    if any(key in params for key in ("code", "error", "state")):
-        cleaned = {
-            k: v
-            for k, v in params.items()
-            if k not in {"code", "error", "state"}
-        }
-        _set_query_params(cleaned)
 
 
 def _styled_metric(label: str, value: Any) -> None:
@@ -519,127 +233,63 @@ def _build_sidebar() -> None:
         "Configure your language model and reporting window, then load the source data before running screeners or extractors."
     )
 
-    _handle_openrouter_callback()
+    st.sidebar.markdown("### API credentials")
 
-    st.sidebar.markdown("### Connect to OpenRouter")
+    provider_options = ["OpenAI", "OpenRouter"]
+    current_provider = st.session_state.get("provider_override_select", st.session_state.get("provider_override", "OpenAI"))
+    st.session_state["provider_override"] = current_provider
 
-    callback_url = _default_callback_url()
-    with st.sidebar.expander("Callback URL (override if needed)", expanded=False):
-        st.text_input(
-            "App callback URL",
-            value=st.session_state.get("openrouter_callback_override", ""),
-            key="openrouter_callback_override",
-            placeholder=callback_url,
-            help="Defaults to the configured PUBLIC_URL or http://localhost:8501.",
+    if current_provider == "OpenAI":
+        openai_api_key = st.sidebar.text_input(
+            "OpenAI API key",
+            value=st.session_state.get("openai_api_key", ""),
+            type="password",
+            help="Required to access OpenAI models.",
         )
-
-    st.sidebar.caption(f"Callback URL: {callback_url}")
-
-    openrouter_key = st.session_state.get("openrouter_api_key")
-    if openrouter_key:
-        st.sidebar.success("Connected to OpenRouter")
-        balance_info = st.session_state.get("openrouter_balance_info")
-        if balance_info is None:
-            balance_info = _fetch_openrouter_key_metadata(openrouter_key)
-            st.session_state["openrouter_balance_info"] = balance_info
-
-        if st.sidebar.button(
-            "Refresh balance & limits",
-            key="refresh_openrouter_balance",
-            use_container_width=True,
-        ):
-            balance_info = _fetch_openrouter_key_metadata(openrouter_key)
-            st.session_state["openrouter_balance_info"] = balance_info
-
-        if balance_info:
-            caption = _format_openrouter_balance(balance_info)
-            if caption:
-                st.sidebar.caption(caption)
-            else:
-                st.sidebar.json(balance_info)
-        else:
-            st.sidebar.info("Balance information is currently unavailable.")
-
-        if st.sidebar.button(
-            "Disconnect from OpenRouter",
-            key="disconnect_openrouter",
-            use_container_width=True,
-        ):
-            for key in (
-                "openrouter_api_key",
-                "openrouter_balance_info",
-                "openrouter_pkce_verifier",
-                "openrouter_pkce_state",
-            ):
-                st.session_state[key] = None
-            st.session_state["provider_override"] = "OpenRouter OAuth"
-            st.experimental_rerun()
+        st.session_state["openai_api_key"] = openai_api_key
     else:
-        st.sidebar.info("Use your OpenRouter account to purchase credits and connect below.")
-        if st.sidebar.button(
-            "Sign in with OpenRouter",
-            use_container_width=True,
-            type="primary",
-        ):
-            _start_openrouter_login(callback_url)
+        openrouter_api_key = st.sidebar.text_input(
+            "OpenRouter API key",
+            value=st.session_state.get("openrouter_api_key", ""),
+            type="password",
+            help="Paste your OpenRouter key to use their API.",
+        )
+        st.session_state["openrouter_api_key"] = openrouter_api_key
 
-    provider_options = ["OpenRouter OAuth", "OpenRouter API key", "OpenAI"]
-    default_provider = st.session_state.get("provider_override", provider_options[0])
     with st.sidebar.expander("Advanced model provider options", expanded=False):
-        provider_mode = st.radio(
+        provider_index = (
+            provider_options.index(current_provider)
+            if current_provider in provider_options
+            else 0
+        )
+        provider_choice = st.selectbox(
             "Model provider",
             provider_options,
-            index=provider_options.index(default_provider)
-            if default_provider in provider_options
-            else 0,
-            key="provider_override_radio",
+            index=provider_index,
+            key="provider_override_select",
         )
-        st.session_state["provider_override"] = provider_mode
+        st.session_state["provider_override"] = provider_choice
 
-        if provider_mode != "OpenAI":
+        if provider_choice == "OpenAI":
+            openai_base_url = st.text_input(
+                "Custom OpenAI base URL (optional)",
+                value=st.session_state.get("openai_base_url", ""),
+                help="Leave blank to use the official OpenAI endpoint.",
+            )
+            st.session_state["openai_base_url"] = openai_base_url
+        else:
             openrouter_base_url = st.text_input(
                 "OpenRouter API base",
                 value=st.session_state.get("openrouter_base_url", OPENROUTER_API_BASE),
                 help="Override when using an OpenRouter-compatible proxy.",
             )
             st.session_state["openrouter_base_url"] = openrouter_base_url
-        else:
-            openrouter_base_url = st.session_state.get("openrouter_base_url", OPENROUTER_API_BASE)
 
-        if provider_mode == "OpenRouter API key":
-            manual_api_key = st.text_input(
-                "OpenRouter API key",
-                value=st.session_state.get("openrouter_manual_api_key", ""),
-                type="password",
-                help="Paste an API key from OpenRouter if you prefer not to use OAuth.",
-            )
-            st.session_state["openrouter_manual_api_key"] = manual_api_key
-        elif provider_mode == "OpenAI":
-            openai_api_key = st.text_input(
-                "OpenAI API key",
-                value=st.session_state.get("openai_api_key", ""),
-                type="password",
-                help="Provide an OpenAI key for direct access to the OpenAI platform.",
-            )
-            st.session_state["openai_api_key"] = openai_api_key
-            openai_base_url = st.text_input(
-                "Custom base URL (optional)",
-                value=st.session_state.get("openai_base_url", ""),
-                help="Leave blank to use the official OpenAI endpoint.",
-            )
-            st.session_state["openai_base_url"] = openai_base_url
-        else:
-            openai_base_url = st.session_state.get("openai_base_url", "")
-
-    provider_mode = st.session_state.get("provider_override", "OpenRouter OAuth")
-    provider = "OpenRouter" if provider_mode != "OpenAI" else "OpenAI"
+    provider = st.session_state.get("provider_override", "OpenAI")
 
     if provider == "OpenRouter":
         base_url = (st.session_state.get("openrouter_base_url") or OPENROUTER_API_BASE).strip()
-        if provider_mode == "OpenRouter OAuth":
-            api_key = (st.session_state.get("openrouter_api_key") or "").strip()
-        else:
-            api_key = (st.session_state.get("openrouter_manual_api_key") or "").strip()
+        api_key = (st.session_state.get("openrouter_api_key") or "").strip()
     else:
         base_url = (st.session_state.get("openai_base_url") or "").strip() or None
         api_key = (st.session_state.get("openai_api_key") or "").strip()
@@ -727,10 +377,7 @@ def _build_sidebar() -> None:
         except Exception as exc:  # pragma: no cover - depends on credentials
             st.sidebar.error(f"Failed to create LLM client: {exc}")
     else:
-        if provider == "OpenRouter" and provider_mode == "OpenRouter OAuth":
-            st.sidebar.info("Connect with OpenRouter to unlock the Screener and Extractor tools.")
-        else:
-            st.sidebar.info("Provide an API key to unlock the Screener and Extractor tools.")
+        st.sidebar.info("Provide an API key to unlock the Screener and Extractor tools.")
         st.session_state["llm_client"] = None
 
 
