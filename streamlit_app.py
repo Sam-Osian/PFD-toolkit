@@ -42,6 +42,7 @@ def _init_session_state() -> None:
         "extractor_result": None,
         "summary_result": None,
         "theme_model_schema": None,
+        "theme_summary_table": None,
         "llm_client": None,
         "extractor": None,
         "extractor_source_signature": None,
@@ -264,6 +265,7 @@ def _render_reports_overview(
             st.session_state["summary_result"] = None
             st.session_state["extractor_result"] = None
             st.session_state["theme_model_schema"] = None
+            st.session_state["theme_summary_table"] = None
             st.session_state["seed_topics_last"] = None
             st.session_state["extractor"] = None
             st.session_state["extractor_source_signature"] = None
@@ -769,7 +771,6 @@ def _render_extractor_tab() -> None:
                             trim_intensity=trim_labels[trim_choice],
                         )
                         st.session_state["summary_result"] = summary_df
-                        st.session_state["reports_df"] = summary_df.copy(deep=True)
                     progress_bar.progress(55)
 
                     seed_topics: Optional[Any] = None
@@ -801,6 +802,72 @@ def _render_extractor_tab() -> None:
                         )
                     else:
                         st.session_state["theme_model_schema"] = ThemeModel.model_json_schema()
+                        with st.spinner("Assigning themes to reports..."):
+                            extracted_reports = extractor.extract_features(
+                                feature_model=ThemeModel,
+                                force_assign=True,
+                                allow_multiple=True,
+                                skip_if_present=False,
+                            )
+                        st.session_state["extractor_result"] = extracted_reports
+                        st.session_state["reports_df"] = extracted_reports.copy(deep=True)
+                        theme_schema = st.session_state.get("theme_model_schema") or {}
+                        properties = (
+                            theme_schema.get("properties")
+                            if isinstance(theme_schema, dict)
+                            else {}
+                        )
+                        rows = []
+                        total_reports = len(extracted_reports)
+
+                        def _is_true(value: Any) -> bool:
+                            if pd.isna(value):
+                                return False
+                            if isinstance(value, bool):
+                                return value
+                            if isinstance(value, (int, float)):
+                                return value == 1
+                            return str(value).strip().lower() in {"true", "1", "yes"}
+
+                        for theme_key, config in (
+                            properties.items() if isinstance(properties, dict) else []
+                        ):
+                            column_name = theme_key
+                            if column_name not in extracted_reports.columns:
+                                continue
+                            column = extracted_reports[column_name]
+                            count = int(column.map(_is_true).sum())
+                            percentage = round(
+                                (count / total_reports * 100.0) if total_reports else 0.0,
+                                1,
+                            )
+                            display_name = (
+                                config.get("title")
+                                if isinstance(config, dict)
+                                else None
+                            ) or column_name.replace("_", " ").title()
+                            description = (
+                                _format_theme_description(config.get("description"))
+                                if isinstance(config, dict)
+                                else ""
+                            )
+                            rows.append(
+                                {
+                                    "Theme": display_name,
+                                    "Description": description,
+                                    "Count": count,
+                                    "%": percentage,
+                                }
+                            )
+                        if rows:
+                            theme_summary_df = pd.DataFrame(rows).sort_values(
+                                by=["Count", "Theme"], ascending=[False, True]
+                            )
+                        else:
+                            theme_summary_df = pd.DataFrame(
+                                columns=["Theme", "Description", "Count", "%"]
+                            )
+                        st.session_state["theme_summary_table"] = theme_summary_df
                     progress_bar.progress(100)
                     st.success(
                         "Theme discovery complete. The schema below can be reused when tagging reports."
@@ -819,13 +886,13 @@ def _render_extractor_tab() -> None:
             else:
                 st.json(seed_topics_last)
 
-        summary_df = st.session_state.get("summary_result")
-        if isinstance(summary_df, pd.DataFrame) and not summary_df.empty:
-            _display_dataframe(summary_df, "Report summaries")
+        theme_summary_df = st.session_state.get("theme_summary_table")
+        if isinstance(theme_summary_df, pd.DataFrame) and not theme_summary_df.empty:
+            _display_dataframe(theme_summary_df, "Theme assignments overview")
             st.download_button(
-                "Download summaries as CSV",
-                data=summary_df.to_csv(index=False).encode("utf-8"),
-                file_name="pfd_summaries.csv",
+                "Download theme summary as CSV",
+                data=theme_summary_df.to_csv(index=False).encode("utf-8"),
+                file_name="pfd_theme_summary.csv",
                 mime="text/csv",
                 use_container_width=True,
             )
@@ -849,8 +916,10 @@ def _render_extractor_tab() -> None:
                         "Description": description,
                     })
 
-                themes_df = pd.DataFrame(schema_rows)
-                st.table(themes_df)
+                for theme in schema_rows:
+                    st.markdown(
+                        f"**{theme['Theme']}** — {theme['Description'] or 'No description provided.'}"
+                    )
             else:
                 st.info("Theme discovery completed but no theme definitions were returned.")
 
