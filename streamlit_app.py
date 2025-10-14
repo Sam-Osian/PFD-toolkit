@@ -35,15 +35,17 @@ def _init_session_state() -> None:
     """Ensure default keys exist in ``st.session_state``."""
     defaults = {
         "reports_df": pd.DataFrame(),
+        "reports_df_initial": None,
+        "reports_df_modified": False,
         "screener_result": None,
         "extractor_result": None,
         "summary_result": None,
-        "token_estimate": None,
         "theme_model_schema": None,
         "llm_client": None,
         "extractor": None,
         "extractor_source_signature": None,
         "extractor_verbose": False,
+        "seed_topics_last": None,
         "feature_grid": None,
         "extractor_mode": "Discover themes in the reports",
         "active_tab": "Load in reports",
@@ -69,30 +71,6 @@ def _styled_metric(label: str, value: Any) -> None:
         """,
         unsafe_allow_html=True,
     )
-
-
-def _parse_optional_int(value: str) -> Optional[int]:
-    """Convert ``value`` to ``int`` when possible."""
-    value = value.strip()
-    if not value:
-        return None
-    try:
-        return int(value)
-    except ValueError:
-        st.error("Seed must be an integer if provided.")
-        return None
-
-
-def _parse_optional_float(value: str) -> Optional[float]:
-    """Convert ``value`` to ``float`` when possible."""
-    value = value.strip()
-    if not value:
-        return None
-    try:
-        return float(value)
-    except ValueError:
-        st.error("Timeout must be numeric (seconds).")
-        return None
 
 
 def _parse_optional_non_negative_int(value: str, field_name: str) -> Optional[int]:
@@ -219,6 +197,50 @@ def _display_dataframe(df: pd.DataFrame, caption: str) -> None:
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
+def _render_reports_overview(
+    caption: str = "Loaded Prevention of Future Death reports", *, key_suffix: str = ""
+) -> None:
+    """Display the active reports with an optional revert button."""
+
+    reports_df: pd.DataFrame = st.session_state.get("reports_df", pd.DataFrame())
+    initial_df: Optional[pd.DataFrame] = st.session_state.get("reports_df_initial")
+
+    if initial_df is None and not reports_df.empty:
+        initial_df = reports_df.copy(deep=True)
+        st.session_state["reports_df_initial"] = initial_df
+
+    modified = False
+    if initial_df is not None:
+        if reports_df.empty and not initial_df.empty:
+            modified = True
+        elif not reports_df.empty:
+            try:
+                modified = not reports_df.equals(initial_df)
+            except Exception:
+                modified = True
+
+    st.session_state["reports_df_modified"] = modified
+
+    if modified:
+        if st.button(
+            "Revert changes",
+            key=f"revert_reports_{key_suffix}" if key_suffix else "revert_reports",
+            use_container_width=True,
+        ):
+            st.session_state["reports_df"] = initial_df.copy()
+            st.session_state["reports_df_modified"] = False
+            st.session_state["screener_result"] = None
+            st.session_state["summary_result"] = None
+            st.session_state["extractor_result"] = None
+            st.session_state["theme_model_schema"] = None
+            st.session_state["seed_topics_last"] = None
+            st.session_state["extractor"] = None
+            st.session_state["extractor_source_signature"] = None
+            reports_df = st.session_state["reports_df"]
+
+    _display_dataframe(reports_df, caption)
+
+
 # ---------------------------------------------------------------------------
 # Sidebar controls
 # ---------------------------------------------------------------------------
@@ -296,12 +318,24 @@ def _build_sidebar() -> None:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Model configuration")
-    model_name = st.sidebar.text_input("Chat model", value="gpt-4.1")
-    temperature = st.sidebar.slider("Temperature", min_value=0.0, max_value=2.0, value=0.0, step=0.1)
+    model_display_options = ["GPT 4.1", "GPT 4.1 Mini"]
+    model_value_map = {"GPT 4.1": "gpt-4.1", "GPT 4.1 Mini": "gpt-4.1-mini"}
+    current_model_value = st.session_state.get("model_name", "gpt-4.1")
+    current_display = next(
+        (label for label, value in model_value_map.items() if value == current_model_value),
+        "GPT 4.1",
+    )
+    model_display = st.sidebar.selectbox(
+        "Chat model",
+        model_display_options,
+        index=model_display_options.index(current_display)
+        if current_display in model_display_options
+        else 0,
+    )
+    model_name = model_value_map[model_display]
+    st.session_state["model_name"] = model_name
     max_workers = st.sidebar.number_input("Max parallel workers", min_value=1, max_value=32, value=8)
-    seed_raw = st.sidebar.text_input("Deterministic seed (optional)")
-    timeout_raw = st.sidebar.text_input("Request timeout seconds (optional)", value="120")
-    validation_attempts = st.sidebar.number_input("Validation attempts", min_value=1, max_value=5, value=2)
+    validation_attempts = 2
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Report window")
@@ -318,36 +352,45 @@ def _build_sidebar() -> None:
         start_date = date_range
         end_date = date.today()
 
-    n_reports = st.sidebar.number_input(
+    n_reports_raw = st.sidebar.text_input(
         "Limit number of recent reports (optional)",
-        min_value=0,
-        max_value=5000,
-        value=0,
-        help="Keep 0 to load all matching reports.",
+        value="",
+        placeholder="e.g. 50",
+        help="Leave blank to load all matching reports.",
     )
+    n_reports: Optional[int] = None
+    if n_reports_raw.strip():
+        try:
+            n_reports = int(n_reports_raw.strip())
+            if n_reports < 0:
+                raise ValueError
+        except ValueError:
+            st.sidebar.error("Please enter a whole number for the report limit.")
+            n_reports = None
     refresh = st.sidebar.checkbox(
         "Force refresh from remote dataset", value=True, help="Disable to reuse the cached CSV if available."
     )
 
     load_button = st.sidebar.button("Load in reports", use_container_width=True)
 
-    seed = _parse_optional_int(seed_raw) if seed_raw else None
-    timeout = _parse_optional_float(timeout_raw) if timeout_raw else None
-
     if load_button:
+        if n_reports_raw.strip() and n_reports is None:
+            st.sidebar.error("Enter a valid integer before loading reports.")
+            return
         try:
             with st.spinner("Downloading and filtering reports..."):
                 df = load_reports(
                     start_date=start_date.isoformat(),
                     end_date=end_date.isoformat(),
-                    n_reports=int(n_reports) if n_reports else None,
+                    n_reports=n_reports,
                     refresh=refresh,
                 )
-            st.session_state["reports_df"] = df
+            st.session_state["reports_df"] = df.copy(deep=True)
+            st.session_state["reports_df_initial"] = df.copy(deep=True)
+            st.session_state["reports_df_modified"] = False
             st.session_state["screener_result"] = None
             st.session_state["extractor_result"] = None
             st.session_state["summary_result"] = None
-            st.session_state["token_estimate"] = None
             st.session_state["theme_model_schema"] = None
             st.session_state["extractor"] = None
             st.session_state["extractor_source_signature"] = None
@@ -360,13 +403,11 @@ def _build_sidebar() -> None:
             "api_key": api_key.strip(),
             "model": model_name.strip() or "gpt-4.1",
             "max_workers": int(max_workers),
-            "temperature": float(temperature),
+            "temperature": 0.0,
             "validation_attempts": int(validation_attempts),
+            "seed": 123,
+            "timeout": 30,
         }
-        if seed is not None:
-            llm_kwargs["seed"] = seed
-        if timeout is not None:
-            llm_kwargs["timeout"] = timeout
         if provider == "OpenRouter":
             llm_kwargs["base_url"] = base_url or OPENROUTER_API_BASE
         elif base_url:
@@ -412,7 +453,9 @@ def _render_load_reports_tab() -> None:
             if pd.notna(date_max):
                 _styled_metric("Latest date", date_max.strftime("%d %b %Y"))
 
-    _display_dataframe(reports_df, "Loaded Prevention of Future Death reports")
+    _render_reports_overview(
+        "Loaded Prevention of Future Death reports", key_suffix="load_tab"
+    )
 
 
 def _render_screener_tab() -> None:
@@ -437,6 +480,10 @@ def _render_screener_tab() -> None:
         st.info("Load reports from the sidebar before screening.")
         return
 
+    reports_container = st.container()
+    with reports_container:
+        _render_reports_overview("Loaded reports in workspace", key_suffix="screener")
+
     with st.form("screener_form", enter_to_submit=False):
         st.markdown("#### Screening request")
         search_query = st.text_area(
@@ -459,6 +506,10 @@ def _render_screener_tab() -> None:
     if submitted:
         if not search_query.strip():
             st.error("Describe what the Screener should look for.")
+            with reports_container:
+                _render_reports_overview(
+                    "Loaded reports in workspace", key_suffix="screener"
+                )
             return
         progress_placeholder = st.empty()
         progress_bar = progress_placeholder.progress(0)
@@ -487,17 +538,20 @@ def _render_screener_tab() -> None:
                 )
             progress_bar.progress(100)
             st.session_state["screener_result"] = result_df
+            st.session_state["reports_df"] = result_df.copy(deep=True)
             st.session_state["extractor"] = None
             st.session_state["extractor_source_signature"] = None
             st.session_state["extractor_result"] = None
             st.session_state["summary_result"] = None
-            st.session_state["token_estimate"] = None
             st.session_state["theme_model_schema"] = None
             st.success("Screening complete. Review the results below.")
         except Exception as exc:  # pragma: no cover - relies on live API
             st.error(f"Screening failed: {exc}")
         finally:
             progress_placeholder.empty()
+
+        with reports_container:
+            _render_reports_overview("Loaded reports in workspace", key_suffix="screener")
 
     result_df = st.session_state.get("screener_result")
     if isinstance(result_df, pd.DataFrame):
@@ -558,22 +612,24 @@ def _render_extractor_tab() -> None:
         f"Working with {len(active_reports_df)} report(s) based on the current selection."
     )
 
-    with st.form("extractor_setup_form", enter_to_submit=False):
-        st.markdown("#### Initial setup")
-        verbose = st.checkbox(
-            "Show detailed logs in the terminal",
-            value=bool(st.session_state.get("extractor_verbose", False)),
-        )
-        initialise = st.form_submit_button("Initialise extractor", use_container_width=True)
+    reports_container = st.container()
+    with reports_container:
+        _render_reports_overview("Loaded reports in workspace", key_suffix="extractor")
+
+    previous_verbose = bool(st.session_state.get("extractor_verbose", False))
+    verbose = st.checkbox(
+        "Show detailed logs in the terminal",
+        value=previous_verbose,
+    )
+    st.session_state["extractor_verbose"] = verbose
 
     extractor_signature = (len(active_reports_df), tuple(active_reports_df.columns))
     extractor: Optional[Extractor] = st.session_state.get("extractor")
 
     if (
-        initialise
-        or extractor is None
+        extractor is None
         or st.session_state.get("extractor_source_signature") != extractor_signature
-        or st.session_state.get("extractor_verbose") != verbose
+        or previous_verbose != verbose
     ):
         try:
             extractor = Extractor(
@@ -590,9 +646,6 @@ def _render_extractor_tab() -> None:
             )
             st.session_state["extractor"] = extractor
             st.session_state["extractor_source_signature"] = extractor_signature
-            st.session_state["extractor_verbose"] = verbose
-            if initialise:
-                st.success("Extractor initialised with the loaded reports.")
         except Exception as exc:  # pragma: no cover - depends on live API
             st.error(f"Could not initialise extractor: {exc}")
             return
@@ -617,18 +670,11 @@ def _render_extractor_tab() -> None:
         )
 
         with st.form("discover_themes_form", enter_to_submit=False):
-            summary_column = st.text_input(
-                "Name for the summary column",
-                value=extractor.summary_col or "summary",
-            )
             extra_theme_instructions = st.text_area(
                 "Add any extra guidance for the themes (optional)",
                 placeholder="e.g. Focus on system-level safety issues.",
             )
-            seed_topics_text = st.text_area(
-                "Seed topics (optional)",
-                placeholder="Separate each topic on a new line or provide a JSON list.",
-            )
+            seed_topics_text = ""
 
             with st.expander("Advanced options"):
                 trim_labels = {
@@ -665,12 +711,18 @@ def _render_extractor_tab() -> None:
                     value="",
                     placeholder="Leave blank to let the model decide.",
                 )
+                seed_topics_text = st.text_area(
+                    "Seed topics (optional)",
+                    value=seed_topics_text,
+                    placeholder='["Communication", "Medication safety", "Staff training"]',
+                )
 
             themes_submitted = st.form_submit_button(
                 "Discover themes", use_container_width=True
             )
 
         if themes_submitted:
+            st.session_state["seed_topics_last"] = None
             input_error = False
             try:
                 max_themes_value = _parse_optional_non_negative_int(
@@ -697,12 +749,14 @@ def _render_extractor_tab() -> None:
                 progress_bar = progress_placeholder.progress(0)
                 try:
                     progress_bar.progress(10)
+                    summary_col_name = extractor.summary_col or "summary"
                     with st.spinner("Summarising the reports..."):
                         summary_df = extractor.summarise(
-                            result_col_name=summary_column or "summary",
+                            result_col_name=summary_col_name,
                             trim_intensity=trim_labels[trim_choice],
                         )
                         st.session_state["summary_result"] = summary_df
+                        st.session_state["reports_df"] = summary_df.copy(deep=True)
                     progress_bar.progress(55)
 
                     seed_topics: Optional[Any] = None
@@ -726,6 +780,7 @@ def _render_extractor_tab() -> None:
                             extra_instructions=extra_theme_instructions or None,
                             seed_topics=seed_topics,
                         )
+                    st.session_state["seed_topics_last"] = seed_topics or None
                     if ThemeModel is None or not hasattr(ThemeModel, "model_json_schema"):
                         st.warning(
                             "Theme discovery completed but did not return a schema. "
@@ -741,6 +796,20 @@ def _render_extractor_tab() -> None:
                     st.error(f"Theme discovery failed: {exc}")
                 finally:
                     progress_placeholder.empty()
+
+                with reports_container:
+                    _render_reports_overview(
+                        "Loaded reports in workspace", key_suffix="extractor"
+                    )
+
+        seed_topics_last = st.session_state.get("seed_topics_last")
+        if seed_topics_last:
+            st.markdown("##### Seed topics in use")
+            if isinstance(seed_topics_last, (list, tuple, set)):
+                for topic in seed_topics_last:
+                    st.markdown(f"- {topic}")
+            else:
+                st.json(seed_topics_last)
 
         summary_df = st.session_state.get("summary_result")
         if isinstance(summary_df, pd.DataFrame) and not summary_df.empty:
@@ -880,11 +949,15 @@ def _render_extractor_tab() -> None:
                     )
                 progress_bar.progress(100)
                 st.session_state["extractor_result"] = result_df
+                st.session_state["reports_df"] = result_df.copy(deep=True)
                 st.success("Tagging complete. Review the extracted fields below.")
             except Exception as exc:  # pragma: no cover - depends on live API
                 st.error(f"Extraction failed: {exc}")
             finally:
                 progress_placeholder.empty()
+
+            with reports_container:
+                _render_reports_overview("Loaded reports in workspace", key_suffix="extractor")
 
         result_df = st.session_state.get("extractor_result")
         if isinstance(result_df, pd.DataFrame):
@@ -896,51 +969,6 @@ def _render_extractor_tab() -> None:
                 mime="text/csv",
                 use_container_width=True,
             )
-
-    st.markdown("---")
-    st.markdown("#### Estimate token usage")
-    st.write(
-        "Gauge how many tokens a column will use when sent to the model."
-    )
-
-    with st.form("estimate_tokens_form", enter_to_submit=False):
-        col_name = st.text_input(
-            "Column to analyse",
-            value="",
-            placeholder="Defaults to the most recent summary column if left blank.",
-            help="Leave blank to reuse the latest summary column name.",
-        )
-        return_series = st.checkbox(
-            "Return a token count for every report",
-            value=False,
-        )
-        tokens_submitted = st.form_submit_button(
-            "Estimate tokens", use_container_width=True
-        )
-
-    if tokens_submitted:
-        progress_placeholder = st.empty()
-        progress_bar = progress_placeholder.progress(0)
-        try:
-            progress_bar.progress(15)
-            token_result = extractor.estimate_tokens(
-                col_name=col_name or None,
-                return_series=return_series,
-            )
-            st.session_state["token_estimate"] = token_result
-            if isinstance(token_result, pd.Series):
-                st.success("Token counts calculated for each report.")
-            else:
-                st.success(f"Estimated total tokens: {token_result:,}")
-        except Exception as exc:  # pragma: no cover - depends on live API
-            st.error(f"Token estimation failed: {exc}")
-        finally:
-            progress_bar.progress(100)
-            progress_placeholder.empty()
-
-    token_result = st.session_state.get("token_estimate")
-    if isinstance(token_result, pd.Series):
-        st.dataframe(token_result.to_frame(), use_container_width=True)
 
 
 # ---------------------------------------------------------------------------
