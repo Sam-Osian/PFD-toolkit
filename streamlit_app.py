@@ -46,7 +46,6 @@ def _init_session_state() -> None:
         "llm_client": None,
         "extractor": None,
         "extractor_source_signature": None,
-        "extractor_verbose": False,
         "seed_topics_last": None,
         "feature_grid": None,
         "extractor_mode": "Discover themes in the reports",
@@ -351,12 +350,18 @@ def _build_sidebar() -> None:
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Model configuration")
-    model_display_options = ["GPT 4.1", "GPT 4.1 Mini"]
-    model_value_map = {"GPT 4.1": "gpt-4.1", "GPT 4.1 Mini": "gpt-4.1-mini"}
-    current_model_value = st.session_state.get("model_name", "gpt-4.1")
+    model_display_options = [
+        "GPT 4.1 Mini (+speed, -accuracy)",
+        "GPT 4.1 (+accuracy, -speed)",
+    ]
+    model_value_map = {
+        "GPT 4.1 Mini (+speed, -accuracy)": "gpt-4.1-mini",
+        "GPT 4.1 (+accuracy, -speed)": "gpt-4.1",
+    }
+    current_model_value = st.session_state.get("model_name", "gpt-4.1-mini")
     current_display = next(
         (label for label, value in model_value_map.items() if value == current_model_value),
-        "GPT 4.1",
+        model_display_options[0],
     )
     model_display = st.sidebar.selectbox(
         "Chat model",
@@ -367,23 +372,36 @@ def _build_sidebar() -> None:
     )
     model_name = model_value_map[model_display]
     st.session_state["model_name"] = model_name
-    max_workers = st.sidebar.number_input("Max parallel workers", min_value=1, max_value=32, value=8)
+    with st.sidebar.expander("Advanced options"):
+        max_workers = st.number_input(
+            "Max parallel workers",
+            min_value=1,
+            max_value=32,
+            value=int(st.session_state.get("max_parallel_workers", 8)),
+            key="max_parallel_workers_input",
+        )
+    st.session_state["max_parallel_workers"] = int(max_workers)
     validation_attempts = 2
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### Report window")
     default_start = date(2013, 1, 1)
-    date_range = st.sidebar.date_input(
-        "Report date range",
-        value=(default_start, date.today()),
+    start_date = st.sidebar.date_input(
+        "Report start date",
+        value=st.session_state.get("report_start_date", default_start),
         min_value=date(2000, 1, 1),
         max_value=date.today(),
     )
-    if isinstance(date_range, tuple):
-        start_date, end_date = date_range
-    else:
-        start_date = date_range
-        end_date = date.today()
+    st.session_state["report_start_date"] = start_date
+    end_date = st.sidebar.date_input(
+        "Report end date",
+        value=st.session_state.get("report_end_date", date.today()),
+        min_value=start_date,
+        max_value=date.today(),
+    )
+    st.session_state["report_end_date"] = end_date
+    if end_date < start_date:
+        st.sidebar.error("End date must be on or after the start date.")
 
     n_reports_raw = st.sidebar.text_input(
         "Limit number of recent reports (optional)",
@@ -409,6 +427,9 @@ def _build_sidebar() -> None:
     if load_button:
         if n_reports_raw.strip() and n_reports is None:
             st.sidebar.error("Enter a valid integer before loading reports.")
+            return
+        if end_date < start_date:
+            st.sidebar.error("Fix the report date range before loading reports.")
             return
         try:
             with st.spinner("Downloading and filtering reports..."):
@@ -523,10 +544,8 @@ def _render_screener_tab() -> None:
         )
         cols3 = st.columns(2)
         filter_df = cols3[0].checkbox("Only keep matching reports", value=True)
-        result_col_name = cols3[1].text_input("Name for the match column", value="matches_query")
 
         with st.expander("Advanced options"):
-            verbose = st.checkbox("Show detailed logs in the terminal", value=False)
             produce_spans = st.checkbox("Return supporting quotes from the reports", value=False)
             drop_spans = st.checkbox(
                 "Remove the quotes column from the results", value=False
@@ -542,6 +561,9 @@ def _render_screener_tab() -> None:
                     "Loaded reports in workspace", key_suffix="screener"
                 )
             return
+        initial_report_count = len(reports_df)
+        match_column_name = "matches_query"
+
         progress_placeholder = st.empty()
         progress_bar = progress_placeholder.progress(0)
         try:
@@ -549,7 +571,7 @@ def _render_screener_tab() -> None:
             screener = Screener(
                 llm=llm_client,
                 reports=reports_df,
-                verbose=verbose,
+                verbose=False,
                 include_date=True,
                 include_coroner=True,
                 include_area=True,
@@ -563,7 +585,7 @@ def _render_screener_tab() -> None:
                 result_df = screener.screen_reports(
                     search_query=search_query or None,
                     filter_df=filter_df,
-                    result_col_name=result_col_name or "matches_query",
+                    result_col_name=match_column_name,
                     produce_spans=produce_spans,
                     drop_spans=drop_spans,
                 )
@@ -575,7 +597,19 @@ def _render_screener_tab() -> None:
             st.session_state["extractor_result"] = None
             st.session_state["summary_result"] = None
             st.session_state["theme_model_schema"] = None
-            st.success("Screening complete. Review the results below.")
+            if filter_df:
+                matched_report_count = len(result_df)
+            elif isinstance(result_df, pd.DataFrame) and match_column_name in result_df.columns:
+                matched_series = result_df[match_column_name]
+                matched_report_count = int(matched_series.fillna(False).astype(bool).sum())
+            else:
+                matched_report_count = len(result_df)
+
+            st.success(
+                f"Screening successful! From the initial {initial_report_count:,} reports, "
+                f"PFD Toolkit identified {matched_report_count:,} reports which matched your search query. "
+                "The dataset above has been updated to reflect this screening."
+            )
         except Exception as exc:  # pragma: no cover - relies on live API
             st.error(f"Screening failed: {exc}")
         finally:
@@ -631,20 +665,12 @@ def _render_extractor_tab() -> None:
     with reports_container:
         _render_reports_overview("Loaded reports in workspace", key_suffix="extractor")
 
-    previous_verbose = bool(st.session_state.get("extractor_verbose", False))
-    verbose = st.checkbox(
-        "Show detailed logs in the terminal",
-        value=previous_verbose,
-    )
-    st.session_state["extractor_verbose"] = verbose
-
     extractor_signature = (len(active_reports_df), tuple(active_reports_df.columns))
     extractor: Optional[Extractor] = st.session_state.get("extractor")
 
     if (
         extractor is None
         or st.session_state.get("extractor_source_signature") != extractor_signature
-        or previous_verbose != verbose
     ):
         try:
             extractor = Extractor(
@@ -657,7 +683,7 @@ def _render_extractor_tab() -> None:
                 include_investigation=True,
                 include_circumstances=True,
                 include_concerns=True,
-                verbose=verbose,
+                verbose=False,
             )
             st.session_state["extractor"] = extractor
             st.session_state["extractor_source_signature"] = extractor_signature
@@ -715,21 +741,24 @@ def _render_extractor_tab() -> None:
                     value=500000,
                     step=1000,
                 )
-                max_col, min_col = st.columns(2)
-                max_themes_raw = max_col.text_input(
-                    "Maximum number of themes (optional)",
-                    value="",
-                    placeholder="Leave blank to let the model decide.",
-                )
+                min_col, max_col = st.columns(2)
                 min_themes_raw = min_col.text_input(
                     "Minimum number of themes (optional)",
                     value="",
-                    placeholder="Leave blank to let the model decide.",
+                    placeholder="e.g. 5",
+                )
+                max_themes_raw = max_col.text_input(
+                    "Maximum number of themes (optional)",
+                    value="",
+                    placeholder="e.g. 10",
                 )
                 seed_topics_text = st.text_area(
                     "Seed topics (optional)",
                     value=seed_topics_text,
                     placeholder='["Communication", "Medication safety", "Staff training"]',
+                )
+                st.caption(
+                    "Enter in a topic or list of topics to help the model get started."
                 )
 
             themes_submitted = st.form_submit_button(
@@ -740,16 +769,6 @@ def _render_extractor_tab() -> None:
             st.session_state["seed_topics_last"] = None
             input_error = False
             try:
-                max_themes_value = _parse_optional_non_negative_int(
-                    max_themes_raw,
-                    "Maximum number of themes",
-                )
-            except ValueError as exc:
-                st.error(str(exc))
-                input_error = True
-                max_themes_value = None
-
-            try:
                 min_themes_value = _parse_optional_non_negative_int(
                     min_themes_raw,
                     "Minimum number of themes",
@@ -758,6 +777,16 @@ def _render_extractor_tab() -> None:
                 st.error(str(exc))
                 input_error = True
                 min_themes_value = None
+
+            try:
+                max_themes_value = _parse_optional_non_negative_int(
+                    max_themes_raw,
+                    "Maximum number of themes",
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+                input_error = True
+                max_themes_value = None
 
             if not input_error:
                 progress_placeholder = st.empty()
