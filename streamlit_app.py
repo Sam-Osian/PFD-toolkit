@@ -719,7 +719,7 @@ def _render_action_tiles() -> None:
     st.markdown("### What would you like to do next?")
 
     if st.button(
-        "Save CSV to file",
+        "Save working dataset to file",
         key="tile_save",
         use_container_width=True,
         disabled=not dataset_available,
@@ -751,23 +751,35 @@ def _render_action_tiles() -> None:
         st.session_state["active_action"] = "extract"
 
     if history:
-        if st.button(
-            "Undo most recent change",
+        undo_container = st.container()
+        undo_container.markdown(
+            "<div class='pfd-undo-button'>",
+            unsafe_allow_html=True,
+        )
+        if undo_container.button(
+            "↶ Undo most recent change",
             key="tile_undo",
             use_container_width=True,
         ):
             _undo_last_change()
+        undo_container.markdown("</div>", unsafe_allow_html=True)
 
     start_again_disabled = not (
         isinstance(initial_df, pd.DataFrame) and not initial_df.empty
     )
-    if st.button(
-        "Start again",
+    restart_container = st.container()
+    restart_container.markdown(
+        "<div class='pfd-start-button'>",
+        unsafe_allow_html=True,
+    )
+    if restart_container.button(
+        "↻ Start over",
         key="tile_reset",
         use_container_width=True,
         disabled=start_again_disabled,
     ):
         _start_again()
+    restart_container.markdown("</div>", unsafe_allow_html=True)
 
 
 def _undo_last_change() -> None:
@@ -832,13 +844,13 @@ def _render_save_action() -> None:
     """Render the save action allowing users to download the dataset."""
 
     reports_df = _get_reports_df()
-    st.markdown("#### Save CSV to file")
+    st.markdown("#### Save working dataset to file")
     if reports_df.empty:
         st.info("No reports available to download yet.")
         return
 
     st.download_button(
-        "Download current dataset as CSV",
+        "Download working dataset as CSV",
         data=reports_df.to_csv(index=False).encode("utf-8"),
         file_name="pfd_reports.csv",
         mime="text/csv",
@@ -1168,14 +1180,7 @@ def _render_discover_action() -> None:
         st.info("No theme assignments were returned in the preview.")
 
     preview_df = preview_state.get("preview_df")
-    if isinstance(preview_df, pd.DataFrame):
-        st.markdown("##### Preview of annotated reports")
-        st.dataframe(preview_df, use_container_width=True, hide_index=True)
-
     theme_schema = preview_state.get("theme_schema")
-    if isinstance(theme_schema, dict):
-        st.markdown("##### Theme schema preview")
-        st.json(theme_schema)
 
     actions_col1, actions_col2 = st.columns(2)
     if actions_col1.button("Apply themes", use_container_width=True):
@@ -1263,24 +1268,7 @@ def _render_extract_action() -> None:
     )
     st.session_state["feature_grid"] = feature_grid
 
-    uploaded_df: Optional[pd.DataFrame] = None
     with st.form("extract_features_form", enter_to_submit=False):
-        dataset_choice = st.radio(
-            "Which reports should be processed?",
-            ("Use the loaded reports", "Upload a CSV"),
-            index=0,
-            key="extract_dataset_choice",
-        )
-        if dataset_choice == "Upload a CSV":
-            uploaded_file = st.file_uploader(
-                "Upload a CSV file",
-                type="csv",
-                accept_multiple_files=False,
-                key="extract_uploaded_file",
-            )
-            if uploaded_file is not None:
-                uploaded_df = pd.read_csv(uploaded_file)
-
         with st.expander("Advanced options"):
             produce_spans = st.checkbox(
                 "Return supporting quotes from the reports",
@@ -1302,12 +1290,6 @@ def _render_extract_action() -> None:
                 value=False,
                 key="extract_allow_multiple",
             )
-            schema_detail_choice = st.selectbox(
-                "Level of schema detail shared with the model",
-                options=["Minimal", "Full"],
-                index=0,
-                key="extract_schema_detail",
-            )
             extra_instructions = st.text_area(
                 "Anything else the model should know? (optional)",
                 key="extract_extra_instructions",
@@ -1325,17 +1307,13 @@ def _render_extract_action() -> None:
     if not extract_submitted:
         return
 
-    if dataset_choice == "Upload a CSV" and uploaded_df is None:
-        st.error("Upload a CSV file before running the extractor.")
-        return
-
     push_history_snapshot()
     progress_placeholder = st.empty()
     progress_bar = progress_placeholder.progress(0)
     try:
         progress_bar.progress(10)
         feature_model = _build_feature_model_from_grid(feature_grid)
-        target_df = uploaded_df if uploaded_df is not None else None
+        target_df = reports_df
         with st.spinner("Extracting structured data..."):
             result_df = extractor.extract_features(
                 reports=target_df,
@@ -1344,7 +1322,7 @@ def _render_extract_action() -> None:
                 drop_spans=drop_spans,
                 force_assign=force_assign,
                 allow_multiple=allow_multiple,
-                schema_detail=schema_detail_choice.lower(),  # type: ignore[arg-type]
+                schema_detail="minimal",
                 extra_instructions=extra_instructions or None,
                 skip_if_present=skip_if_present,
             )
@@ -1402,6 +1380,22 @@ def main() -> None:
             div[data-testid="stButton"] > button:disabled {
                 cursor: not-allowed;
                 opacity: 0.55;
+            }
+            .pfd-undo-button button {
+                border: 1px solid rgba(148, 163, 184, 0.6);
+                background: linear-gradient(90deg, #f9fafb 0%, #e5e7eb 100%);
+                color: #1f2937;
+            }
+            .pfd-undo-button button:hover {
+                background: linear-gradient(90deg, #e5e7eb 0%, #d1d5db 100%);
+            }
+            .pfd-start-button button {
+                border: 1px solid rgba(148, 163, 184, 0.6);
+                background: linear-gradient(90deg, #f9fafb 0%, #e5e7eb 100%);
+                color: #1f2937;
+            }
+            .pfd-start-button button:hover {
+                background: linear-gradient(90deg, #e5e7eb 0%, #d1d5db 100%);
             }
         </style>
         """,
