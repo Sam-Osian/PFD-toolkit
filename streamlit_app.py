@@ -7,7 +7,7 @@ import json
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -67,11 +67,12 @@ def _init_session_state() -> None:
 
 def _styled_metric(label: str, value: Any) -> None:
     """Render a metric with consistent styling."""
+
     st.markdown(
         f"""
         <div class="metric-card">
-            <div class="metric-label">{label}</div>
-            <div class="metric-value">{value}</div>
+            <span class="metric-label">{label}</span>
+            <span class="metric-value">{value}</span>
         </div>
         """,
         unsafe_allow_html=True,
@@ -559,21 +560,9 @@ def _get_reports_df() -> pd.DataFrame:
 
 
 def _render_header(container: Optional[DeltaGenerator] = None) -> None:
-    """Render the pinned header containing KPIs and the active dataset."""
+    """Render the hero header and dataset snapshot."""
 
     ctx = container or st
-
-    ctx.title("PFD Toolkit AI Workbench")
-    ctx.markdown(
-        """
-        <p class="lead">
-            Explore Prevention of Future Death (PFD) reports, screen them against custom topics,
-            and extract structured insights using the Screener and Extractor APIs.
-            Configure your data and model in the sidebar, then work through the guided flows below.
-        </p>
-        """,
-        unsafe_allow_html=True,
-    )
 
     reports_df = _get_reports_df()
     reports_count = len(reports_df)
@@ -596,21 +585,128 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
         if pd.notna(latest):
             latest_display = latest.strftime("%d %b %Y")
 
-    col1, col2, col3 = ctx.columns(3)
+    hero_html = f"""
+    <section class="hero-section">
+        <div class="hero-copy">
+            <span class="hero-badge">PFD Toolkit · AI Workbench</span>
+            <h1>Command the narrative of Prevention of Future Death reports.</h1>
+            <p>
+                Load official reports, triage them against strategic focus areas, and extract
+                structured evidence in minutes. The streamlined workspace keeps your data,
+                models, and insights aligned from discovery through delivery.
+            </p>
+            <div class="hero-checklist">
+                <span class="hero-pill">① Load and curate source data</span>
+                <span class="hero-pill">② Screen topics and themes with LLMs</span>
+                <span class="hero-pill">③ Capture structured insights for reporting</span>
+            </div>
+        </div>
+        <div class="hero-visual">
+            <div class="hero-orb orb-primary"></div>
+            <div class="hero-orb orb-secondary"></div>
+            <div class="hero-kpi">
+                <span class="hero-kpi-value">{reports_count:,}</span>
+                <span class="hero-kpi-label">Reports currently in view</span>
+                <span class="hero-kpi-range">{earliest_display} – {latest_display}</span>
+            </div>
+        </div>
+    </section>
+    """
+
+    ctx.markdown(hero_html, unsafe_allow_html=True)
+
+    metric_row = ctx.container()
+    metric_row.markdown("<div class='metric-row'>", unsafe_allow_html=True)
+    col1, col2, col3 = metric_row.columns(3)
     with col1:
         _styled_metric("Reports in view", f"{reports_count:,}")
     with col2:
-        _styled_metric("Earliest date", earliest_display)
+        _styled_metric("Earliest report", earliest_display)
     with col3:
-        _styled_metric("Latest date", latest_display)
+        _styled_metric("Latest report", latest_display)
+    metric_row.markdown("</div>", unsafe_allow_html=True)
 
-    ctx.markdown("#### Current working dataset")
+    dataset_card = ctx.container()
+    dataset_card.markdown(
+        """
+        <div class="section-card data-card">
+            <div class="section-card-header">
+                <span class="section-kicker">Workspace</span>
+                <h3>Current working dataset</h3>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     if reports_df.empty:
-        ctx.info(
-            "No reports loaded yet. Use the **sidebar** to configure and load reports."
+        dataset_card.markdown(
+            """
+            <div class="empty-state">
+                <h4>No reports loaded yet</h4>
+                <p>Use the sidebar to select a data window, configure your model provider, and load source reports.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
     else:
-        ctx.dataframe(reports_df, use_container_width=True, hide_index=True)
+        dataset_card.dataframe(reports_df, use_container_width=True, hide_index=True)
+
+    dataset_card.markdown("</div>", unsafe_allow_html=True)
+
+
+def _render_status_bar(container: Optional[DeltaGenerator] = None) -> None:
+    """Display a floating status ribbon with workspace health."""
+
+    ctx = container or st
+    reports_df = _get_reports_df()
+    dataset_modified = st.session_state.get("reports_df_modified", False)
+    llm_ready = st.session_state.get("llm_client") is not None
+    history_depth = len(st.session_state.get("history", []))
+
+    if reports_df.empty:
+        dataset_status = "No dataset loaded"
+        dataset_tone = "muted"
+    else:
+        dataset_status = f"{len(reports_df):,} reports"
+        dataset_tone = "success" if not dataset_modified else "alert"
+        if dataset_modified:
+            dataset_status += " · unsaved edits"
+
+    statuses: List[Dict[str, str]] = [
+        {
+            "label": "Dataset",
+            "value": dataset_status,
+            "tone": dataset_tone,
+        },
+        {
+            "label": "Model",
+            "value": "Connected" if llm_ready else "Awaiting key",
+            "tone": "success" if llm_ready else "muted",
+        },
+        {
+            "label": "Undo",
+            "value": f"{history_depth} step(s) available" if history_depth else "Nothing to undo",
+            "tone": "info" if history_depth else "muted",
+        },
+    ]
+
+    badges = "".join(
+        f"""
+        <div class="status-pill status-{item['tone']}">
+            <span class="status-label">{item['label']}</span>
+            <span class="status-value">{item['value']}</span>
+        </div>
+        """
+        for item in statuses
+    )
+
+    ctx.markdown(
+        f"""
+        <div class="status-bar">{badges}</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def _build_theme_summary_table(
     extracted_reports: pd.DataFrame, theme_schema: Optional[Dict[str, Any]]
@@ -705,7 +801,7 @@ def _render_flash_message() -> None:
 
 
 def _render_action_tiles() -> None:
-    """Render the single-column action tiles."""
+    """Render the next-step action grid with gradient tiles."""
 
     reports_df = _get_reports_df()
     dataset_available = not reports_df.empty
@@ -716,44 +812,94 @@ def _render_action_tiles() -> None:
     if not dataset_available and st.session_state.get("active_action") is not None:
         st.session_state["active_action"] = None
 
-    st.markdown("### What would you like to do next?")
+    actions = [
+        {
+            "label": "Save working dataset",
+            "description": "Export the curated reports as a CSV for sharing or further analysis.",
+            "key": "tile_save",
+            "disabled": not dataset_available,
+            "icon": "💾",
+            "target": "save",
+        },
+        {
+            "label": "Filter reports (LLM Screener)",
+            "description": "Apply high-precision filters powered by your configured language model.",
+            "key": "tile_filter",
+            "disabled": not (dataset_available and llm_ready),
+            "icon": "🧭",
+            "target": "filter",
+        },
+        {
+            "label": "Discover recurring themes",
+            "description": "Surface thematic clusters to see how systemic issues recur across cases.",
+            "key": "tile_discover",
+            "disabled": not (dataset_available and llm_ready),
+            "icon": "🌐",
+            "target": "discover",
+        },
+        {
+            "label": "Pull out structured information",
+            "description": "Extract fields, tags, and custom attributes ready for dashboards and briefs.",
+            "key": "tile_extract",
+            "disabled": not (dataset_available and llm_ready),
+            "icon": "🧾",
+            "target": "extract",
+        },
+    ]
 
-    if st.button(
-        "Save working dataset to file",
-        key="tile_save",
-        use_container_width=True,
-        disabled=not dataset_available,
-    ):
-        st.session_state["active_action"] = "save"
+    section = st.container()
+    section.markdown(
+        """
+        <div class="section-card action-section">
+            <div class="section-card-header">
+                <span class="section-kicker">Next steps</span>
+                <h3>Where would you like to go next?</h3>
+                <p>Choose a workflow to continue refining, tagging, or exporting your Prevention of Future Death reports.</p>
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    if st.button(
-        "Filter reports (LLM Screener)",
-        key="tile_filter",
-        use_container_width=True,
-        disabled=not (dataset_available and llm_ready),
-    ):
-        st.session_state["active_action"] = "filter"
+    grid_container = section.container()
+    for i in range(0, len(actions), 2):
+        cols = grid_container.columns(2, gap="large")
+        for col, action in zip(cols, actions[i : i + 2]):
+            with col:
+                card = col.container()
+                card.markdown(
+                    f"""
+                    <div class="action-card {'is-disabled' if action['disabled'] else ''}">
+                    """,
+                    unsafe_allow_html=True,
+                )
+                if card.button(
+                    f"{action['icon']}  {action['label']}",
+                    key=action["key"],
+                    use_container_width=True,
+                    disabled=action["disabled"],
+                ):
+                    st.session_state["active_action"] = action["target"]
+                card.markdown(
+                    f"""
+                        <p class="action-card-copy">{action['description']}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-    if st.button(
-        "Discover recurring themes (Extractor)",
-        key="tile_discover",
-        use_container_width=True,
-        disabled=not (dataset_available and llm_ready),
-    ):
-        st.session_state["active_action"] = "discover"
-
-    if st.button(
-        "Pull out structured information (Extractor)",
-        key="tile_extract",
-        use_container_width=True,
-        disabled=not (dataset_available and llm_ready),
-    ):
-        st.session_state["active_action"] = "extract"
+    section.markdown("</div>", unsafe_allow_html=True)
 
     if history:
         undo_container = st.container()
         undo_container.markdown(
-            "<div class='pfd-undo-button'>",
+            """
+            <div class="section-card utility-card">
+                <div class="utility-grid">
+                    <div>
+                        <span class="utility-label">Need a do-over?</span>
+                        <p class="utility-copy">Undo the latest change to revert to your previous dataset snapshot.</p>
+                    </div>
+            """,
             unsafe_allow_html=True,
         )
         if undo_container.button(
@@ -762,14 +908,21 @@ def _render_action_tiles() -> None:
             use_container_width=True,
         ):
             _undo_last_change()
-        undo_container.markdown("</div>", unsafe_allow_html=True)
+        undo_container.markdown("</div></div></div>", unsafe_allow_html=True)
 
     start_again_disabled = not (
         isinstance(initial_df, pd.DataFrame) and not initial_df.empty
     )
     restart_container = st.container()
     restart_container.markdown(
-        "<div class='pfd-start-button'>",
+        """
+        <div class="section-card utility-card">
+            <div class="utility-grid">
+                <div>
+                    <span class="utility-label">Start fresh</span>
+                    <p class="utility-copy">Reload the original dataset you first brought into the workspace.</p>
+                </div>
+        """,
         unsafe_allow_html=True,
     )
     if restart_container.button(
@@ -779,7 +932,7 @@ def _render_action_tiles() -> None:
         disabled=start_again_disabled,
     ):
         _start_again()
-    restart_container.markdown("</div>", unsafe_allow_html=True)
+    restart_container.markdown("</div></div></div>", unsafe_allow_html=True)
 
 
 def _undo_last_change() -> None:
@@ -1355,47 +1508,589 @@ def main() -> None:
     st.markdown(
         """
         <style>
-            .stApp {background: radial-gradient(circle at top, #f0f4ff 0%, #ffffff 60%);}
-            .metric-card {
-                background: linear-gradient(135deg, #1b64f2 0%, #4f46e5 100%);
-                padding: 1.2rem;
-                border-radius: 1rem;
-                color: white;
-                text-align: center;
-                box-shadow: 0 8px 20px rgba(79, 70, 229, 0.25);
+            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600&display=swap');
+
+            :root {
+                color-scheme: dark;
             }
-            .metric-label {font-size: 0.9rem; opacity: 0.85;}
-            .metric-value {font-size: 1.6rem; font-weight: 600; margin-top: 0.2rem;}
-            .lead {font-size: 1.1rem; color: #1f2937;}
-            div[data-testid="stButton"] {margin-bottom: 0.75rem;}
-            div[data-testid="stButton"] > button {
-                border-radius: 0.9rem;
-                padding: 1rem 1.2rem;
-                font-size: 1rem;
+
+            html, body, .stApp {
+                font-family: 'Plus Jakarta Sans', sans-serif;
+            }
+
+            .stApp {
+                background: linear-gradient(130deg, #040716 0%, #131b46 35%, #2b1564 70%, #461b8b 100%);
+                min-height: 100vh;
+                color: #e7ecff;
+                position: relative;
+            }
+
+            .stApp::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                background:
+                    radial-gradient(circle at 20% 20%, rgba(96, 165, 250, 0.28), transparent 55%),
+                    radial-gradient(circle at 80% 0%, rgba(192, 132, 252, 0.38), transparent 50%),
+                    radial-gradient(circle at 50% 95%, rgba(45, 212, 191, 0.18), transparent 55%);
+                pointer-events: none;
+                z-index: -2;
+            }
+
+            .stApp::after {
+                content: "";
+                position: fixed;
+                inset: 0;
+                background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 0);
+                background-size: 40px 40px;
+                opacity: 0.35;
+                pointer-events: none;
+                z-index: -1;
+            }
+
+            .stApp a {
+                color: #8fdcff;
+            }
+
+            .stApp p, .stApp label, .stApp li, .stApp span, .stApp .stMarkdown {
+                color: rgba(230, 234, 255, 0.88);
+            }
+
+            div[data-testid="stHeader"] {
+                background: linear-gradient(135deg, rgba(8, 12, 36, 0.9), rgba(24, 18, 54, 0.85));
+                border-bottom: 1px solid rgba(99, 102, 241, 0.28);
+                box-shadow: none;
+                backdrop-filter: blur(18px);
+            }
+
+            div[data-testid="stHeader"] * {
+                color: #dfe5ff !important;
+            }
+
+            div[data-testid="stToolbar"] button[title*="theme"],
+            div[data-testid="stToolbar"] button[aria-label*="theme"] {
+                display: none;
+            }
+
+            .stApp h1, .stApp h2, .stApp h3, .stApp h4, .stApp h5 {
+                color: #f8f9ff;
+                font-family: 'Space Grotesk', sans-serif;
+            }
+
+            section[data-testid="stSidebar"] {
+                background: rgba(8, 12, 36, 0.85);
+                backdrop-filter: blur(20px);
+                border-right: 1px solid rgba(148, 163, 255, 0.2);
+            }
+
+            section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] span {
+                color: rgba(226, 232, 255, 0.88);
+            }
+
+            section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] textarea, section[data-testid="stSidebar"] select {
+                background: rgba(15, 23, 42, 0.65);
+                border: 1px solid rgba(148, 163, 255, 0.45);
+                color: #f8f9ff;
+                border-radius: 12px;
+            }
+
+            section[data-testid="stSidebar"] .stButton button {
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.6), rgba(56, 189, 248, 0.45));
+                border-radius: 999px;
+                border: 1px solid rgba(148, 163, 255, 0.4);
+                color: #0f172a;
+                font-weight: 700;
+            }
+
+            .status-bar {
+                position: fixed;
+                top: 1.5rem;
+                right: 1.5rem;
+                display: flex;
+                gap: 0.75rem;
+                z-index: 100;
+            }
+
+            .status-pill {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+                min-width: 180px;
+                padding: 0.65rem 1rem;
+                border-radius: 16px;
+                border: 1px solid rgba(148, 163, 255, 0.38);
+                background: rgba(14, 22, 58, 0.75);
+                box-shadow: 0 14px 40px rgba(8, 12, 28, 0.45);
+                backdrop-filter: blur(12px);
+            }
+
+            .status-pill.status-success {
+                border-color: rgba(74, 222, 128, 0.55);
+                background: rgba(16, 185, 129, 0.22);
+            }
+
+            .status-pill.status-alert {
+                border-color: rgba(250, 204, 21, 0.55);
+                background: rgba(250, 204, 21, 0.22);
+            }
+
+            .status-pill.status-info {
+                border-color: rgba(56, 189, 248, 0.55);
+                background: rgba(56, 189, 248, 0.22);
+            }
+
+            .stApp div[data-baseweb="input"] > div,
+            .stApp div[data-baseweb="textarea"] > div,
+            .stApp div[data-baseweb="select"] > div {
+                background: rgba(13, 21, 52, 0.75);
+                border: 1px solid rgba(148, 163, 255, 0.45);
+                border-radius: 14px;
+                box-shadow: inset 0 0 0 1px rgba(5, 10, 28, 0.55);
+            }
+
+            .stApp div[data-baseweb="input"] input,
+            .stApp div[data-baseweb="textarea"] textarea,
+            .stApp div[data-baseweb="select"] div[role="combobox"],
+            .stApp .stTextInput input,
+            .stApp .stTextArea textarea {
+                color: #f8f9ff !important;
+            }
+
+            .stApp div[data-baseweb="input"] input::placeholder,
+            .stApp div[data-baseweb="textarea"] textarea::placeholder {
+                color: rgba(226, 232, 255, 0.55);
+            }
+
+            .stApp div[data-baseweb="select"] svg {
+                color: rgba(226, 232, 255, 0.72);
+            }
+
+            .status-label {
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+                font-size: 0.7rem;
+                color: rgba(226, 232, 255, 0.72);
+            }
+
+            .status-value {
                 font-weight: 600;
-                border: 1px solid rgba(79, 70, 229, 0.35);
-                background: linear-gradient(90deg, #eef2ff 0%, #e0e7ff 100%);
-                color: #1f2937;
+                color: #f8faff;
             }
-            div[data-testid="stButton"] > button:disabled {
-                cursor: not-allowed;
+
+            .hero-section {
+                margin-top: 2.2rem;
+                position: relative;
+                display: grid;
+                grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+                gap: 3rem;
+                padding: 3rem 3.5rem;
+                border-radius: 32px;
+                background: rgba(12, 17, 46, 0.78);
+                border: 1px solid rgba(148, 163, 255, 0.25);
+                box-shadow: 0 35px 70px rgba(6, 10, 32, 0.55);
+                overflow: hidden;
+            }
+
+            .hero-section::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(135deg, rgba(79, 70, 229, 0.25), transparent 65%);
+                pointer-events: none;
+            }
+
+            .hero-copy {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .hero-badge {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                padding: 0.4rem 0.9rem;
+                border-radius: 999px;
+                background: rgba(56, 189, 248, 0.16);
+                border: 1px solid rgba(148, 163, 255, 0.35);
+                font-size: 0.8rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: rgba(224, 231, 255, 0.9);
+            }
+
+            .hero-section h1 {
+                font-size: clamp(2.6rem, 4vw, 3.6rem);
+                line-height: 1.1;
+                margin: 0.5rem 0 0.75rem;
+            }
+
+            .hero-section p {
+                max-width: 34rem;
+                font-size: 1.05rem;
+                color: rgba(226, 232, 255, 0.78);
+            }
+
+            .hero-checklist {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.6rem;
+            }
+
+            .hero-pill {
+                padding: 0.55rem 1rem;
+                border-radius: 999px;
+                background: rgba(148, 163, 255, 0.22);
+                border: 1px solid rgba(180, 198, 255, 0.35);
+                font-size: 0.85rem;
+                color: rgba(230, 234, 255, 0.9);
+            }
+
+            .hero-visual {
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .hero-orb {
+                position: absolute;
+                border-radius: 50%;
+                filter: blur(0px);
                 opacity: 0.55;
+                animation: float 12s ease-in-out infinite;
             }
-            .pfd-undo-button button {
-                border: 1px solid rgba(148, 163, 184, 0.6);
-                background: linear-gradient(90deg, #f9fafb 0%, #e5e7eb 100%);
-                color: #1f2937;
+
+            .hero-orb.orb-primary {
+                width: 260px;
+                height: 260px;
+                background: radial-gradient(circle at 30% 30%, rgba(96, 165, 250, 0.6), transparent 65%);
+                animation-delay: 0s;
             }
-            .pfd-undo-button button:hover {
-                background: linear-gradient(90deg, #e5e7eb 0%, #d1d5db 100%);
+
+            .hero-orb.orb-secondary {
+                width: 360px;
+                height: 360px;
+                background: radial-gradient(circle at 70% 40%, rgba(192, 132, 252, 0.45), transparent 70%);
+                animation-delay: 4s;
             }
-            .pfd-start-button button {
-                border: 1px solid rgba(148, 163, 184, 0.6);
-                background: linear-gradient(90deg, #f9fafb 0%, #e5e7eb 100%);
-                color: #1f2937;
+
+            @keyframes float {
+                0%, 100% { transform: translate3d(0, -8px, 0); }
+                50% { transform: translate3d(0, 12px, 0); }
             }
-            .pfd-start-button button:hover {
-                background: linear-gradient(90deg, #e5e7eb 0%, #d1d5db 100%);
+
+            .hero-kpi {
+                position: relative;
+                z-index: 1;
+                padding: 2.2rem 2rem;
+                border-radius: 24px;
+                background: rgba(12, 15, 45, 0.78);
+                border: 1px solid rgba(129, 140, 248, 0.4);
+                box-shadow: 0 22px 45px rgba(9, 10, 34, 0.55);
+                text-align: center;
+                display: flex;
+                flex-direction: column;
+                gap: 0.6rem;
+            }
+
+            .hero-kpi-value {
+                font-size: 2.8rem;
+                font-weight: 600;
+            }
+
+            .hero-kpi-label {
+                font-size: 0.95rem;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: rgba(224, 231, 255, 0.72);
+            }
+
+            .hero-kpi-range {
+                font-size: 0.95rem;
+                color: rgba(226, 232, 255, 0.68);
+            }
+
+            .metric-row {
+                margin-top: 2.4rem;
+            }
+
+            .metric-row [data-testid="column"] {
+                padding: 0.4rem;
+            }
+
+            .metric-card {
+                width: 100%;
+                background: linear-gradient(135deg, rgba(148, 163, 255, 0.22), rgba(56, 189, 248, 0.18));
+                border-radius: 20px;
+                padding: 1.5rem 1.6rem;
+                border: 1px solid rgba(180, 198, 255, 0.35);
+                box-shadow: 0 24px 40px rgba(5, 10, 30, 0.45);
+                display: flex;
+                flex-direction: column;
+                gap: 0.3rem;
+            }
+
+            .metric-label {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.14em;
+                color: rgba(229, 234, 255, 0.72);
+            }
+
+            .metric-value {
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: 1.9rem;
+                font-weight: 600;
+                color: #f9fbff;
+            }
+
+            .section-card {
+                margin-top: 2.8rem;
+                padding: 2.4rem 2.6rem;
+                border-radius: 28px;
+                background: rgba(12, 17, 44, 0.78);
+                border: 1px solid rgba(148, 163, 255, 0.25);
+                box-shadow: 0 32px 60px rgba(6, 10, 32, 0.5);
+                backdrop-filter: blur(18px);
+            }
+
+            .section-card-header h3 {
+                margin: 0.4rem 0 0.7rem;
+                font-size: 1.6rem;
+            }
+
+            .section-card-header p {
+                margin: 0;
+                color: rgba(224, 231, 255, 0.72);
+                font-size: 0.98rem;
+            }
+
+            .section-kicker {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.35rem 0.9rem;
+                border-radius: 999px;
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+                font-size: 0.75rem;
+                color: rgba(228, 233, 255, 0.85);
+                background: rgba(99, 102, 241, 0.25);
+                border: 1px solid rgba(148, 163, 255, 0.35);
+            }
+
+            .data-card .empty-state {
+                margin-top: 1.5rem;
+                padding: 1.8rem;
+                border-radius: 22px;
+                background: rgba(15, 23, 42, 0.6);
+                border: 1px dashed rgba(148, 163, 255, 0.4);
+            }
+
+            .data-card .empty-state h4 {
+                margin: 0 0 0.6rem;
+                font-size: 1.2rem;
+            }
+
+            .data-card .empty-state p {
+                margin: 0;
+                color: rgba(224, 231, 255, 0.72);
+            }
+
+            .data-card div[data-testid="stDataFrame"] {
+                margin-top: 1.8rem;
+                border-radius: 22px;
+                overflow: hidden;
+                box-shadow: 0 18px 40px rgba(6, 10, 32, 0.55);
+                background: rgba(9, 14, 36, 0.92);
+                border: 1px solid rgba(129, 140, 248, 0.32);
+            }
+
+            .data-card div[data-testid="stDataFrame"] table {
+                color: rgba(227, 233, 255, 0.92);
+            }
+
+            .data-card div[data-testid="stDataFrame"] thead tr th {
+                background: rgba(15, 23, 42, 0.95);
+                color: rgba(239, 246, 255, 0.82);
+                border-bottom: 1px solid rgba(129, 140, 248, 0.35);
+            }
+
+            .data-card div[data-testid="stDataFrame"] tbody tr td {
+                background: rgba(11, 18, 44, 0.76);
+                border-bottom: 1px solid rgba(71, 85, 139, 0.35);
+            }
+
+            .data-card div[data-testid="stDataFrame"] tbody tr:hover td {
+                background: rgba(32, 41, 86, 0.85);
+            }
+
+            .action-section {
+                margin-top: 3rem;
+            }
+
+            .action-section [data-testid="column"] {
+                padding: 0.5rem;
+            }
+
+            .action-card {
+                position: relative;
+                padding: 1.7rem 1.8rem 1.6rem;
+                border-radius: 24px;
+                background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 64, 175, 0.55));
+                border: 1px solid rgba(99, 102, 241, 0.42);
+                box-shadow: 0 26px 52px rgba(4, 8, 28, 0.65);
+                backdrop-filter: blur(18px);
+                display: flex;
+                flex-direction: column;
+                gap: 1.1rem;
+            }
+
+            .action-card.is-disabled {
+                opacity: 0.45;
+            }
+
+            .action-card div[data-testid="stButton"] {
+                width: 100%;
+                margin: 0;
+            }
+
+            .action-card div[data-testid="stButton"] > button {
+                width: 100%;
+                padding: 1.2rem 1.4rem;
+                border-radius: 18px;
+                font-weight: 700;
+                font-size: 1.05rem;
+                letter-spacing: 0.01em;
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(129, 140, 248, 0.95));
+                border: none;
+                color: #040b22;
+                box-shadow: 0 20px 40px rgba(12, 16, 48, 0.55);
+                transition: transform 0.28s ease, box-shadow 0.28s ease;
+            }
+
+            .action-card div[data-testid="stButton"] > button:hover:not(:disabled) {
+                transform: translateY(-3px);
+                box-shadow: 0 28px 55px rgba(16, 20, 58, 0.65);
+            }
+
+            .action-card div[data-testid="stButton"] > button:disabled {
+                background: linear-gradient(135deg, rgba(71, 85, 105, 0.55), rgba(100, 116, 139, 0.55));
+                color: rgba(241, 245, 255, 0.75);
+                cursor: not-allowed;
+                box-shadow: none;
+            }
+
+            .action-card-copy {
+                color: rgba(224, 231, 255, 0.76);
+                font-size: 0.94rem;
+                margin: 0;
+            }
+
+            .utility-card {
+                margin-top: 1.8rem;
+                padding: 1.8rem 2.2rem;
+                border-radius: 24px;
+                background: rgba(13, 20, 48, 0.78);
+                border: 1px solid rgba(148, 163, 255, 0.3);
+                box-shadow: 0 24px 50px rgba(6, 10, 30, 0.48);
+            }
+
+            .utility-grid {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 1.8rem;
+                align-items: center;
+            }
+
+            .utility-label {
+                text-transform: uppercase;
+                letter-spacing: 0.12em;
+                font-size: 0.75rem;
+                color: rgba(224, 231, 255, 0.68);
+            }
+
+            .utility-copy {
+                margin: 0;
+                color: rgba(226, 232, 255, 0.75);
+            }
+
+            .utility-card div[data-testid="stButton"] {
+                margin: 0;
+            }
+
+            .utility-card div[data-testid="stButton"] > button {
+                border-radius: 999px;
+                padding: 0.85rem 1.9rem;
+                font-weight: 700;
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(129, 140, 248, 0.95));
+                border: none;
+                color: #041026;
+                box-shadow: 0 20px 40px rgba(17, 24, 64, 0.45);
+                transition: transform 0.25s ease;
+            }
+
+            .utility-card div[data-testid="stButton"] > button:hover:not(:disabled) {
+                transform: translateY(-2px);
+            }
+
+            .utility-card div[data-testid="stButton"] > button:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+            }
+
+            div[data-testid="stAlert"] {
+                border-radius: 18px;
+                border: 1px solid rgba(148, 163, 255, 0.35);
+                background: rgba(12, 22, 54, 0.85);
+            }
+
+            div[data-testid="stAlert"] p {
+                color: rgba(226, 232, 255, 0.88);
+            }
+
+            @media (max-width: 1200px) {
+                .hero-section {
+                    grid-template-columns: 1fr;
+                    padding: 2.6rem;
+                }
+
+                .hero-visual {
+                    margin-top: 2rem;
+                }
+
+                .status-bar {
+                    position: static;
+                    margin-bottom: 1.5rem;
+                }
+            }
+
+            @media (max-width: 900px) {
+                .metric-row [data-testid="column"],
+                .action-section [data-testid="column"] {
+                    flex: 1 1 100% !important;
+                    width: 100% !important;
+                }
+
+                .utility-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+
+            @media (max-width: 600px) {
+                .hero-section {
+                    padding: 2.2rem;
+                }
+
+                .hero-section h1 {
+                    font-size: 2.2rem;
+                }
+
+                .metric-row {
+                    margin-top: 2rem;
+                }
             }
         </style>
         """,
@@ -1403,9 +2098,9 @@ def main() -> None:
     )
 
     _build_sidebar()
+    _render_status_bar()
     header_container = st.container()
     _render_header(header_container)
-    st.markdown("---")
     _render_flash_message()
     _render_action_tiles()
     _render_active_action()
