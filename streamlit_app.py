@@ -654,58 +654,94 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
     dataset_card.markdown("</div>", unsafe_allow_html=True)
 
 
-def _render_status_bar(container: Optional[DeltaGenerator] = None) -> None:
-    """Display a floating status ribbon with workspace health."""
+def _value_has_content(value: Any) -> bool:
+    """Return ``True`` when ``value`` contains meaningful state."""
 
-    ctx = container or st
-    reports_df = _get_reports_df()
-    dataset_modified = st.session_state.get("reports_df_modified", False)
-    llm_ready = st.session_state.get("llm_client") is not None
-    history_depth = len(st.session_state.get("history", []))
+    if value is None:
+        return False
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        return not value.empty
+    if isinstance(value, (list, tuple, set, dict)):
+        return len(value) > 0
+    try:
+        return bool(value)
+    except ValueError:
+        return True
+    except TypeError:
+        return True
 
-    if reports_df.empty:
-        dataset_status = "No dataset loaded"
-        dataset_tone = "muted"
-    else:
-        dataset_status = f"{len(reports_df):,} reports"
-        dataset_tone = "success" if not dataset_modified else "alert"
-        if dataset_modified:
-            dataset_status += " · unsaved edits"
 
-    statuses: List[Dict[str, str]] = [
-        {
-            "label": "Dataset",
-            "value": dataset_status,
-            "tone": dataset_tone,
-        },
-        {
-            "label": "Model",
-            "value": "Connected" if llm_ready else "Awaiting key",
-            "tone": "success" if llm_ready else "muted",
-        },
-        {
-            "label": "Undo",
-            "value": f"{history_depth} step(s) available" if history_depth else "Nothing to undo",
-            "tone": "info" if history_depth else "muted",
-        },
+def _workspace_has_activity() -> bool:
+    """Return ``True`` if the workspace has actions beyond the initial load."""
+
+    if st.session_state.get("reports_df_modified", False):
+        return True
+    if len(st.session_state.get("history", [])):
+        return True
+
+    activity_keys = [
+        "screener_result",
+        "extractor_result",
+        "summary_result",
+        "theme_model_schema",
+        "theme_summary_table",
+        "seed_topics_last",
+        "extractor",
+        "feature_grid",
+        "preview_state",
     ]
 
-    badges = "".join(
-        f"""
-        <div class="status-pill status-{item['tone']}">
-            <span class="status-label">{item['label']}</span>
-            <span class="status-value">{item['value']}</span>
-        </div>
-        """
-        for item in statuses
-    )
+    for key in activity_keys:
+        if _value_has_content(st.session_state.get(key)):
+            return True
 
-    ctx.markdown(
-        f"""
-        <div class="status-bar">{badges}</div>
-        """,
+    return False
+
+
+def _render_status_bar(container: Optional[DeltaGenerator] = None) -> None:
+    """Display a floating ribbon containing undo and start-over actions."""
+
+    ctx = container or st
+    history_depth = len(st.session_state.get("history", []))
+    initial_df = st.session_state.get("reports_df_initial")
+
+    undo_disabled = history_depth == 0
+    if undo_disabled:
+        undo_message = ""
+    elif history_depth == 1:
+        undo_message = "(1 step available)"
+    else:
+        undo_message = f"{history_depth} steps available"
+
+    has_initial_dataset = isinstance(initial_df, pd.DataFrame) and not initial_df.empty
+    workspace_active = _workspace_has_activity()
+    start_over_disabled = not (has_initial_dataset and workspace_active)
+
+    if not has_initial_dataset:
+        start_over_message = ""
+    elif not workspace_active:
+        start_over_message = ""
+    else:
+        start_over_message = ""
+
+    shell = ctx.container()
+    shell.markdown(
+        "<div class='status-shell'><div class='status-actions'>",
         unsafe_allow_html=True,
     )
+    if shell.button(
+        f"↶ Undo\n{undo_message}",
+        key="status_undo",
+        disabled=undo_disabled,
+    ):
+        _undo_last_change()
+    if shell.button(
+        f"↻ Start over\n{start_over_message}",
+        key="status_reset",
+        disabled=start_over_disabled,
+    ):
+        _start_again()
+    shell.markdown("</div></div>", unsafe_allow_html=True)
 
 
 def _build_theme_summary_table(
@@ -807,7 +843,6 @@ def _render_action_tiles() -> None:
     dataset_available = not reports_df.empty
     llm_ready = st.session_state.get("llm_client") is not None
     history = st.session_state.get("history", [])
-    initial_df = st.session_state.get("reports_df_initial")
 
     if not dataset_available and st.session_state.get("active_action") is not None:
         st.session_state["active_action"] = None
@@ -915,31 +950,6 @@ def _render_action_tiles() -> None:
         ):
             _undo_last_change()
         undo_container.markdown("</div></div></div>", unsafe_allow_html=True)
-
-    start_again_disabled = not (
-        isinstance(initial_df, pd.DataFrame) and not initial_df.empty
-    )
-    restart_container = st.container()
-    restart_container.markdown(
-        """
-        <div class="section-card utility-card">
-            <div class="utility-grid">
-                <div>
-                    <span class="utility-label">Start fresh</span>
-                    <p class="utility-copy">Reload the original dataset you first brought into the workspace.</p>
-                </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    if restart_container.button(
-        "↻ Start over",
-        key="tile_reset",
-        use_container_width=True,
-        disabled=start_again_disabled,
-    ):
-        _start_again()
-    restart_container.markdown("</div></div></div>", unsafe_allow_html=True)
-
 
 def _undo_last_change() -> None:
     """Pop the latest snapshot from history and restore it."""
@@ -1608,41 +1618,93 @@ def main() -> None:
                 font-weight: 700;
             }
 
-            .status-bar {
+            .status-shell {
                 position: fixed;
                 top: 1.5rem;
                 right: 1.5rem;
                 display: flex;
                 gap: 0.75rem;
+                align-items: stretch;
                 z-index: 100;
             }
 
-            .status-pill {
+            .status-actions {
+                display: flex;
+                align-items: stretch;
+                gap: 0.75rem;
+                flex-wrap: nowrap;
+            }
+
+            .status-actions div[data-testid="stButton"] {
+                margin: 0;
+                flex: 0 0 auto;
+            }
+
+            .status-actions div[data-testid="stButton"] > button {
                 display: flex;
                 flex-direction: column;
+                justify-content: center;
+                align-items: flex-start;
                 gap: 0.25rem;
-                min-width: 180px;
-                padding: 0.65rem 1rem;
-                border-radius: 16px;
-                border: 1px solid rgba(148, 163, 255, 0.38);
-                background: rgba(14, 22, 58, 0.75);
-                box-shadow: 0 14px 40px rgba(8, 12, 28, 0.45);
+                padding: 0.95rem 1.15rem;
+                min-width: 215px;
+                border-radius: 18px;
+                border: 1px solid rgba(148, 163, 255, 0.4);
+                background: rgba(15, 23, 42, 0.82);
+                color: #f8faff;
+                font-weight: 600;
+                letter-spacing: 0.01em;
+                text-align: left;
+                white-space: pre-line;
+                box-shadow: 0 18px 44px rgba(8, 12, 28, 0.45);
                 backdrop-filter: blur(12px);
+                transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
             }
 
-            .status-pill.status-success {
-                border-color: rgba(74, 222, 128, 0.55);
-                background: rgba(16, 185, 129, 0.22);
+            .status-actions div[data-testid="stButton"] > button :is(p, span) {
+                margin: 0;
+                display: block;
+                white-space: inherit;
+                font-size: 0.68rem;
+                line-height: 1.25;
+                font-weight: 500;
+                letter-spacing: 0.01em;
+                color: rgba(226, 232, 255, 0.65);
             }
 
-            .status-pill.status-alert {
-                border-color: rgba(250, 204, 21, 0.55);
-                background: rgba(250, 204, 21, 0.22);
+            .status-actions div[data-testid="stButton"] > button :is(p, span)::first-line {
+                font-size: 1.06rem;
+                font-weight: 700;
+                color: #f8faff;
+                letter-spacing: 0.015em;
             }
 
-            .status-pill.status-info {
-                border-color: rgba(56, 189, 248, 0.55);
-                background: rgba(56, 189, 248, 0.22);
+            .status-actions div[data-testid="stButton"] > button:not(:disabled) {
+                background: rgba(59, 130, 246, 0.35);
+                border-color: rgba(96, 165, 250, 0.6);
+            }
+
+            .status-actions div[data-testid="stButton"]:nth-child(2) > button:not(:disabled) {
+                background: rgba(30, 64, 175, 0.45);
+                border-color: rgba(129, 140, 248, 0.65);
+            }
+
+            .status-actions div[data-testid="stButton"] > button:hover:not(:disabled) {
+                transform: translateY(-2px);
+            }
+
+            .status-actions div[data-testid="stButton"] > button:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+                background: rgba(15, 23, 42, 0.58);
+            }
+
+            .status-actions div[data-testid="stButton"] > button:disabled p {
+                color: rgba(148, 163, 196, 0.58);
+            }
+
+            .status-actions div[data-testid="stButton"] > button:disabled p::first-line {
+                color: rgba(224, 231, 255, 0.78);
             }
 
             .stApp div[data-baseweb="input"] > div,
@@ -2150,9 +2212,17 @@ def main() -> None:
                     margin-top: 2rem;
                 }
 
-                .status-bar {
+                .status-shell {
                     position: static;
                     margin-bottom: 1.5rem;
+                    justify-content: flex-end;
+                    flex-wrap: wrap;
+                    gap: 0.75rem;
+                }
+
+                .status-actions {
+                    justify-content: flex-end;
+                    flex-wrap: wrap;
                 }
             }
 
