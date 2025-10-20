@@ -869,19 +869,25 @@ def _render_action_tiles() -> None:
                 card.markdown(
                     f"""
                     <div class="action-card {'is-disabled' if action['disabled'] else ''}">
+                        <div class="action-card-content">
+                            <div class="action-card-heading">
+                                <span class="action-card-icon">{action['icon']}</span>
+                                <span class="action-card-title">{action['label']}</span>
+                            </div>
+                            <p class="action-card-copy">{action['description']}</p>
+                        </div>
                     """,
                     unsafe_allow_html=True,
                 )
                 if card.button(
-                    f"{action['icon']}  {action['label']}",
+                    f"{action['icon']} {action['label']}",
                     key=action["key"],
                     use_container_width=True,
                     disabled=action["disabled"],
                 ):
                     st.session_state["active_action"] = action["target"]
                 card.markdown(
-                    f"""
-                        <p class="action-card-copy">{action['description']}</p>
+                    """
                     </div>
                     """,
                     unsafe_allow_html=True,
@@ -1939,48 +1945,131 @@ def main() -> None:
                 position: relative;
                 padding: 1.7rem 1.8rem 1.6rem;
                 border-radius: 24px;
-                background: linear-gradient(135deg, rgba(15, 23, 42, 0.85), rgba(30, 64, 175, 0.55));
+                background: linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(37, 69, 180, 0.6));
                 border: 1px solid rgba(99, 102, 241, 0.42);
                 box-shadow: 0 26px 52px rgba(4, 8, 28, 0.65);
                 backdrop-filter: blur(18px);
                 display: flex;
                 flex-direction: column;
-                gap: 1.1rem;
-            }
-
-            .action-card.is-disabled {
-                opacity: 0.45;
-            }
-
-            .action-card div[data-testid="stButton"] {
-                width: 100%;
-                margin: 0;
-            }
-
-            .action-card div[data-testid="stButton"] > button {
-                width: 100%;
-                padding: 1.2rem 1.4rem;
-                border-radius: 18px;
-                font-weight: 700;
-                font-size: 1.05rem;
-                letter-spacing: 0.01em;
-                background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(129, 140, 248, 0.95));
-                border: none;
-                color: #040b22;
-                box-shadow: 0 20px 40px rgba(12, 16, 48, 0.55);
+                justify-content: space-between;
+                min-height: 10rem;
                 transition: transform 0.28s ease, box-shadow 0.28s ease;
+                isolation: isolate;
             }
 
-            .action-card div[data-testid="stButton"] > button:hover:not(:disabled) {
+            .action-card::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: linear-gradient(135deg, rgba(79, 70, 229, 0.08), rgba(59, 130, 246, 0.14));
+                opacity: 0;
+                transition: opacity 0.28s ease;
+                z-index: 0;
+            }
+
+            .action-card:not(.is-disabled):hover,
+            .action-card:not(.is-disabled):has(+ div[data-testid="stElementContainer"] button:focus-visible) {
                 transform: translateY(-3px);
-                box-shadow: 0 28px 55px rgba(16, 20, 58, 0.65);
+                box-shadow: 0 32px 60px rgba(16, 20, 58, 0.65);
             }
 
-            .action-card div[data-testid="stButton"] > button:disabled {
-                background: linear-gradient(135deg, rgba(71, 85, 105, 0.55), rgba(100, 116, 139, 0.55));
-                color: rgba(241, 245, 255, 0.75);
+            .action-card:not(.is-disabled):hover::after,
+            .action-card:not(.is-disabled):has(+ div[data-testid="stElementContainer"] button:focus-visible)::after {
+                opacity: 1;
+            }
+
+            .action-card.is-disabled::after {
+                opacity: 0.4;
+                background: rgba(12, 18, 43, 0.72);
+            }
+
+            .action-card-content {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 1.05rem;
+                flex: 1 1 auto;
+            }
+
+            .action-card-heading {
+                display: flex;
+                align-items: center;
+                gap: 0.7rem;
+                font-weight: 700;
+                font-size: 1.08rem;
+                letter-spacing: 0.01em;
+                color: #f8fafc;
+            }
+
+            .action-card-icon {
+                font-size: 1.35rem;
+                line-height: 1;
+            }
+
+            .action-card-title {
+                display: inline-flex;
+                align-items: center;
+            }
+
+            div[data-testid="stVerticalBlock"]:has(.action-card) {
+                position: relative;
+                width: 100%;
+                overflow: visible;
+                height: 100%;
+            }
+
+            div[data-testid="stElementContainer"]:has(.action-card) {
+                position: relative;
+                z-index: 1;
+                height: 100%;
+            }
+
+            div[data-testid="stVerticalBlock"]:has(.action-card) > div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) {
+                position: absolute;
+                inset: 0;
+                margin: 0;
+                z-index: 2;
+            }
+
+            div[data-testid="stVerticalBlock"]:has(.action-card) > div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) > div[data-testid="stButton"] {
+                width: 100%;
+                height: 100%;
+            }
+
+            div[data-testid="stVerticalBlock"]:has(.action-card) > div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) button {
+                width: 100%;
+                height: 100%;
+                border: none;
+                background: transparent;
+                color: transparent;
+                cursor: pointer;
+                opacity: 0;
+            }
+
+            div[data-testid="stVerticalBlock"]:has(.action-card) > div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) button:focus-visible {
+                outline: none;
+            }
+
+            div[data-testid="stVerticalBlock"]:has(.action-card.is-disabled) > div[data-testid="stElementContainer"]:has(div[data-testid="stButton"]) button {
+                pointer-events: none;
                 cursor: not-allowed;
-                box-shadow: none;
+            }
+
+            .action-section div[data-testid="column"]:has(.action-card) {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .action-section div[data-testid="column"]:has(.action-card) > div[data-testid="stVerticalBlock"] {
+                display: flex;
+                flex-direction: column;
+                flex: 1 1 auto;
+            }
+
+            .action-section div[data-testid="column"]:has(.action-card) > div[data-testid="stVerticalBlock"] > div[data-testid="stVerticalBlock"] {
+                flex: 1 1 auto;
             }
 
             .action-card-copy {
