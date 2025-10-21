@@ -63,6 +63,7 @@ def _init_session_state() -> None:
         "openai_base_url": "",
         "provider_override": "OpenAI",
         "provider_override_select": "OpenAI",
+        REPORTS_LOADING_FLAG_KEY: False,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -114,6 +115,57 @@ class LoadingIndicator:
 
 
 FLASH_MESSAGE_KEY = "flash_message"
+
+REPORTS_LOADING_OVERLAY_KEY = "_reports_loading_overlay_placeholder"
+REPORTS_LOADING_FLAG_KEY = "reports_loading_active"
+
+
+def _get_loading_overlay_placeholder() -> DeltaGenerator:
+    """Return the placeholder used for the reports loading scrim."""
+
+    placeholder: Optional[DeltaGenerator] = st.session_state.get(REPORTS_LOADING_OVERLAY_KEY)
+    if placeholder is None:
+        placeholder = st.empty()
+        st.session_state[REPORTS_LOADING_OVERLAY_KEY] = placeholder
+    return placeholder
+
+
+def _ensure_loading_overlay_placeholder() -> DeltaGenerator:
+    """Ensure the loading overlay placeholder exists and is reset when idle."""
+
+    placeholder = _get_loading_overlay_placeholder()
+    if not st.session_state.get(REPORTS_LOADING_FLAG_KEY, False):
+        placeholder.empty()
+    return placeholder
+
+
+def _show_reports_loading_overlay(message: str = "Loading reports…") -> None:
+    """Display the blur scrim while reports are loading."""
+
+    placeholder = _get_loading_overlay_placeholder()
+    st.session_state[REPORTS_LOADING_FLAG_KEY] = True
+    safe_message = escape(message)
+    placeholder.markdown(
+        f"""
+        <div class="reports-loading-scrim reports-loading-scrim--active" role="status" aria-live="assertive">
+            <div class="reports-loading-scrim__content">
+                <span class="reports-loading-scrim__halo"></span>
+                <span class="reports-loading-scrim__ring"></span>
+                <span class="reports-loading-scrim__label">{safe_message}</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _hide_reports_loading_overlay() -> None:
+    """Remove the reports loading scrim from view."""
+
+    placeholder = st.session_state.get(REPORTS_LOADING_OVERLAY_KEY)
+    if placeholder is not None:
+        placeholder.empty()
+    st.session_state[REPORTS_LOADING_FLAG_KEY] = False
 
 
 SNAPSHOT_KEYS = [
@@ -551,7 +603,8 @@ def _build_sidebar() -> None:
             st.sidebar.error("Fix the report date range before loading reports.")
             return
         try:
-            with st.spinner("Downloading and filtering reports..."):
+            _show_reports_loading_overlay()
+            with st.spinner("Fetching reports from server..."):
                 df = load_reports(
                     start_date=start_date.isoformat(),
                     end_date=end_date.isoformat(),
@@ -575,6 +628,8 @@ def _build_sidebar() -> None:
             st.success(f"Loaded {len(df)} reports into the workspace.")
         except Exception as exc:  # pragma: no cover - UI feedback
             st.error(f"Could not load reports: {exc}")
+        finally:
+            _hide_reports_loading_overlay()
 
     if api_key:
         llm_kwargs: Dict[str, Any] = {
@@ -683,6 +738,33 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
 
     ctx.markdown(hero_html, unsafe_allow_html=True)
 
+    if reports_df.empty:
+        onboarding_html = """
+        <section class="empty-onboarding">
+            <div class="empty-onboarding__scene" aria-hidden="true">
+                <div class="empty-onboarding__backdrop"></div>
+                <div class="empty-onboarding__halo empty-onboarding__halo--outer"></div>
+                <div class="empty-onboarding__halo empty-onboarding__halo--inner"></div>
+                <div class="empty-onboarding__cta-ring">
+                    <span class="empty-onboarding__cta">Use the sidebar</span>
+                </div>
+            </div>
+            <div class="empty-onboarding__content">
+                <span class="empty-onboarding__eyebrow">Workspace locked</span>
+                <h2>Load reports to activate your workspace.</h2>
+                <p>Use the sidebar to import Prevention of Future Death reports and unlock metrics, datasets, and guided actions.</p>
+                <div class="empty-onboarding__steps" role="list">
+                    <span class="empty-onboarding__step" role="listitem">Set your API key</span>
+                    <span class="empty-onboarding__step" role="listitem">Choose your reporting window</span>
+                    <span class="empty-onboarding__step" role="listitem">Load reports</span>
+                </div>
+            </div>
+        </section>
+        """
+
+        ctx.markdown(onboarding_html, unsafe_allow_html=True)
+        return
+
     metric_row = ctx.container()
     metric_row.markdown("<div class='metric-row'>", unsafe_allow_html=True)
     col1, col2, col3 = metric_row.columns(3)
@@ -706,18 +788,7 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
         unsafe_allow_html=True,
     )
 
-    if reports_df.empty:
-        dataset_card.markdown(
-            """
-            <div class="empty-state">
-                <h4>No reports loaded yet</h4>
-                <p>Use the sidebar to select a data window, configure your model provider, and load source reports.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        dataset_card.dataframe(reports_df, width="stretch", hide_index=True)
+    dataset_card.dataframe(reports_df, width="stretch", hide_index=True)
 
     dataset_card.markdown("</div>", unsafe_allow_html=True)
 
@@ -771,6 +842,12 @@ def _render_workspace_footer(
 ) -> None:
     """Render the bottom workspace footer with flash messaging and utilities."""
 
+    reports_df = _get_reports_df()
+    dataset_available = not reports_df.empty
+
+    if not dataset_available and not flash_payload:
+        return
+
     history_depth = len(st.session_state.get("history", []))
     initial_df = st.session_state.get("reports_df_initial")
 
@@ -804,6 +881,10 @@ def _render_workspace_footer(
             """,
             unsafe_allow_html=True,
         )
+
+    if not dataset_available:
+        footer.markdown("</div>", unsafe_allow_html=True)
+        return
 
     undo_label = "↶ Undo" if not undo_hint else f"↶ Undo\n{undo_hint}"
     undo_col, start_over_col = footer.columns(2, gap="large")
@@ -926,8 +1007,10 @@ def _render_action_tiles() -> None:
     reports_df = _get_reports_df()
     dataset_available = not reports_df.empty
     llm_ready = st.session_state.get("llm_client") is not None
-    if not dataset_available and st.session_state.get("active_action") is not None:
-        st.session_state["active_action"] = None
+    if not dataset_available:
+        if st.session_state.get("active_action") is not None:
+            st.session_state["active_action"] = None
+        return
 
     actions = [
         {
@@ -939,8 +1022,9 @@ def _render_action_tiles() -> None:
             "target": "save",
         },
         {
-            "label": "Filter reports (LLM Screener)",
-            "description": "Apply high-precision filters powered by your configured language model.",
+            "label": "Filter reports",
+            "description": "Screen reports against your custom search query. "
+            "The AI bot will crawl through each report, showing matches.",
             "key": "tile_filter",
             "disabled": not (dataset_available and llm_ready),
             "icon": "🧭",
@@ -1163,7 +1247,7 @@ def _render_filter_action() -> None:
     reports_df = _get_reports_df()
     llm_client: Optional[LLM] = st.session_state.get("llm_client")
 
-    st.markdown("#### Filter reports (LLM Screener)")
+    st.markdown("#### Filter reports")
     if llm_client is None:
         st.warning("Add a valid API key in the sidebar to enable the Screener.")
         return
@@ -2155,6 +2239,333 @@ def main() -> None:
                 color: rgba(226, 232, 255, 0.68);
             }
 
+            .empty-onboarding {
+                margin-top: 3rem;
+                display: grid;
+                grid-template-columns: minmax(240px, 1fr) minmax(320px, 1.05fr);
+                gap: clamp(1.5rem, 5vw, 3.5rem);
+                padding: clamp(2.4rem, 5vw, 3.8rem);
+                border-radius: 40px;
+                background: radial-gradient(140% 150% at 18% 20%, rgba(99, 102, 241, 0.22), transparent 60%),
+                    radial-gradient(120% 140% at 78% 18%, rgba(244, 114, 182, 0.18), transparent 65%),
+                    linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(17, 24, 39, 0.78));
+                border: 1px solid rgba(148, 163, 255, 0.42);
+                box-shadow: 0 48px 95px rgba(8, 12, 44, 0.6);
+                position: relative;
+                overflow: hidden;
+                isolation: isolate;
+            }
+
+            .empty-onboarding__scene {
+                position: relative;
+                min-height: clamp(240px, 32vw, 340px);
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: clamp(1.6rem, 3vw, 2.6rem);
+                color: rgba(224, 231, 255, 0.88);
+            }
+
+            .empty-onboarding__backdrop {
+                position: absolute;
+                inset: -60% -50% -55% -60%;
+                background: radial-gradient(circle at 35% 55%, rgba(56, 189, 248, 0.55), transparent 70%);
+                filter: blur(80px);
+                opacity: 0.9;
+                z-index: -3;
+            }
+
+            .empty-onboarding__halo {
+                position: absolute;
+                border-radius: 50%;
+                border: 1px solid rgba(165, 180, 252, 0.35);
+                mix-blend-mode: screen;
+            }
+
+            .empty-onboarding__halo--outer {
+                width: clamp(260px, 34vw, 360px);
+                height: clamp(260px, 34vw, 360px);
+                background: radial-gradient(circle, rgba(59, 130, 246, 0.25), transparent 68%);
+                z-index: -2;
+                animation: haloPulse 8s ease-in-out infinite;
+            }
+
+            .empty-onboarding__halo--inner {
+                width: clamp(180px, 24vw, 260px);
+                height: clamp(180px, 24vw, 260px);
+                background: radial-gradient(circle, rgba(244, 114, 182, 0.25), transparent 70%);
+                z-index: -1;
+                animation: haloPulse 6s ease-in-out infinite reverse;
+            }
+
+            @keyframes haloPulse {
+                0%,
+                100% {
+                    transform: scale(0.92);
+                    opacity: 0.85;
+                }
+
+                50% {
+                    transform: scale(1.05);
+                    opacity: 1;
+                }
+            }
+
+            .empty-onboarding__cta-ring {
+                position: relative;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: clamp(190px, 26vw, 260px);
+                height: clamp(190px, 26vw, 260px);
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(30, 64, 175, 0.55), rgba(15, 23, 42, 0.4));
+                border: 1px solid rgba(148, 163, 255, 0.4);
+                box-shadow: inset 0 0 60px rgba(96, 165, 250, 0.35), 0 30px 70px rgba(8, 12, 44, 0.65);
+                backdrop-filter: blur(24px);
+                overflow: hidden;
+            }
+
+            .empty-onboarding__cta-ring::before {
+                content: "";
+                position: absolute;
+                inset: 14%;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(96, 165, 250, 0.65), transparent 70%);
+                filter: blur(6px);
+                opacity: 0.65;
+                animation: ctaGlow 5.5s ease-in-out infinite;
+            }
+
+            .empty-onboarding__cta-ring::after {
+                content: "";
+                position: absolute;
+                width: 120%;
+                height: 120%;
+                background: conic-gradient(from 120deg, rgba(59, 130, 246, 0.55), rgba(147, 197, 253, 0.2), rgba(236, 72, 153, 0.4), rgba(59, 130, 246, 0.55));
+                opacity: 0.18;
+                animation: orbitSweep 18s linear infinite;
+            }
+
+            @keyframes ctaGlow {
+                0%,
+                100% {
+                    transform: scale(0.94);
+                    opacity: 0.5;
+                }
+
+                50% {
+                    transform: scale(1.05);
+                    opacity: 0.85;
+                }
+            }
+
+            @keyframes orbitSweep {
+                0% {
+                    transform: rotate(0deg);
+                }
+
+                100% {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .empty-onboarding__cta {
+                position: relative;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.65rem;
+                padding: 0.75rem 1.6rem;
+                border-radius: 999px;
+                text-transform: uppercase;
+                letter-spacing: 0.32em;
+                font-size: 0.82rem;
+                font-weight: 600;
+                background: rgba(15, 23, 42, 0.78);
+                border: 1px solid rgba(191, 219, 254, 0.28);
+                box-shadow: 0 20px 46px rgba(2, 6, 23, 0.55);
+                z-index: 1;
+            }
+
+            .empty-onboarding__cta::before {
+                content: "↖";
+                font-size: 1.4rem;
+                line-height: 1;
+            }
+
+            .empty-onboarding__content {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                gap: clamp(1.2rem, 2.4vw, 2.2rem);
+                justify-content: center;
+            }
+
+            .empty-onboarding__content::after {
+                content: "";
+                position: absolute;
+                inset: 12% -12% auto auto;
+                width: clamp(180px, 32vw, 260px);
+                height: clamp(180px, 32vw, 260px);
+                background: radial-gradient(circle, rgba(244, 114, 182, 0.28), transparent 70%);
+                opacity: 0.8;
+                pointer-events: none;
+                z-index: -1;
+            }
+
+            .empty-onboarding__eyebrow {
+                align-self: flex-start;
+                padding: 0.55rem 1.4rem;
+                border-radius: 999px;
+                background: rgba(30, 64, 175, 0.38);
+                border: 1px solid rgba(129, 140, 248, 0.55);
+                text-transform: uppercase;
+                letter-spacing: 0.2em;
+                font-size: 0.78rem;
+                font-weight: 600;
+                color: rgba(239, 246, 255, 0.92);
+                box-shadow: 0 16px 36px rgba(9, 12, 34, 0.55);
+            }
+
+            .empty-onboarding__content h2 {
+                margin: 0;
+                font-size: clamp(2.2rem, 4.6vw, 3rem);
+                line-height: 1.05;
+                max-width: 32rem;
+            }
+
+            .empty-onboarding__content p {
+                margin: 0;
+                font-size: 1.04rem;
+                color: rgba(226, 232, 255, 0.85);
+                max-width: 33rem;
+            }
+
+            .empty-onboarding__steps {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.85rem;
+            }
+
+            .empty-onboarding__step {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.65rem 1.05rem;
+                border-radius: 16px;
+                background: rgba(37, 99, 235, 0.18);
+                border: 1px solid rgba(129, 140, 248, 0.4);
+                font-size: 0.96rem;
+                letter-spacing: 0.01em;
+                color: rgba(224, 231, 255, 0.9);
+                box-shadow: 0 20px 40px rgba(9, 12, 34, 0.5);
+            }
+
+            .empty-onboarding__step::before {
+                content: "";
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.95), rgba(59, 130, 246, 0.95));
+                box-shadow: 0 0 14px rgba(56, 189, 248, 0.7);
+            }
+
+            .reports-loading-scrim {
+                position: fixed;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(6, 10, 28, 0.6);
+                backdrop-filter: blur(18px) saturate(120%);
+                z-index: 1000;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 0.35s ease;
+            }
+
+            .reports-loading-scrim--active {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            .reports-loading-scrim__content {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 1.2rem;
+                padding: 2.4rem 3rem;
+                border-radius: 30px;
+                background: rgba(15, 23, 42, 0.8);
+                border: 1px solid rgba(148, 163, 255, 0.32);
+                box-shadow: 0 32px 90px rgba(2, 6, 23, 0.6);
+                overflow: hidden;
+            }
+
+            .reports-loading-scrim__content::before {
+                content: "";
+                position: absolute;
+                inset: -40% -50% auto -50%;
+                height: 140%;
+                background: radial-gradient(circle at top, rgba(96, 165, 250, 0.35), transparent 60%);
+                opacity: 0.75;
+                pointer-events: none;
+            }
+
+            .reports-loading-scrim__halo {
+                position: absolute;
+                width: 220px;
+                height: 220px;
+                border-radius: 50%;
+                background: radial-gradient(circle, rgba(59, 130, 246, 0.35), rgba(14, 165, 233, 0.12), transparent 72%);
+                filter: blur(2px);
+                animation: scrimPulse 7s ease-in-out infinite;
+            }
+
+            .reports-loading-scrim__ring {
+                position: relative;
+                width: 82px;
+                height: 82px;
+                border-radius: 50%;
+                border: 4px solid rgba(148, 163, 255, 0.25);
+                border-top-color: rgba(96, 165, 250, 0.95);
+                border-right-color: rgba(59, 130, 246, 0.65);
+                animation: scrimSpin 1.2s linear infinite;
+                box-shadow: 0 0 30px rgba(59, 130, 246, 0.45);
+            }
+
+            .reports-loading-scrim__label {
+                font-size: 1rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: rgba(226, 232, 255, 0.85);
+            }
+
+            @keyframes scrimSpin {
+                0% {
+                    transform: rotate(0deg);
+                }
+
+                100% {
+                    transform: rotate(360deg);
+                }
+            }
+
+            @keyframes scrimPulse {
+                0%,
+                100% {
+                    transform: scale(0.92);
+                    opacity: 0.7;
+                }
+
+                50% {
+                    transform: scale(1);
+                    opacity: 1;
+                }
+            }
+
             .loading-indicator {
                 display: flex;
                 flex-direction: column;
@@ -2273,24 +2684,6 @@ def main() -> None:
                 color: rgba(228, 233, 255, 0.85);
                 background: rgba(99, 102, 241, 0.25);
                 border: 1px solid rgba(148, 163, 255, 0.35);
-            }
-
-            .data-card .empty-state {
-                margin-top: 1.5rem;
-                padding: 1.8rem;
-                border-radius: 22px;
-                background: rgba(15, 23, 42, 0.6);
-                border: 1px dashed rgba(148, 163, 255, 0.4);
-            }
-
-            .data-card .empty-state h4 {
-                margin: 0 0 0.6rem;
-                font-size: 1.2rem;
-            }
-
-            .data-card .empty-state p {
-                margin: 0;
-                color: rgba(224, 231, 255, 0.72);
             }
 
             .data-card div[data-testid="stDataFrame"] {
@@ -2496,6 +2889,35 @@ def main() -> None:
                     margin-top: 2rem;
                 }
 
+                .empty-onboarding {
+                    grid-template-columns: 1fr;
+                    justify-items: center;
+                    text-align: center;
+                    padding: 2.8rem 2.4rem;
+                }
+
+                .empty-onboarding__scene {
+                    min-height: clamp(220px, 40vw, 320px);
+                }
+
+                .empty-onboarding__content {
+                    align-items: center;
+                }
+
+                .empty-onboarding__content::after {
+                    inset: auto auto -10% 50%;
+                    transform: translateX(-50%);
+                }
+
+                .empty-onboarding__eyebrow {
+                    align-self: center;
+                }
+
+                .empty-onboarding__content h2,
+                .empty-onboarding__content p {
+                    max-width: 38rem;
+                }
+
                 .workspace-footer div[data-testid="column"] {
                     flex: 1 1 100% !important;
                 }
@@ -2508,6 +2930,19 @@ def main() -> None:
 
                 .beta-banner__text {
                     max-width: 100%;
+                }
+
+                .empty-onboarding {
+                    padding: 2.4rem;
+                }
+
+                .empty-onboarding__cta {
+                    letter-spacing: 0.28em;
+                }
+
+                .empty-onboarding__cta-ring {
+                    width: clamp(180px, 44vw, 240px);
+                    height: clamp(180px, 44vw, 240px);
                 }
 
                 .metric-row [data-testid="column"],
@@ -2539,14 +2974,40 @@ def main() -> None:
                     font-size: 2.2rem;
                 }
 
+                .empty-onboarding {
+                    padding: 1.85rem;
+                    border-radius: 28px;
+                }
+
+                .empty-onboarding__cta {
+                    font-size: 0.76rem;
+                    letter-spacing: 0.26em;
+                }
+
+                .empty-onboarding__cta-ring {
+                    width: clamp(170px, 58vw, 220px);
+                    height: clamp(170px, 58vw, 220px);
+                }
+
+                .empty-onboarding__content h2 {
+                    font-size: 2.05rem;
+                }
+
+                .empty-onboarding__steps {
+                    justify-content: center;
+                }
+
                 .metric-row {
                     margin-top: 2rem;
                 }
             }
+
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+    _ensure_loading_overlay_placeholder()
 
     _build_sidebar()
     header_container = st.container()
