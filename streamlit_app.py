@@ -5,6 +5,7 @@ import ast
 import copy
 import json
 import sys
+from html import escape
 from datetime import date
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -698,50 +699,67 @@ def _workspace_has_activity() -> bool:
     return False
 
 
-def _render_status_bar(container: Optional[DeltaGenerator] = None) -> None:
-    """Display a floating ribbon containing undo and start-over actions."""
+def _render_workspace_footer(
+    flash_payload: Optional[Tuple[str, str]] = None,
+) -> None:
+    """Render the bottom workspace footer with flash messaging and utilities."""
 
-    ctx = container or st
     history_depth = len(st.session_state.get("history", []))
     initial_df = st.session_state.get("reports_df_initial")
 
     undo_disabled = history_depth == 0
-    if undo_disabled:
-        undo_message = ""
-    elif history_depth == 1:
-        undo_message = "(1 step available)"
+    if history_depth == 1:
+        undo_hint = "(1 step available)"
+    elif history_depth > 1:
+        undo_hint = f"({history_depth} steps available)"
     else:
-        undo_message = f"{history_depth} steps available"
+        undo_hint = ""
 
     has_initial_dataset = isinstance(initial_df, pd.DataFrame) and not initial_df.empty
     workspace_active = _workspace_has_activity()
     start_over_disabled = not (has_initial_dataset and workspace_active)
 
-    if not has_initial_dataset:
-        start_over_message = ""
-    elif not workspace_active:
-        start_over_message = ""
-    else:
-        start_over_message = ""
+    footer = st.container()
+    footer.markdown("<div class='workspace-footer'>", unsafe_allow_html=True)
 
-    shell = ctx.container()
-    shell.markdown(
-        "<div class='status-shell'><div class='status-actions'>",
-        unsafe_allow_html=True,
-    )
-    if shell.button(
-        f"↶ Undo\n{undo_message}",
-        key="status_undo",
-        disabled=undo_disabled,
-    ):
-        _undo_last_change()
-    if shell.button(
-        f"↻ Start over\n{start_over_message}",
-        key="status_reset",
-        disabled=start_over_disabled,
-    ):
-        _start_again()
-    shell.markdown("</div></div>", unsafe_allow_html=True)
+    if flash_payload:
+        message, level = flash_payload
+        icon_map = {"success": "✅", "info": "ℹ️", "warning": "⚠️", "error": "❌"}
+        level_key = level if level in icon_map else "info"
+        icon = icon_map[level_key]
+        safe_message = escape(message)
+        footer.markdown(
+            f"""
+            <div class="workspace-message workspace-message--{level_key}">
+                <span class="workspace-message-icon">{icon}</span>
+                <span class="workspace-message-text">{safe_message}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    undo_label = "↶ Undo" if not undo_hint else f"↶ Undo\n{undo_hint}"
+    undo_col, start_over_col = footer.columns(2, gap="large")
+
+    with undo_col:
+        if st.button(
+            undo_label,
+            key="footer_undo",
+            use_container_width=True,
+            disabled=undo_disabled,
+        ):
+            _undo_last_change()
+
+    with start_over_col:
+        if st.button(
+            "↻ Start over",
+            key="footer_reset",
+            use_container_width=True,
+            disabled=start_over_disabled,
+        ):
+            _start_again()
+
+    footer.markdown("</div>", unsafe_allow_html=True)
 
 
 def _build_theme_summary_table(
@@ -820,20 +838,19 @@ def _trigger_rerun() -> None:
     raise RuntimeError("Streamlit rerun is not available in this environment.")
 
 
-def _render_flash_message() -> None:
-    """Display and clear any queued status message."""
+def _consume_flash_message() -> Optional[Tuple[str, str]]:
+    """Return and clear any queued status message for later rendering."""
 
     flash_payload = st.session_state.pop(FLASH_MESSAGE_KEY, None)
     if not flash_payload:
-        return
+        return None
 
     message = flash_payload.get("message")
     if not message:
-        return
+        return None
 
-    level = flash_payload.get("level", "info")
-    display_fn = getattr(st, level, st.info)
-    display_fn(message)
+    level = str(flash_payload.get("level", "info"))
+    return message, level
 
 
 def _render_action_tiles() -> None:
@@ -842,8 +859,6 @@ def _render_action_tiles() -> None:
     reports_df = _get_reports_df()
     dataset_available = not reports_df.empty
     llm_ready = st.session_state.get("llm_client") is not None
-    history = st.session_state.get("history", [])
-
     if not dataset_available and st.session_state.get("active_action") is not None:
         st.session_state["active_action"] = None
 
@@ -929,27 +944,6 @@ def _render_action_tiles() -> None:
                 )
 
     section.markdown("</div>", unsafe_allow_html=True)
-
-    if history:
-        undo_container = st.container()
-        undo_container.markdown(
-            """
-            <div class="section-card utility-card">
-                <div class="utility-grid">
-                    <div>
-                        <span class="utility-label">Need a do-over?</span>
-                        <p class="utility-copy">Undo the latest change to revert to your previous dataset snapshot.</p>
-                    </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        if undo_container.button(
-            "↶ Undo most recent change",
-            key="tile_undo",
-            use_container_width=True,
-        ):
-            _undo_last_change()
-        undo_container.markdown("</div></div></div>", unsafe_allow_html=True)
 
 def _undo_last_change() -> None:
     """Pop the latest snapshot from history and restore it."""
@@ -1618,93 +1612,105 @@ def main() -> None:
                 font-weight: 700;
             }
 
-            .status-shell {
-                position: fixed;
-                top: 1.5rem;
-                right: 1.5rem;
-                display: flex;
-                gap: 0.75rem;
-                align-items: stretch;
-                z-index: 100;
-            }
-
-            .status-actions {
-                display: flex;
-                align-items: stretch;
-                gap: 0.75rem;
-                flex-wrap: nowrap;
-            }
-
-            .status-actions div[data-testid="stButton"] {
-                margin: 0;
-                flex: 0 0 auto;
-            }
-
-            .status-actions div[data-testid="stButton"] > button {
+            .workspace-footer {
+                margin-top: 3rem;
+                padding: 0;
+                border-radius: 0;
+                background: transparent;
+                border: none;
+                box-shadow: none;
                 display: flex;
                 flex-direction: column;
-                justify-content: center;
-                align-items: flex-start;
-                gap: 0.25rem;
-                padding: 0.95rem 1.15rem;
-                min-width: 215px;
+                gap: 1.2rem;
+            }
+
+            .workspace-message {
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                padding: 1rem 1.3rem;
                 border-radius: 18px;
-                border: 1px solid rgba(148, 163, 255, 0.4);
-                background: rgba(15, 23, 42, 0.82);
-                color: #f8faff;
-                font-weight: 600;
-                letter-spacing: 0.01em;
-                text-align: left;
-                white-space: pre-line;
-                box-shadow: 0 18px 44px rgba(8, 12, 28, 0.45);
-                backdrop-filter: blur(12px);
-                transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+                background: rgba(30, 41, 82, 0.72);
+                border: 1px solid rgba(99, 102, 241, 0.45);
+                font-size: 0.98rem;
+                line-height: 1.5;
+                color: rgba(233, 238, 255, 0.92);
             }
 
-            .status-actions div[data-testid="stButton"] > button :is(p, span) {
+            .workspace-message--success {
+                background: rgba(16, 185, 129, 0.22);
+                border-color: rgba(45, 212, 191, 0.5);
+            }
+
+            .workspace-message--info {
+                background: rgba(56, 189, 248, 0.2);
+                border-color: rgba(59, 130, 246, 0.5);
+            }
+
+            .workspace-message--warning {
+                background: rgba(251, 191, 36, 0.2);
+                border-color: rgba(245, 158, 11, 0.5);
+            }
+
+            .workspace-message--error {
+                background: rgba(248, 113, 113, 0.22);
+                border-color: rgba(248, 113, 113, 0.5);
+            }
+
+            .workspace-message-icon {
+                font-size: 1.5rem;
+            }
+
+            .workspace-message-text {
+                flex: 1 1 auto;
+            }
+
+            .workspace-footer div[data-testid="column"] {
+                display: flex;
+                flex-direction: column;
+            }
+
+            .workspace-footer div[data-testid="column"] div[data-testid="stButton"] {
                 margin: 0;
-                display: block;
-                white-space: inherit;
-                font-size: 0.68rem;
-                line-height: 1.25;
-                font-weight: 500;
-                letter-spacing: 0.01em;
-                color: rgba(226, 232, 255, 0.65);
+                flex: 1 1 auto;
             }
 
-            .status-actions div[data-testid="stButton"] > button :is(p, span)::first-line {
-                font-size: 1.06rem;
+            .workspace-footer div[data-testid="column"] div[data-testid="stButton"] > button {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: center;
+                gap: 0.35rem;
+                padding: 1.05rem 1.35rem;
+                border-radius: 20px;
+                border: none;
                 font-weight: 700;
-                color: #f8faff;
-                letter-spacing: 0.015em;
+                font-size: 1.02rem;
+                letter-spacing: 0.01em;
+                white-space: pre-line;
+                text-align: left;
+                width: 100%;
+                color: #041026;
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(96, 165, 250, 0.95));
+                box-shadow: 0 26px 52px rgba(12, 18, 54, 0.5);
+                transition: transform 0.2s ease, box-shadow 0.2s ease;
             }
 
-            .status-actions div[data-testid="stButton"] > button:not(:disabled) {
-                background: rgba(59, 130, 246, 0.35);
-                border-color: rgba(96, 165, 250, 0.6);
+            .workspace-footer div[data-testid="column"]:last-of-type div[data-testid="stButton"] > button {
+                background: linear-gradient(135deg, rgba(192, 132, 252, 0.9), rgba(129, 140, 248, 0.95));
             }
 
-            .status-actions div[data-testid="stButton"]:nth-child(2) > button:not(:disabled) {
-                background: rgba(30, 64, 175, 0.45);
-                border-color: rgba(129, 140, 248, 0.65);
-            }
-
-            .status-actions div[data-testid="stButton"] > button:hover:not(:disabled) {
+            .workspace-footer div[data-testid="column"] div[data-testid="stButton"] > button:hover:not(:disabled) {
                 transform: translateY(-2px);
+                box-shadow: 0 32px 60px rgba(12, 18, 54, 0.55);
             }
 
-            .status-actions div[data-testid="stButton"] > button:disabled {
-                opacity: 0.55;
+            .workspace-footer div[data-testid="column"] div[data-testid="stButton"] > button:disabled {
+                opacity: 0.48;
                 cursor: not-allowed;
-                background: rgba(15, 23, 42, 0.58);
-            }
-
-            .status-actions div[data-testid="stButton"] > button:disabled p {
-                color: rgba(148, 163, 196, 0.58);
-            }
-
-            .status-actions div[data-testid="stButton"] > button:disabled p::first-line {
-                color: rgba(224, 231, 255, 0.78);
+                background: rgba(30, 41, 82, 0.65);
+                color: rgba(226, 232, 255, 0.6);
+                box-shadow: none;
             }
 
             .stApp div[data-baseweb="input"] > div,
@@ -2140,58 +2146,6 @@ def main() -> None:
                 margin: 0;
             }
 
-            .utility-card {
-                margin-top: 1.8rem;
-                padding: 1.8rem 2.2rem;
-                border-radius: 24px;
-                background: rgba(13, 20, 48, 0.78);
-                border: 1px solid rgba(148, 163, 255, 0.3);
-                box-shadow: 0 24px 50px rgba(6, 10, 30, 0.48);
-            }
-
-            .utility-grid {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
-                gap: 1.8rem;
-                align-items: center;
-            }
-
-            .utility-label {
-                text-transform: uppercase;
-                letter-spacing: 0.12em;
-                font-size: 0.75rem;
-                color: rgba(224, 231, 255, 0.68);
-            }
-
-            .utility-copy {
-                margin: 0;
-                color: rgba(226, 232, 255, 0.75);
-            }
-
-            .utility-card div[data-testid="stButton"] {
-                margin: 0;
-            }
-
-            .utility-card div[data-testid="stButton"] > button {
-                border-radius: 999px;
-                padding: 0.85rem 1.9rem;
-                font-weight: 700;
-                background: linear-gradient(135deg, rgba(56, 189, 248, 0.85), rgba(129, 140, 248, 0.95));
-                border: none;
-                color: #041026;
-                box-shadow: 0 20px 40px rgba(17, 24, 64, 0.45);
-                transition: transform 0.25s ease;
-            }
-
-            .utility-card div[data-testid="stButton"] > button:hover:not(:disabled) {
-                transform: translateY(-2px);
-            }
-
-            .utility-card div[data-testid="stButton"] > button:disabled {
-                opacity: 0.45;
-                cursor: not-allowed;
-            }
-
             div[data-testid="stAlert"] {
                 border-radius: 18px;
                 border: 1px solid rgba(148, 163, 255, 0.35);
@@ -2212,17 +2166,8 @@ def main() -> None:
                     margin-top: 2rem;
                 }
 
-                .status-shell {
-                    position: static;
-                    margin-bottom: 1.5rem;
-                    justify-content: flex-end;
-                    flex-wrap: wrap;
-                    gap: 0.75rem;
-                }
-
-                .status-actions {
-                    justify-content: flex-end;
-                    flex-wrap: wrap;
+                .workspace-footer div[data-testid="column"] {
+                    flex: 1 1 100% !important;
                 }
             }
 
@@ -2231,10 +2176,6 @@ def main() -> None:
                 .action-section [data-testid="column"] {
                     flex: 1 1 100% !important;
                     width: 100% !important;
-                }
-
-                .utility-grid {
-                    grid-template-columns: 1fr;
                 }
             }
 
@@ -2257,12 +2198,12 @@ def main() -> None:
     )
 
     _build_sidebar()
-    _render_status_bar()
     header_container = st.container()
     _render_header(header_container)
-    _render_flash_message()
+    flash_payload = _consume_flash_message()
     _render_action_tiles()
     _render_active_action()
+    _render_workspace_footer(flash_payload)
 
 
 if __name__ == "__main__":
