@@ -5,8 +5,10 @@ import ast
 import copy
 import json
 import sys
+import zipfile
 from html import escape
 from datetime import date
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -124,6 +126,24 @@ def restore_state(snapshot: Dict[str, Any]) -> None:
 
     for key, value in snapshot.items():
         st.session_state[key] = _deepcopy_value(value)
+
+
+def _coerce_dataframe(value: Any) -> Optional[pd.DataFrame]:
+    """Return ``value`` as a DataFrame when possible."""
+
+    if isinstance(value, pd.DataFrame):
+        return value.copy(deep=True)
+    if isinstance(value, (list, tuple)):
+        try:
+            return pd.DataFrame(value)
+        except ValueError:
+            return None
+    if isinstance(value, dict):
+        try:
+            return pd.DataFrame(value)
+        except ValueError:
+            return None
+    return None
 
 
 def push_history_snapshot() -> None:
@@ -1012,11 +1032,41 @@ def _render_save_action() -> None:
         st.info("No reports available to download yet.")
         return
 
+    csv_bytes = reports_df.to_csv(index=False).encode("utf-8")
+
+    theme_summary_df = _coerce_dataframe(st.session_state.get("theme_summary_table"))
+    feature_grid_df = _coerce_dataframe(st.session_state.get("feature_grid"))
+
+    include_theme_summary = theme_summary_df is not None and not theme_summary_df.empty
+    include_feature_grid = feature_grid_df is not None and not feature_grid_df.empty
+
+    if not include_theme_summary and not include_feature_grid:
+        st.download_button(
+            "Download working dataset as CSV",
+            data=csv_bytes,
+            file_name="pfd_reports.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        return
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        zip_file.writestr("pfd_reports.csv", csv_bytes)
+        if include_theme_summary:
+            theme_text = theme_summary_df.to_csv(index=False, sep="\t")
+            zip_file.writestr("theme_summary.txt", theme_text)
+        if include_feature_grid:
+            feature_text = feature_grid_df.to_csv(index=False, sep="\t")
+            zip_file.writestr("custom_feature_grid.txt", feature_text)
+
+    zip_buffer.seek(0)
+
     st.download_button(
-        "Download working dataset as CSV",
-        data=reports_df.to_csv(index=False).encode("utf-8"),
-        file_name="pfd_reports.csv",
-        mime="text/csv",
+        "Download workspace bundle",
+        data=zip_buffer.getvalue(),
+        file_name="pfd_workspace_bundle.zip",
+        mime="application/zip",
         use_container_width=True,
     )
 
