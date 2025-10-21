@@ -368,7 +368,7 @@ def _render_reports_overview(
 def _build_sidebar() -> None:
     st.sidebar.image(str(LOGO_PATH), width=120)
     st.sidebar.markdown(
-        "<h2 style='margin-bottom:0.2rem;'>PFD Toolkit Workbench</h2>",
+        "<h2 class='sidebar-title'>PFD Toolkit Workbench <span class='sidebar-beta'>Beta</span></h2>",
         unsafe_allow_html=True,
     )
     st.sidebar.caption(
@@ -607,9 +607,25 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
             latest_display = latest.strftime("%d %b %Y")
 
     hero_html = f"""
+    <div class="beta-banner">
+        <div class="beta-banner__glow"></div>
+        <div class="beta-banner__content">
+            <span class="beta-banner__pill">Beta</span>
+            <div class="beta-banner__text">
+                <span class="beta-banner__headline">Welcome to the beta version of PFD Toolkit Workbench.</span>
+                <span class="beta-banner__subtext">
+                Because this app is still in development, there might be some bugs we haven't squashed yet. Please bare with us while we iron out the kinks! </span>
+            </div>
+            <div class="beta-banner__sparks">
+                <span class="beta-banner__spark"></span>
+                <span class="beta-banner__spark"></span>
+                <span class="beta-banner__spark"></span>
+            </div>
+        </div>
+    </div>
     <section class="hero-section">
         <div class="hero-copy">
-            <span class="hero-badge">PFD Toolkit · AI Workbench</span>
+            <span class="hero-badge">PFD Toolkit · AI Workbench <span class="hero-badge-beta">Beta</span></span>
             <h1>Command the narrative of Prevention of Future Death reports.</h1>
             <p>
                 Load official reports, triage them against strategic focus areas, and extract
@@ -1581,7 +1597,7 @@ def _render_extract_action() -> None:
 
 def main() -> None:
     st.set_page_config(
-        page_title="PFD Toolkit AI Workbench",
+        page_title="PFD Toolkit AI Workbench · Beta",
         page_icon="📊",
         layout="wide",
     )
@@ -1663,6 +1679,27 @@ def main() -> None:
                 background: rgba(8, 12, 36, 0.85);
                 backdrop-filter: blur(20px);
                 border-right: 1px solid rgba(148, 163, 255, 0.2);
+            }
+
+            section[data-testid="stSidebar"] h2.sidebar-title {
+                margin-bottom: 0.2rem;
+                display: inline-flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            .sidebar-beta {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.2rem 0.55rem;
+                border-radius: 999px;
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.65), rgba(192, 132, 252, 0.7));
+                font-size: 0.6em;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+                color: #050b24;
+                font-weight: 700;
+                box-shadow: 0 8px 18px rgba(7, 10, 34, 0.35);
             }
 
             section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] span {
@@ -1823,6 +1860,120 @@ def main() -> None:
                 color: #f8faff;
             }
 
+            .beta-banner {
+                margin-top: 1.4rem;
+                position: relative;
+                overflow: hidden;
+                padding: 1.4rem 1.8rem;
+                border-radius: 28px;
+                background: linear-gradient(135deg, rgba(14, 18, 54, 0.9), rgba(56, 189, 248, 0.18));
+                border: 1px solid rgba(148, 163, 255, 0.42);
+                box-shadow: 0 32px 60px rgba(5, 10, 30, 0.55);
+                isolation: isolate;
+            }
+
+            .beta-banner__glow {
+                position: absolute;
+                inset: -35% -20% -20% -25%;
+                background:
+                    radial-gradient(circle at 15% 25%, rgba(96, 165, 250, 0.45), transparent 55%),
+                    radial-gradient(circle at 85% 20%, rgba(192, 132, 252, 0.42), transparent 60%),
+                    radial-gradient(circle at 50% 85%, rgba(45, 212, 191, 0.35), transparent 65%);
+                filter: blur(12px);
+                opacity: 0.9;
+                transform: scale(1.02);
+                animation: betaGlow 12s ease-in-out infinite;
+                z-index: 0;
+            }
+
+            @keyframes betaGlow {
+                0%, 100% {
+                    transform: scale(1.02) translate3d(0, 0, 0);
+                    opacity: 0.82;
+                }
+                50% {
+                    transform: scale(1.08) translate3d(1%, -2%, 0);
+                    opacity: 1;
+                }
+            }
+
+            .beta-banner__content {
+                position: relative;
+                z-index: 1;
+                display: flex;
+                align-items: center;
+                gap: 1.4rem;
+            }
+
+            .beta-banner__pill {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.4rem;
+                padding: 0.45rem 1rem;
+                border-radius: 999px;
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(56, 189, 248, 0.85));
+                color: #050b24;
+                font-size: 0.78rem;
+                letter-spacing: 0.16em;
+                text-transform: uppercase;
+                font-weight: 700;
+                box-shadow: 0 18px 35px rgba(5, 10, 30, 0.45);
+            }
+
+            .beta-banner__text {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+                max-width: 38rem;
+            }
+
+            .beta-banner__headline {
+                font-size: 1.08rem;
+                font-weight: 600;
+                color: #f8faff;
+            }
+
+            .beta-banner__subtext {
+                font-size: 0.94rem;
+                color: rgba(224, 231, 255, 0.8);
+            }
+
+            .beta-banner__sparks {
+                display: flex;
+                align-items: center;
+                gap: 0.45rem;
+                margin-left: auto;
+            }
+
+            .beta-banner__spark {
+                width: 16px;
+                height: 16px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, rgba(56, 189, 248, 0.92), rgba(192, 132, 252, 0.92));
+                box-shadow: 0 0 18px rgba(148, 163, 255, 0.85);
+                opacity: 0.8;
+                animation: betaSpark 2.8s ease-in-out infinite;
+            }
+
+            .beta-banner__spark:nth-child(2) {
+                animation-delay: 0.6s;
+            }
+
+            .beta-banner__spark:nth-child(3) {
+                animation-delay: 1.2s;
+            }
+
+            @keyframes betaSpark {
+                0%, 100% {
+                    transform: scale(0.75) translateY(0);
+                    opacity: 0.55;
+                }
+                50% {
+                    transform: scale(1.25) translateY(-6px);
+                    opacity: 1;
+                }
+            }
+
             .hero-section {
                 margin-top: 2.2rem;
                 position: relative;
@@ -1865,6 +2016,20 @@ def main() -> None:
                 letter-spacing: 0.08em;
                 text-transform: uppercase;
                 color: rgba(224, 231, 255, 0.9);
+            }
+
+            .hero-badge-beta {
+                display: inline-flex;
+                align-items: center;
+                padding: 0.2rem 0.6rem;
+                border-radius: 999px;
+                background: linear-gradient(135deg, rgba(148, 163, 255, 0.92), rgba(56, 189, 248, 0.95));
+                color: #050b24;
+                font-size: 0.7rem;
+                letter-spacing: 0.14em;
+                text-transform: uppercase;
+                font-weight: 700;
+                box-shadow: 0 12px 24px rgba(6, 10, 32, 0.45);
             }
 
             .hero-section h1 {
@@ -2229,6 +2394,16 @@ def main() -> None:
             }
 
             @media (max-width: 1200px) {
+                .beta-banner__content {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 1rem;
+                }
+
+                .beta-banner__sparks {
+                    margin-left: 0;
+                }
+
                 .hero-section {
                     grid-template-columns: 1fr;
                     padding: 2.6rem;
@@ -2244,6 +2419,14 @@ def main() -> None:
             }
 
             @media (max-width: 900px) {
+                .beta-banner {
+                    padding: 1.3rem 1.5rem;
+                }
+
+                .beta-banner__text {
+                    max-width: 100%;
+                }
+
                 .metric-row [data-testid="column"],
                 .action-section [data-testid="column"] {
                     flex: 1 1 100% !important;
@@ -2252,6 +2435,19 @@ def main() -> None:
             }
 
             @media (max-width: 600px) {
+                .beta-banner {
+                    padding: 1.1rem 1.25rem;
+                    border-radius: 22px;
+                }
+
+                .beta-banner__headline {
+                    font-size: 1rem;
+                }
+
+                .beta-banner__subtext {
+                    font-size: 0.88rem;
+                }
+
                 .hero-section {
                     padding: 2.2rem;
                 }
