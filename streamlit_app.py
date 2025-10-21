@@ -1371,7 +1371,7 @@ def _render_discover_action() -> None:
         _queue_status_message("Themes applied to the working dataset.")
         _trigger_rerun()
 
-    if actions_col2.button("Cancel preview", use_container_width=True):
+    if actions_col2.button("Try again", use_container_width=True):
         clear_preview_state()
         st.session_state["active_action"] = None
         _queue_status_message("Theme preview discarded.", level="info")
@@ -1391,25 +1391,46 @@ def _render_extract_action() -> None:
         "Describe the fields you want to capture and the Extractor will populate them for each report."
     )
 
-    default_grid = st.session_state.get("feature_grid")
-    if default_grid is None:
-        default_grid = pd.DataFrame(
-            [
-                {
-                    "Field name": "risk_factor",
-                    "Description": "Primary risk factor contributing to the death.",
-                    "Type": "Text",
-                },
-                {
-                    "Field name": "is_healthcare",
-                    "Description": "True if the report involves a healthcare setting.",
-                    "Type": "Boolean",
-                },
-            ]
-        )
+    default_grid = pd.DataFrame(
+        [
+            {
+                "Field name": "risk_factor",
+                "Description": "Primary risk factor contributing to the death.",
+                "Type": "Text",
+            },
+            {
+                "Field name": "is_healthcare",
+                "Description": "True if the report involves a healthcare setting.",
+                "Type": "Boolean",
+            },
+        ]
+    )
+
+    stored_grid = st.session_state.get("feature_editor")
+    if stored_grid is None:
+        stored_grid = st.session_state.get("feature_grid")
+
+    if isinstance(stored_grid, pd.DataFrame):
+        feature_grid_df = stored_grid.copy(deep=True)
+    else:
+        try:
+            feature_grid_df = pd.DataFrame(stored_grid)
+        except ValueError:
+            feature_grid_df = pd.DataFrame()
+
+    if feature_grid_df.empty:
+        feature_grid_df = default_grid.copy(deep=True)
+
+    missing_columns = [
+        column
+        for column in ("Field name", "Description", "Type")
+        if column not in feature_grid_df.columns
+    ]
+    if missing_columns:
+        feature_grid_df = feature_grid_df.reindex(columns=default_grid.columns)
 
     feature_grid = st.data_editor(
-        default_grid,
+        feature_grid_df,
         num_rows="dynamic",
         use_container_width=True,
         column_config={
@@ -1429,7 +1450,8 @@ def _render_extract_action() -> None:
         },
         key="feature_editor",
     )
-    st.session_state["feature_grid"] = feature_grid
+
+    st.session_state["feature_grid"] = feature_grid.copy(deep=True)
 
     with st.form("extract_features_form", enter_to_submit=False):
         with st.expander("Advanced options"):
