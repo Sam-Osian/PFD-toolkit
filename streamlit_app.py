@@ -313,7 +313,7 @@ def _display_dataframe(df: pd.DataFrame, caption: str) -> None:
         st.info("No rows to display yet. Load or generate data to see results here.")
         return
     st.markdown(f"<div class='section-caption'>{caption}</div>", unsafe_allow_html=True)
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(df, width="stretch", hide_index=True)
 
 
 def _render_reports_overview(
@@ -344,7 +344,7 @@ def _render_reports_overview(
         if st.button(
             "Revert changes",
             key=f"revert_reports_{key_suffix}" if key_suffix else "revert_reports",
-            use_container_width=True,
+            width="stretch",
         ):
             st.session_state["reports_df"] = initial_df.copy()
             st.session_state["reports_df_modified"] = False
@@ -510,7 +510,7 @@ def _build_sidebar() -> None:
         "Force refresh from remote dataset", value=True, help="Disable to reuse the cached CSV if available."
     )
 
-    load_button = st.sidebar.button("Load in reports", use_container_width=True)
+    load_button = st.sidebar.button("Load in reports", width="stretch")
 
     if load_button:
         if n_reports_raw.strip() and n_reports is None:
@@ -670,7 +670,7 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
             unsafe_allow_html=True,
         )
     else:
-        dataset_card.dataframe(reports_df, use_container_width=True, hide_index=True)
+        dataset_card.dataframe(reports_df, width="stretch", hide_index=True)
 
     dataset_card.markdown("</div>", unsafe_allow_html=True)
 
@@ -765,7 +765,7 @@ def _render_workspace_footer(
         if st.button(
             undo_label,
             key="footer_undo",
-            use_container_width=True,
+            width="stretch",
             disabled=undo_disabled,
         ):
             _undo_last_change()
@@ -774,7 +774,7 @@ def _render_workspace_footer(
         if st.button(
             "↻ Start over",
             key="footer_reset",
-            use_container_width=True,
+            width="stretch",
             disabled=start_over_disabled,
         ):
             _start_again()
@@ -952,7 +952,7 @@ def _render_action_tiles() -> None:
                 if card.button(
                     f"{action['icon']} {action['label']}",
                     key=action["key"],
-                    use_container_width=True,
+                    width="stretch",
                     disabled=action["disabled"],
                 ):
                     st.session_state["active_action"] = action["target"]
@@ -1046,7 +1046,7 @@ def _render_save_action() -> None:
             data=csv_bytes,
             file_name="pfd_reports.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
         return
 
@@ -1067,7 +1067,7 @@ def _render_save_action() -> None:
         data=zip_buffer.getvalue(),
         file_name="pfd_workspace_bundle.zip",
         mime="application/zip",
-        use_container_width=True,
+        width="stretch",
     )
 
 
@@ -1150,7 +1150,7 @@ def _render_filter_action() -> None:
         with st.container():
             submitted = st.form_submit_button(
                 "Run Screener",
-                use_container_width=True,
+                width="stretch",
                 type="primary",
             )
 
@@ -1292,7 +1292,7 @@ def _render_discover_action() -> None:
             )
 
         preview_requested = st.form_submit_button(
-            "Preview recurring themes", use_container_width=True
+            "Preview recurring themes", width="stretch"
         )
 
     if preview_requested:
@@ -1396,7 +1396,7 @@ def _render_discover_action() -> None:
     theme_schema = preview_state.get("theme_schema")
 
     actions_col1, actions_col2 = st.columns(2)
-    if actions_col1.button("Apply themes", use_container_width=True):
+    if actions_col1.button("Apply themes", width="stretch"):
         if not isinstance(preview_df, pd.DataFrame):
             st.error("No preview data available to apply.")
             return
@@ -1421,7 +1421,7 @@ def _render_discover_action() -> None:
         _queue_status_message("Themes applied to the working dataset.")
         _trigger_rerun()
 
-    if actions_col2.button("Try again", use_container_width=True):
+    if actions_col2.button("Try again", width="stretch"):
         clear_preview_state()
         st.session_state["active_action"] = None
         _queue_status_message("Theme preview discarded.", level="info")
@@ -1482,7 +1482,7 @@ def _render_extract_action() -> None:
     feature_grid = st.data_editor(
         feature_grid_df,
         num_rows="dynamic",
-        use_container_width=True,
+        width="stretch",
         column_config={
             "Field name": st.column_config.TextColumn(
                 "Field name",
@@ -1536,7 +1536,7 @@ def _render_extract_action() -> None:
             )
 
         extract_submitted = st.form_submit_button(
-            "Tag the reports", use_container_width=True
+            "Tag the reports", width="stretch"
         )
 
     if not extract_submitted:
