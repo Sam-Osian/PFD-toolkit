@@ -82,6 +82,37 @@ def _styled_metric(label: str, value: Any) -> None:
     )
 
 
+class LoadingIndicator:
+    """Utility to display the animated loading indicator."""
+
+    def __init__(self, placeholder: DeltaGenerator, message: str = "Loading…") -> None:
+        self._placeholder = placeholder
+        self.update(message)
+
+    def update(self, message: str) -> None:
+        """Update the indicator with ``message``."""
+
+        safe_message = escape(message)
+        self._placeholder.markdown(
+            f"""
+            <div class="loading-indicator">
+                <div class="loading-indicator__dots">
+                    <span class="loading-indicator__dot"></span>
+                    <span class="loading-indicator__dot"></span>
+                    <span class="loading-indicator__dot"></span>
+                </div>
+                <span class="loading-indicator__label">{safe_message}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    def close(self) -> None:
+        """Remove the indicator from the UI."""
+
+        self._placeholder.empty()
+
+
 FLASH_MESSAGE_KEY = "flash_message"
 
 
@@ -1181,10 +1212,10 @@ def _render_filter_action() -> None:
     initial_report_count = len(reports_df)
     match_column_name = "matches_query"
 
-    progress_placeholder = st.empty()
-    progress_bar = progress_placeholder.progress(0)
+    loading_placeholder = st.empty()
+    loading_indicator = LoadingIndicator(loading_placeholder, "Preparing screener…")
     try:
-        progress_bar.progress(10)
+        loading_indicator.update("Configuring screener…")
         screener = Screener(
             llm=llm_client,
             reports=reports_df,
@@ -1197,21 +1228,20 @@ def _render_filter_action() -> None:
             include_circumstances=True,
             include_concerns=True,
         )
-        progress_bar.progress(25)
-        with st.spinner("Running the screener..."):
-            result_df = screener.screen_reports(
-                search_query=search_query or None,
-                filter_df=filter_df,
-                result_col_name=match_column_name,
-                produce_spans=produce_spans,
-                drop_spans=drop_spans,
-            )
-        progress_bar.progress(100)
+        loading_indicator.update("Running the screener…")
+        result_df = screener.screen_reports(
+            search_query=search_query or None,
+            filter_df=filter_df,
+            result_col_name=match_column_name,
+            produce_spans=produce_spans,
+            drop_spans=drop_spans,
+        )
+        loading_indicator.update("Finalising results…")
     except Exception as exc:  # pragma: no cover - relies on live API
         st.error(f"Screening failed: {exc}")
         return
     finally:
-        progress_placeholder.empty()
+        loading_indicator.close()
 
     st.session_state["screener_result"] = result_df
     st.session_state["reports_df"] = result_df.copy(deep=True)
@@ -1308,7 +1338,7 @@ def _render_discover_action() -> None:
             )
 
         preview_requested = st.form_submit_button(
-            "Preview recurring themes", width="stretch"
+            "Discover recurring themes", width="stretch"
         )
 
     if preview_requested:
@@ -1330,17 +1360,16 @@ def _render_discover_action() -> None:
         if min_themes_value is not None or max_themes_value is not None or (
             not min_themes_raw.strip() and not max_themes_raw.strip()
         ):
-            progress_placeholder = st.empty()
-            progress_bar = progress_placeholder.progress(0)
+            loading_placeholder = st.empty()
+            loading_indicator = LoadingIndicator(
+                loading_placeholder, "Summarising the reports…"
+            )
             try:
-                progress_bar.progress(10)
                 summary_col_name = extractor.summary_col or "summary"
-                with st.spinner("Summarising the reports..."):
-                    summary_df = extractor.summarise(
-                        result_col_name=summary_col_name,
-                        trim_intensity=trim_labels[trim_choice],
-                    )
-                progress_bar.progress(55)
+                summary_df = extractor.summarise(
+                    result_col_name=summary_col_name,
+                    trim_intensity=trim_labels[trim_choice],
+                )
 
                 seed_topics: Optional[Any] = None
                 if seed_topics_text.strip():
@@ -1353,31 +1382,31 @@ def _render_discover_action() -> None:
                             if line.strip()
                         ]
 
-                progress_bar.progress(70)
-                with st.spinner("Identifying themes..."):
-                    ThemeModel = extractor.discover_themes(
-                        warn_exceed=int(warning_threshold),
-                        error_exceed=int(error_threshold),
-                        max_themes=max_themes_value,
-                        min_themes=min_themes_value,
-                        extra_instructions=extra_theme_instructions or None,
-                        seed_topics=seed_topics,
-                    )
+                loading_indicator.update("Identifying themes…")
+                ThemeModel = extractor.discover_themes(
+                    warn_exceed=int(warning_threshold),
+                    error_exceed=int(error_threshold),
+                    max_themes=max_themes_value,
+                    min_themes=min_themes_value,
+                    extra_instructions=extra_theme_instructions or None,
+                    seed_topics=seed_topics,
+                )
 
                 if ThemeModel is None or not hasattr(ThemeModel, "model_json_schema"):
+                    loading_indicator.update("Theme discovery finished.")
                     st.warning(
                         "Theme discovery completed but did not return a schema."
                     )
                     clear_preview_state()
                 else:
+                    loading_indicator.update("Assigning themes to reports…")
                     theme_schema = ThemeModel.model_json_schema()
-                    with st.spinner("Assigning themes to reports..."):
-                        preview_df = extractor.extract_features(
-                            feature_model=ThemeModel,
-                            force_assign=True,
-                            allow_multiple=True,
-                            skip_if_present=False,
-                        )
+                    preview_df = extractor.extract_features(
+                        feature_model=ThemeModel,
+                        force_assign=True,
+                        allow_multiple=True,
+                        skip_if_present=False,
+                    )
                     theme_summary_df = _build_theme_summary_table(
                         preview_df, theme_schema
                     )
@@ -1389,6 +1418,7 @@ def _render_discover_action() -> None:
                         "theme_summary": theme_summary_df,
                         "seed_topics": seed_topics or None,
                     }
+                    loading_indicator.update("Preview ready.")
                     st.success(
                         "Preview ready. Review the results below and apply them when happy."
                     )
@@ -1396,7 +1426,7 @@ def _render_discover_action() -> None:
                 st.error(f"Theme discovery failed: {exc}")
                 clear_preview_state()
             finally:
-                progress_placeholder.empty()
+                loading_indicator.close()
 
     preview_state = st.session_state.get("preview_state")
     if not isinstance(preview_state, dict) or preview_state.get("type") != "discover":
@@ -1412,7 +1442,7 @@ def _render_discover_action() -> None:
     theme_schema = preview_state.get("theme_schema")
 
     actions_col1, actions_col2 = st.columns(2)
-    if actions_col1.button("Apply themes", width="stretch"):
+    if actions_col1.button("Accept themes", width="stretch"):
         if not isinstance(preview_df, pd.DataFrame):
             st.error("No preview data available to apply.")
             return
@@ -1437,7 +1467,7 @@ def _render_discover_action() -> None:
         _queue_status_message("Themes applied to the working dataset.")
         _trigger_rerun()
 
-    if actions_col2.button("Try again", width="stretch"):
+    if actions_col2.button("Discard themes", width="stretch"):
         clear_preview_state()
         st.session_state["active_action"] = None
         _queue_status_message("Theme preview discarded.", level="info")
@@ -1559,30 +1589,31 @@ def _render_extract_action() -> None:
         return
 
     push_history_snapshot()
-    progress_placeholder = st.empty()
-    progress_bar = progress_placeholder.progress(0)
+    loading_placeholder = st.empty()
+    loading_indicator = LoadingIndicator(
+        loading_placeholder, "Configuring extraction…"
+    )
     try:
-        progress_bar.progress(10)
         feature_model = _build_feature_model_from_grid(feature_grid)
         target_df = reports_df
-        with st.spinner("Extracting structured data..."):
-            result_df = extractor.extract_features(
-                reports=target_df,
-                feature_model=feature_model,
-                produce_spans=produce_spans,
-                drop_spans=drop_spans,
-                force_assign=force_assign,
-                allow_multiple=allow_multiple,
-                schema_detail="minimal",
-                extra_instructions=extra_instructions or None,
-                skip_if_present=skip_if_present,
-            )
-        progress_bar.progress(100)
+        loading_indicator.update("Extracting structured data…")
+        result_df = extractor.extract_features(
+            reports=target_df,
+            feature_model=feature_model,
+            produce_spans=produce_spans,
+            drop_spans=drop_spans,
+            force_assign=force_assign,
+            allow_multiple=allow_multiple,
+            schema_detail="minimal",
+            extra_instructions=extra_instructions or None,
+            skip_if_present=skip_if_present,
+        )
+        loading_indicator.update("Finalising dataset…")
     except Exception as exc:  # pragma: no cover - depends on live API
         st.error(f"Extraction failed: {exc}")
         return
     finally:
-        progress_placeholder.empty()
+        loading_indicator.close()
 
     st.session_state["extractor_result"] = result_df
     st.session_state["reports_df"] = result_df.copy(deep=True)
@@ -2122,6 +2153,58 @@ def main() -> None:
             .hero-kpi-range {
                 font-size: 0.95rem;
                 color: rgba(226, 232, 255, 0.68);
+            }
+
+            .loading-indicator {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 0.85rem;
+                padding: 1.6rem 0;
+                margin: 0 auto;
+                text-align: center;
+                width: fit-content;
+            }
+
+            .loading-indicator__dots {
+                display: flex;
+                gap: 0.55rem;
+            }
+
+            .loading-indicator__dot {
+                width: 18px;
+                height: 18px;
+                border-radius: 50%;
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.9), rgba(14, 165, 233, 0.9));
+                box-shadow: 0 0 18px rgba(56, 189, 248, 0.65);
+                opacity: 0.75;
+                animation: loadingPulse 1.9s ease-in-out infinite;
+            }
+
+            .loading-indicator__dot:nth-child(2) {
+                animation-delay: 0.25s;
+            }
+
+            .loading-indicator__dot:nth-child(3) {
+                animation-delay: 0.5s;
+            }
+
+            @keyframes loadingPulse {
+                0%, 100% {
+                    transform: scale(0.72) translateY(0);
+                    opacity: 0.45;
+                }
+                50% {
+                    transform: scale(1.18) translateY(-6px);
+                    opacity: 1;
+                }
+            }
+
+            .loading-indicator__label {
+                font-size: 0.95rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: rgba(226, 232, 255, 0.82);
             }
 
             .metric-row {
