@@ -577,7 +577,7 @@ def _build_sidebar() -> None:
     n_reports_raw = st.sidebar.text_input(
         "Limit number of recent reports (optional)",
         value="",
-        placeholder="e.g. 50",
+        placeholder="e.g. 1000",
         help="Leave blank to load all matching reports.",
     )
     n_reports: Optional[int] = None
@@ -1713,7 +1713,7 @@ def _render_extract_action() -> None:
 def main() -> None:
     st.set_page_config(
         page_title="PFD Toolkit AI Workbench · Beta",
-        page_icon="📊",
+        page_icon=":material/build:",
         layout="wide",
     )
     _init_session_state()
