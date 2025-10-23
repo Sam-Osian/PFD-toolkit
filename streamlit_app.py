@@ -353,10 +353,10 @@ def _build_feature_model_from_grid(feature_rows: pd.DataFrame):
         raise ValueError("Please add at least one feature to extract.")
 
     type_mapping: Dict[str, type] = {
-        "Text": str,
-        "Boolean": bool,
-        "Integer": int,
-        "Decimal": float,
+        "Free text": str,
+        "Conditional (True/False)": bool,
+        "Whole number": int,
+        "Decimal number": float,
     }
 
     fields: Dict[str, Tuple[type, Field]] = {}
@@ -535,7 +535,7 @@ def _build_sidebar() -> None:
         model_display_options[0],
     )
     model_display = st.sidebar.selectbox(
-        "Chat model",
+        "Choose your AI model",
         model_display_options,
         index=model_display_options.index(current_display)
         if current_display in model_display_options
@@ -1574,14 +1574,14 @@ def _render_extract_action() -> None:
     default_grid = pd.DataFrame(
         [
             {
-                "Field name": "risk_factor",
-                "Description": "Primary risk factor contributing to the death.",
-                "Type": "Text",
+                "Field name": "age",
+                "Description": "Age of the deceased (in years), if provided.",
+                "Type": "Whole number",
             },
             {
                 "Field name": "is_healthcare",
                 "Description": "True if the report involves a healthcare setting.",
-                "Type": "Boolean",
+                "Type": "Conditional (True/False)",
             },
         ]
     )
@@ -1624,7 +1624,12 @@ def _render_extract_action() -> None:
             ),
             "Type": st.column_config.SelectboxColumn(
                 "Type",
-                options=["Text", "Boolean", "Integer", "Decimal"],
+                options=[
+                    "Free text",
+                    "Conditional (True/False)",
+                    "Whole number",
+                    "Decimal number",
+                ],
                 help="Choose the data type the extractor should return.",
             ),
         },
