@@ -43,6 +43,7 @@ def _init_session_state() -> None:
         "reports_df": pd.DataFrame(),
         "reports_df_initial": None,
         "history": [],
+        "redo_history": [],
         "active_action": None,
         "preview_state": None,
         "reports_df_modified": False,
@@ -237,6 +238,7 @@ def push_history_snapshot() -> None:
     if len(history) > 10:
         history = history[-10:]
     st.session_state["history"] = history
+    st.session_state["redo_history"] = []
 
 
 def clear_preview_state() -> None:
@@ -623,6 +625,7 @@ def _build_sidebar() -> None:
             st.session_state["extractor_source_signature"] = None
             st.session_state["seed_topics_last"] = None
             st.session_state["history"] = []
+            st.session_state["redo_history"] = []
             st.session_state["active_action"] = None
             clear_preview_state()
             st.success(f"Loaded {len(df)} reports into the workspace.")
@@ -922,6 +925,7 @@ def _render_workspace_footer(
         return
 
     history_depth = len(st.session_state.get("history", []))
+    redo_depth = len(st.session_state.get("redo_history", []))
     initial_df = st.session_state.get("reports_df_initial")
 
     undo_disabled = history_depth == 0
@@ -931,6 +935,14 @@ def _render_workspace_footer(
         undo_hint = f"({history_depth} steps available)"
     else:
         undo_hint = ""
+
+    redo_disabled = redo_depth == 0
+    if redo_depth == 1:
+        redo_hint = "(1 step available)"
+    elif redo_depth > 1:
+        redo_hint = f"({redo_depth} steps available)"
+    else:
+        redo_hint = ""
 
     has_initial_dataset = isinstance(initial_df, pd.DataFrame) and not initial_df.empty
     workspace_active = _workspace_has_activity()
@@ -960,7 +972,8 @@ def _render_workspace_footer(
         return
 
     undo_label = "↶ Undo" if not undo_hint else f"↶ Undo\n{undo_hint}"
-    undo_col, start_over_col = footer.columns(2, gap="large")
+    redo_label = "↷ Redo" if not redo_hint else f"↷ Redo\n{redo_hint}"
+    undo_col, redo_col, start_over_col = footer.columns(3, gap="large")
 
     with undo_col:
         if st.button(
@@ -970,6 +983,15 @@ def _render_workspace_footer(
             disabled=undo_disabled,
         ):
             _undo_last_change()
+
+    with redo_col:
+        if st.button(
+            redo_label,
+            key="footer_redo",
+            width="stretch",
+            disabled=redo_disabled,
+        ):
+            _redo_last_change()
 
     with start_over_col:
         if st.button(
@@ -1176,11 +1198,38 @@ def _undo_last_change() -> None:
     if not history:
         return
 
+    redo_history = list(st.session_state.get("redo_history", []))
+    redo_history.append(snapshot_state())
+    if len(redo_history) > 10:
+        redo_history = redo_history[-10:]
+
     snapshot = history.pop()
     st.session_state["history"] = history
+    st.session_state["redo_history"] = redo_history
     restore_state(snapshot)
     st.session_state["active_action"] = None
     _queue_status_message("Reverted to the previous state.")
+    _trigger_rerun()
+
+
+def _redo_last_change() -> None:
+    """Restore the most recently undone snapshot."""
+
+    redo_history = list(st.session_state.get("redo_history", []))
+    if not redo_history:
+        return
+
+    history = list(st.session_state.get("history", []))
+    history.append(snapshot_state())
+    if len(history) > 10:
+        history = history[-10:]
+
+    snapshot = redo_history.pop()
+    st.session_state["history"] = history
+    st.session_state["redo_history"] = redo_history
+    restore_state(snapshot)
+    st.session_state["active_action"] = None
+    _queue_status_message("Reapplied the next state.")
     _trigger_rerun()
 
 
@@ -1205,6 +1254,7 @@ def _start_again() -> None:
     st.session_state["feature_grid"] = None
     clear_preview_state()
     st.session_state["history"] = []
+    st.session_state["redo_history"] = []
     st.session_state["active_action"] = None
     _queue_status_message("Workspace restored to the post-load dataset.")
     _trigger_rerun()
