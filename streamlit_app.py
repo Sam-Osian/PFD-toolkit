@@ -792,6 +792,79 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
 
     dataset_card.markdown("</div>", unsafe_allow_html=True)
 
+    _render_theme_summary_panel(ctx)
+
+
+def _render_theme_summary_panel(container: Optional[DeltaGenerator] = None) -> None:
+    """Render a collapsible card summarising accepted themes."""
+
+    theme_df = _coerce_dataframe(st.session_state.get("theme_summary_table"))
+    if theme_df is None or theme_df.empty:
+        return
+
+    ctx = container or st
+
+    display_df = theme_df.copy(deep=True)
+    if {"Count", "Theme"}.issubset(display_df.columns):
+        display_df = display_df.sort_values(
+            by=["Count", "Theme"], ascending=[False, True]
+        ).reset_index(drop=True)
+
+    reports_df = _get_reports_df()
+    total_reports = len(reports_df)
+    theme_count = len(display_df)
+
+    top_theme = display_df.iloc[0] if not display_df.empty else {}
+    top_theme_name = escape(str(top_theme.get("Theme", "—"))) if isinstance(top_theme, pd.Series) else "—"
+    top_theme_count = (
+        int(top_theme.get("Count", 0)) if isinstance(top_theme, pd.Series) else 0
+    )
+    top_theme_percentage_raw = (
+        float(top_theme.get("%", 0.0)) if isinstance(top_theme, pd.Series) else 0.0
+    )
+    top_theme_percentage = f"{top_theme_percentage_raw:.1f}%"
+
+    theme_label = "theme" if theme_count == 1 else "themes"
+    reports_label = "report" if total_reports == 1 else "reports"
+    top_theme_reports_label = "report" if top_theme_count == 1 else "reports"
+
+    panel = ctx.container()
+    panel.markdown(
+        f"""
+        <div class="section-card theme-summary-card">
+            <div class="section-card-header theme-summary-card__header">
+                <span class="section-kicker">Theme discovery</span>
+                <div class="theme-summary-card__title">
+                    <h3>Thematic snapshot</h3>
+                    <p>Revisit the thematic patterns surfaced by PFD Toolkit.</p>
+                </div>
+                <div class="theme-summary-card__meta">
+                    <span class="theme-summary-chip">{theme_count} {theme_label}</span>
+                    <span class="theme-summary-chip theme-summary-chip--accent">{total_reports:,} {reports_label} analysed</span>
+                </div>
+            </div>
+            <div class="theme-summary-highlight">
+                <div class="theme-summary-highlight__icon">✨</div>
+                <div class="theme-summary-highlight__content">
+                    <span class="theme-summary-highlight__label">Most prominent theme</span>
+                    <span class="theme-summary-highlight__value">{top_theme_name}</span>
+                    <span class="theme-summary-highlight__meta">{top_theme_count} {top_theme_reports_label} · {top_theme_percentage}</span>
+                </div>
+            </div>
+            <div class="theme-summary-card__expander">
+        """,
+        unsafe_allow_html=True,
+    )
+
+    expander = panel.expander("See all identified themes", expanded=False)
+    expander.markdown(
+        "<div class='theme-summary-table-caption'>Theme assignments across the working dataset</div>",
+        unsafe_allow_html=True,
+    )
+    expander.dataframe(display_df, width="stretch", hide_index=True)
+
+    panel.markdown("""</div></div>""", unsafe_allow_html=True)
+
 
 def _value_has_content(value: Any) -> bool:
     """Return ``True`` when ``value`` contains meaningful state."""
@@ -2717,6 +2790,141 @@ def main() -> None:
 
             .data-card div[data-testid="stDataFrame"] tbody tr:hover td {
                 background: rgba(32, 41, 86, 0.85);
+            }
+
+            .theme-summary-card {
+                position: relative;
+                overflow: hidden;
+            }
+
+            .theme-summary-card::before {
+                content: "";
+                position: absolute;
+                inset: 0;
+                background: radial-gradient(circle at 0% 0%, rgba(192, 132, 252, 0.22), transparent 55%),
+                    radial-gradient(circle at 85% 15%, rgba(56, 189, 248, 0.18), transparent 55%);
+                opacity: 0.9;
+                pointer-events: none;
+            }
+
+            .theme-summary-card__header {
+                position: relative;
+                display: grid;
+                gap: 1.4rem;
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .theme-summary-card__title h3 {
+                margin: 0.2rem 0 0.4rem;
+                font-size: 1.5rem;
+            }
+
+            .theme-summary-card__meta {
+                display: inline-flex;
+                flex-wrap: wrap;
+                gap: 0.6rem;
+            }
+
+            .theme-summary-chip {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.35rem;
+                padding: 0.45rem 0.85rem;
+                border-radius: 999px;
+                font-size: 0.78rem;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                background: rgba(148, 163, 255, 0.18);
+                border: 1px solid rgba(148, 163, 255, 0.38);
+                color: rgba(226, 232, 255, 0.82);
+            }
+
+            .theme-summary-chip--accent {
+                background: linear-gradient(135deg, rgba(59, 130, 246, 0.28), rgba(192, 132, 252, 0.32));
+                border-color: rgba(96, 165, 250, 0.5);
+            }
+
+            .theme-summary-highlight {
+                position: relative;
+                margin-top: 1.8rem;
+                padding: 1.2rem 1.4rem;
+                border-radius: 20px;
+                background: rgba(15, 23, 42, 0.78);
+                border: 1px solid rgba(148, 163, 255, 0.24);
+                display: flex;
+                gap: 1rem;
+                align-items: center;
+            }
+
+            .theme-summary-highlight__icon {
+                font-size: 1.5rem;
+            }
+
+            .theme-summary-highlight__content {
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+
+            .theme-summary-highlight__label {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.14em;
+                color: rgba(226, 232, 255, 0.72);
+            }
+
+            .theme-summary-highlight__value {
+                font-family: 'Space Grotesk', sans-serif;
+                font-size: 1.3rem;
+                color: #f9fbff;
+            }
+
+            .theme-summary-highlight__meta {
+                font-size: 0.9rem;
+                color: rgba(226, 232, 255, 0.7);
+            }
+
+            .theme-summary-card__expander {
+                position: relative;
+                margin-top: 1.6rem;
+            }
+
+            .theme-summary-card__expander div[data-testid="stExpander"] {
+                border-radius: 18px;
+                border: 1px solid rgba(148, 163, 255, 0.3);
+                background: rgba(15, 23, 42, 0.74);
+                box-shadow: 0 18px 40px rgba(6, 10, 32, 0.4);
+            }
+
+            .theme-summary-card__expander button[aria-expanded="true"],
+            .theme-summary-card__expander button[aria-expanded="false"] {
+                color: rgba(224, 231, 255, 0.85);
+                font-weight: 600;
+                font-size: 0.95rem;
+            }
+
+            .theme-summary-table-caption {
+                font-size: 0.82rem;
+                text-transform: uppercase;
+                letter-spacing: 0.14em;
+                color: rgba(199, 210, 254, 0.7);
+                margin-bottom: 0.6rem;
+            }
+
+            .theme-summary-card__expander div[data-testid="stDataFrame"] {
+                margin-top: 0.4rem;
+                border-radius: 16px;
+                overflow: hidden;
+                border: 1px solid rgba(129, 140, 248, 0.28);
+                background: rgba(9, 14, 36, 0.9);
+            }
+
+            .theme-summary-card__expander div[data-testid="stDataFrame"] thead tr th {
+                background: rgba(15, 23, 42, 0.94);
+            }
+
+            .theme-summary-card__expander div[data-testid="stDataFrame"] tbody tr td {
+                background: rgba(17, 24, 54, 0.82);
             }
 
             .action-section {
