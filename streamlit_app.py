@@ -49,6 +49,14 @@ THEME_EMOJI_BANNED_TOKENS = {
     "☠️",
     "💀",
     "🧟",
+    "⚰️",
+    "🪦",
+    "🧛", "🧛‍♂️", "🧛‍♀️",
+    "🥀",
+    "⚱️",
+    "🕷️", "🕸️",
+    "🕊️",
+    "🕯️",
 }
 
 ThemeEmojiModel = create_model(
@@ -973,6 +981,8 @@ def _resolve_theme_emoji(theme_name: str, llm_client: Optional[LLM]) -> str:
         "- Avoid violent, graphic, or harmful imagery such as knives, guns, bombs, "
         "blood, skulls, zombies, or anything implying injury.\n"
         f"- If nothing is suitable, respond with the light bulb emoji {DEFAULT_THEME_EMOJI}.\n"
+        "- Do not engage in any death-related euphemism whatsoever. Use the light "
+        "bulb emoji for any theme specific to death. "
         "- Do not include text, spaces, or additional punctuation.\n"
         'Respond only with JSON that matches the schema {"emoji": "🙂"}.\n'
     )
