@@ -313,6 +313,9 @@ SNAPSHOT_KEYS = [
     "feature_grid",
     "active_action",
     "preview_state",
+    REPRO_SCRIPT_KEY,
+    REPRO_ACTION_COUNTS_KEY,
+    LLM_SIGNATURE_KEY,
 ]
 
 
