@@ -32,6 +32,39 @@ from pfd_toolkit.screener import Screener
 LOGO_PATH = Path("docs/assets/badge-circle.png")
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
+DEFAULT_THEME_EMOJI = "💡"
+THEME_EMOJI_BANNED_TOKENS = {
+    "🩸",
+    "🩹",
+    "🔪",
+    "🗡",
+    "🗡️",
+    "🪓",
+    "⚔",
+    "⚔️",
+    "💣",
+    "🧨",
+    "🔫",
+    "☠",
+    "☠️",
+    "💀",
+    "🧟",
+}
+
+ThemeEmojiModel = create_model(
+    "ThemeEmojiModel",
+    emoji=(
+        str,
+        Field(
+            min_length=1,
+            max_length=8,
+            pattern=r"^\S+$",
+            description="A single emoji with no surrounding text or whitespace.",
+            json_schema_extra={"examples": ["🗣️"]},
+        ),
+    ),
+)
+
 
 # Keys for the reproducible script caching feature
 REPRO_SCRIPT_KEY = "repro_script_lines"
@@ -154,6 +187,7 @@ def _init_session_state() -> None:
         REPRO_SCRIPT_KEY: _initial_repro_script_lines(),
         REPRO_ACTION_COUNTS_KEY: {},
         LLM_SIGNATURE_KEY: None,
+        "theme_emoji_cache": {},
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -757,6 +791,7 @@ def _build_sidebar() -> None:
             signature = tuple(signature_payload.items())
             if st.session_state.get(LLM_SIGNATURE_KEY) != signature:
                 st.session_state[LLM_SIGNATURE_KEY] = signature
+                st.session_state["theme_emoji_cache"] = {}
                 llm_script_kwargs = llm_kwargs.copy()
                 if "api_key" in llm_script_kwargs:
                     llm_script_kwargs["api_key"] = "<redacted>"
@@ -912,8 +947,59 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
     _render_theme_summary_panel(ctx)
 
 
+def _resolve_theme_emoji(theme_name: str, llm_client: Optional[LLM]) -> str:
+    """Return a single emoji representing ``theme_name`` using the configured LLM."""
+
+    theme_clean = (theme_name or "").strip()
+    if not theme_clean:
+        return DEFAULT_THEME_EMOJI
+
+    if llm_client is None:
+        return DEFAULT_THEME_EMOJI
+
+    cache: Dict[Any, str] = st.session_state.setdefault("theme_emoji_cache", {})
+    signature = st.session_state.get(LLM_SIGNATURE_KEY)
+    cache_key = (signature, theme_clean.lower())
+    cached = cache.get(cache_key)
+    if isinstance(cached, str) and cached:
+        return cached
+
+    prompt = (
+        "You choose exactly one emoji to represent a theme extracted from Prevention "
+        "of Future Death reports.\n"
+        f"Theme: \"{theme_clean}\"\n\n"
+        "Rules:\n"
+        "- Select precisely one emoji that captures the theme's core idea.\n"
+        "- Avoid violent, graphic, or harmful imagery such as knives, guns, bombs, "
+        "blood, skulls, zombies, or anything implying injury.\n"
+        f"- If nothing is suitable, respond with the light bulb emoji {DEFAULT_THEME_EMOJI}.\n"
+        "- Do not include text, spaces, or additional punctuation.\n"
+        'Respond only with JSON that matches the schema {"emoji": "🙂"}.\n'
+    )
+
+    candidate = DEFAULT_THEME_EMOJI
+    try:
+        responses = llm_client.generate([prompt], response_format=ThemeEmojiModel)
+        result = responses[0] if responses else None
+        if isinstance(result, ThemeEmojiModel):
+            candidate = result.emoji.strip() or DEFAULT_THEME_EMOJI
+    except Exception:
+        candidate = DEFAULT_THEME_EMOJI
+
+    if any(token in candidate for token in THEME_EMOJI_BANNED_TOKENS):
+        candidate = DEFAULT_THEME_EMOJI
+
+    if any(char.isalnum() for char in candidate):
+        candidate = DEFAULT_THEME_EMOJI
+
+    cache[cache_key] = candidate or DEFAULT_THEME_EMOJI
+    return cache[cache_key]
+
+
 def _render_theme_summary_panel(container: Optional[DeltaGenerator] = None) -> None:
     """Render a collapsible card summarising accepted themes."""
+
+    llm_client: Optional[LLM] = st.session_state.get("llm_client")
 
     theme_df = _coerce_dataframe(st.session_state.get("theme_summary_table"))
     if theme_df is None or theme_df.empty:
@@ -932,7 +1018,10 @@ def _render_theme_summary_panel(container: Optional[DeltaGenerator] = None) -> N
     theme_count = len(display_df)
 
     top_theme = display_df.iloc[0] if not display_df.empty else {}
-    top_theme_name = escape(str(top_theme.get("Theme", "—"))) if isinstance(top_theme, pd.Series) else "—"
+    top_theme_name_raw = (
+        str(top_theme.get("Theme", "")).strip() if isinstance(top_theme, pd.Series) else ""
+    )
+    top_theme_name = escape(top_theme_name_raw or "—")
     top_theme_count = (
         int(top_theme.get("Count", 0)) if isinstance(top_theme, pd.Series) else 0
     )
@@ -940,6 +1029,9 @@ def _render_theme_summary_panel(container: Optional[DeltaGenerator] = None) -> N
         float(top_theme.get("%", 0.0)) if isinstance(top_theme, pd.Series) else 0.0
     )
     top_theme_percentage = f"{top_theme_percentage_raw:.1f}%"
+
+    theme_emoji = _resolve_theme_emoji(top_theme_name_raw, llm_client)
+    theme_emoji_display = escape(theme_emoji or DEFAULT_THEME_EMOJI)
 
     theme_label = "theme" if theme_count == 1 else "themes"
     reports_label = "report" if total_reports == 1 else "reports"
@@ -961,7 +1053,7 @@ def _render_theme_summary_panel(container: Optional[DeltaGenerator] = None) -> N
                 </div>
             </div>
             <div class="theme-summary-highlight">
-                <div class="theme-summary-highlight__icon">✨</div>
+                <div class="theme-summary-highlight__icon">{theme_emoji_display}</div>
                 <div class="theme-summary-highlight__content">
                     <span class="theme-summary-highlight__label">Most prominent theme</span>
                     <span class="theme-summary-highlight__value">{top_theme_name}</span>
