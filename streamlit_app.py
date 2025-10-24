@@ -10,7 +10,7 @@ from html import escape
 from datetime import date
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -31,6 +31,92 @@ from pfd_toolkit.screener import Screener
 
 LOGO_PATH = Path("docs/assets/badge-circle.png")
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
+
+
+# Keys for the reproducible script caching feature
+REPRO_SCRIPT_KEY = "repro_script_lines"
+REPRO_ACTION_COUNTS_KEY = "repro_action_counts"
+LLM_SIGNATURE_KEY = "llm_config_signature"
+
+
+# ---------------------------------------------------------------------------
+# Reproducible script helpers
+# ---------------------------------------------------------------------------
+
+def _initial_repro_script_lines() -> List[str]:
+    """Return the initial lines for the reproducible workspace script."""
+
+    return [
+        "# -----------------------------------------------------------------------------",
+        "# Reproducible workspace script",
+        "# This script contains the Python code for the various actions you performed in",
+        "# PFD Toolkit Workbench.",
+        "# To replay them locally, first install the Toolkit before running the script:",
+        "#     pip install pfd_toolkit",
+        "# Workbench does not save your API key. Make sure to add this to the script."
+        ""
+        "from pfd_toolkit import load_reports",
+        "from pfd_toolkit import LLM",
+        "from pfd_toolkit import Screener",
+        "from pfd_toolkit import Extractor",
+        "",
+    ]
+
+
+def _ensure_repro_script(reset: bool = False) -> List[str]:
+    """Ensure the reproducible script list exists and optionally reset it."""
+
+    lines = st.session_state.get(REPRO_SCRIPT_KEY)
+    if reset or not isinstance(lines, list):
+        lines = _initial_repro_script_lines()
+        st.session_state[REPRO_SCRIPT_KEY] = lines
+    return lines
+
+
+def _reset_repro_tracking() -> None:
+    """Reset the cached script and action counters."""
+
+    _ensure_repro_script(reset=True)
+    st.session_state[REPRO_ACTION_COUNTS_KEY] = {}
+    st.session_state[LLM_SIGNATURE_KEY] = None
+
+
+def _format_call(prefix: str, kwargs: Dict[str, Any], raw_parameters: Iterable[str] = ()) -> str:
+    """Return a formatted multi-line call string for the reproducible script."""
+
+    lines = [f"{prefix}("]
+    for key, value in kwargs.items():
+        if key in raw_parameters:
+            rendered = value
+        else:
+            rendered = repr(value)
+        lines.append(f"    {key}={rendered},")
+    lines.append(")")
+    return "\n".join(lines)
+
+
+def _record_repro_action(action_key: str, base_comment: str, code_block: str) -> None:
+    """Append an action to the reproducible script with run counters."""
+
+    lines = _ensure_repro_script()
+    counters: Dict[str, int] = st.session_state.setdefault(
+        REPRO_ACTION_COUNTS_KEY, {}
+    )
+    count = counters.get(action_key, 0) + 1
+    counters[action_key] = count
+    comment = base_comment if count == 1 else f"{base_comment} (run {count})"
+
+    if lines and lines[-1] != "":
+        lines.append("")
+    lines.append(f"# {comment}")
+    lines.extend(code_block.splitlines())
+
+
+def _get_repro_script_text() -> str:
+    """Return the reproducible script as a single text blob."""
+
+    lines = _ensure_repro_script()
+    return "\n".join(lines) + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +151,9 @@ def _init_session_state() -> None:
         "provider_override": "OpenAI",
         "provider_override_select": "OpenAI",
         REPORTS_LOADING_FLAG_KEY: False,
+        REPRO_SCRIPT_KEY: _initial_repro_script_lines(),
+        REPRO_ACTION_COUNTS_KEY: {},
+        LLM_SIGNATURE_KEY: None,
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -628,6 +717,18 @@ def _build_sidebar() -> None:
             st.session_state["redo_history"] = []
             st.session_state["active_action"] = None
             clear_preview_state()
+            _reset_repro_tracking()
+            load_kwargs = {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "n_reports": n_reports,
+                "refresh": refresh,
+            }
+            _record_repro_action(
+                "load_reports",
+                "Load in reports",
+                _format_call("reports_df = load_reports", load_kwargs),
+            )
             st.success(f"Loaded {len(df)} reports into the workspace.")
         except Exception as exc:  # pragma: no cover - UI feedback
             st.error(f"Could not load reports: {exc}")
@@ -651,6 +752,19 @@ def _build_sidebar() -> None:
         try:
             st.session_state["llm_client"] = LLM(**llm_kwargs)
             st.sidebar.success("LLM client initialised.")
+            signature_payload = llm_kwargs.copy()
+            signature_payload["api_key"] = bool(signature_payload.get("api_key"))
+            signature = tuple(signature_payload.items())
+            if st.session_state.get(LLM_SIGNATURE_KEY) != signature:
+                st.session_state[LLM_SIGNATURE_KEY] = signature
+                llm_script_kwargs = llm_kwargs.copy()
+                if "api_key" in llm_script_kwargs:
+                    llm_script_kwargs["api_key"] = "<redacted>"
+                _record_repro_action(
+                    "init_llm",
+                    "Set up the language model client",
+                    _format_call("llm_client = LLM", llm_script_kwargs),
+                )
         except Exception as exc:  # pragma: no cover - depends on credentials
             st.sidebar.error(f"Failed to create LLM client: {exc}")
     else:
@@ -1109,8 +1223,8 @@ def _render_action_tiles() -> None:
 
     actions = [
         {
-            "label": "Save working dataset",
-            "description": "Export the curated reports as a CSV for sharing or further analysis.",
+            "label": "Download reports",
+            "description": "Export the curated reports to your local device.",
             "key": "tile_save",
             "disabled": not dataset_available,
             "icon": "💾",
@@ -1281,7 +1395,7 @@ def _render_save_action() -> None:
     """Render the save action allowing users to download the dataset."""
 
     reports_df = _get_reports_df()
-    st.markdown("#### Save working dataset to file")
+    st.markdown("#### Download research bundle")
     if reports_df.empty:
         st.info("No reports available to download yet.")
         return
@@ -1294,34 +1408,79 @@ def _render_save_action() -> None:
     include_theme_summary = theme_summary_df is not None and not theme_summary_df.empty
     include_feature_grid = feature_grid_df is not None and not feature_grid_df.empty
 
-    if not include_theme_summary and not include_feature_grid:
-        st.download_button(
-            "Download working dataset as CSV",
-            data=csv_bytes,
-            file_name="pfd_reports.csv",
-            mime="text/csv",
-            width="stretch",
-        )
-        return
+    dataset_selected = st.checkbox(
+        "Working dataset",
+        value=True,
+        key="download_include_dataset",
+    )
 
-    zip_buffer = BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
-        zip_file.writestr("pfd_reports.csv", csv_bytes)
-        if include_theme_summary:
-            theme_text = theme_summary_df.to_csv(index=False, sep="\t")
-            zip_file.writestr("theme_summary.txt", theme_text)
-        if include_feature_grid:
-            feature_text = feature_grid_df.to_csv(index=False, sep="\t")
-            zip_file.writestr("custom_feature_grid.txt", feature_text)
+    theme_help = None
+    if not include_theme_summary:
+        theme_help = "Run Discover themes to generate the theme table before downloading it."
+    else:
+        theme_help = "Downloads your list of themes, definitions and counts."
+    theme_selected = st.checkbox(
+        "Theme table",
+        value=include_theme_summary,
+        disabled=not include_theme_summary,
+        help=theme_help,
+        key="download_include_theme",
+    )
 
-    zip_buffer.seek(0)
+    feature_help = None
+    if not include_feature_grid:
+        feature_help = "Use Pull out structured info to create a custom feature grid."
+    else:
+        feature_help = "Downloads the custom attributes you defined in 'Pull out structured info'"
+    feature_selected = st.checkbox(
+        "Custom feature grid",
+        value=include_feature_grid,
+        disabled=not include_feature_grid,
+        help=feature_help,
+        key="download_include_feature_grid",
+    )
+
+    script_selected = st.checkbox(
+        "Reproducible Python script",
+        value=True,
+        key="download_include_script",
+        help="Saves a reproducible script of every action you've taken on this Workbench session.",
+    )
+
+    bundle_files: List[Tuple[str, bytes]] = []
+    if dataset_selected:
+        bundle_files.append(("pfd_reports.csv", csv_bytes))
+    if theme_selected and include_theme_summary and isinstance(theme_summary_df, pd.DataFrame):
+        theme_text = theme_summary_df.to_csv(index=False, sep="\t").encode("utf-8")
+        bundle_files.append(("theme_summary.txt", theme_text))
+    if feature_selected and include_feature_grid and isinstance(feature_grid_df, pd.DataFrame):
+        feature_text = feature_grid_df.to_csv(index=False, sep="\t").encode("utf-8")
+        bundle_files.append(("custom_feature_grid.txt", feature_text))
+    if script_selected:
+        script_bytes = _get_repro_script_text().encode("utf-8")
+        bundle_files.append(("reproducible_workspace.py", script_bytes))
+
+    has_selection = bool(bundle_files)
+
+    zip_bytes = b""
+    if has_selection:
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+            for filename, payload in bundle_files:
+                zip_file.writestr(filename, payload)
+        zip_buffer.seek(0)
+        zip_bytes = zip_buffer.getvalue()
+
+    if not has_selection:
+        st.info("Select at least one resource above to enable the download.")
 
     st.download_button(
-        "Download workspace bundle",
-        data=zip_buffer.getvalue(),
-        file_name="pfd_workspace_bundle.zip",
+        "Download research bundle",
+        data=zip_bytes,
+        file_name="pfd_research_bundle.zip",
         mime="application/zip",
         width="stretch",
+        disabled=not has_selection,
     )
 
 
@@ -1351,6 +1510,27 @@ def _get_extractor(reports_df: pd.DataFrame) -> Optional[Extractor]:
                 include_circumstances=True,
                 include_concerns=True,
                 verbose=False,
+            )
+            extractor_kwargs = {
+                "llm": "llm_client",
+                "reports": "reports_df",
+                "include_date": True,
+                "include_coroner": True,
+                "include_area": True,
+                "include_receiver": True,
+                "include_investigation": True,
+                "include_circumstances": True,
+                "include_concerns": True,
+                "verbose": False,
+            }
+            _record_repro_action(
+                "init_extractor",
+                "Initialise the extractor",
+                _format_call(
+                    "extractor = Extractor",
+                    extractor_kwargs,
+                    raw_parameters={"llm", "reports"},
+                ),
             )
         except Exception as exc:  # pragma: no cover - depends on live API
             st.error(f"Could not initialise extractor: {exc}")
@@ -1435,6 +1615,27 @@ def _render_filter_action() -> None:
             include_circumstances=True,
             include_concerns=True,
         )
+        screener_kwargs = {
+            "llm": "llm_client",
+            "reports": "reports_df",
+            "verbose": False,
+            "include_date": True,
+            "include_coroner": True,
+            "include_area": True,
+            "include_receiver": True,
+            "include_investigation": True,
+            "include_circumstances": True,
+            "include_concerns": True,
+        }
+        _record_repro_action(
+            "init_screener",
+            "Initialise the screener",
+            _format_call(
+                "screener = Screener",
+                screener_kwargs,
+                raw_parameters={"llm", "reports"},
+            ),
+        )
         loading_indicator.update("Running the screener…")
         result_df = screener.screen_reports(
             search_query=search_query or None,
@@ -1442,6 +1643,21 @@ def _render_filter_action() -> None:
             result_col_name=match_column_name,
             produce_spans=produce_spans,
             drop_spans=drop_spans,
+        )
+        screen_kwargs = {
+            "search_query": search_query or None,
+            "filter_df": filter_df,
+            "result_col_name": match_column_name,
+            "produce_spans": produce_spans,
+            "drop_spans": drop_spans,
+        }
+        _record_repro_action(
+            "run_screener",
+            "Screen the reports",
+            _format_call(
+                "result_df = screener.screen_reports",
+                screen_kwargs,
+            ),
         )
         loading_indicator.update("Finalising results…")
     except Exception as exc:  # pragma: no cover - relies on live API
@@ -1577,6 +1793,18 @@ def _render_discover_action() -> None:
                     result_col_name=summary_col_name,
                     trim_intensity=trim_labels[trim_choice],
                 )
+                summarise_kwargs = {
+                    "result_col_name": summary_col_name,
+                    "trim_intensity": trim_labels[trim_choice],
+                }
+                _record_repro_action(
+                    "summarise_reports",
+                    "Summarise the reports",
+                    _format_call(
+                        "summary_df = extractor.summarise",
+                        summarise_kwargs,
+                    ),
+                )
 
                 seed_topics: Optional[Any] = None
                 if seed_topics_text.strip():
@@ -1598,6 +1826,22 @@ def _render_discover_action() -> None:
                     extra_instructions=extra_theme_instructions or None,
                     seed_topics=seed_topics,
                 )
+                discover_kwargs = {
+                    "warn_exceed": int(warning_threshold),
+                    "error_exceed": int(error_threshold),
+                    "max_themes": max_themes_value,
+                    "min_themes": min_themes_value,
+                    "extra_instructions": extra_theme_instructions or None,
+                    "seed_topics": seed_topics,
+                }
+                _record_repro_action(
+                    "discover_themes",
+                    "Discover recurring themes",
+                    _format_call(
+                        "ThemeModel = extractor.discover_themes",
+                        discover_kwargs,
+                    ),
+                )
 
                 if ThemeModel is None or not hasattr(ThemeModel, "model_json_schema"):
                     loading_indicator.update("Theme discovery finished.")
@@ -1613,6 +1857,21 @@ def _render_discover_action() -> None:
                         force_assign=True,
                         allow_multiple=True,
                         skip_if_present=False,
+                    )
+                    theme_extract_kwargs = {
+                        "feature_model": "ThemeModel",
+                        "force_assign": True,
+                        "allow_multiple": True,
+                        "skip_if_present": False,
+                    }
+                    _record_repro_action(
+                        "assign_themes",
+                        "Assign discovered themes to the reports",
+                        _format_call(
+                            "preview_df = extractor.extract_features",
+                            theme_extract_kwargs,
+                            raw_parameters={"feature_model"},
+                        ),
                     )
                     theme_summary_df = _build_theme_summary_table(
                         preview_df, theme_schema
@@ -1807,10 +2066,9 @@ def _render_extract_action() -> None:
     )
     try:
         feature_model = _build_feature_model_from_grid(feature_grid)
-        target_df = reports_df
         loading_indicator.update("Extracting structured data…")
         result_df = extractor.extract_features(
-            reports=target_df,
+            reports=reports_df,
             feature_model=feature_model,
             produce_spans=produce_spans,
             drop_spans=drop_spans,
@@ -1819,6 +2077,26 @@ def _render_extract_action() -> None:
             schema_detail="minimal",
             extra_instructions=extra_instructions or None,
             skip_if_present=skip_if_present,
+        )
+        extract_kwargs = {
+            "reports": "reports_df",
+            "feature_model": "feature_model",
+            "produce_spans": produce_spans,
+            "drop_spans": drop_spans,
+            "force_assign": force_assign,
+            "allow_multiple": allow_multiple,
+            "schema_detail": "minimal",
+            "extra_instructions": extra_instructions or None,
+            "skip_if_present": skip_if_present,
+        }
+        _record_repro_action(
+            "extract_features",
+            "Pull structured information",
+            _format_call(
+                "result_df = extractor.extract_features",
+                extract_kwargs,
+                raw_parameters={"reports", "feature_model"},
+            ),
         )
         loading_indicator.update("Finalising dataset…")
     except Exception as exc:  # pragma: no cover - depends on live API
