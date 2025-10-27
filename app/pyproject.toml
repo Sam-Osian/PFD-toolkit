@@ -16,5 +16,6 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 only-include = [
   "streamlit_app.py",
-  ".streamlit/config.toml"
+  ".streamlit/config.toml",
+  "assets"
 ]

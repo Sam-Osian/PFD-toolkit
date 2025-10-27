@@ -29,7 +29,7 @@ from pfd_toolkit.loader import load_reports
 from pfd_toolkit.llm import LLM
 from pfd_toolkit.screener import Screener
 
-LOGO_PATH = Path("docs/assets/badge-circle.png")
+LOGO_PATH = ROOT_DIR / "assets" / "badge-circle.png"
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 
 DEFAULT_THEME_EMOJI = "💡"
