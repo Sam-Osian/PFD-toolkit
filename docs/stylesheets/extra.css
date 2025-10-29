@@ -346,3 +346,82 @@ html[data-md-color-scheme="slate"] .md-typeset .task-list-item > input:checked +
   display: block;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Landing page pathways                                                       */
+/* -------------------------------------------------------------------------- */
+
+.pfd-pathways {
+  display: grid;
+  gap: 1.8rem;
+  margin: 2.4rem 0 3.2rem;
+}
+
+@media (min-width: 780px) {
+  .pfd-pathways {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+  }
+}
+
+.pfd-pathway {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 2.2rem;
+  border-radius: 24px;
+  border: 1px solid rgba(148, 163, 255, 0.22);
+  background: radial-gradient(circle at 15% -10%, rgba(96, 165, 250, 0.32), transparent 55%),
+    radial-gradient(circle at 90% 120%, rgba(192, 132, 252, 0.24), transparent 60%),
+    rgba(8, 13, 40, 0.92);
+  box-shadow: 0 30px 60px rgba(6, 11, 34, 0.55);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.35s ease, box-shadow 0.35s ease, border-color 0.35s ease;
+}
+
+.pfd-pathway:hover,
+.pfd-pathway:focus {
+  transform: translateY(-6px);
+  box-shadow: 0 40px 80px rgba(7, 12, 38, 0.65);
+  border-color: rgba(96, 165, 250, 0.45);
+}
+
+.pfd-pathway__tag {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 255, 0.8);
+  margin: 0;
+}
+
+.pfd-pathway__title {
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1.2;
+  color: var(--md-default-fg-color);
+}
+
+.pfd-pathway__body {
+  margin: 0;
+  color: var(--md-default-fg-color--light);
+  line-height: 1.6;
+}
+
+.pfd-pathway__cta {
+  margin-top: auto;
+  font-weight: 600;
+  color: var(--md-primary-fg-color);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: color 0.35s ease;
+}
+
+.pfd-pathway:hover .pfd-pathway__cta,
+.pfd-pathway:focus .pfd-pathway__cta {
+  color: var(--md-accent-fg-color);
+}
+

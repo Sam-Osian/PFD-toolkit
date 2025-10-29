@@ -14,6 +14,23 @@ PFD reports are vital public warnings, but until now, they’ve been a nightmare
 
 PFD Toolkit solves this by using AI (including LLMs and Vision models) to read, clean, and standardise every report, whether typed or scanned.
 
+## Two ways to get started
+
+<div class="pfd-pathways">
+  <a class="pfd-pathway" href="https://workbench.pfdtoolkit.org" target="_blank" rel="noopener">
+    <p class="pfd-pathway__tag">For everyone</p>
+    <h3 class="pfd-pathway__title">Use the AI Workbench</h3>
+    <p class="pfd-pathway__body">Explore Prevention of Future Deaths reports in minutes with our hosted AI Workbench. Search, filter, and generate insight-ready summaries without installing anything.</p>
+    <span class="pfd-pathway__cta">Launch the AI Workbench →</span>
+  </a>
+  <a class="pfd-pathway" href="getting_started/basic_tutorial/" rel="noopener">
+    <p class="pfd-pathway__tag">For coders</p>
+    <h3 class="pfd-pathway__title">Build with the toolkit</h3>
+    <p class="pfd-pathway__body">Install the open-source package, follow the step-by-step tutorial, and plug powerful extraction, screening, and scraping tools into your own projects.</p>
+    <span class="pfd-pathway__cta">Read the tutorial →</span>
+  </a>
+</div>
+
 What does this mean in practice? Instead of weeks of manual coding, you get instant access to:
 
 - **Bulk-download structured datasets** of PFD reports
