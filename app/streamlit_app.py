@@ -587,7 +587,15 @@ def _render_reports_overview(
 def _build_sidebar() -> None:
     st.sidebar.image(str(LOGO_PATH), width=120)
     st.sidebar.markdown(
-        "<h2 class='sidebar-title'>PFD Toolkit Workbench <span class='sidebar-beta'>Beta</span></h2>",
+        """
+        <div class="sidebar-heading">
+            <h2 class='sidebar-title'>
+                <span class='sidebar-title-text'>PFD Toolkit Workbench – Analyse PFD reports with AI</span>
+                <span class='sidebar-beta'>Beta</span>
+            </h2>
+            <p class='sidebar-description'>Investigate Prevention of Future Deaths (PFD) reports, surface key themes, and build evidence with an AI-assisted workflow.</p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
     st.sidebar.caption(
@@ -2307,11 +2315,29 @@ def main() -> None:
                 border-right: 1px solid rgba(148, 163, 255, 0.2);
             }
 
+            section[data-testid="stSidebar"] .sidebar-heading {
+                margin-bottom: 1rem;
+            }
+
             section[data-testid="stSidebar"] h2.sidebar-title {
-                margin-bottom: 0.2rem;
-                display: inline-flex;
+                margin-bottom: 0.35rem;
+                display: flex;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 0.5rem;
+                font-size: 1.2rem;
+                line-height: 1.35;
+            }
+
+            section[data-testid="stSidebar"] .sidebar-title-text {
+                font-weight: 600;
+            }
+
+            section[data-testid="stSidebar"] .sidebar-description {
+                margin: 0;
+                font-size: 0.85rem;
+                line-height: 1.4;
+                color: rgba(226, 232, 255, 0.72);
             }
 
             .sidebar-beta {
@@ -2330,6 +2356,17 @@ def main() -> None:
 
             section[data-testid="stSidebar"] .stMarkdown, section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] span {
                 color: rgba(226, 232, 255, 0.88);
+            }
+
+            div[data-testid="stSubheader"] h3 {
+                font-size: 1.5rem;
+                font-weight: 600;
+                margin-bottom: 0.35rem;
+            }
+
+            div[data-testid="stSubheader"] + div[data-testid="stText"] p {
+                font-size: 0.95rem;
+                color: rgba(226, 232, 255, 0.82);
             }
 
             section[data-testid="stSidebar"] input, section[data-testid="stSidebar"] textarea, section[data-testid="stSidebar"] select {
