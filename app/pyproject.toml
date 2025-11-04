@@ -8,8 +8,8 @@ version = "0.1.1"
 requires-python = ">=3.10"
 description = "Streamlit workbench for PFD Toolkit."
 dependencies = [
-  "pfd-toolkit>=0.3.7",
-  "streamlit>=1.41.1"
+  "pfd-toolkit==0.3.7",
+  "streamlit==1.41.1"
 ]
 
 # Hatch assumes Python package; below limit the wheel to only the app files

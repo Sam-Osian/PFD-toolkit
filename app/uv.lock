@@ -1174,8 +1174,8 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "pfd-toolkit", specifier = ">=0.3.7" },
-    { name = "streamlit", specifier = ">=1.41.1" },
+    { name = "pfd-toolkit", specifier = "==0.3.7" },
+    { name = "streamlit", specifier = "==1.41.1" },
 ]
 
 [[package]]
