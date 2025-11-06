@@ -450,12 +450,28 @@ def test_token_cache_export_import(tmp_path):
     assert ext2.token_cache == ext1.token_cache
 
 
-def test_discover_themes_basic():
-    df = pd.DataFrame({"summary": ["one", "two"]})
-    llm = DummyLLM(values={"safety": "Cases about safety"})
+def test_discover_themes_basic(monkeypatch):
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_INVESTIGATION: ["one", "two"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ1", "circ2"],
+            GeneralConfig.COL_CONCERNS: ["conc1", "conc2"],
+        }
+    )
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        outputs = []
+        for prompt in prompts:
+            if "Report excerpt" in prompt:
+                outputs.append("summary text")
+            else:
+                outputs.append(json.dumps({"safety": "Cases about safety"}))
+        return outputs
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
 
     theme_model = ext.discover_themes()
 
@@ -464,12 +480,22 @@ def test_discover_themes_basic():
     assert ext.feature_model is theme_model
 
 
-def test_discover_themes_handles_code_fence():
-    df = pd.DataFrame({"summary": ["one"]})
-    llm = DummyLLM(values="```json\n{\n  \"fence\": \"ok\"\n}\n```")
+def test_discover_themes_handles_code_fence(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        outputs = []
+        for prompt in prompts:
+            if "Report excerpt" in prompt:
+                outputs.append("summary text")
+            else:
+                outputs.append("```json\n{\n  \"fence\": \"ok\"\n}\n```")
+        return outputs
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
 
     theme_model = ext.discover_themes()
 
@@ -477,25 +503,49 @@ def test_discover_themes_handles_code_fence():
     assert ext.identified_themes == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
 
 
-def test_discover_themes_bool_fields():
-    df = pd.DataFrame({"summary": ["one"]})
-    llm = DummyLLM(values={"example": "desc"})
+def test_discover_themes_bool_fields(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        outputs = []
+        for prompt in prompts:
+            if "Report excerpt" in prompt:
+                outputs.append("summary text")
+            else:
+                outputs.append(json.dumps({"example": "desc"}))
+        return outputs
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
 
     theme_model = ext.discover_themes()
 
     assert theme_model.model_fields["example"].annotation is bool
 
 
-def test_discover_themes_uses_token_cache():
-    df = pd.DataFrame({"summary": ["one", "two"]})
-    llm = DummyLLM(values={})
+def test_discover_themes_uses_token_cache(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one", "two"]})
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
-    ext.token_cache["summary"] = [1, 2]
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        outputs = []
+        for prompt in prompts:
+            if "Report excerpt" in prompt:
+                outputs.append("summary text")
+            else:
+                outputs.append(json.dumps({}))
+        return outputs
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+
+    ext.discover_themes()
+
+    llm.token_called = 0
+    ext.token_cache[ext.summary_col] = [1, 2]
 
     ext.discover_themes()
 
@@ -503,18 +553,19 @@ def test_discover_themes_uses_token_cache():
 
 
 def test_discover_themes_prompt_limits(monkeypatch):
-    df = pd.DataFrame({"summary": ["one"]})
-    llm = DummyLLM(values={})
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
-    ext.token_cache["summary"] = [1]
 
     captured = {}
 
     def fake_generate(prompts, response_format=None, **kwargs):
-        captured["prompt"] = prompts[0]
-        return [{}]
+        llm.called += len(prompts)
+        prompt = prompts[0]
+        if "Report excerpt" in prompt:
+            return ["summary text"]
+        captured["prompt"] = prompt
+        return [json.dumps({})]
 
     monkeypatch.setattr(llm, "generate", fake_generate)
     ext.discover_themes(max_themes=5, min_themes=2)
@@ -525,17 +576,19 @@ def test_discover_themes_prompt_limits(monkeypatch):
 
 
 def test_discover_themes_seed_topics_string(monkeypatch):
-    df = pd.DataFrame({"summary": ["one"]})
-    llm = DummyLLM(values={})
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
 
     captured = {}
 
     def fake_generate(prompts, response_format=None, **kwargs):
-        captured["prompt"] = prompts[0]
-        return [{}]
+        llm.called += len(prompts)
+        prompt = prompts[0]
+        if "Report excerpt" in prompt:
+            return ["summary text"]
+        captured["prompt"] = prompt
+        return [json.dumps({})]
 
     monkeypatch.setattr(llm, "generate", fake_generate)
     ext.discover_themes(seed_topics="health")
@@ -550,17 +603,19 @@ def test_discover_themes_seed_topics_model(monkeypatch):
         topic_a: str
         topic_b: str
 
-    df = pd.DataFrame({"summary": ["one"]})
-    llm = DummyLLM(values={})
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
-    ext.summarised_reports = df
-    ext.summary_col = "summary"
 
     captured = {}
 
     def fake_generate(prompts, response_format=None, **kwargs):
-        captured["prompt"] = prompts[0]
-        return [{}]
+        llm.called += len(prompts)
+        prompt = prompts[0]
+        if "Report excerpt" in prompt:
+            return ["summary text"]
+        captured["prompt"] = prompt
+        return [json.dumps({})]
 
     monkeypatch.setattr(llm, "generate", fake_generate)
     seeds = SeedModel(topic_a="desc", topic_b="desc")
@@ -569,3 +624,49 @@ def test_discover_themes_seed_topics_model(monkeypatch):
     prompt = captured["prompt"]
     assert "topic_a" in prompt
     assert "seed topics" in prompt.lower()
+
+
+def test_discover_themes_adds_extra_instructions_to_summaries(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
+    ext = Extractor(llm=llm, reports=df)
+
+    captured = {}
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        prompt = prompts[0]
+        if "Report excerpt" in prompt:
+            captured["summary_prompt"] = prompt
+            return ["summary text"]
+        return [json.dumps({})]
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    instructions = "Themes related to setting (e.g. in hospital, at home, etc.)"
+    ext.discover_themes(extra_instructions=instructions)
+
+    summary_prompt = captured["summary_prompt"]
+    assert "Downstream, your summary will be used by an analyst" in summary_prompt
+    assert instructions in summary_prompt
+
+
+def test_discover_themes_respects_trim_intensity(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
+    ext = Extractor(llm=llm, reports=df)
+
+    captured = {}
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        prompt = prompts[0]
+        if "Report excerpt" in prompt:
+            captured["summary_prompt"] = prompt
+            return ["summary text"]
+        return [json.dumps({})]
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    ext.discover_themes(trim_intensity="very high")
+
+    summary_prompt = captured["summary_prompt"].lower()
+    assert "one or two sentence summary" in summary_prompt

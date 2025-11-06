@@ -138,21 +138,8 @@ extractor = Extractor(
 
 ---
 
-### Summarise reports
-
-Some PFD reports can be _long_. Because of this, we need to summarise reports *before* we discover themes:
-
-
-```python
-# Create short summaries of the concerns
-extractor.summarise(trim_intensity="medium")
-```
-
----
-
 ### Get a list of themes
 
-Now that we've done this, we can run the `discover_themes` method and assign the result to a new class, which we've named `ThemeInstructions`:
 
 ```python
 # Ask the LLM to propose recurring themes

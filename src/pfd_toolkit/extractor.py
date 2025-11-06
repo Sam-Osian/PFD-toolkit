@@ -467,6 +467,7 @@ Here is the report excerpt:
         result_col_name: str = "summary",
         trim_intensity: str = "medium",
         extra_instructions: Optional[str] = None,
+        discover_themes_extra_instructions: Optional[str] = None,
     ) -> pd.DataFrame:
         """Summarise selected report fields into one column using the LLM.
 
@@ -479,6 +480,12 @@ Here is the report excerpt:
         extra_instructions : str, optional
             Additional instructions to append to the prompt before the report
             excerpt.
+        discover_themes_extra_instructions : str, optional
+            Guidance that should be surfaced in the summary prompt when
+            ``discover_themes`` delegates summarisation. When provided, the
+            prompt reminds the model that downstream theme discovery will follow
+            specific instructions. The value should typically mirror the
+            ``extra_instructions`` argument passed to ``discover_themes``.
 
         Returns
         ------- 
@@ -506,6 +513,16 @@ Here is the report excerpt:
             + "\n\nDo not provide any commentary or headings; simply summarise the report."
             + "Always use British English. Do not re-write acronyms to full form."
         )
+        if discover_themes_extra_instructions:
+            detail = discover_themes_extra_instructions.strip()
+            base_prompt += (
+                "\n\nDownstream, your summary will be used by an analyst to discover "
+                "themes with the following instructions: '"
+                + detail
+                + "'. In your summary, make sure that this detail is included if "
+                "present in the input - if not present, simply ignore this. Do not "
+                "attempt to discover themes yourself, this is just to guide your summary."
+            )
         if extra_instructions:
             base_prompt += "\n\n" + extra_instructions.strip()
         base_prompt += "\n\nReport excerpt:\n\n"
@@ -549,6 +566,9 @@ Here is the report excerpt:
 
         summary_df[result_col_name] = summary_series
         self.summarised_reports = summary_df
+        self.token_cache.pop(result_col_name, None)
+        self._last_summary_trim_intensity = trim_intensity
+        self._last_summary_discover_extra = discover_themes_extra_instructions
         return summary_df
 
 
@@ -618,6 +638,7 @@ Here is the report excerpt:
         min_themes: Optional[int] = None,
         extra_instructions: Optional[str] = None,
         seed_topics: Optional[Union[str, List[str], BaseModel]] = None,
+        trim_intensity: str = "medium",
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
@@ -647,6 +668,9 @@ Here is the report excerpt:
             Optional seed topics to include in the prompt. These are treated as
             starting suggestions and the model should incorporate them into a
             broader list of themes.
+        trim_intensity : {"low", "medium", "high", "very high"}, optional
+            Trim level to apply when generating summaries specifically for
+            theme discovery. Defaults to ``"medium"``.
 
         Returns
         -------
@@ -654,9 +678,21 @@ Here is the report excerpt:
             The generated feature model containing discovered themes.
         """
 
-        if not hasattr(self, "summarised_reports"):
-            raise AttributeError(
-                "Please run `summarise()` before calling discover_themes()."
+        summary_col = getattr(self, "summary_col", "summary")
+        has_summary = (
+            hasattr(self, "summarised_reports")
+            and summary_col in self.summarised_reports.columns
+        )
+        last_trim = getattr(self, "_last_summary_trim_intensity", None)
+        last_extra = getattr(self, "_last_summary_discover_extra", None)
+        instructions_changed = extra_instructions != last_extra
+        trim_changed = trim_intensity != last_trim
+
+        if not has_summary or instructions_changed or trim_changed:
+            self.summarise(
+                result_col_name=summary_col,
+                trim_intensity=trim_intensity,
+                discover_themes_extra_instructions=extra_instructions,
             )
 
         if self.summary_col not in self.summarised_reports.columns:

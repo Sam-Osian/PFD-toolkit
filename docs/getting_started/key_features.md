@@ -108,7 +108,7 @@ Read more on [producing summaries](../extractor/summarising.md).
 
 ## Discover recurring themes
 
-Once summaries exist, you can instruct the LLM to find common topics across your dataset.
+`discover_themes()` automatically generates the summaries it needs, so you can jump straight to identifying common topics across your dataset.
 
 ```python
 IdentifiedThemes = extractor.discover_themes()

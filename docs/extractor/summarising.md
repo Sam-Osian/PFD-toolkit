@@ -57,7 +57,7 @@ extractor = Extractor(
 summary_df = extractor.summarise(trim_intensity="medium")
 ```
 
-The resulting DataFrame contains a new column (default name `summary`). 
+The resulting DataFrame contains a new column (default name `summary`).
 
 You can specify a different column name via `result_col_name` if desired. You can also set a different `trim_intensity` (options range from `low` to `very high`) if desired.
 

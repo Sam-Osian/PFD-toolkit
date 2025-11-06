@@ -9,6 +9,9 @@ description: |
 Welcome to the project changelog. All notable changes to this project will be documented below.
 
 
+### 0.3.8 - <small>2025-09-18</small>
+* `discover_themes()` now runs summarisation automatically, piping extra thematic guidance into the summary prompt and exposing trim intensity as a parameter.
+
 ### 0.3.7 - <small>2025-09-02</small>
 * In August 2025, the judiciary.uk website made some subtle changes that broke PFD Toolkit's scraper, meaning that we were unable to collect newly published reports. This issue has now been resolved, and all previously missed reports have now been added.
 

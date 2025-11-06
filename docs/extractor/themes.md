@@ -15,9 +15,9 @@ Spotting common themes across many reports helps reveal systemic problems and po
 
 ## Discovering themes
 
-The `discover_themes()` method allows you to identify recurring topics contained within a selection of PFD reports. 
+The `discover_themes()` method allows you to identify recurring topics contained within a selection of PFD reports.
 
-Once summaries are available, you can instruct the LLM to identify a list of recurring themes. This method expects that the `summary` column has already been created by `summarise()` (see [Produce summaries of report text](summarising.md)).
+The method now creates the necessary summaries automatically, so you no longer need to call `summarise()` yourself first. If you want to inspect or customise the summaries independently, you can still run `summarise()` manually (see [Produce summaries of report text](summarising.md)).
 
 
 ```python
@@ -29,8 +29,6 @@ extractor = Extractor(
     llm=llm_client,
     reports=reports
 )
-
-summary_df = extractor.summarise(trim_intensity="medium")
 
 IdentifiedThemes = extractor.discover_themes()
 
@@ -92,8 +90,6 @@ extractor = Extractor(
     reports=reports
 )
 
-summary_df = extractor.summarise(trim_intensity="medium")
-
 IdentifiedThemes = extractor.discover_themes(
     seed_topics="Risk assessment failures; understaffing; information sharing failures"
 )
@@ -109,8 +105,6 @@ You can also provide additional instructions to help guide the model. This is so
 
 
 ```python
-summary_df = extractor.summarise(trim_intensity="medium")
-
 extra_instructions="""
 My research question is: What are the various consequences of transitioning from youth to adult mental health services?"
 """
@@ -128,15 +122,14 @@ Above, we guide the model by specifying our specific area of interest. This will
 You can control how many themes the model discovers through `min_themes` and `max_themes` arguments:
 
 ```python
-summary_df = extractor.summarise(trim_intensity="medium")
-
 IdentifiedThemes = extractor.discover_themes(
-    min_theme=8,
-    max_theme=12
+    min_themes=8,
+    max_themes=12,
+    trim_intensity="high",
 )
 ```
 
-`discover_themes` will now produce at least 8 themes, but not more than 12, themes.
+`discover_themes` will now produce at least 8 themes, but not more than 12, themes while using a more aggressive summary trim to keep prompts concise.
 
 
 
