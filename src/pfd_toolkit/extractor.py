@@ -89,6 +89,8 @@ class Extractor:
         self.extra_instructions: Optional[str] = None
         self.verbose = verbose
         self.produce_spans = False
+        self._theme_assignment_instructions: Optional[str] = None
+        self._discovered_theme_model: Optional[Type[BaseModel]] = None
 
         # Default summary column name used by Cleaner.summarise
         self.summary_col = "summary"
@@ -139,6 +141,11 @@ class Extractor:
             if self.produce_spans
             else ""
         )
+        theme_line = (
+            self._theme_assignment_instructions
+            if self._theme_assignment_instructions
+            else ""
+        )
         # Include any extra user instructions if provided
         extra_instr = (self.extra_instructions.strip() + "\n") if self.extra_instructions else ""
 
@@ -148,6 +155,7 @@ You are an expert at extracting structured information from UK Prevention of Fut
 
 Extract the following features from the report excerpt provided.
 
+{theme_line}
 {not_found_line_prompt}
 {category_line}
 {span_line}
@@ -161,6 +169,19 @@ Here is the report excerpt:
 {{report_excerpt}}
 """
         return template.strip()
+
+    # ------------------------------------------------------------------
+    def _build_theme_assignment_instructions(self) -> str:
+        """Return internal guidance used for discovered theme assignment."""
+
+        return (
+            "You are assigning this report excerpt to the candidate themes that were "
+            "discovered earlier. For each theme listed below, decide whether the excerpt "
+            "explicitly mentions it or provides clear, direct evidence that it applies. "
+            "Respond with `true` only when that explicit evidence is present; otherwise "
+            "respond `false`. A report might align with one theme, several themes, or none "
+            "of them.\n"
+        )
 
     # ------------------------------------------------------------------
     def _add_span_fields(self, model: Type[BaseModel]) -> Type[BaseModel]:
@@ -345,8 +366,18 @@ Here is the report excerpt:
         # Update feature extraction configuration
         if feature_model is not None:
             self._base_feature_model = feature_model
+            if feature_model is not self._discovered_theme_model:
+                self._theme_assignment_instructions = None
         if self._base_feature_model is None:
             raise ValueError("feature_model must be provided")
+
+        if self._base_feature_model is self._discovered_theme_model:
+            if not self._theme_assignment_instructions:
+                self._theme_assignment_instructions = (
+                    self._build_theme_assignment_instructions()
+                )
+        else:
+            self._theme_assignment_instructions = None
 
         self.produce_spans = produce_spans
         if self.produce_spans:
@@ -795,6 +826,8 @@ Here is the report excerpt:
 
         self.feature_model = ThemeModel
         self._base_feature_model = ThemeModel
+        self._discovered_theme_model = ThemeModel
+        self._theme_assignment_instructions = self._build_theme_assignment_instructions()
         self.feature_names = self._collect_field_names()
         self._feature_schema = self._build_feature_schema(self.schema_detail)
         self.prompt_template = self._build_prompt_template()
