@@ -12,6 +12,9 @@ Welcome to the project changelog. All notable changes to this project will be do
 ### 0.3.8 - <small>2025-11-30</small>
 * `discover_themes()` now runs summarisation automatically, meaning you no longer have to manually summarise reports before discovering themes. Advanced users can now set the summarisation trim intensity with the new `trim_intensity` parameter within `discover_themes()` (this can be either "low", "medium", "high", or "very high").
 * Users have reported that running `extract_features()` on a list of themes from `discover_themes()` seems to assign reports too liberally. We have made some changes to make the model a bit more conservative, only assigning a report with a theme if there is sufficient evidence that it is well represented in the underlying report. We'll continue monitoring this behaviour to make sure we've got the balance right.
+* Added a truncation-based alternative to LLM summarisation (`trim_intensity="none"` with optional `truncate`) and new report-length diagnostics consolidated under `count()` for word or token charts/tables with threshold guidance.
+* `count()` now also supports a `stats` mode producing markdown summary statistics across word or token lengths.
+* `count()` statistics now render as a readable table without console prints, and the chart option is renamed to `as_="hist"` for clarity.
 
 ### 0.3.7 - <small>2025-09-02</small>
 * In August 2025, the judiciary.uk website made some subtle changes that broke PFD Toolkit's scraper, meaning that we were unable to collect newly published reports. This issue has now been resolved, and all previously missed reports have now been added.

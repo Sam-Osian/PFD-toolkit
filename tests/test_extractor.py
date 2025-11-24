@@ -1,6 +1,8 @@
+import logging
 import pandas as pd
 import json
 import pytest
+import matplotlib.pyplot as plt
 from pydantic import BaseModel, Field
 from pfd_toolkit.extractor import Extractor
 from pfd_toolkit.config import GeneralConfig
@@ -117,6 +119,96 @@ def test_extract_drop_spans_warns():
     assert "spans_ethnicity" not in result.columns
     assert result["age"].iloc[0] == 30
     assert result["ethnicity"].iloc[0] == "White"
+
+
+def test_summarise_truncate_concatenation():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_INVESTIGATION: ["one two three four five six"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["seven eight nine"],
+            GeneralConfig.COL_CONCERNS: ["ten eleven"],
+        }
+    )
+    llm = DummyLLM()
+    extractor = Extractor(llm=llm, reports=df)
+
+    summarised = extractor.summarise(trim_intensity="none", truncate=5)
+
+    assert summarised["summary"].iloc[0] == "one two three four five"
+    assert llm.called == 0
+
+
+def test_count_table_words_threshold(capsys):
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_INVESTIGATION: ["one two three", "one two", "one two three four five"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["", "", ""],
+        }
+    )
+    extractor = Extractor(llm=DummyLLM(), reports=df)
+
+    table = extractor.count(measure="words", as_="table", threshold=4, step=2)
+
+    captured = capsys.readouterr().out
+    assert "10 total words" in captured
+    assert "5 total words within the threshold" in captured
+    assert table.loc[table["threshold"] == 4, "cumulative_count"].iloc[0] == 2
+
+
+def test_count_tokens_chart_ignores_step_info(caplog, capsys):
+    df = pd.DataFrame(
+        {GeneralConfig.COL_INVESTIGATION: ["alpha beta gamma"], GeneralConfig.COL_CIRCUMSTANCES: ["delta"]}
+    )
+    llm = DummyLLM()
+    extractor = Extractor(llm=llm, reports=df)
+
+    with caplog.at_level(logging.INFO):
+        fig, _ = extractor.count(measure="tokens", as_="hist", threshold=3, step=25)
+
+    captured = capsys.readouterr().out
+    assert "4 total tokens" in captured
+    assert "0 total tokens within the threshold" in captured
+    assert "Ignoring step parameter" in caplog.text
+    assert llm.token_called == 1
+    plt.close(fig)
+
+
+def test_count_stats_words_markdown(capsys, caplog):
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_INVESTIGATION: ["one two three", "one two three four five"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["", ""],
+        }
+    )
+    extractor = Extractor(llm=DummyLLM(), reports=df)
+
+    with caplog.at_level(logging.INFO):
+        markdown = extractor.count(measure="words", as_="stats", threshold=4, step=25)
+
+    captured = capsys.readouterr().out
+    assert captured == ""
+    assert "Ignoring step parameter" in caplog.text
+    assert "total_words" in markdown
+    assert "within_threshold_words" in markdown
+    assert "median" in markdown
+
+
+def test_count_stats_tokens_logging(capsys, caplog):
+    df = pd.DataFrame(
+        {GeneralConfig.COL_INVESTIGATION: ["alpha beta", "gamma"], GeneralConfig.COL_CIRCUMSTANCES: ["", "delta"]}
+    )
+    llm = DummyLLM()
+    extractor = Extractor(llm=llm, reports=df)
+
+    with caplog.at_level(logging.INFO):
+        markdown = extractor.count(measure="tokens", as_="stats", step=50)
+
+    captured = capsys.readouterr().out
+    assert captured == ""
+    assert "total_tokens" in markdown
+    assert "iqr" in markdown
+    assert "Ignoring step parameter" in caplog.text
+    assert llm.token_called == 1
 
 
 def test_extract_drop_spans_preserves_existing():
