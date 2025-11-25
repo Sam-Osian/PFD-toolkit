@@ -532,7 +532,7 @@ def _display_dataframe(df: pd.DataFrame, caption: str) -> None:
         st.info("No rows to display yet. Load or generate data to see results here.")
         return
     st.markdown(f"<div class='section-caption'>{caption}</div>", unsafe_allow_html=True)
-    st.dataframe(df, width="stretch", hide_index=True)
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
 
 def _render_reports_overview(
@@ -563,7 +563,7 @@ def _render_reports_overview(
         if st.button(
             "Revert changes",
             key=f"revert_reports_{key_suffix}" if key_suffix else "revert_reports",
-            width="stretch",
+            use_container_width=True,
         ):
             st.session_state["reports_df"] = initial_df.copy()
             st.session_state["reports_df_modified"] = False
@@ -737,7 +737,7 @@ def _build_sidebar() -> None:
         "Force refresh from remote dataset", value=True, help="Disable to reuse the cached CSV if available."
     )
 
-    load_button = st.sidebar.button("Load in reports", width="stretch")
+    load_button = st.sidebar.button("Load in reports", use_container_width=True)
 
     if load_button:
         if n_reports_raw.strip() and n_reports is None:
@@ -959,7 +959,7 @@ def _render_header(container: Optional[DeltaGenerator] = None) -> None:
         unsafe_allow_html=True,
     )
 
-    dataset_card.dataframe(reports_df, width="stretch", hide_index=True)
+    dataset_card.dataframe(reports_df, use_container_width=True, hide_index=True)
 
     dataset_card.markdown("</div>", unsafe_allow_html=True)
 
@@ -1091,7 +1091,7 @@ def _render_theme_summary_panel(container: Optional[DeltaGenerator] = None) -> N
         "<div class='theme-summary-table-caption'>Theme assignments across the working dataset</div>",
         unsafe_allow_html=True,
     )
-    expander.dataframe(display_df, width="stretch", hide_index=True)
+    expander.dataframe(display_df, use_container_width=True, hide_index=True)
 
     panel.markdown("""</div></div>""", unsafe_allow_html=True)
 
@@ -1206,7 +1206,7 @@ def _render_workspace_footer(
         if st.button(
             undo_label,
             key="footer_undo",
-            width="stretch",
+            use_container_width=True,
             disabled=undo_disabled,
         ):
             _undo_last_change()
@@ -1215,7 +1215,7 @@ def _render_workspace_footer(
         if st.button(
             redo_label,
             key="footer_redo",
-            width="stretch",
+            use_container_width=True,
             disabled=redo_disabled,
         ):
             _redo_last_change()
@@ -1224,7 +1224,7 @@ def _render_workspace_footer(
         if st.button(
             "↻ Start over",
             key="footer_reset",
-            width="stretch",
+            use_container_width=True,
             disabled=start_over_disabled,
         ):
             _start_again()
@@ -1405,7 +1405,7 @@ def _render_action_tiles() -> None:
                 if card.button(
                     f"{action['icon']} {action['label']}",
                     key=action["key"],
-                    width="stretch",
+                    use_container_width=True,
                     disabled=action["disabled"],
                 ):
                     st.session_state["active_action"] = action["target"]
@@ -1592,7 +1592,7 @@ def _render_save_action() -> None:
         data=zip_bytes,
         file_name="pfd_research_bundle.zip",
         mime="application/zip",
-        width="stretch",
+        use_container_width=True,
         disabled=not has_selection,
     )
 
@@ -1697,7 +1697,7 @@ def _render_filter_action() -> None:
         with st.container():
             submitted = st.form_submit_button(
                 "Run Screener",
-                width="stretch",
+                use_container_width=True,
                 type="primary",
             )
 
@@ -1833,12 +1833,60 @@ def _render_discover_action() -> None:
                 "Short summary": "high",
                 "One or two sentences": "very high",
             }
-            trim_choice = st.selectbox(
-                "How concise should the summaries be?",
-                list(trim_labels.keys()),
-                index=1,
-                key="discover_trim_choice",
+            trim_modes = {
+                "Truncate the report text before discovering themes (default)": "truncate",
+                "Summarise the reports with the LLM before discovering themes": "summarise",
+            }
+            trim_mode_choice = st.selectbox(
+                "How should reports be prepared for theme discovery?",
+                list(trim_modes.keys()),
+                index=0,
+                key="discover_trim_mode",
             )
+            trim_approach = trim_modes[trim_mode_choice]
+
+            summarise_intensity: Optional[str] = None
+            max_tokens: Optional[int] = None
+            max_words: Optional[int] = None
+
+            if trim_approach == "truncate":
+                limit_choice = st.radio(
+                    "Truncation limit type",
+                    ["Tokens", "Words"],
+                    index=0,
+                    horizontal=True,
+                    key="discover_truncation_limit_type",
+                )
+                if limit_choice == "Tokens":
+                    max_tokens = int(
+                        st.number_input(
+                            "Truncate to this many tokens",
+                            min_value=500,
+                            value=3000,
+                            step=250,
+                            key="discover_max_tokens",
+                        )
+                    )
+                    max_words = None
+                else:
+                    max_words = int(
+                        st.number_input(
+                            "Truncate to this many words",
+                            min_value=100,
+                            value=1500,
+                            step=100,
+                            key="discover_max_words",
+                        )
+                    )
+                    max_tokens = None
+            else:
+                trim_choice = st.selectbox(
+                    "How concise should the summaries be?",
+                    list(trim_labels.keys()),
+                    index=1,
+                    key="discover_trim_choice",
+                )
+                summarise_intensity = trim_labels[trim_choice]
             warning_threshold = st.number_input(
                 "Warn if the token estimate exceeds",
                 min_value=1000,
@@ -1874,7 +1922,7 @@ def _render_discover_action() -> None:
             )
 
         preview_requested = st.form_submit_button(
-            "Discover recurring themes", width="stretch"
+            "Discover recurring themes", use_container_width=True
         )
 
     if preview_requested:
@@ -1898,21 +1946,30 @@ def _render_discover_action() -> None:
         ):
             loading_placeholder = st.empty()
             loading_indicator = LoadingIndicator(
-                loading_placeholder, "Summarising the reports…"
+                loading_placeholder, "Preparing report text…"
             )
             try:
                 summary_col_name = extractor.summary_col or "summary"
                 summary_df = extractor.summarise(
                     result_col_name=summary_col_name,
-                    trim_intensity=trim_labels[trim_choice],
+                    trim_approach=trim_approach,
+                    summarise_intensity=summarise_intensity,
+                    discover_themes_extra_instructions=extra_theme_instructions or None,
+                    max_tokens=max_tokens,
+                    max_words=max_words,
                 )
                 summarise_kwargs = {
                     "result_col_name": summary_col_name,
-                    "trim_intensity": trim_labels[trim_choice],
+                    "trim_approach": trim_approach,
+                    "summarise_intensity": summarise_intensity,
+                    "discover_themes_extra_instructions": extra_theme_instructions
+                    or None,
+                    "max_tokens": max_tokens,
+                    "max_words": max_words,
                 }
                 _record_repro_action(
                     "summarise_reports",
-                    "Summarise the reports",
+                    "Prepare the reports for theme discovery",
                     _format_call(
                         "summary_df = extractor.summarise",
                         summarise_kwargs,
@@ -1938,6 +1995,10 @@ def _render_discover_action() -> None:
                     min_themes=min_themes_value,
                     extra_instructions=extra_theme_instructions or None,
                     seed_topics=seed_topics,
+                    trim_approach=trim_approach,
+                    summarise_intensity=summarise_intensity,
+                    max_tokens=max_tokens,
+                    max_words=max_words,
                 )
                 discover_kwargs = {
                     "warn_exceed": int(warning_threshold),
@@ -1946,6 +2007,10 @@ def _render_discover_action() -> None:
                     "min_themes": min_themes_value,
                     "extra_instructions": extra_theme_instructions or None,
                     "seed_topics": seed_topics,
+                    "trim_approach": trim_approach,
+                    "summarise_intensity": summarise_intensity,
+                    "max_tokens": max_tokens,
+                    "max_words": max_words,
                 }
                 _record_repro_action(
                     "discover_themes",
@@ -2021,7 +2086,7 @@ def _render_discover_action() -> None:
     theme_schema = preview_state.get("theme_schema")
 
     actions_col1, actions_col2 = st.columns(2)
-    if actions_col1.button("Accept themes", width="stretch"):
+    if actions_col1.button("Accept themes", use_container_width=True):
         if not isinstance(preview_df, pd.DataFrame):
             st.error("No preview data available to apply.")
             return
@@ -2046,7 +2111,7 @@ def _render_discover_action() -> None:
         _queue_status_message("Themes applied to the working dataset.")
         _trigger_rerun()
 
-    if actions_col2.button("Discard themes", width="stretch"):
+    if actions_col2.button("Discard themes", use_container_width=True):
         clear_preview_state()
         st.session_state["active_action"] = None
         _queue_status_message("Theme preview discarded.", level="info")
@@ -2107,7 +2172,7 @@ def _render_extract_action() -> None:
     feature_grid = st.data_editor(
         feature_grid_df,
         num_rows="dynamic",
-        width="stretch",
+        use_container_width=True,
         column_config={
             "Field name": st.column_config.TextColumn(
                 "Field name",
@@ -2166,7 +2231,7 @@ def _render_extract_action() -> None:
             )
 
         extract_submitted = st.form_submit_button(
-            "Tag the reports", width="stretch"
+            "Tag the reports", use_container_width=True
         )
 
     if not extract_submitted:
@@ -2382,6 +2447,21 @@ def main() -> None:
                 border: 1px solid rgba(148, 163, 255, 0.4);
                 color: #0f172a;
                 font-weight: 700;
+            }
+
+            .stButton > button,
+            .stForm [data-testid="stFormSubmitButton"] button {
+                outline: none !important;
+                box-shadow: none;
+                border-color: rgba(148, 163, 255, 0.5);
+            }
+
+            .stButton > button:focus-visible,
+            .stForm [data-testid="stFormSubmitButton"] button:focus-visible {
+                outline: 2px solid rgba(99, 102, 241, 0.65);
+                outline-offset: 2px;
+                box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.22);
+                border-color: rgba(99, 102, 241, 0.85);
             }
 
             .workspace-footer {

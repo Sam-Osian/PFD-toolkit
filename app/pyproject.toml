@@ -4,13 +4,19 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pfd-toolkit-workbench"
-version = "0.1.1"
+version = "0.1.2"
 requires-python = ">=3.10"
 description = "Streamlit workbench for PFD Toolkit."
 dependencies = [
-  "pfd-toolkit==0.3.7",
+  "pfd_toolkit==0.4.0",
   "streamlit==1.41.1"
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv.sources]
+pfd_toolkit = { path = ".." }
 
 # Hatch assumes Python package; below limit the wheel to only the app files
 [tool.hatch.build.targets.wheel]
