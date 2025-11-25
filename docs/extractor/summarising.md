@@ -8,9 +8,9 @@ description: |
 
 Short, consistent summaries make it possible to skim hundreds or even of thousands of reports. You might use these summaries to quickly identify notable case studies, or to get an 'at a glance' understanding of the breadth contained within PFD reports.
 
-Producing summaries also paves the way for automated theme discovery (see [Discover recurring themes](themes.md)). 
+Producing summaries also paves the way for automated theme discovery (see [Discover recurring themes](themes.md)).
 
-Use `summarise()` to condense each report into a short text snippet. The `trim_intensity` option controls how terse the summary should be. Calling `summarise` adds a `summary` column to your stored reports and keeps a copy on the instance under `extractor.summarised_reports` for later reuse.
+Use `summarise()` to either concatenate report text as-is (`trim_approach="truncate"`, the default) or generate LLM-written summaries (`trim_approach="summarise"`). When summarising, the `summarise_intensity` option controls how terse the summary should be. Calling `summarise` adds a `summary` column to your stored reports and keeps a copy on the instance under `extractor.summarised_reports` for later reuse.
 
 ---
 
@@ -54,12 +54,12 @@ extractor = Extractor(
     reports=reports
 )
 
-summary_df = extractor.summarise(trim_intensity="medium")
+summary_df = extractor.summarise(trim_approach="summarise", summarise_intensity="medium")
 ```
 
-The resulting DataFrame contains a new column (default name `summary`). 
+The resulting DataFrame contains a new column (default name `summary`).
 
-You can specify a different column name via `result_col_name` if desired. You can also set a different `trim_intensity` (options range from `low` to `very high`) if desired.
+You can specify a different column name via `result_col_name` if desired. You can also set a different `summarise_intensity` (options range from `low` to `very high`) when `trim_approach="summarise"`. If you just need raw concatenated text, keep the default `trim_approach="truncate"` and optionally pass `max_words` or `max_tokens` to clip the text without LLM intervention.
 
 
 ## Specify which sections to summarise
@@ -78,7 +78,7 @@ extractor = Extractor(
     include_concerns=True
 )
 
-summary_df = extractor.summarise(trim_intensity="medium")
+summary_df = extractor.summarise(trim_approach="summarise", summarise_intensity="medium")
 ```
 
 #### All options and defaults

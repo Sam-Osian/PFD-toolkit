@@ -6,10 +6,13 @@ import logging
 import json
 import re
 import warnings
-from typing import Dict, List, Optional, Type, Union, Literal
+from typing import Any, Dict, List, Optional, Type, Union, Literal
 
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, create_model, ConfigDict
+import tiktoken
 
 from .llm import LLM
 from .config import GeneralConfig
@@ -89,6 +92,8 @@ class Extractor:
         self.extra_instructions: Optional[str] = None
         self.verbose = verbose
         self.produce_spans = False
+        self._theme_assignment_instructions: Optional[str] = None
+        self._discovered_theme_model: Optional[Type[BaseModel]] = None
 
         # Default summary column name used by Cleaner.summarise
         self.summary_col = "summary"
@@ -117,6 +122,40 @@ class Extractor:
         self.token_cache: Dict[str, List[int]] = {}
         # Store raw LLM output from discover_themes for debugging
         self.identified_themes = None
+        self._last_summary_summarise_intensity: Optional[str] = None
+        self._last_summary_discover_extra: Optional[str] = None
+        self._last_summary_trim_approach: Optional[str] = None
+        self._last_summary_max_tokens: Optional[int] = None
+        self._last_summary_max_words: Optional[int] = None
+
+    # ------------------------------------------------------------------
+    def _get_field_parts(
+        self, row: pd.Series, *, include_labels: bool = True
+    ) -> List[str]:
+        fields = [
+            (self.include_coroner, self.COL_CORONER_NAME, "Coroner name"),
+            (self.include_area, self.COL_AREA, "Area"),
+            (self.include_receiver, self.COL_RECEIVER, "Receiver"),
+            (
+                self.include_investigation,
+                self.COL_INVESTIGATION,
+                "Investigation and Inquest",
+            ),
+            (
+                self.include_circumstances,
+                self.COL_CIRCUMSTANCES,
+                "Circumstances of Death",
+            ),
+            (self.include_concerns, self.COL_CONCERNS, "Matters of Concern"),
+        ]
+
+        parts: List[str] = []
+        for flag, col, label in fields:
+            if flag and col in row.index:
+                val = row.get(col)
+                if pd.notna(val):
+                    parts.append(f"{label}: {str(val)}" if include_labels else str(val))
+        return parts
 
     # ------------------------------------------------------------------
     def _build_prompt_template(self) -> str:
@@ -139,6 +178,11 @@ class Extractor:
             if self.produce_spans
             else ""
         )
+        theme_line = (
+            self._theme_assignment_instructions
+            if self._theme_assignment_instructions
+            else ""
+        )
         # Include any extra user instructions if provided
         extra_instr = (self.extra_instructions.strip() + "\n") if self.extra_instructions else ""
 
@@ -148,6 +192,7 @@ You are an expert at extracting structured information from UK Prevention of Fut
 
 Extract the following features from the report excerpt provided.
 
+{theme_line}
 {not_found_line_prompt}
 {category_line}
 {span_line}
@@ -161,6 +206,19 @@ Here is the report excerpt:
 {{report_excerpt}}
 """
         return template.strip()
+
+    # ------------------------------------------------------------------
+    def _build_theme_assignment_instructions(self) -> str:
+        """Return internal guidance used for discovered theme assignment."""
+
+        return (
+            "You are assigning this report excerpt to the candidate themes that were "
+            "discovered earlier. For each theme listed below, decide whether the excerpt "
+            "explicitly mentions it or provides clear, direct evidence that it applies. "
+            "Respond with `true` only when that explicit evidence is present; otherwise "
+            "respond `false`. A report might align with one theme, several themes, or none "
+            "of them.\n"
+        )
 
     # ------------------------------------------------------------------
     def _add_span_fields(self, model: Type[BaseModel]) -> Type[BaseModel]:
@@ -345,8 +403,18 @@ Here is the report excerpt:
         # Update feature extraction configuration
         if feature_model is not None:
             self._base_feature_model = feature_model
+            if feature_model is not self._discovered_theme_model:
+                self._theme_assignment_instructions = None
         if self._base_feature_model is None:
             raise ValueError("feature_model must be provided")
+
+        if self._base_feature_model is self._discovered_theme_model:
+            if not self._theme_assignment_instructions:
+                self._theme_assignment_instructions = (
+                    self._build_theme_assignment_instructions()
+                )
+        else:
+            self._theme_assignment_instructions = None
 
         self.produce_spans = produce_spans
         if self.produce_spans:
@@ -465,8 +533,12 @@ Here is the report excerpt:
     def summarise(
         self,
         result_col_name: str = "summary",
-        trim_intensity: str = "medium",
+        trim_approach: Literal["summarise", "truncate"] = "truncate",
+        summarise_intensity: Optional[str] = None,
         extra_instructions: Optional[str] = None,
+        discover_themes_extra_instructions: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        max_words: Optional[int] = None,
     ) -> pd.DataFrame:
         """Summarise selected report fields into one column using the LLM.
 
@@ -474,20 +546,56 @@ Here is the report excerpt:
         ----------
         result_col_name : str, optional
             Name of the summary column. Defaults to ``"summary"``.
-        trim_intensity : {"low", "medium", "high", "very high"}, optional
-            Controls how concise the summary should be. Defaults to ``"medium"``.
+        trim_approach : {"summarise", "truncate"}, optional
+            Choose whether to use LLM-driven summarisation (``"summarise"``) or
+            concatenation with optional trimming (``"truncate"``). Defaults to
+            ``"truncate"`` which performs no trimming unless ``max_tokens`` or
+            ``max_words`` is provided.
+        summarise_intensity : {"low", "medium", "high", "very high"} or None, optional
+            Controls how concise the summary should be when
+            ``trim_approach="summarise"``. Defaults to ``"medium"`` when
+            omitted. Cannot be used alongside ``trim_approach="truncate"``.
         extra_instructions : str, optional
             Additional instructions to append to the prompt before the report
             excerpt.
+        discover_themes_extra_instructions : str, optional
+            Guidance that should be surfaced in the summary prompt when
+            ``discover_themes`` delegates summarisation. When provided, the
+            prompt reminds the model that downstream theme discovery will follow
+            specific instructions. The value should typically mirror the
+            ``extra_instructions`` argument passed to ``discover_themes``.
+        max_tokens : int, optional
+            Token limit applied when ``trim_approach="truncate"``. The
+            concatenated text will be trimmed to approximately this number of
+            tokens. Cannot be combined with ``max_words``.
+        max_words : int, optional
+            Word limit applied when ``trim_approach="truncate"``. The
+            concatenated text will be trimmed to the first ``max_words`` words.
+            Cannot be combined with ``max_tokens``.
 
         Returns
-        ------- 
+        -------
         pandas.DataFrame
             A new DataFrame identical to the one provided at initialisation with
             an extra summary column.
         """
-        if trim_intensity not in {"low", "medium", "high", "very high"}:
-            raise ValueError("trim_intensity must be 'low', 'medium', 'high', or 'very high'")
+        if trim_approach not in {"summarise", "truncate"}:
+            raise ValueError("trim_approach must be 'summarise' or 'truncate'")
+
+        if max_tokens is not None and max_words is not None:
+            raise ValueError("Provide only one of max_tokens or max_words")
+
+        if trim_approach == "summarise":
+            if max_tokens is not None or max_words is not None:
+                raise ValueError("max_tokens/max_words are only valid when trim_approach='truncate'")
+            summarise_intensity = summarise_intensity or "medium"
+            if summarise_intensity not in {"low", "medium", "high", "very high"}:
+                raise ValueError(
+                    "summarise_intensity must be 'low', 'medium', 'high', or 'very high' when summarising"
+                )
+        else:
+            if summarise_intensity is not None:
+                raise ValueError("summarise_intensity can only be used when trim_approach='summarise'")
 
         self.summary_col = result_col_name
         summary_df = self.reports.copy()
@@ -496,60 +604,359 @@ Here is the report excerpt:
             "low": "write a fairly detailed paragraph summarising the report.",
             "medium": "write a concise summary of the key points of the report.",
             "high": "write a very short summary of the report.",
-            "very high": "write a one or two sentence summary of the report."
+            "very high": "write a one or two sentence summary of the report.",
         }
-        base_prompt = (
-            "You are an assistant summarising UK Prevention of Future Death reports."
-            "You will be given an excerpt from one report.\n\n"
-            "Your task is to "
-            + instructions[trim_intensity]
-            + "\n\nDo not provide any commentary or headings; simply summarise the report."
-            + "Always use British English. Do not re-write acronyms to full form."
-        )
-        if extra_instructions:
-            base_prompt += "\n\n" + extra_instructions.strip()
-        base_prompt += "\n\nReport excerpt:\n\n"
 
-        fields = [
-            (self.include_coroner, self.COL_CORONER_NAME, "Coroner name"),
-            (self.include_area, self.COL_AREA, "Area"),
-            (self.include_receiver, self.COL_RECEIVER, "Receiver"),
-            (self.include_investigation, self.COL_INVESTIGATION, "Investigation and Inquest"),
-            (self.include_circumstances, self.COL_CIRCUMSTANCES, "Circumstances of Death"),
-            (self.include_concerns, self.COL_CONCERNS, "Matters of Concern"),
-        ]
+        def _truncate_words(text: str, limit: Optional[int]) -> str:
+            if limit is None:
+                return text
+            if limit <= 0:
+                return ""
+            words = text.split()
+            if len(words) <= limit:
+                return text
+            return " ".join(words[:limit])
 
-        prompts = []
-        idx_order = []
-        for idx, row in summary_df.iterrows():
-            parts = []
-            for flag, col, label in fields:
-                if flag and col in summary_df.columns:
-                    val = row.get(col)
-                    if pd.notna(val):
-                        parts.append(f"{label}: {str(val)}")
-            if not parts:
-                prompts.append(base_prompt + "\nN/A")
+        def _truncate_tokens(text: str, limit: Optional[int]) -> str:
+            if limit is None:
+                return text
+            if limit <= 0:
+                return ""
+            enc_model = getattr(self.llm, "model", None) or "cl100k_base"
+            try:
+                enc = tiktoken.encoding_for_model(enc_model)
+            except KeyError:
+                enc = tiktoken.get_encoding("cl100k_base")
+            tokens = enc.encode(text or "")
+            if len(tokens) <= limit:
+                return text
+            return enc.decode(tokens[:limit])
+
+        if trim_approach == "truncate":
+            combined_texts: List[str] = []
+            truncator = _truncate_tokens if max_tokens is not None else _truncate_words
+            for _, row in summary_df.iterrows():
+                text = "\n\n".join(self._get_field_parts(row, include_labels=False))
+                text = truncator(text, max_tokens or max_words)
+                combined_texts.append(text)
+            summary_df[result_col_name] = combined_texts
+        else:
+            base_prompt = (
+                "You are an assistant summarising UK Prevention of Future Death reports."
+                "You will be given an excerpt from one report.\n\n"
+                "Your task is to "
+                + instructions[summarise_intensity]
+                + "\n\nDo not provide any commentary or headings; simply summarise the report."
+                + "Always use British English. Do not re-write acronyms to full form."
+            )
+            if discover_themes_extra_instructions:
+                detail = discover_themes_extra_instructions.strip()
+                base_prompt += (
+                    "\n\nDownstream, your summary will be used by an analyst to discover "
+                    "themes with the following instructions: '"
+                    + detail
+                    + "'. In your summary, make sure that this detail is included if "
+                    "present in the input - if not present, simply ignore this. Do not "
+                    "attempt to discover themes yourself, this is just to guide your summary."
+                )
+            if extra_instructions:
+                base_prompt += "\n\n" + extra_instructions.strip()
+            base_prompt += "\n\nReport excerpt:\n\n"
+
+            prompts = []
+            idx_order = []
+            for idx, row in summary_df.iterrows():
+                parts = self._get_field_parts(row, include_labels=True)
+                if not parts:
+                    prompts.append(base_prompt + "\nN/A")
+                else:
+                    text = " ".join(str(p) for p in parts)
+                    prompts.append(base_prompt + "\n" + text)
+                idx_order.append(idx)
+
+            if prompts:
+                results = self.llm.generate(
+                    prompts=prompts,
+                    tqdm_extra_kwargs={"desc": "Summarising reports", "leave": False},
+                )
             else:
-                text = " ".join(str(p) for p in parts)
-                prompts.append(base_prompt + "\n" + text)
-            idx_order.append(idx)
+                results = []
 
-        if prompts:
-            results = self.llm.generate(
-                prompts=prompts,
-                tqdm_extra_kwargs={"desc": "Summarising reports", "leave": False},
+            summary_series = pd.Series(index=idx_order, dtype=object)
+            for i, res in enumerate(results):
+                summary_series.loc[idx_order[i]] = res
+
+            summary_df[result_col_name] = summary_series
+
+        self.summarised_reports = summary_df
+        self.token_cache.pop(result_col_name, None)
+        self._last_summary_summarise_intensity = summarise_intensity
+        self._last_summary_discover_extra = discover_themes_extra_instructions
+        self._last_summary_trim_approach = trim_approach
+        self._last_summary_max_tokens = max_tokens
+        self._last_summary_max_words = max_words
+        return summary_df
+
+
+    # ------------------------------------------------------------------
+    def _concatenated_report_texts(self) -> List[str]:
+        """Collect concatenated report text respecting include flags."""
+
+        texts: List[str] = []
+        for _, row in self.reports.iterrows():
+            parts = self._get_field_parts(row, include_labels=False)
+            texts.append("\n\n".join(parts))
+        return texts
+
+    # ------------------------------------------------------------------
+    def count(
+        self,
+        *,
+        measure: Literal["words", "tokens"] = "words",
+        as_: Literal["hist", "table", "stats"] = "hist",
+        threshold: Optional[int] = None,
+        step: int = 100,
+    ):
+        """Visualise or tabulate report lengths by word or token counts.
+
+        Parameters
+        ----------
+        measure : {"words", "tokens"}, optional
+            Whether to count words or tokens for each report. Defaults to
+            ``"words"``. Token counting uses the configured LLM's token
+            estimation utility.
+        as_ : {"hist", "table", "stats"}, optional
+            Render output as a histogram (``"hist"``), cumulative frequency
+            table (``"table"``), or summary statistics table (``"stats"``).
+            Defaults to ``"hist"``.
+        threshold : int, optional
+            Optional threshold to highlight or anchor. When provided, both
+            display types include a concise summary of how many reports fall at
+            or below the threshold.
+        step : int, optional
+            Bin interval for the cumulative table. Ignored when ``as_`` is
+            ``"hist"``. Defaults to ``100``.
+
+        Returns
+        -------
+        tuple[matplotlib.figure.Figure, matplotlib.axes.Axes] | pandas.DataFrame | str
+            Figure and axes for ``as_="hist"``, a cumulative table for
+            ``as_="table"``, or a plain-text statistics table for
+            ``as_="stats"``.
+        """
+
+        if as_ not in {"hist", "table", "stats"}:
+            raise ValueError("as_ must be either 'hist', 'table', or 'stats'")
+        if measure not in {"words", "tokens"}:
+            raise ValueError("measure must be either 'words' or 'tokens'")
+        if step <= 0:
+            raise ValueError("step must be a positive integer")
+
+        if as_ in {"hist", "stats"} and step != 100:
+            logger.info("Ignoring step parameter because as_='%s'.", as_)
+
+        texts = self._concatenated_report_texts()
+        if measure == "words":
+            lengths = [len(text.split()) for text in texts]
+            unit_label = "words"
+        else:
+            lengths = self.llm.estimate_tokens(texts)
+            unit_label = "tokens"
+
+        total_reports = len(lengths)
+        total_length = sum(lengths)
+
+        if as_ == "stats":
+            series = pd.Series(lengths, dtype=float)
+            mean = series.mean() if not series.empty else 0.0
+            median = series.median() if not series.empty else 0.0
+            var = series.var(ddof=0) if not series.empty else 0.0
+            std = series.std(ddof=0) if not series.empty else 0.0
+            min_len = series.min() if not series.empty else 0.0
+            max_len = series.max() if not series.empty else 0.0
+            q1 = series.quantile(0.25) if not series.empty else 0.0
+            q3 = series.quantile(0.75) if not series.empty else 0.0
+            iqr = q3 - q1
+            p90 = series.quantile(0.9) if not series.empty else 0.0
+            p95 = series.quantile(0.95) if not series.empty else 0.0
+
+            rows = [
+                {"metric": "reports", "value": total_reports},
+                {"metric": f"total_{unit_label}", "value": total_length},
+                {"metric": "mean", "value": mean},
+                {"metric": "median", "value": median},
+                {"metric": "variance", "value": var},
+                {"metric": "std_dev", "value": std},
+                {"metric": "min", "value": min_len},
+                {"metric": "max", "value": max_len},
+                {"metric": "range", "value": max_len - min_len},
+                {"metric": "q1", "value": q1},
+                {"metric": "q3", "value": q3},
+                {"metric": "iqr", "value": iqr},
+                {"metric": "p90", "value": p90},
+                {"metric": "p95", "value": p95},
+            ]
+
+            if threshold is not None:
+                below_lengths = [length for length in lengths if length <= threshold]
+                rows.extend(
+                    [
+                        {"metric": "threshold", "value": threshold},
+                        {
+                            "metric": f"within_threshold_{unit_label}",
+                            "value": sum(below_lengths),
+                        },
+                        {
+                            "metric": "within_threshold_reports",
+                            "value": len(below_lengths),
+                        },
+                    ]
+                )
+
+            df = pd.DataFrame(rows)
+            value_strings = []
+
+            def _format_value(val: Any) -> str:
+                if isinstance(val, (int, np.integer)):
+                    return f"{val:,}"
+                if isinstance(val, float):
+                    if val.is_integer():
+                        return f"{int(val):,}"
+                    return f"{val:,.3f}"
+                return str(val)
+
+            for val in df["value"]:
+                value_strings.append(_format_value(val))
+
+            metric_width = max(len("Metric"), df["metric"].astype(str).map(len).max())
+            value_width = max(len("Value"), max(len(v) for v in value_strings))
+
+            top_border = f"┌{'─' * (metric_width + 2)}┬{'─' * (value_width + 2)}┐"
+            header = f"│ {'Metric'.ljust(metric_width)} │ {'Value'.rjust(value_width)} │"
+            divider = f"├{'─' * (metric_width + 2)}┼{'─' * (value_width + 2)}┤"
+            rows_formatted = [
+                f"│ {metric.ljust(metric_width)} │ {value.rjust(value_width)} │"
+                for metric, value in zip(df["metric"].astype(str), value_strings)
+            ]
+            bottom_border = f"└{'─' * (metric_width + 2)}┴{'─' * (value_width + 2)}┘"
+
+            table_lines = [top_border, header, divider, *rows_formatted, bottom_border]
+
+            class _PlainText(str):
+                def __repr__(self) -> str:  # pragma: no cover - presentation only
+                    return str(self)
+
+                def _repr_pretty_(self, p, cycle: bool) -> None:  # pragma: no cover
+                    p.text(str(self))
+
+            return _PlainText("\n".join(table_lines))
+
+        if as_ == "hist":
+            fig, ax = plt.subplots()
+            ax.hist(lengths, bins="auto", edgecolor="black")
+            ax.set_xlabel(f"{measure.capitalize()} count")
+            ax.set_ylabel("Number of reports")
+            ax.set_title("Report length distribution")
+
+            if threshold is not None:
+                below_threshold = sum(length <= threshold for length in lengths)
+                below_length = sum(length for length in lengths if length <= threshold)
+                percent = (
+                    (below_threshold / total_reports * 100) if total_reports else 0.0
+                )
+                ax.axvline(
+                    threshold,
+                    color="red",
+                    linestyle="--",
+                    label=f"Threshold ({threshold})",
+                )
+                ax.text(
+                    0.95,
+                    0.95,
+                    f"≤{threshold}: {below_threshold}/{total_reports} ({percent:.1f}%)",
+                    transform=ax.transAxes,
+                    ha="right",
+                    va="top",
+                    bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "red"},
+                )
+                ax.legend()
+
+                print(
+                    "{total_units} total {unit}".format(
+                        unit=unit_label,
+                        total_units=total_length,
+                    )
+                )
+                print(
+                    "{below_units} total {unit} within the threshold.".format(
+                        below_units=below_length,
+                        unit=unit_label,
+                    )
+                )
+            else:
+                print(
+                    "{total_units} total {unit}".format(
+                        unit=unit_label,
+                        total_units=total_length,
+                    )
+                )
+
+            return fig, ax
+
+        max_length = max(lengths, default=0)
+
+        if threshold is None:
+            upper_limit = max(max_length, step)
+            thresholds = list(range(step, upper_limit + step, step))
+        else:
+            remainder = threshold % step
+            start = remainder if remainder else step
+            upper_limit = max(max_length, threshold)
+            thresholds = list(range(start, upper_limit + step, step))
+            if threshold not in thresholds:
+                thresholds.append(threshold)
+
+        thresholds = sorted(set(thresholds))
+
+        data = []
+        for limit in thresholds:
+            count = sum(length <= limit for length in lengths)
+            percent = (count / total_reports * 100) if total_reports else 0.0
+            data.append(
+                {
+                    "threshold": limit,
+                    "cumulative_count": count,
+                    "cumulative_percent": percent,
+                }
+            )
+
+        table = pd.DataFrame(data)
+
+        if threshold is not None:
+            below_threshold = sum(length <= threshold for length in lengths)
+            below_length = sum(length for length in lengths if length <= threshold)
+            percent = (below_threshold / total_reports * 100) if total_reports else 0.0
+            print(
+                "{total_units} total {unit}".format(
+                    unit=unit_label,
+                    total_units=total_length,
+                )
+            )
+            print(
+                "{below_units} total {unit} within the threshold.".format(
+                    below_units=below_length,
+                    unit=unit_label,
+                )
             )
         else:
-            results = []
+            print(
+                "{total_units} total {unit}".format(
+                    unit=unit_label,
+                    total_units=total_length,
+                )
+            )
 
-        summary_series = pd.Series(index=idx_order, dtype=object)
-        for i, res in enumerate(results):
-            summary_series.loc[idx_order[i]] = res
-
-        summary_df[result_col_name] = summary_series
-        self.summarised_reports = summary_df
-        return summary_df
+        return table
 
 
     # ------------------------------------------------------------------
@@ -618,6 +1025,10 @@ Here is the report excerpt:
         min_themes: Optional[int] = None,
         extra_instructions: Optional[str] = None,
         seed_topics: Optional[Union[str, List[str], BaseModel]] = None,
+        trim_approach: Literal["summarise", "truncate"] = "truncate",
+        summarise_intensity: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        max_words: Optional[int] = None,
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
@@ -647,6 +1058,20 @@ Here is the report excerpt:
             Optional seed topics to include in the prompt. These are treated as
             starting suggestions and the model should incorporate them into a
             broader list of themes.
+        trim_approach : {"summarise", "truncate"}, optional
+            Select whether to use LLM summarisation (``"summarise"``) or direct
+            concatenation with optional trimming (``"truncate"``) when preparing
+            text for theme discovery. Defaults to ``"truncate"``.
+        summarise_intensity : {"low", "medium", "high", "very high"} or None, optional
+            Trim level to apply when ``trim_approach="summarise"``. Defaults to
+            ``"medium"`` when omitted. Cannot be provided when
+            ``trim_approach="truncate"``.
+        max_tokens : int, optional
+            Token limit applied when ``trim_approach="truncate"``. Cannot be
+            combined with ``max_words``.
+        max_words : int, optional
+            Word limit applied when ``trim_approach="truncate"``. Cannot be
+            combined with ``max_tokens``.
 
         Returns
         -------
@@ -654,9 +1079,49 @@ Here is the report excerpt:
             The generated feature model containing discovered themes.
         """
 
-        if not hasattr(self, "summarised_reports"):
-            raise AttributeError(
-                "Please run `summarise()` before calling discover_themes()."
+        if trim_approach not in {"summarise", "truncate"}:
+            raise ValueError("trim_approach must be 'summarise' or 'truncate'")
+        if max_tokens is not None and max_words is not None:
+            raise ValueError("Provide only one of max_tokens or max_words")
+        if trim_approach == "summarise":
+            if max_tokens is not None or max_words is not None:
+                raise ValueError("max_tokens/max_words are only valid when trim_approach='truncate'")
+            summarise_intensity = summarise_intensity or "medium"
+        else:
+            if summarise_intensity is not None:
+                raise ValueError("summarise_intensity can only be used when trim_approach='summarise'")
+
+        summary_col = getattr(self, "summary_col", "summary")
+        has_summary = (
+            hasattr(self, "summarised_reports")
+            and summary_col in self.summarised_reports.columns
+        )
+        last_trim = getattr(self, "_last_summary_summarise_intensity", None)
+        last_extra = getattr(self, "_last_summary_discover_extra", None)
+        last_trim_approach = getattr(self, "_last_summary_trim_approach", None)
+        last_max_tokens = getattr(self, "_last_summary_max_tokens", None)
+        last_max_words = getattr(self, "_last_summary_max_words", None)
+        instructions_changed = extra_instructions != last_extra
+        trim_changed = summarise_intensity != last_trim
+        trim_approach_changed = trim_approach != last_trim_approach
+        max_tokens_changed = max_tokens != last_max_tokens
+        max_words_changed = max_words != last_max_words
+
+        if (
+            not has_summary
+            or instructions_changed
+            or trim_changed
+            or trim_approach_changed
+            or max_tokens_changed
+            or max_words_changed
+        ):
+            self.summarise(
+                result_col_name=summary_col,
+                trim_approach=trim_approach,
+                summarise_intensity=summarise_intensity,
+                discover_themes_extra_instructions=extra_instructions,
+                max_tokens=max_tokens,
+                max_words=max_words,
             )
 
         if self.summary_col not in self.summarised_reports.columns:
@@ -759,6 +1224,8 @@ Here is the report excerpt:
 
         self.feature_model = ThemeModel
         self._base_feature_model = ThemeModel
+        self._discovered_theme_model = ThemeModel
+        self._theme_assignment_instructions = self._build_theme_assignment_instructions()
         self.feature_names = self._collect_field_names()
         self._feature_schema = self._build_feature_schema(self.schema_detail)
         self.prompt_template = self._build_prompt_template()

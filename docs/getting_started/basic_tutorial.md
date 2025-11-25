@@ -138,21 +138,8 @@ extractor = Extractor(
 
 ---
 
-### Summarise reports
-
-Some PFD reports can be _long_. Because of this, we need to summarise reports *before* we discover themes:
-
-
-```python
-# Create short summaries of the concerns
-extractor.summarise(trim_intensity="medium")
-```
-
----
-
 ### Get a list of themes
 
-Now that we've done this, we can run the `discover_themes` method and assign the result to a new class, which we've named `ThemeInstructions`:
 
 ```python
 # Ask the LLM to propose recurring themes
@@ -162,7 +149,7 @@ ThemeInstructions = extractor.discover_themes(
 ```
 
 !!! note
-    `discover_themes()` will warn you if the word count of your summaries is still too high. In these cases, you might want to set your `trim_intensity` to `high` or `very high` (though please note that the more we trim, the more detail we lose).
+    `discover_themes()` now concatenates your selected fields by default without trimming. To trim aggressively, either set `trim_approach="truncate"` with `max_words`/`max_tokens` to clip the raw text, or use `trim_approach="summarise"` with `summarise_intensity` ("low"–"very high") to re-enable LLM summarisation. By default, no truncation is applied.
 
 
 
