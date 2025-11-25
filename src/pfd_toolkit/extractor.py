@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Type, Union, Literal
 import matplotlib.pyplot as plt
 import pandas as pd
 from pydantic import BaseModel, Field, create_model, ConfigDict
+import tiktoken
 
 from .llm import LLM
 from .config import GeneralConfig
@@ -120,9 +121,11 @@ class Extractor:
         self.token_cache: Dict[str, List[int]] = {}
         # Store raw LLM output from discover_themes for debugging
         self.identified_themes = None
-        self._last_summary_trim_intensity: Optional[str] = None
+        self._last_summary_summarise_intensity: Optional[str] = None
         self._last_summary_discover_extra: Optional[str] = None
-        self._last_summary_truncate: Optional[int] = None
+        self._last_summary_trim_approach: Optional[str] = None
+        self._last_summary_max_tokens: Optional[int] = None
+        self._last_summary_max_words: Optional[int] = None
 
     # ------------------------------------------------------------------
     def _get_field_parts(
@@ -529,10 +532,12 @@ Here is the report excerpt:
     def summarise(
         self,
         result_col_name: str = "summary",
-        trim_intensity: str = "medium",
+        trim_approach: Literal["summarise", "truncate"] = "truncate",
+        summarise_intensity: Optional[str] = None,
         extra_instructions: Optional[str] = None,
         discover_themes_extra_instructions: Optional[str] = None,
-        truncate: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        max_words: Optional[int] = None,
     ) -> pd.DataFrame:
         """Summarise selected report fields into one column using the LLM.
 
@@ -540,10 +545,15 @@ Here is the report excerpt:
         ----------
         result_col_name : str, optional
             Name of the summary column. Defaults to ``"summary"``.
-        trim_intensity : {"none", "low", "medium", "high", "very high"}, optional
-            Controls how concise the summary should be. Defaults to ``"medium"``.
-            When set to ``"none"``, no LLM summarisation occurs and the selected
-            report fields are concatenated instead.
+        trim_approach : {"summarise", "truncate"}, optional
+            Choose whether to use LLM-driven summarisation (``"summarise"``) or
+            concatenation with optional trimming (``"truncate"``). Defaults to
+            ``"truncate"`` which performs no trimming unless ``max_tokens`` or
+            ``max_words`` is provided.
+        summarise_intensity : {"low", "medium", "high", "very high"} or None, optional
+            Controls how concise the summary should be when
+            ``trim_approach="summarise"``. Defaults to ``"medium"`` when
+            omitted. Cannot be used alongside ``trim_approach="truncate"``.
         extra_instructions : str, optional
             Additional instructions to append to the prompt before the report
             excerpt.
@@ -553,11 +563,14 @@ Here is the report excerpt:
             prompt reminds the model that downstream theme discovery will follow
             specific instructions. The value should typically mirror the
             ``extra_instructions`` argument passed to ``discover_themes``.
-        truncate : int, optional
-            Word limit applied when ``trim_intensity`` is ``"none"``. Text will
-            be truncated to the first ``truncate`` words after concatenation.
-            Providing this argument with any other ``trim_intensity`` raises a
-            ``ValueError``.
+        max_tokens : int, optional
+            Token limit applied when ``trim_approach="truncate"``. The
+            concatenated text will be trimmed to approximately this number of
+            tokens. Cannot be combined with ``max_words``.
+        max_words : int, optional
+            Word limit applied when ``trim_approach="truncate"``. The
+            concatenated text will be trimmed to the first ``max_words`` words.
+            Cannot be combined with ``max_tokens``.
 
         Returns
         -------
@@ -565,12 +578,23 @@ Here is the report excerpt:
             A new DataFrame identical to the one provided at initialisation with
             an extra summary column.
         """
-        if trim_intensity not in {"none", "low", "medium", "high", "very high"}:
-            raise ValueError(
-                "trim_intensity must be 'none', 'low', 'medium', 'high', or 'very high'"
-            )
-        if truncate is not None and trim_intensity != "none":
-            raise ValueError("truncate can only be used when trim_intensity='none'")
+        if trim_approach not in {"summarise", "truncate"}:
+            raise ValueError("trim_approach must be 'summarise' or 'truncate'")
+
+        if max_tokens is not None and max_words is not None:
+            raise ValueError("Provide only one of max_tokens or max_words")
+
+        if trim_approach == "summarise":
+            if max_tokens is not None or max_words is not None:
+                raise ValueError("max_tokens/max_words are only valid when trim_approach='truncate'")
+            summarise_intensity = summarise_intensity or "medium"
+            if summarise_intensity not in {"low", "medium", "high", "very high"}:
+                raise ValueError(
+                    "summarise_intensity must be 'low', 'medium', 'high', or 'very high' when summarising"
+                )
+        else:
+            if summarise_intensity is not None:
+                raise ValueError("summarise_intensity can only be used when trim_approach='summarise'")
 
         self.summary_col = result_col_name
         summary_df = self.reports.copy()
@@ -592,11 +616,27 @@ Here is the report excerpt:
                 return text
             return " ".join(words[:limit])
 
-        if trim_intensity == "none":
+        def _truncate_tokens(text: str, limit: Optional[int]) -> str:
+            if limit is None:
+                return text
+            if limit <= 0:
+                return ""
+            enc_model = getattr(self.llm, "model", None) or "cl100k_base"
+            try:
+                enc = tiktoken.encoding_for_model(enc_model)
+            except KeyError:
+                enc = tiktoken.get_encoding("cl100k_base")
+            tokens = enc.encode(text or "")
+            if len(tokens) <= limit:
+                return text
+            return enc.decode(tokens[:limit])
+
+        if trim_approach == "truncate":
             combined_texts: List[str] = []
+            truncator = _truncate_tokens if max_tokens is not None else _truncate_words
             for _, row in summary_df.iterrows():
                 text = "\n\n".join(self._get_field_parts(row, include_labels=False))
-                text = _truncate_words(text, truncate)
+                text = truncator(text, max_tokens or max_words)
                 combined_texts.append(text)
             summary_df[result_col_name] = combined_texts
         else:
@@ -604,7 +644,7 @@ Here is the report excerpt:
                 "You are an assistant summarising UK Prevention of Future Death reports."
                 "You will be given an excerpt from one report.\n\n"
                 "Your task is to "
-                + instructions[trim_intensity]
+                + instructions[summarise_intensity]
                 + "\n\nDo not provide any commentary or headings; simply summarise the report."
                 + "Always use British English. Do not re-write acronyms to full form."
             )
@@ -649,9 +689,11 @@ Here is the report excerpt:
 
         self.summarised_reports = summary_df
         self.token_cache.pop(result_col_name, None)
-        self._last_summary_trim_intensity = trim_intensity
+        self._last_summary_summarise_intensity = summarise_intensity
         self._last_summary_discover_extra = discover_themes_extra_instructions
-        self._last_summary_truncate = truncate
+        self._last_summary_trim_approach = trim_approach
+        self._last_summary_max_tokens = max_tokens
+        self._last_summary_max_words = max_words
         return summary_df
 
 
@@ -947,8 +989,10 @@ Here is the report excerpt:
         min_themes: Optional[int] = None,
         extra_instructions: Optional[str] = None,
         seed_topics: Optional[Union[str, List[str], BaseModel]] = None,
-        trim_intensity: str = "medium",
-        truncate: Optional[int] = None,
+        trim_approach: Literal["summarise", "truncate"] = "truncate",
+        summarise_intensity: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        max_words: Optional[int] = None,
     ) -> Type[BaseModel]:
         """Use an LLM to automatically discover report themes.
 
@@ -978,13 +1022,20 @@ Here is the report excerpt:
             Optional seed topics to include in the prompt. These are treated as
             starting suggestions and the model should incorporate them into a
             broader list of themes.
-        trim_intensity : {"none", "low", "medium", "high", "very high"}, optional
-            Trim level to apply when generating summaries specifically for theme
-            discovery. Defaults to ``"medium"``. When set to ``"none"`` the
-            method concatenates report fields instead of summarising.
-        truncate : int, optional
-            Word limit applied only when ``trim_intensity`` is ``"none"``. Raises
-            ``ValueError`` if provided alongside a summarising trim intensity.
+        trim_approach : {"summarise", "truncate"}, optional
+            Select whether to use LLM summarisation (``"summarise"``) or direct
+            concatenation with optional trimming (``"truncate"``) when preparing
+            text for theme discovery. Defaults to ``"truncate"``.
+        summarise_intensity : {"low", "medium", "high", "very high"} or None, optional
+            Trim level to apply when ``trim_approach="summarise"``. Defaults to
+            ``"medium"`` when omitted. Cannot be provided when
+            ``trim_approach="truncate"``.
+        max_tokens : int, optional
+            Token limit applied when ``trim_approach="truncate"``. Cannot be
+            combined with ``max_words``.
+        max_words : int, optional
+            Word limit applied when ``trim_approach="truncate"``. Cannot be
+            combined with ``max_tokens``.
 
         Returns
         -------
@@ -992,27 +1043,49 @@ Here is the report excerpt:
             The generated feature model containing discovered themes.
         """
 
-        if truncate is not None and trim_intensity != "none":
-            raise ValueError("truncate can only be used when trim_intensity='none'")
+        if trim_approach not in {"summarise", "truncate"}:
+            raise ValueError("trim_approach must be 'summarise' or 'truncate'")
+        if max_tokens is not None and max_words is not None:
+            raise ValueError("Provide only one of max_tokens or max_words")
+        if trim_approach == "summarise":
+            if max_tokens is not None or max_words is not None:
+                raise ValueError("max_tokens/max_words are only valid when trim_approach='truncate'")
+            summarise_intensity = summarise_intensity or "medium"
+        else:
+            if summarise_intensity is not None:
+                raise ValueError("summarise_intensity can only be used when trim_approach='summarise'")
 
         summary_col = getattr(self, "summary_col", "summary")
         has_summary = (
             hasattr(self, "summarised_reports")
             and summary_col in self.summarised_reports.columns
         )
-        last_trim = getattr(self, "_last_summary_trim_intensity", None)
+        last_trim = getattr(self, "_last_summary_summarise_intensity", None)
         last_extra = getattr(self, "_last_summary_discover_extra", None)
-        last_truncate = getattr(self, "_last_summary_truncate", None)
+        last_trim_approach = getattr(self, "_last_summary_trim_approach", None)
+        last_max_tokens = getattr(self, "_last_summary_max_tokens", None)
+        last_max_words = getattr(self, "_last_summary_max_words", None)
         instructions_changed = extra_instructions != last_extra
-        trim_changed = trim_intensity != last_trim
-        truncate_changed = truncate != last_truncate
+        trim_changed = summarise_intensity != last_trim
+        trim_approach_changed = trim_approach != last_trim_approach
+        max_tokens_changed = max_tokens != last_max_tokens
+        max_words_changed = max_words != last_max_words
 
-        if not has_summary or instructions_changed or trim_changed or truncate_changed:
+        if (
+            not has_summary
+            or instructions_changed
+            or trim_changed
+            or trim_approach_changed
+            or max_tokens_changed
+            or max_words_changed
+        ):
             self.summarise(
                 result_col_name=summary_col,
-                trim_intensity=trim_intensity,
+                trim_approach=trim_approach,
+                summarise_intensity=summarise_intensity,
                 discover_themes_extra_instructions=extra_instructions,
-                truncate=truncate,
+                max_tokens=max_tokens,
+                max_words=max_words,
             )
 
         if self.summary_col not in self.summarised_reports.columns:

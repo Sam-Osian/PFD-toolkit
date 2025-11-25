@@ -99,7 +99,7 @@ Long reports can be trimmed into short summaries for quick review. The `Extracto
 from pfd_toolkit import Extractor
 
 extractor = Extractor(llm=llm_client, reports=police_reports)
-summary_df = extractor.summarise()
+summary_df = extractor.summarise(trim_approach="summarise")
 ```
 
 Read more on [producing summaries](../extractor/summarising.md).
@@ -108,7 +108,7 @@ Read more on [producing summaries](../extractor/summarising.md).
 
 ## Discover recurring themes
 
-`discover_themes()` automatically generates the summaries it needs, so you can jump straight to identifying common topics across your dataset.
+`discover_themes()` defaults to concatenating your selected report fields without trimming, so you can jump straight to identifying common topics across your dataset. Opt into LLM-driven summarisation via `trim_approach="summarise"` when you need terse summaries.
 
 ```python
 IdentifiedThemes = extractor.discover_themes()

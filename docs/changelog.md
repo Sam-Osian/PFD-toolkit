@@ -9,10 +9,10 @@ description: |
 Welcome to the project changelog. All notable changes to this project will be documented below.
 
 
-### 0.3.8 - <small>2025-11-30</small>
-* `discover_themes()` now runs summarisation automatically, meaning you no longer have to manually summarise reports before discovering themes. Advanced users can now set the summarisation trim intensity with the new `trim_intensity` parameter within `discover_themes()` (this can be either "low", "medium", "high", or "very high").
+### 0.4.0 - <small>2025-11-30</small>
+* `discover_themes()` now defaults to using untrimmed report text, with optional truncation controlled by `trim_approach="truncate"` and new `max_tokens`/`max_words` parameters. Switch to `trim_approach="summarise"` to re-enable LLM summarisation, which now uses `summarise_intensity` settings.
 * Users have reported that running `extract_features()` on a list of themes from `discover_themes()` seems to assign reports too liberally. We have made some changes to make the model a bit more conservative, only assigning a report with a theme if there is sufficient evidence that it is well represented in the underlying report. We'll continue monitoring this behaviour to make sure we've got the balance right.
-* Added a truncation-based alternative to LLM summarisation (`trim_intensity="none"` with optional `truncate`) and new report-length diagnostics consolidated under `count()` for word or token charts/tables with threshold guidance.
+* Added a truncation-based alternative to LLM summarisation and new report-length diagnostics consolidated under `count()` for word or token charts/tables with threshold guidance.
 * `count()` now also supports a `stats` mode producing markdown summary statistics across word or token lengths.
 * `count()` statistics now render as a readable table without console prints, and the chart option is renamed to `as_="hist"` for clarity.
 

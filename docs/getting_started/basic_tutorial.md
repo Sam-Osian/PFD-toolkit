@@ -149,7 +149,7 @@ ThemeInstructions = extractor.discover_themes(
 ```
 
 !!! note
-    `discover_themes()` will warn you if the word count of your summaries is still too high. In these cases, you might want to set your `trim_intensity` to `high` or `very high` (though please note that the more we trim, the more detail we lose).
+    `discover_themes()` now concatenates your selected fields by default without trimming. To trim aggressively, either set `trim_approach="truncate"` with `max_words`/`max_tokens` to clip the raw text, or use `trim_approach="summarise"` with `summarise_intensity` ("low"–"very high") to re-enable LLM summarisation. By default, no truncation is applied.
 
 
 

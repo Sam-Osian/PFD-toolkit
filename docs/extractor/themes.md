@@ -125,11 +125,12 @@ You can control how many themes the model discovers through `min_themes` and `ma
 IdentifiedThemes = extractor.discover_themes(
     min_themes=8,
     max_themes=12,
-    trim_intensity="high",
+    trim_approach="truncate",
+    max_tokens=4000,
 )
 ```
 
-`discover_themes` will now produce at least 8 themes, but not more than 12, themes while using a more aggressive summary trim to keep prompts concise.
+`discover_themes` will now produce at least 8 themes, but not more than 12, themes while trimming raw text to roughly 4,000 tokens. Swap `trim_approach="summarise"` with `summarise_intensity` when you prefer LLM-written summaries instead of truncation.
 
 
 

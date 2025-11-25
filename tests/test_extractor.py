@@ -132,10 +132,21 @@ def test_summarise_truncate_concatenation():
     llm = DummyLLM()
     extractor = Extractor(llm=llm, reports=df)
 
-    summarised = extractor.summarise(trim_intensity="none", truncate=5)
+    summarised = extractor.summarise(trim_approach="truncate", max_words=5)
 
     assert summarised["summary"].iloc[0] == "one two three four five"
     assert llm.called == 0
+
+
+def test_summarise_validates_conflicting_limits():
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one two three"]})
+    extractor = Extractor(llm=DummyLLM(), reports=df)
+
+    with pytest.raises(ValueError):
+        extractor.summarise(trim_approach="truncate", max_tokens=10, max_words=5)
+
+    with pytest.raises(ValueError):
+        extractor.summarise(trim_approach="summarise", max_words=5)
 
 
 def test_count_table_words_threshold(capsys):
@@ -735,14 +746,14 @@ def test_discover_themes_adds_extra_instructions_to_summaries(monkeypatch):
 
     monkeypatch.setattr(llm, "generate", fake_generate)
     instructions = "Themes related to setting (e.g. in hospital, at home, etc.)"
-    ext.discover_themes(extra_instructions=instructions)
+    ext.discover_themes(extra_instructions=instructions, trim_approach="summarise")
 
     summary_prompt = captured["summary_prompt"]
     assert "Downstream, your summary will be used by an analyst" in summary_prompt
     assert instructions in summary_prompt
 
 
-def test_discover_themes_respects_trim_intensity(monkeypatch):
+def test_discover_themes_respects_summarise_intensity(monkeypatch):
     df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
     llm = DummyLLM()
     ext = Extractor(llm=llm, reports=df)
@@ -758,7 +769,18 @@ def test_discover_themes_respects_trim_intensity(monkeypatch):
         return [json.dumps({})]
 
     monkeypatch.setattr(llm, "generate", fake_generate)
-    ext.discover_themes(trim_intensity="very high")
+    ext.discover_themes(trim_approach="summarise", summarise_intensity="very high")
 
     summary_prompt = captured["summary_prompt"].lower()
     assert "one or two sentence summary" in summary_prompt
+
+
+def test_discover_themes_validates_trim_combinations():
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    ext = Extractor(llm=DummyLLM(), reports=df)
+
+    with pytest.raises(ValueError):
+        ext.discover_themes(trim_approach="truncate", summarise_intensity="medium")
+
+    with pytest.raises(ValueError):
+        ext.discover_themes(trim_approach="summarise", max_words=5)
