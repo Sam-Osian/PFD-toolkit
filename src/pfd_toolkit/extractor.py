@@ -6,9 +6,10 @@ import logging
 import json
 import re
 import warnings
-from typing import Dict, List, Optional, Type, Union, Literal
+from typing import Any, Dict, List, Optional, Type, Union, Literal
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 from pydantic import BaseModel, Field, create_model, ConfigDict
 import tiktoken
@@ -813,7 +814,42 @@ Here is the report excerpt:
                 )
 
             df = pd.DataFrame(rows)
-            return df.to_string(index=False)
+            value_strings = []
+
+            def _format_value(val: Any) -> str:
+                if isinstance(val, (int, np.integer)):
+                    return f"{val:,}"
+                if isinstance(val, float):
+                    if val.is_integer():
+                        return f"{int(val):,}"
+                    return f"{val:,.3f}"
+                return str(val)
+
+            for val in df["value"]:
+                value_strings.append(_format_value(val))
+
+            metric_width = max(len("Metric"), df["metric"].astype(str).map(len).max())
+            value_width = max(len("Value"), max(len(v) for v in value_strings))
+
+            top_border = f"┌{'─' * (metric_width + 2)}┬{'─' * (value_width + 2)}┐"
+            header = f"│ {'Metric'.ljust(metric_width)} │ {'Value'.rjust(value_width)} │"
+            divider = f"├{'─' * (metric_width + 2)}┼{'─' * (value_width + 2)}┤"
+            rows_formatted = [
+                f"│ {metric.ljust(metric_width)} │ {value.rjust(value_width)} │"
+                for metric, value in zip(df["metric"].astype(str), value_strings)
+            ]
+            bottom_border = f"└{'─' * (metric_width + 2)}┴{'─' * (value_width + 2)}┘"
+
+            table_lines = [top_border, header, divider, *rows_formatted, bottom_border]
+
+            class _PlainText(str):
+                def __repr__(self) -> str:  # pragma: no cover - presentation only
+                    return str(self)
+
+                def _repr_pretty_(self, p, cycle: bool) -> None:  # pragma: no cover
+                    p.text(str(self))
+
+            return _PlainText("\n".join(table_lines))
 
         if as_ == "hist":
             fig, ax = plt.subplots()
