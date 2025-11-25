@@ -1787,8 +1787,8 @@
 
 <h1 id="produce-summaries-of-report-text">Produce summaries of report text<a class="headerlink" href="#produce-summaries-of-report-text" title="Permanent link">&para;</a></h1>
 <p>Short, consistent summaries make it possible to skim hundreds or even of thousands of reports. You might use these summaries to quickly identify notable case studies, or to get an 'at a glance' understanding of the breadth contained within PFD reports.</p>
-<p>Producing summaries also paves the way for automated theme discovery (see <a href="../themes/">Discover recurring themes</a>). </p>
-<p>Use <code>summarise()</code> to condense each report into a short text snippet. The <code>trim_intensity</code> option controls how terse the summary should be. Calling <code>summarise</code> adds a <code>summary</code> column to your stored reports and keeps a copy on the instance under <code>extractor.summarised_reports</code> for later reuse.</p>
+<p>Producing summaries also paves the way for automated theme discovery (see <a href="../themes/">Discover recurring themes</a>).</p>
+<p>Use <code>summarise()</code> to either concatenate report text as-is (<code>trim_approach="truncate"</code>, the default) or generate LLM-written summaries (<code>trim_approach="summarise"</code>). When summarising, the <code>summarise_intensity</code> option controls how terse the summary should be. Calling <code>summarise</code> adds a <code>summary</code> column to your stored reports and keeps a copy on the instance under <code>extractor.summarised_reports</code> for later reuse.</p>
 <hr />
 <h2 id="getting-started">Getting started<a class="headerlink" href="#getting-started" title="Permanent link">&para;</a></h2>
 <p>You'll likely wish to screen/filter reports with <code>Screener</code> before generating summaries. For example:</p>
@@ -1824,10 +1824,10 @@
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">reports</span><span class="o">=</span><span class="n">reports</span>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_approach</span><span class="o">=</span><span class="s2">&quot;summarise&quot;</span><span class="p">,</span> <span class="n">summarise_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>The resulting DataFrame contains a new column (default name <code>summary</code>). </p>
-<p>You can specify a different column name via <code>result_col_name</code> if desired. You can also set a different <code>trim_intensity</code> (options range from <code>low</code> to <code>very high</code>) if desired.</p>
+<p>The resulting DataFrame contains a new column (default name <code>summary</code>).</p>
+<p>You can specify a different column name via <code>result_col_name</code> if desired. You can also set a different <code>summarise_intensity</code> (options range from <code>low</code> to <code>very high</code>) when <code>trim_approach="summarise"</code>. If you just need raw concatenated text, keep the default <code>trim_approach="truncate"</code> and optionally pass <code>max_words</code> or <code>max_tokens</code> to clip the text without LLM intervention.</p>
 <h2 id="specify-which-sections-to-summarise">Specify which sections to summarise<a class="headerlink" href="#specify-which-sections-to-summarise" title="Permanent link">&para;</a></h2>
 <p>By default, the <code>summarise()</code> method will trim the Investigation, Circumstances of Death and Coroner's Concerns sections. You can override this by setting the <code>include_*</code> flags. For example:</p>
 <div class="language-py highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Set up Extractor</span>
@@ -1841,7 +1841,7 @@
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="n">include_concerns</span><span class="o">=</span><span class="kc">True</span>
 </span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="p">)</span>
 </span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_approach</span><span class="o">=</span><span class="s2">&quot;summarise&quot;</span><span class="p">,</span> <span class="n">summarise_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <h4 id="all-options-and-defaults">All options and defaults<a class="headerlink" href="#all-options-and-defaults" title="Permanent link">&para;</a></h4>
 <table>

@@ -1865,8 +1865,8 @@
 </div>
 <hr />
 <h2 id="discovering-themes">Discovering themes<a class="headerlink" href="#discovering-themes" title="Permanent link">&para;</a></h2>
-<p>The <code>discover_themes()</code> method allows you to identify recurring topics contained within a selection of PFD reports. </p>
-<p>Once summaries are available, you can instruct the LLM to identify a list of recurring themes. This method expects that the <code>summary</code> column has already been created by <code>summarise()</code> (see <a href="../summarising/">Produce summaries of report text</a>).</p>
+<p>The <code>discover_themes()</code> method allows you to identify recurring topics contained within a selection of PFD reports.</p>
+<p>The method now creates the necessary summaries automatically, so you no longer need to call <code>summarise()</code> yourself first. If you want to inspect or customise the summaries independently, you can still run <code>summarise()</code> manually (see <a href="../summarising/">Produce summaries of report text</a>).</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pfd_toolkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Extractor</span><span class="p">,</span> <span class="n">LLM</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="c1"># Set up Extractor</span>
@@ -1875,12 +1875,10 @@
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">reports</span><span class="o">=</span><span class="n">reports</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">()</span>
 </span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">()</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="c1"># Optionally, inspect the themes that the model has identified:</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="c1">#print(extractor.identified_themes)</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># Optionally, inspect the themes that the model has identified:</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1">#print(extractor.identified_themes)</span>
 </span></code></pre></div>
 <p><code>IdentifiedThemes</code> is essentially a set of detailed instructions that you can pass to the LLM via <code>extract_features()</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">assigned_reports</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">extract_features</span><span class="p">(</span>
@@ -1915,37 +1913,33 @@
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">reports</span><span class="o">=</span><span class="n">reports</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">)</span>
 </span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    <span class="n">seed_topics</span><span class="o">=</span><span class="s2">&quot;Risk assessment failures; understaffing; information sharing failures&quot;</span>
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="p">)</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    <span class="n">seed_topics</span><span class="o">=</span><span class="s2">&quot;Risk assessment failures; understaffing; information sharing failures&quot;</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Above, we provide 3 seed topics. The model will attempt to identify these topics in the text, while also searching for other, unspecified topics.</p>
 <hr />
 <h3 id="providing-additional-instructions">Providing additional instructions<a class="headerlink" href="#providing-additional-instructions" title="Permanent link">&para;</a></h3>
 <p>You can also provide additional instructions to help guide the model. This is somewhat similar to the guided topic modelling above, except instead of providing examples of themes, we can provide other kinds of guidance. For example:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">extra_instructions</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="s2">My research question is: What are the various consequences of transitioning from youth to adult mental health services?&quot;</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="s2">&quot;&quot;&quot;</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    <span class="n">extra_instructions</span><span class="o">=</span><span class="n">extra_instructions</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">extra_instructions</span><span class="o">=</span><span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="s2">My research question is: What are the various consequences of transitioning from youth to adult mental health services?&quot;</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="s2">&quot;&quot;&quot;</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">extra_instructions</span><span class="o">=</span><span class="n">extra_instructions</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Above, we guide the model by specifying our specific area of interest. This will help to keep themes focused around our core research question. </p>
 <h3 id="controlling-the-number-of-themes">Controlling the number of themes<a class="headerlink" href="#controlling-the-number-of-themes" title="Permanent link">&para;</a></h3>
 <p>You can control how many themes the model discovers through <code>min_themes</code> and <code>max_themes</code> arguments:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">min_theme</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">max_theme</span><span class="o">=</span><span class="mi">12</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">min_themes</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">max_themes</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">trim_approach</span><span class="o">=</span><span class="s2">&quot;truncate&quot;</span><span class="p">,</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">max_tokens</span><span class="o">=</span><span class="mi">4000</span><span class="p">,</span>
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="p">)</span>
 </span></code></pre></div>
-<p><code>discover_themes</code> will now produce at least 8 themes, but not more than 12, themes.</p>
+<p><code>discover_themes</code> will now produce at least 8 themes, but not more than 12, themes while trimming raw text to roughly 4,000 tokens. Swap <code>trim_approach="summarise"</code> with <code>summarise_intensity</code> when you prefer LLM-written summaries instead of truncation.</p>
 <h3 id="manual-topic-modelling">Manual topic modelling<a class="headerlink" href="#manual-topic-modelling" title="Permanent link">&para;</a></h3>
 <p>Finally, you can bypass <code>discover_themes()</code> altogether by providing a complete set of themes to extract via a feature model. Here, the model only <em>assigns</em> the themes; it does not <em>identify</em> the themes.</p>
 <p>For each of your themes, you should provide 3 pieces of information: the column name (e.g. <code>falls_in_custody</code>), its type (e.g. <code>bool</code>) and a brief description.</p>

@@ -1880,12 +1880,12 @@
 <div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">pfd_toolkit</span><span class="w"> </span><span class="kn">import</span> <span class="n">Extractor</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">extractor</span> <span class="o">=</span> <span class="n">Extractor</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">llm_client</span><span class="p">,</span> <span class="n">reports</span><span class="o">=</span><span class="n">police_reports</span><span class="p">)</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">()</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">summary_df</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_approach</span><span class="o">=</span><span class="s2">&quot;summarise&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Read more on <a href="../../extractor/summarising/">producing summaries</a>.</p>
 <hr />
 <h2 id="discover-recurring-themes">Discover recurring themes<a class="headerlink" href="#discover-recurring-themes" title="Permanent link">&para;</a></h2>
-<p>Once summaries exist, you can instruct the LLM to find common topics across your dataset.</p>
+<p><code>discover_themes()</code> defaults to concatenating your selected report fields without trimming, so you can jump straight to identifying common topics across your dataset. Opt into LLM-driven summarisation via <code>trim_approach="summarise"</code> when you need terse summaries.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">IdentifiedThemes</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">()</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="c1"># Optionally, print the identified themes + description</span>

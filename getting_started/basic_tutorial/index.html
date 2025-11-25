@@ -744,15 +744,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#summarise-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      Summarise reports
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#get-a-list-of-themes" class="md-nav__link">
     <span class="md-ellipsis">
       Get a list of themes
@@ -1792,15 +1783,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#summarise-reports" class="md-nav__link">
-    <span class="md-ellipsis">
-      Summarise reports
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#get-a-list-of-themes" class="md-nav__link">
     <span class="md-ellipsis">
       Get a list of themes
@@ -2002,52 +1984,45 @@
 <p>To understand more about what information is contained within each of the report sections, please see <a href="../../pfd_reports/#what-do-pfd-reports-look-like">About the data</a>.</p>
 </div>
 <hr />
-<h3 id="summarise-reports">Summarise reports<a class="headerlink" href="#summarise-reports" title="Permanent link">&para;</a></h3>
-<p>Some PFD reports can be <em>long</em>. Because of this, we need to summarise reports <em>before</em> we discover themes:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Create short summaries of the concerns</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">extractor</span><span class="o">.</span><span class="n">summarise</span><span class="p">(</span><span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">)</span>
-</span></code></pre></div>
-<hr />
 <h3 id="get-a-list-of-themes">Get a list of themes<a class="headerlink" href="#get-a-list-of-themes" title="Permanent link">&para;</a></h3>
-<p>Now that we've done this, we can run the <code>discover_themes</code> method and assign the result to a new class, which we've named <code>ThemeInstructions</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># Ask the LLM to propose recurring themes</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">ThemeInstructions</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">max_themes</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>  <span class="c1"># Limit the list to keep things manageable</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Ask the LLM to propose recurring themes</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="n">ThemeInstructions</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">discover_themes</span><span class="p">(</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">max_themes</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>  <span class="c1"># Limit the list to keep things manageable</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
 </span></code></pre></div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
-<p><code>discover_themes()</code> will warn you if the word count of your summaries is still too high. In these cases, you might want to set your <code>trim_intensity</code> to <code>high</code> or <code>very high</code> (though please note that the more we trim, the more detail we lose).</p>
+<p><code>discover_themes()</code> now concatenates your selected fields by default without trimming. To trim aggressively, either set <code>trim_approach="truncate"</code> with <code>max_words</code>/<code>max_tokens</code> to clip the raw text, or use <code>trim_approach="summarise"</code> with <code>summarise_intensity</code> ("low"–"very high") to re-enable LLM summarisation. By default, no truncation is applied.</p>
 </div>
 <p>To print our list of themes, run:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">extractor</span><span class="o">.</span><span class="n">identified_themes</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">print</span><span class="p">(</span><span class="n">extractor</span><span class="o">.</span><span class="n">identified_themes</span><span class="p">)</span>
 </span></code></pre></div>
 <p>...which gives us:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">&quot;bed_shortage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Insufficient availability of inpatient mental health beds or suitable placements, leading to delays, inappropriate care environments, or patients being placed far from home.&quot;</span><span class="p">,</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">&quot;staff_training&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Inadequate staff training, knowledge, or awareness regarding policies, risk assessment, clinical procedures, or the Mental Health Act.&quot;</span><span class="p">,</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="nt">&quot;record_keeping&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Poor, inconsistent, or falsified documentation and record keeping, including failures in care planning, observation records, and communication of key information.&quot;</span><span class="p">,</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="nt">&quot;policy_gap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Absence, inconsistency, or lack of clarity in policies, protocols, or guidance, resulting in confusion or unsafe practices.&quot;</span><span class="p">,</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">  </span><span class="nt">&quot;communication_failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Breakdowns in communication or information sharing between staff, agencies, families, or across systems, impacting patient safety and care continuity.&quot;</span><span class="p">,</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>
-</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">  </span><span class="nt">&quot;risk_assessment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Failures or omissions in risk assessment, escalation, or monitoring, including inadequate recognition of suicide risk, self-harm, or other patient safety concerns.&quot;</span>
-</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">&quot;bed_shortage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Insufficient availability of inpatient mental health beds or suitable placements, leading to delays, inappropriate care environments, or patients being placed far from home.&quot;</span><span class="p">,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">&quot;staff_training&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Inadequate staff training, knowledge, or awareness regarding policies, risk assessment, clinical procedures, or the Mental Health Act.&quot;</span><span class="p">,</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">&quot;record_keeping&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Poor, inconsistent, or falsified documentation and record keeping, including failures in care planning, observation records, and communication of key information.&quot;</span><span class="p">,</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="nt">&quot;policy_gap&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Absence, inconsistency, or lack of clarity in policies, protocols, or guidance, resulting in confusion or unsafe practices.&quot;</span><span class="p">,</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="w">  </span><span class="nt">&quot;communication_failures&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Breakdowns in communication or information sharing between staff, agencies, families, or across systems, impacting patient safety and care continuity.&quot;</span><span class="p">,</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="w">  </span><span class="nt">&quot;risk_assessment&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Failures or omissions in risk assessment, escalation, or monitoring, including inadequate recognition of suicide risk, self-harm, or other patient safety concerns.&quot;</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="p">}</span>
 </span></code></pre></div>
 <hr />
 <h3 id="tag-the-reports-with-our-themes">Tag the reports with our themes<a class="headerlink" href="#tag-the-reports-with-our-themes" title="Permanent link">&para;</a></h3>
 <p>Above, we've only <em>identified</em> a list of themes: we haven't yet assigned these themes to each of our reports.</p>
 <p>Here, we take <code>ThemeInstructions</code> that we created earlier and pass it back into the extractor to assign themes to reports via <code>extract_features()</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">labelled_reports</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">extract_features</span><span class="p">(</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="n">feature_model</span><span class="o">=</span><span class="n">ThemeInstructions</span><span class="p">,</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="n">force_assign</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># (Force the model to make a decision)</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">allow_multiple</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># (A single report might touch on several themes)</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">)</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="n">labelled_reports</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">labelled_reports</span> <span class="o">=</span> <span class="n">extractor</span><span class="o">.</span><span class="n">extract_features</span><span class="p">(</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">feature_model</span><span class="o">=</span><span class="n">ThemeInstructions</span><span class="p">,</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">force_assign</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># (Force the model to make a decision)</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">allow_multiple</span><span class="o">=</span><span class="kc">True</span>  <span class="c1"># (A single report might touch on several themes)</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="p">)</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="n">labelled_reports</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
 </span></code></pre></div>
 <p>The resulting <code>DataFrame</code> now contains our existing columns along with a suite of new ones: each filled with either <code>True</code> or <code>False</code>, depending on whether the theme was present.</p>
 <table>
@@ -2161,7 +2136,7 @@
 <hr />
 <h3 id="tabulate-reports">Tabulate reports<a class="headerlink" href="#tabulate-reports" title="Permanent link">&para;</a></h3>
 <p>Finally, we can count how often a theme appears in our collection of reports:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">extractor</span><span class="o">.</span><span class="n">tabulate</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">extractor</span><span class="o">.</span><span class="n">tabulate</span><span class="p">()</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -2206,7 +2181,7 @@
 </table>
 <p>That's it! You've gone from a mass of PFD reports, to a focused set of cases relating to being detained under the Mental Health Act to a theme‑tagged dataset ready for deeper exploration.</p>
 <p>From here, you might want to export your curated dataset to a .csv for any final qualitative/manual analysis:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">labelled_reports</span><span class="o">.</span><span class="n">to_csv</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">labelled_reports</span><span class="o">.</span><span class="n">to_csv</span><span class="p">()</span>
 </span></code></pre></div>
 <p>Alternatively, you might want to check out the other analytical features that PFD Toolkit offers.</p>
 <p>For a deeper dive into each capability, head over to the <a href="../../loader/load_reports/">Explore</a> section.</p>

@@ -1562,6 +1562,15 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pfd_toolkit.Extractor.count" class="md-nav__link">
+    <span class="md-ellipsis">
+      count
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#pfd_toolkit.Extractor.discover_themes" class="md-nav__link">
     <span class="md-ellipsis">
       discover_themes
@@ -1748,6 +1757,15 @@
   <a href="#pfd_toolkit.Extractor" class="md-nav__link">
     <span class="md-ellipsis">
       Extractor
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pfd_toolkit.Extractor.count" class="md-nav__link">
+    <span class="md-ellipsis">
+      count
     </span>
   </a>
   
@@ -2058,6 +2076,139 @@ instance. Defaults to <code>None</code>.</p>
 <div class="doc doc-object doc-function">
 
 
+<h2 id="pfd_toolkit.Extractor.count" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">count</span>
+
+
+<a href="#pfd_toolkit.Extractor.count" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">count</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">measure</span><span class="o">=</span><span class="s2">&quot;words&quot;</span><span class="p">,</span> <span class="n">as_</span><span class="o">=</span><span class="s2">&quot;hist&quot;</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">step</span><span class="o">=</span><span class="mi">100</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Visualise or tabulate report lengths by word or token counts.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>measure</code>
+            </td>
+            <td>
+                  <code>(&#39;words&#39;, &#39;tokens&#39;)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether to count words or tokens for each report. Defaults to
+<code>"words"</code>. Token counting uses the configured LLM's token
+estimation utility.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#34;words&#34;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>as_</code>
+            </td>
+            <td>
+                  <code>(&#39;hist&#39;, &#39;table&#39;, &#39;stats&#39;)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Render output as a histogram (<code>"hist"</code>), cumulative frequency
+table (<code>"table"</code>), or summary statistics table (<code>"stats"</code>).
+Defaults to <code>"hist"</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#34;hist&#34;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>threshold</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional threshold to highlight or anchor. When provided, both
+display types include a concise summary of how many reports fall at
+or below the threshold.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>step</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Bin interval for the cumulative table. Ignored when <code>as_</code> is
+<code>"hist"</code>. Defaults to <code>100</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>100</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="matplotlib.figure.Figure">Figure</span>, <span title="matplotlib.axes.Axes">Axes</span>] | <span title="pandas.DataFrame">DataFrame</span> | <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Figure and axes for <code>as_="hist"</code>, a cumulative table for
+<code>as_="table"</code>, or a plain-text statistics table for
+<code>as_="stats"</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h2 id="pfd_toolkit.Extractor.discover_themes" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">discover_themes</span>
 
@@ -2071,7 +2222,11 @@ instance. Defaults to <code>None</code>.</p>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">min_themes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">extra_instructions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">seed_topics</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">trim_approach</span><span class="o">=</span><span class="s2">&quot;truncate&quot;</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">summarise_intensity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">max_words</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2191,6 +2346,76 @@ provided.</p>
                 <p>Optional seed topics to include in the prompt. These are treated as
 starting suggestions and the model should incorporate them into a
 broader list of themes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>trim_approach</code>
+            </td>
+            <td>
+                  <code>(&#39;summarise&#39;, &#39;truncate&#39;)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Select whether to use LLM summarisation (<code>"summarise"</code>) or direct
+concatenation with optional trimming (<code>"truncate"</code>) when preparing
+text for theme discovery. Defaults to <code>"truncate"</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#34;summarise&#34;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>summarise_intensity</code>
+            </td>
+            <td>
+                  <code>(&#39;low&#39;, &#39;medium&#39;, &#39;high&#39;, &#39;very high&#39;)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Trim level to apply when <code>trim_approach="summarise"</code>. Defaults to
+<code>"medium"</code> when omitted. Cannot be provided when
+<code>trim_approach="truncate"</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#34;low&#34;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_tokens</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Token limit applied when <code>trim_approach="truncate"</code>. Cannot be
+combined with <code>max_words</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_words</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Word limit applied when <code>trim_approach="truncate"</code>. Cannot be
+combined with <code>max_tokens</code>.</p>
               </div>
             </td>
             <td>
@@ -2686,9 +2911,13 @@ chaining, e.g. <code>extractor.reset().extract_features()</code>.</p>
 <a href="#pfd_toolkit.Extractor.summarise" class="headerlink" title="Permanent link">&para;</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">summarise</span><span class="p">(</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">result_col_name</span><span class="o">=</span><span class="s2">&quot;summary&quot;</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">trim_intensity</span><span class="o">=</span><span class="s2">&quot;medium&quot;</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">extra_instructions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="p">)</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">trim_approach</span><span class="o">=</span><span class="s2">&quot;truncate&quot;</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">summarise_intensity</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">extra_instructions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">discover_themes_extra_instructions</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">max_tokens</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">max_words</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2725,14 +2954,35 @@ chaining, e.g. <code>extractor.reset().extract_features()</code>.</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>trim_intensity</code>
+                <code>trim_approach</code>
+            </td>
+            <td>
+                  <code>(&#39;summarise&#39;, &#39;truncate&#39;)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Choose whether to use LLM-driven summarisation (<code>"summarise"</code>) or
+concatenation with optional trimming (<code>"truncate"</code>). Defaults to
+<code>"truncate"</code> which performs no trimming unless <code>max_tokens</code> or
+<code>max_words</code> is provided.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#34;summarise&#34;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>summarise_intensity</code>
             </td>
             <td>
                   <code>(&#39;low&#39;, &#39;medium&#39;, &#39;high&#39;, &#39;very high&#39;)</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Controls how concise the summary should be. Defaults to <code>"medium"</code>.</p>
+                <p>Controls how concise the summary should be when
+<code>trim_approach="summarise"</code>. Defaults to <code>"medium"</code> when
+omitted. Cannot be used alongside <code>trim_approach="truncate"</code>.</p>
               </div>
             </td>
             <td>
@@ -2750,6 +3000,62 @@ chaining, e.g. <code>extractor.reset().extract_features()</code>.</p>
               <div class="doc-md-description">
                 <p>Additional instructions to append to the prompt before the report
 excerpt.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>discover_themes_extra_instructions</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Guidance that should be surfaced in the summary prompt when
+<code>discover_themes</code> delegates summarisation. When provided, the
+prompt reminds the model that downstream theme discovery will follow
+specific instructions. The value should typically mirror the
+<code>extra_instructions</code> argument passed to <code>discover_themes</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_tokens</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Token limit applied when <code>trim_approach="truncate"</code>. The
+concatenated text will be trimmed to approximately this number of
+tokens. Cannot be combined with <code>max_words</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_words</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Word limit applied when <code>trim_approach="truncate"</code>. The
+concatenated text will be trimmed to the first <code>max_words</code> words.
+Cannot be combined with <code>max_tokens</code>.</p>
               </div>
             </td>
             <td>

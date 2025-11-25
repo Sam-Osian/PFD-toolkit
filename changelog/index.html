@@ -1415,6 +1415,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#040-2025-11-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.4.0 - 2025-11-30
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#037-2025-09-02" class="md-nav__link">
     <span class="md-ellipsis">
       0.3.7 - 2025-09-02
@@ -1731,6 +1740,15 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#040-2025-11-30" class="md-nav__link">
+    <span class="md-ellipsis">
+      0.4.0 - 2025-11-30
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#037-2025-09-02" class="md-nav__link">
     <span class="md-ellipsis">
       0.3.7 - 2025-09-02
@@ -1823,6 +1841,14 @@
 
 <h1 id="changelog">📆 Changelog<a class="headerlink" href="#changelog" title="Permanent link">&para;</a></h1>
 <p>Welcome to the project changelog. All notable changes to this project will be documented below.</p>
+<h3 id="040-2025-11-30">0.4.0 - <small>2025-11-30</small><a class="headerlink" href="#040-2025-11-30" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>discover_themes()</code> now defaults to using untrimmed report text, with optional truncation controlled by <code>trim_approach="truncate"</code> and new <code>max_tokens</code>/<code>max_words</code> parameters. Switch to <code>trim_approach="summarise"</code> to re-enable LLM summarisation, which now uses <code>summarise_intensity</code> settings.</li>
+<li>Users have reported that running <code>extract_features()</code> on a list of themes from <code>discover_themes()</code> seems to assign reports too liberally. We have made some changes to make the model a bit more conservative, only assigning a report with a theme if there is sufficient evidence that it is well represented in the underlying report. We'll continue monitoring this behaviour to make sure we've got the balance right.</li>
+<li>Added a truncation-based alternative to LLM summarisation and new report-length diagnostics consolidated under <code>count()</code> for word or token charts/tables with threshold guidance.</li>
+<li><code>count()</code> now also supports a <code>stats</code> mode producing markdown summary statistics across word or token lengths.</li>
+<li><code>count()</code> statistics now render as a readable table without console prints, and the chart option is renamed to <code>as_="hist"</code> for clarity.</li>
+</ul>
 <h3 id="037-2025-09-02">0.3.7 - <small>2025-09-02</small><a class="headerlink" href="#037-2025-09-02" title="Permanent link">&para;</a></h3>
 <ul>
 <li>In August 2025, the judiciary.uk website made some subtle changes that broke PFD Toolkit's scraper, meaning that we were unable to collect newly published reports. This issue has now been resolved, and all previously missed reports have now been added.</li>
