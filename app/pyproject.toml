@@ -15,8 +15,6 @@ dependencies = [
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.uv.sources]
-pfd_toolkit = { path = ".." }
 
 # Hatch assumes Python package; below limit the wheel to only the app files
 [tool.hatch.build.targets.wheel]
