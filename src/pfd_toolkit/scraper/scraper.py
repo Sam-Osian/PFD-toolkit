@@ -10,6 +10,8 @@ from tqdm import tqdm
 import requests
 from itertools import count
 from datetime import datetime
+from urllib.parse import urljoin
+from pydantic import BaseModel, ConfigDict
 
 from .html_extractor import HtmlExtractor
 from .pdf_extractor import PdfExtractor
@@ -131,6 +133,8 @@ class Scraper:
     COL_CIRCUMSTANCES = GeneralConfig.COL_CIRCUMSTANCES
     COL_CONCERNS = GeneralConfig.COL_CONCERNS
     COL_DATE_SCRAPED = GeneralConfig.COL_DATE_SCRAPED
+
+    RESPONSE_ATTRIBUTION_ERROR = GeneralConfig.RESPONSE_ATTRIBUTION_ERROR
 
     # Keys used for LLM interaction when requesting missing fields
     LLM_KEY_DATE = ScraperConfig.LLM_KEY_DATE
@@ -346,6 +350,9 @@ class Scraper:
             "concerns": self.include_concerns,
         }
 
+        # Cache for response document bytes
+        self._response_cache: dict[str, bytes] = {}
+
 
 
     def _parse_scraping_strategy(self, strategy: list[int] | tuple[int, int, int]) -> None:
@@ -512,6 +519,232 @@ class Scraper:
         
         self.reports = updated_df.copy()
         return updated_df
+
+    def scrape_responses(self, reports: pd.DataFrame | None = None) -> pd.DataFrame:
+        """Scrape responses to previously scraped PFD reports using the LLM only.
+
+        Parameters
+        ----------
+        reports : pandas.DataFrame | None
+            DataFrame of scraped PFD reports. Defaults to ``self.reports``.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame containing ``url``, ``respondent`` and ``response``
+            columns for validated responses.
+        """
+
+        if reports is None:
+            if self.reports is None:
+                raise ValueError(
+                    "No reports provided. Please supply a reports DataFrame or run scrape_reports() first."
+                )
+            reports = self.reports
+
+        if self.llm is None:
+            raise ValueError("LLM client (self.llm) must be provided to scrape responses.")
+
+        if reports.empty:
+            logger.info("No reports available to scrape responses from.")
+            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+
+        responses: list[dict[str, str]] = []
+        candidates: list[dict[str, Any]] = []
+
+        class ResponseCheckModel(BaseModel):
+            is_response: bool
+
+            model_config = ConfigDict(extra="forbid")
+
+        class ResponseExtractionModel(BaseModel):
+            respondent: str | None
+            response: str | None
+
+            model_config = ConfigDict(extra="forbid")
+
+        for _, row in tqdm(
+            reports.iterrows(),
+            total=len(reports),
+            desc="Collecting response documents",
+            leave=True,
+        ):
+            report_url = row.get(self.COL_URL)
+            receivers = row.get(self.COL_RECEIVER)
+
+            if pd.isna(report_url) or pd.isna(receivers):
+                continue
+
+            receiver_options = [r.strip() for r in str(receivers).split(";") if r.strip()]
+            if not receiver_options:
+                continue
+
+            pdf_links = self._collect_pdf_links(str(report_url))
+            if len(pdf_links) <= 1:
+                continue
+
+            for response_link in pdf_links[1:]:
+                pdf_bytes = self._fetch_response_bytes(response_link)
+                if not pdf_bytes:
+                    continue
+
+                try:
+                    base64_images = self.llm._pdf_bytes_to_base64_images(pdf_bytes, dpi=200)
+                except Exception as exc:  # pragma: no cover - defensive
+                    logger.error("Failed to convert PDF at %s to images: %s", response_link, exc)
+                    continue
+
+                candidates.append(
+                    {
+                        "report_url": str(report_url),
+                        "response_url": response_link,
+                        "receiver_options": receiver_options,
+                        "base64_images": base64_images,
+                    }
+                )
+
+        if not candidates:
+            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+
+        check_prompts = [self._build_response_check_prompt() for _ in candidates]
+        check_images = [candidate["base64_images"] for candidate in candidates]
+
+        try:
+            check_outputs = self.llm.generate(
+                prompts=check_prompts,
+                images_list=check_images,
+                response_format=ResponseCheckModel,
+                tqdm_extra_kwargs={"desc": "Finding responses"},
+            )
+        except Exception as exc:  # pragma: no cover - LLM errors
+            logger.error("LLM validation failed when checking responses: %s", exc)
+            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+
+        validated_candidates: list[dict[str, Any]] = []
+        for candidate, check_result in zip(candidates, check_outputs):
+            if isinstance(check_result, ResponseCheckModel) and check_result.is_response:
+                validated_candidates.append(candidate)
+
+        if not validated_candidates:
+            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+
+        extraction_prompts = [
+            self._build_response_extraction_prompt(
+                receiver_options=candidate["receiver_options"],
+            )
+            for candidate in validated_candidates
+        ]
+        extraction_images = [candidate["base64_images"] for candidate in validated_candidates]
+
+        try:
+            extraction_outputs = self.llm.generate(
+                prompts=extraction_prompts,
+                images_list=extraction_images,
+                response_format=ResponseExtractionModel,
+                tqdm_extra_kwargs={"desc": "Scraping responses"},
+            )
+        except Exception as exc:  # pragma: no cover - LLM errors
+            logger.error("LLM extraction failed when scraping responses: %s", exc)
+            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+
+        for candidate, extraction_result in zip(
+            validated_candidates, extraction_outputs
+        ):
+            if not isinstance(extraction_result, ResponseExtractionModel):
+                continue
+
+            respondent = (extraction_result.respondent or "").strip()
+            response_text = (extraction_result.response or "").strip()
+
+            if respondent == self.RESPONSE_ATTRIBUTION_ERROR:
+                logger.info(
+                    "Skipping response at %s because no recipient matched provided list.",
+                    candidate["response_url"],
+                )
+                continue
+
+            if not respondent or respondent not in candidate["receiver_options"]:
+                continue
+
+            if not response_text:
+                continue
+
+            responses.append(
+                {
+                    self.COL_URL: candidate["report_url"],
+                    "respondent": respondent,
+                    "response": response_text,
+                }
+            )
+
+        return pd.DataFrame(responses)
+
+    def _collect_pdf_links(self, report_url: str) -> list[str]:
+        """Collect all PDF links on a report page in document order."""
+
+        try:
+            resp = self.cfg.session.get(report_url, timeout=self.timeout)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.content, "html.parser")
+        except requests.RequestException as exc:
+            logger.error("Failed to fetch report page %s: %s", report_url, exc)
+            return []
+
+        links: list[str] = []
+        seen: set[str] = set()
+        for anchor in soup.find_all("a", href=True):
+            href = anchor.get("href")
+            if not href or ".pdf" not in href.lower():
+                continue
+            abs_href = urljoin(report_url, href)
+            if abs_href not in seen:
+                links.append(abs_href)
+                seen.add(abs_href)
+
+        return links
+
+    def _fetch_response_bytes(self, pdf_url: str) -> bytes | None:
+        """Retrieve response PDF bytes with basic caching."""
+
+        if pdf_url in self._response_cache:
+            return self._response_cache[pdf_url]
+
+        try:
+            resp = self.cfg.session.get(pdf_url, timeout=self.timeout)
+            resp.raise_for_status()
+            self._response_cache[pdf_url] = resp.content
+            return resp.content
+        except requests.RequestException as exc:
+            logger.error("Failed to fetch response PDF %s: %s", pdf_url, exc)
+            return None
+
+    @staticmethod
+    def _build_response_check_prompt() -> str:
+        """Prompt asking whether a document is a *response* to a PFD report."""
+
+        return (
+            "You will review a PDF from a Prevention of Future Deaths (PFD) report page.\n"
+            "Decide if the document is a *response* to a Coroner PFD report, or if it is a PFD report itself.\n"
+            "A valid response is written by someone other than the coroner (though it may be addressed to the coroner) and replies to concerns raised in the PFD report.\n"
+            "Output JSON with a single field: is_response (true only when the document is a response as defined above; false otherwise)."
+        )
+
+    @staticmethod
+    def _build_response_extraction_prompt(*, receiver_options: list[str]) -> str:
+        """Prompt guiding respondent selection and response extraction."""
+
+        receivers_text = "\n".join(f"- {receiver}" for receiver in receiver_options)
+        return (
+            "You will extract content from a PDF that is a specific response to a Coroner Prevention of Future Death (PFD) document.\n"
+            "Identify the respondent by matching the response document to the correct recipient from the provided list. Do not invent or choose freely; select only the recipient whose details align with the document. If no recipient fits, set the respondent value to"
+            f" the literal text '{GeneralConfig.RESPONSE_ATTRIBUTION_ERROR}'.\n"
+            "Output JSON with these fields:\n"
+            "- respondent: an exact match (character-for-character) of one recipient from the list below, or the error token above when the document is not attributable to any recipient.\n"
+            "- response: only the substantive body of the reply, starting with the first sentence addressing the coroner's concerns; exclude letterheads, addresses, reference numbers, greetings, and sign-offs.\n\n"
+            "Recipients to choose from (exact spellings):\n"
+            f"{receivers_text}\n\n"
+            "Return only the JSON fields requested."
+        )
 
     def top_up(
         self,

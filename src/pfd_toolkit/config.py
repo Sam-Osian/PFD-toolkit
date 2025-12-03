@@ -48,6 +48,9 @@ class GeneralConfig:
     COL_CONCERNS = "concerns"
     COL_DATE_SCRAPED = "date_scraped"
 
+    # Response scraping constants
+    RESPONSE_ATTRIBUTION_ERROR = "RESPONDENT_NOT_IN_RECIPIENT_LIST"
+
     ID_PATTERN = re.compile(r"(\d{4}-\d{4})")
 
     # Accepted values for the area field used by the Cleaner
