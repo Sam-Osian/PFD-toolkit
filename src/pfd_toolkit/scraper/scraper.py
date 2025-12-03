@@ -520,20 +520,34 @@ class Scraper:
         self.reports = updated_df.copy()
         return updated_df
 
-    def scrape_responses(self, reports: pd.DataFrame | None = None) -> pd.DataFrame:
+    def scrape_responses(
+        self, reports: pd.DataFrame | None = None, *, verify_responses: bool = True
+    ) -> pd.DataFrame:
         """Scrape responses to previously scraped PFD reports using the LLM only.
 
         Parameters
         ----------
         reports : pandas.DataFrame | None
             DataFrame of scraped PFD reports. Defaults to ``self.reports``.
+        verify_responses : bool, optional
+            When ``True``, confirm each document is a response before scraping.
+            When ``False``, assume all discovered PDFs are responses and skip the
+            validation stage.
 
         Returns
         -------
         pandas.DataFrame
-            A DataFrame containing ``url``, ``respondent`` and ``response``
-            columns for validated responses.
+            A DataFrame containing ``id``, ``parent_url``, ``response_url``,
+            ``respondent`` and ``response`` columns for validated responses.
         """
+
+        responses_columns = [
+            self.COL_ID,
+            "parent_url",
+            "response_url",
+            "respondent",
+            "response",
+        ]
 
         if reports is None:
             if self.reports is None:
@@ -547,9 +561,9 @@ class Scraper:
 
         if reports.empty:
             logger.info("No reports available to scrape responses from.")
-            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+            return pd.DataFrame(columns=responses_columns)
 
-        responses: list[dict[str, str]] = []
+        responses: list[dict[str, Any]] = []
         candidates: list[dict[str, Any]] = []
 
         class ResponseCheckModel(BaseModel):
@@ -570,6 +584,7 @@ class Scraper:
             leave=True,
         ):
             report_url = row.get(self.COL_URL)
+            report_id = row.get(self.COL_ID)
             receivers = row.get(self.COL_RECEIVER)
 
             if pd.isna(report_url) or pd.isna(receivers):
@@ -584,19 +599,28 @@ class Scraper:
                 continue
 
             for response_link in pdf_links[1:]:
-                pdf_bytes = self._fetch_response_bytes(response_link)
+                pdf_bytes = self._fetch_response_bytes(
+                    response_link, parent_url=report_url, report_id=report_id
+                )
                 if not pdf_bytes:
                     continue
 
                 try:
                     base64_images = self.llm._pdf_bytes_to_base64_images(pdf_bytes, dpi=200)
                 except Exception as exc:  # pragma: no cover - defensive
-                    logger.error("Failed to convert PDF at %s to images: %s", response_link, exc)
+                    logger.error(
+                        "Failed to convert response PDF %s from %s (%s) to images: %s",
+                        response_link,
+                        report_url,
+                        report_id,
+                        exc,
+                    )
                     continue
 
                 candidates.append(
                     {
-                        "report_url": str(report_url),
+                        "report_id": report_id,
+                        "parent_url": str(report_url),
                         "response_url": response_link,
                         "receiver_options": receiver_options,
                         "base64_images": base64_images,
@@ -604,29 +628,36 @@ class Scraper:
                 )
 
         if not candidates:
-            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+            return pd.DataFrame(columns=responses_columns)
 
-        check_prompts = [self._build_response_check_prompt() for _ in candidates]
-        check_images = [candidate["base64_images"] for candidate in candidates]
+        if verify_responses:
+            check_prompts = [self._build_response_check_prompt() for _ in candidates]
+            check_images = [candidate["base64_images"] for candidate in candidates]
 
-        try:
-            check_outputs = self.llm.generate(
-                prompts=check_prompts,
-                images_list=check_images,
-                response_format=ResponseCheckModel,
-                tqdm_extra_kwargs={"desc": "Finding responses"},
-            )
-        except Exception as exc:  # pragma: no cover - LLM errors
-            logger.error("LLM validation failed when checking responses: %s", exc)
-            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+            try:
+                check_outputs = self.llm.generate(
+                    prompts=check_prompts,
+                    images_list=check_images,
+                    response_format=ResponseCheckModel,
+                    tqdm_extra_kwargs={
+                        "desc": "Verifying that all documents are responses"
+                    },
+                )
+            except Exception as exc:  # pragma: no cover - LLM errors
+                logger.error(
+                    "LLM validation failed when checking responses: %s", exc
+                )
+                return pd.DataFrame(columns=responses_columns)
 
-        validated_candidates: list[dict[str, Any]] = []
-        for candidate, check_result in zip(candidates, check_outputs):
-            if isinstance(check_result, ResponseCheckModel) and check_result.is_response:
-                validated_candidates.append(candidate)
+            validated_candidates: list[dict[str, Any]] = []
+            for candidate, check_result in zip(candidates, check_outputs):
+                if isinstance(check_result, ResponseCheckModel) and check_result.is_response:
+                    validated_candidates.append(candidate)
+        else:
+            validated_candidates = candidates
 
         if not validated_candidates:
-            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+            return pd.DataFrame(columns=responses_columns)
 
         extraction_prompts = [
             self._build_response_extraction_prompt(
@@ -641,11 +672,11 @@ class Scraper:
                 prompts=extraction_prompts,
                 images_list=extraction_images,
                 response_format=ResponseExtractionModel,
-                tqdm_extra_kwargs={"desc": "Scraping responses"},
+                tqdm_extra_kwargs={"desc": "Scraping response documents"},
             )
         except Exception as exc:  # pragma: no cover - LLM errors
             logger.error("LLM extraction failed when scraping responses: %s", exc)
-            return pd.DataFrame(columns=[self.COL_URL, "respondent", "response"])
+            return pd.DataFrame(columns=responses_columns)
 
         for candidate, extraction_result in zip(
             validated_candidates, extraction_outputs
@@ -658,8 +689,10 @@ class Scraper:
 
             if respondent == self.RESPONSE_ATTRIBUTION_ERROR:
                 logger.info(
-                    "Skipping response at %s because no recipient matched provided list.",
+                    "Skipping response at %s from %s (%s) because no recipient matched provided list.",
                     candidate["response_url"],
+                    candidate["parent_url"],
+                    candidate["report_id"],
                 )
                 continue
 
@@ -671,13 +704,15 @@ class Scraper:
 
             responses.append(
                 {
-                    self.COL_URL: candidate["report_url"],
+                    self.COL_ID: candidate["report_id"],
+                    "parent_url": candidate["parent_url"],
+                    "response_url": candidate["response_url"],
                     "respondent": respondent,
                     "response": response_text,
                 }
             )
 
-        return pd.DataFrame(responses)
+        return pd.DataFrame(responses, columns=responses_columns)
 
     def _collect_pdf_links(self, report_url: str) -> list[str]:
         """Collect all PDF links on a report page in document order."""
@@ -703,7 +738,9 @@ class Scraper:
 
         return links
 
-    def _fetch_response_bytes(self, pdf_url: str) -> bytes | None:
+    def _fetch_response_bytes(
+        self, pdf_url: str, *, parent_url: str | None = None, report_id: Any = None
+    ) -> bytes | None:
         """Retrieve response PDF bytes with basic caching."""
 
         if pdf_url in self._response_cache:
@@ -715,7 +752,13 @@ class Scraper:
             self._response_cache[pdf_url] = resp.content
             return resp.content
         except requests.RequestException as exc:
-            logger.error("Failed to fetch response PDF %s: %s", pdf_url, exc)
+            logger.error(
+                "Failed to fetch response PDF %s from %s (%s): %s",
+                pdf_url,
+                parent_url,
+                report_id,
+                exc,
+            )
             return None
 
     @staticmethod
