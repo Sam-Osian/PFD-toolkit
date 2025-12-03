@@ -5,7 +5,7 @@ import logging
 from bs4 import BeautifulSoup
 import pandas as pd
 from dateutil import parser as date_parser
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import requests
 from itertools import count
@@ -537,12 +537,13 @@ class Scraper:
         Returns
         -------
         pandas.DataFrame
-            A DataFrame containing ``id``, ``parent_url``, ``response_url``,
-            ``respondent`` and ``response`` columns for validated responses.
+            A DataFrame containing ``parent_id``, ``parent_url``,
+            ``response_url``, ``respondent`` and ``response`` columns for
+            validated responses.
         """
 
         responses_columns = [
-            self.COL_ID,
+            "parent_id",
             "parent_url",
             "response_url",
             "respondent",
@@ -577,26 +578,22 @@ class Scraper:
 
             model_config = ConfigDict(extra="forbid")
 
-        for _, row in tqdm(
-            reports.iterrows(),
-            total=len(reports),
-            desc="Collecting response documents",
-            leave=True,
-        ):
+        def _collect_candidates(row: dict[str, Any]) -> list[dict[str, Any]]:
+            row_candidates: list[dict[str, Any]] = []
             report_url = row.get(self.COL_URL)
             report_id = row.get(self.COL_ID)
             receivers = row.get(self.COL_RECEIVER)
 
             if pd.isna(report_url) or pd.isna(receivers):
-                continue
+                return row_candidates
 
             receiver_options = [r.strip() for r in str(receivers).split(";") if r.strip()]
             if not receiver_options:
-                continue
+                return row_candidates
 
             pdf_links = self._collect_pdf_links(str(report_url))
             if len(pdf_links) <= 1:
-                continue
+                return row_candidates
 
             for response_link in pdf_links[1:]:
                 pdf_bytes = self._fetch_response_bytes(
@@ -617,7 +614,7 @@ class Scraper:
                     )
                     continue
 
-                candidates.append(
+                row_candidates.append(
                     {
                         "report_id": report_id,
                         "parent_url": str(report_url),
@@ -626,6 +623,24 @@ class Scraper:
                         "base64_images": base64_images,
                     }
                 )
+
+            return row_candidates
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures = [
+                executor.submit(_collect_candidates, row)
+                for row in reports.to_dict("records")
+            ]
+
+            with tqdm(
+                total=len(futures),
+                desc="Collecting response documents",
+                leave=True,
+            ) as progress:
+                for future in as_completed(futures):
+                    row_candidates = future.result()
+                    candidates.extend(row_candidates)
+                    progress.update(1)
 
         if not candidates:
             return pd.DataFrame(columns=responses_columns)
@@ -704,7 +719,7 @@ class Scraper:
 
             responses.append(
                 {
-                    self.COL_ID: candidate["report_id"],
+                    "parent_id": candidate["report_id"],
                     "parent_url": candidate["parent_url"],
                     "response_url": candidate["response_url"],
                     "respondent": respondent,
