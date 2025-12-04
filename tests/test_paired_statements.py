@@ -205,4 +205,8 @@ def test_parse_responses_aligns_to_concerns_and_counts_actions():
 
     df = paired.as_df()
     assert {"response_author", "action_phrase"}.issubset(df.columns)
-    assert parser.count("action_phrases") == {"action_phrases": 2}
+    action_counts = parser.count("action_phrases")
+    assert action_counts["action_phrases"] == 2
+    assert action_counts["mean_action_phrases_per_report"] == 2.0
+    assert action_counts["median_action_phrases_per_report"] == 2.0
+    assert action_counts["max_action_phrases_per_report"] == 2

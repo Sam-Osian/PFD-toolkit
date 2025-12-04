@@ -66,6 +66,15 @@ class ResponseAuthor(BaseModel):
             raise ValueError("author name cannot be empty")
         return cleaned
 
+    @field_validator("action_phrases")
+    @classmethod
+    def _limit_actions(cls, value: List[ActionPhrase]) -> List[ActionPhrase]:
+        """Ensure at most one action phrase is kept per author."""
+
+        if len(value) > 1:
+            return value[:1]
+        return value
+
 
 class ConcernResponseItem(BaseModel):
     """A concern paired with response authors and their action phrases."""
@@ -460,14 +469,19 @@ class ConcernParser:
             "from a coroner's report. You are given response documents that may "
             "address these concerns.\n\n"
             "Your task is to link each concern to short action phrases describing "
-            "what the response author says they will do. Keep the concern text "
-            "exactly as provided and only include action phrases that directly "
-            "address a listed concern. The adequacy of the actions is out of "
-            "scope—simply capture and group them.\n\n"
+            "what the response author says they will do or change. Keep the "
+            "concern text exactly as provided and only include action phrases "
+            "that directly address a listed concern. The adequacy of the actions "
+            "is out of scope—simply capture and group them.\n\n"
             "Guidance for extracting actions:\n"
             "- Treat each response author (person or organisation) as a parent and "
             "list their discrete action phrases beneath them.\n"
             "- Prefer 5–25 word action phrases that summarise commitments or steps.\n"
+            "- Each concern-author pairing must have no more than one action "
+            "phrase; if multiple are offered, keep the single action that best "
+            "captures what will be done.\n"
+            "- Action phrases must describe an intended action or change. Purely "
+            "contextual or declarative statements are insufficient.\n"
             "- Ignore narrative background or text unrelated to the concerns.\n"
             "- If a concern has no matching response, use author '[no response]' "
             "with a single action phrase '[no response]'.\n"
@@ -534,10 +548,12 @@ class ConcernParser:
                     url=report.url,
                     report_id=report.report_id,
                     recipients=report.recipients,
-                    responses=report.responses,
+                    responses=[],
                     concern_responses=aligned,
                 )
             )
+
+            report.responses = []
 
         self._response_results = ResponseResults(reports=paired_reports)
 
@@ -713,11 +729,26 @@ class ConcernParser:
                     )
                 return {"action_phrases": 0}
             total_actions = 0
+            per_report_actions: list[int] = []
             for report in self._response_results.reports:
+                report_actions = 0
                 for item in report.concern_responses.concerns:
                     for response in item.responses:
-                        total_actions += len(response.action_phrases)
-            return {"action_phrases": total_actions}
+                        report_actions += len(response.action_phrases)
+                per_report_actions.append(report_actions)
+                total_actions += report_actions
+
+            series = pd.Series(per_report_actions)
+            mean_actions = float(series.mean()) if not series.empty else 0.0
+            median_actions = float(series.median()) if not series.empty else 0.0
+            max_actions = int(series.max()) if not series.empty else 0
+
+            return {
+                "action_phrases": total_actions,
+                "mean_action_phrases_per_report": mean_actions,
+                "median_action_phrases_per_report": median_actions,
+                "max_action_phrases_per_report": max_actions,
+            }
 
         if target == "reports":
             return report_count()
