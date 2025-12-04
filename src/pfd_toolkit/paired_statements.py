@@ -50,26 +50,30 @@ class ActionPhrase(BaseModel):
 
 
 class ResponseAuthor(BaseModel):
-    """Author of a response and their associated actions."""
+    """Respondent of a response and their associated actions."""
 
-    author: str = Field(..., description="Name of the individual or organisation.")
+    respondent: str = Field(
+        ..., description="Name of the individual or organisation responding."
+    )
     action_phrases: List[ActionPhrase] = Field(
         default_factory=list,
-        description="List of discrete actions or commitments attributed to this author.",
+        description=(
+            "List of discrete actions or commitments attributed to this respondent."
+        ),
     )
 
-    @field_validator("author")
+    @field_validator("respondent")
     @classmethod
     def _normalise_text(cls, value: str) -> str:
         cleaned = " ".join((value or "").split()).strip()
         if not cleaned:
-            raise ValueError("author name cannot be empty")
+            raise ValueError("respondent name cannot be empty")
         return cleaned
 
     @field_validator("action_phrases")
     @classmethod
     def _limit_actions(cls, value: List[ActionPhrase]) -> List[ActionPhrase]:
-        """Ensure at most one action phrase is kept per author."""
+        """Ensure at most one action phrase is kept per respondent."""
 
         if len(value) > 1:
             return value[:1]
@@ -77,12 +81,12 @@ class ResponseAuthor(BaseModel):
 
 
 class ConcernResponseItem(BaseModel):
-    """A concern paired with response authors and their action phrases."""
+    """A concern paired with respondents and their action phrases."""
 
     concern: str = Field(..., description="Concern text copied from the report.")
     responses: List[ResponseAuthor] = Field(
         default_factory=list,
-        description="Authors and their actions linked to this concern.",
+        description="Respondents and their actions linked to this concern.",
     )
 
     @field_validator("concern")
@@ -203,7 +207,7 @@ class ReportConcernResponses(BaseModel):
     )
     concern_responses: ConcernResponseSet = Field(
         default_factory=ConcernResponseSet,
-        description="Structured concerns with linked response authors and actions.",
+        description="Structured concerns with linked respondents and actions.",
     )
 
 
@@ -217,30 +221,32 @@ class ResponseResults(BaseModel):
 
         serialised: List[dict[str, Any]] = []
         for report in self.reports:
-            serialised.append(
-                {
-                    GeneralConfig.COL_URL: report.url,
-                    GeneralConfig.COL_ID: report.report_id,
-                    GeneralConfig.COL_RECEIVER: report.recipients,
-                    "responses": report.responses,
-                    "concern_responses": [
-                        {
-                            "concern": item.concern,
-                            "responses": [
-                                {
-                                    "author": response.author,
-                                    "action_phrases": [
-                                        action.action_phrase
-                                        for action in response.action_phrases
-                                    ],
-                                }
-                                for response in item.responses
-                            ],
-                        }
-                        for item in report.concern_responses.concerns
-                    ],
-                }
-            )
+            record = {
+                GeneralConfig.COL_URL: report.url,
+                GeneralConfig.COL_ID: report.report_id,
+                GeneralConfig.COL_RECEIVER: report.recipients,
+                "concern_responses": [
+                    {
+                        "concern": item.concern,
+                        "responses": [
+                            {
+                                "respondent": response.respondent,
+                                "action_phrases": [
+                                    action.action_phrase
+                                    for action in response.action_phrases
+                                ],
+                            }
+                            for response in item.responses
+                        ],
+                    }
+                    for item in report.concern_responses.concerns
+                ],
+            }
+
+            if report.responses:
+                record["responses"] = report.responses
+
+            serialised.append(record)
         return serialised
 
     def as_json(self) -> str:
@@ -261,7 +267,7 @@ class ResponseResults(BaseModel):
                             GeneralConfig.COL_ID: report.report_id,
                             GeneralConfig.COL_RECEIVER: report.recipients,
                             "concern": item.concern,
-                            "response_author": "[no response]",
+                            "response_respondent": "[unspecified respondent]",
                             "action_phrase": "[no response]",
                         }
                     )
@@ -274,7 +280,7 @@ class ResponseResults(BaseModel):
                                 GeneralConfig.COL_ID: report.report_id,
                                 GeneralConfig.COL_RECEIVER: report.recipients,
                                 "concern": item.concern,
-                                "response_author": response.author,
+                                "response_respondent": response.respondent,
                                 "action_phrase": "[no response]",
                             }
                         )
@@ -286,7 +292,7 @@ class ResponseResults(BaseModel):
                                 GeneralConfig.COL_ID: report.report_id,
                                 GeneralConfig.COL_RECEIVER: report.recipients,
                                 "concern": item.concern,
-                                "response_author": response.author,
+                                "response_respondent": response.respondent,
                                 "action_phrase": action.action_phrase,
                             }
                         )
@@ -343,9 +349,12 @@ class ConcernParser:
             "Guidance for identifying concerns:\n"
             "- Focus on explicit risks, failings, or missing safeguards that the "
             "coroner highlights.\n"
-            "- Use 1–2 sentences per concern and keep the phrasing neutral.\n"
-            "- Preserve the responsible party or context when provided (e.g. a "
-            "police force, hospital, housing provider).\n"
+            "- Use 1–2 sentences per concern, keep the phrasing neutral, and "
+            "retain the original wording where possible.\n"
+            "- Preserve every named system, organisation, document, role, date, "
+            "time, location, and explicit responsibility exactly as stated (e.g. "
+            "a police force, hospital, housing provider, named policy). Do not "
+            "generalise or rename them.\n"
             "- Ignore narrative background that does not state a distinct risk.\n"
             "- Combine duplicate wording that refers to the same underlying risk, "
             "but do not merge unrelated issues.\n"
@@ -469,22 +478,26 @@ class ConcernParser:
             "from a coroner's report. You are given response documents that may "
             "address these concerns.\n\n"
             "Your task is to link each concern to short action phrases describing "
-            "what the response author says they will do or change. Keep the "
+            "what the respondent says they will do or change. Keep the "
             "concern text exactly as provided and only include action phrases "
             "that directly address a listed concern. The adequacy of the actions "
             "is out of scope—simply capture and group them.\n\n"
             "Guidance for extracting actions:\n"
-            "- Treat each response author (person or organisation) as a parent and "
+            "- Treat each respondent (person or organisation) as a parent and "
             "list their discrete action phrases beneath them.\n"
-            "- Prefer 5–25 word action phrases that summarise commitments or steps.\n"
-            "- Each concern-author pairing must have no more than one action "
+            "- Prefer 5–25 word action phrases that summarise commitments or steps, "
+            "preserving the exact named systems, policies, documents, teams, "
+            "timescales, and other specifics (e.g. dates, deadlines, locations, "
+            "equipment names). Do not generalise or alter these details.\n"
+            "- Each concern-respondent pairing must have no more than one action "
             "phrase; if multiple are offered, keep the single action that best "
             "captures what will be done.\n"
             "- Action phrases must describe an intended action or change. Purely "
             "contextual or declarative statements are insufficient.\n"
             "- Ignore narrative background or text unrelated to the concerns.\n"
-            "- If a concern has no matching response, use author '[no response]' "
-            "with a single action phrase '[no response]'.\n"
+            "- If a concern has no matching response text for any intended "
+            "recipient/respondent, list each intended respondent with a single "
+            "action phrase '[no response]'.\n"
             "- Do not invent actions or add concerns beyond those supplied.\n\n"
             "Report recipients (for context):\n"
             f"{recipient_line}\n\n"
@@ -542,7 +555,9 @@ class ConcernParser:
                 raise ValueError(
                     f"Unexpected LLM response at index {idx}: {output_set}"
                 )
-            aligned = self._align_responses_to_concerns(report.concerns, output_set)
+            aligned = self._align_responses_to_concerns(
+                report.concerns, output_set, report.recipients
+            )
             paired_reports.append(
                 ReportConcernResponses(
                     url=report.url,
@@ -571,7 +586,10 @@ class ConcernParser:
         )
 
     def _align_responses_to_concerns(
-        self, concerns: Sequence[ConcernItem], parsed: ConcernResponseSet
+        self,
+        concerns: Sequence[ConcernItem],
+        parsed: ConcernResponseSet,
+        recipients: Sequence[str],
     ) -> ConcernResponseSet:
         """Ensure every concern has at least one response placeholder."""
 
@@ -585,22 +603,22 @@ class ConcernParser:
                 aligned.append(
                     ConcernResponseItem(
                         concern=concern.concern,
-                        responses=self._ensure_actions(candidate.responses),
+                        responses=self._ensure_actions(candidate.responses, recipients),
                     )
                 )
             else:
                 aligned.append(
                     ConcernResponseItem(
                         concern=concern.concern,
-                        responses=[self._no_response_author()],
+                        responses=self._recipient_placeholders(recipients),
                     )
                 )
         return ConcernResponseSet(concerns=aligned)
 
     def _ensure_actions(
-        self, responses: Sequence[ResponseAuthor] | None
+        self, responses: Sequence[ResponseAuthor] | None, recipients: Sequence[str] | None
     ) -> List[ResponseAuthor]:
-        """Guarantee at least one action phrase per response author."""
+        """Guarantee at least one action phrase per respondent/recipient."""
 
         ensured: List[ResponseAuthor] = []
         for response in responses or []:
@@ -608,17 +626,21 @@ class ConcernParser:
                 ActionPhrase(action_phrase="[no response]")
             ]
             ensured.append(
-                ResponseAuthor(author=response.author, action_phrases=actions)
+                ResponseAuthor(respondent=response.respondent, action_phrases=actions)
             )
         if not ensured:
-            ensured.append(self._no_response_author())
+            ensured.extend(self._recipient_placeholders(recipients))
         return ensured
 
-    def _no_response_author(self) -> ResponseAuthor:
-        return ResponseAuthor(
-            author="[no response]",
-            action_phrases=[ActionPhrase(action_phrase="[no response]")],
-        )
+    def _recipient_placeholders(self, recipients: Sequence[str] | None) -> List[ResponseAuthor]:
+        targets = list(recipients or []) or ["[unspecified respondent]"]
+        return [
+            ResponseAuthor(
+                respondent=target,
+                action_phrases=[ActionPhrase(action_phrase="[no response]")],
+            )
+            for target in targets
+        ]
 
     def _records_from_table(self, table: Iterable[Mapping[str, Any]] | Any) -> List[Mapping[str, Any]]:
         """Convert a DataFrame-like object or iterable of mappings into records."""
