@@ -106,8 +106,8 @@ class ConcernResults(BaseModel):
         return pd.DataFrame(rows)
 
 
-class ConcernPairGenerator:
-    """Generate discrete concerns from narrative text using an LLM.
+class ConcernParser:
+    """LLM-based manipulation of coroners' concerns.
 
     Parameters
     ----------
@@ -115,6 +115,11 @@ class ConcernPairGenerator:
         LLM client used to call the OpenAI API. Parallelisation and retry
         settings are controlled directly by this object and should be provided
         by the caller.
+    reports : Iterable[Mapping[str, Any]] | Any
+        Table-like collection of PFD reports containing at least the URL and
+        Matters of Concern text.
+    responses : Iterable[Mapping[str, Any]] | Any | None
+        Optional table-like collection of responses keyed by parent URL.
     """
 
     REPORT_URL_COLUMN = GeneralConfig.COL_URL
@@ -124,8 +129,16 @@ class ConcernPairGenerator:
     RESPONSES_PARENT_URL_COLUMN = "parent_url"
     RESPONSES_TEXT_COLUMN = "response"
 
-    def __init__(self, llm: LLM):
+    def __init__(
+        self,
+        llm: LLM,
+        reports: Iterable[Mapping[str, Any]] | Any,
+        responses: Iterable[Mapping[str, Any]] | Any | None = None,
+    ):
         self.llm = llm
+        self.reports = reports
+        self.responses = responses
+        self._results: ConcernResults | None = None
 
     def build_prompt(self, concerns_section: str) -> str:
         """Build a detailed prompt to split a concerns section into items."""
@@ -152,6 +165,7 @@ class ConcernPairGenerator:
             "Only populate the `concerns` field of the response schema with the "
             "final list. Do not invent information beyond the supplied text.\n\n"
             "Concerns section to analyse:\n"
+            "The Coroner's Concerns text is below:\n\n"
             + concerns_section.strip()
         )
 
@@ -180,16 +194,21 @@ class ConcernPairGenerator:
                 raise ValueError(f"Unexpected LLM response at index {idx}: {result}")
         return parsed
 
-    def build_concerns(
-        self,
-        reports: Iterable[Mapping[str, Any]] | Any,
-        responses: Iterable[Mapping[str, Any]] | Any | None = None,
-    ) -> ConcernResults:
-        """Extract concerns for reports and attach recipients and matching responses."""
+    def parse_concerns(self, output: str = "json") -> ConcernResults | list[dict[str, Any]] | pd.DataFrame:
+        """Parse discrete concerns from Matters of Concern text in PFD reports.
 
-        report_records = self._records_from_table(reports)
+        Parameters
+        ----------
+        output : {"json", "dataframe", "object"}
+            Controls the return type. ``"json"`` (default) returns a list of
+            JSON-serialisable dictionaries. ``"dataframe"`` returns a pandas
+            DataFrame with one row per concern. ``"object"`` returns the
+            :class:`ConcernResults` instance for further manipulation.
+        """
+
+        report_records = self._records_from_table(self.reports)
         self._validate_report_columns(report_records)
-        response_lookup = self._response_lookup(responses)
+        response_lookup = self._response_lookup(self.responses)
 
         urls: List[str] = []
         ids: List[str | None] = []
@@ -220,7 +239,16 @@ class ConcernPairGenerator:
                 )
             )
 
-        return ConcernResults(reports=paired)
+        self._results = ConcernResults(reports=paired)
+
+        if output == "json":
+            return self._results.as_list()
+        if output == "dataframe":
+            return self._results.as_df()
+        if output == "object":
+            return self._results
+
+        raise ValueError("output must be one of {'json', 'dataframe', 'object'}")
 
     def _records_from_table(self, table: Iterable[Mapping[str, Any]] | Any) -> List[Mapping[str, Any]]:
         """Convert a DataFrame-like object or iterable of mappings into records."""
@@ -277,3 +305,61 @@ class ConcernPairGenerator:
         raw = str(value or "")
         recipients = [segment.strip() for segment in raw.split(";") if segment.strip()]
         return recipients
+
+    def count(self, target: str = "all") -> dict[str, Any]:
+        """Count reports, responses, concerns, or all supported entities.
+
+        Parameters
+        ----------
+        target : {"reports", "responses", "concerns", "all"}
+            Selects what to count. ``"reports"`` returns the number of PFD
+            reports supplied to the parser. ``"responses"`` counts response
+            documents and includes mean, median, and maximum responses per
+            report. ``"concerns"`` counts discrete concerns and requires that
+            :meth:`parse_concerns` has been run. ``"all"`` returns a combined
+            dictionary of all metrics.
+        """
+
+        target = target.lower()
+        report_records = self._records_from_table(self.reports)
+        response_records = self._records_from_table(self.responses)
+
+        def report_count() -> dict[str, int]:
+            return {"reports": len(report_records)}
+
+        def response_counts() -> dict[str, Any]:
+            total_responses = len(response_records)
+            per_report = []
+            if report_records:
+                lookup = self._response_lookup(self.responses)
+                per_report = [len(lookup.get(str(r.get(self.REPORT_URL_COLUMN, "")), [])) for r in report_records]
+            mean = float(pd.Series(per_report).mean()) if per_report else 0.0
+            median = float(pd.Series(per_report).median()) if per_report else 0.0
+            maximum = int(max(per_report)) if per_report else 0
+            return {
+                "responses": total_responses,
+                "mean_responses_per_report": mean,
+                "median_responses_per_report": median,
+                "max_responses_per_report": maximum,
+            }
+
+        def concern_counts() -> dict[str, int]:
+            if self._results is None:
+                raise ValueError("parse_concerns() must be run before counting concerns")
+            total_concerns = sum(len(report.concerns) for report in self._results.reports)
+            return {"concerns": total_concerns}
+
+        if target == "reports":
+            return report_count()
+        if target == "responses":
+            return response_counts()
+        if target == "concerns":
+            return concern_counts()
+        if target == "all":
+            metrics: dict[str, Any] = {}
+            metrics.update(report_count())
+            metrics.update(response_counts())
+            metrics.update(concern_counts())
+            return metrics
+
+        raise ValueError("target must be one of {'reports', 'responses', 'concerns', 'all'}")

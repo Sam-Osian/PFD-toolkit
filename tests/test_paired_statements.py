@@ -1,7 +1,7 @@
 import pandas as pd
 
 from pfd_toolkit.config import GeneralConfig
-from pfd_toolkit.paired_statements import ConcernItem, ConcernPairGenerator, ConcernSet
+from pfd_toolkit.paired_statements import ConcernItem, ConcernParser, ConcernSet
 
 
 class DummyLLM:
@@ -22,7 +22,7 @@ def test_concern_item_normalises_whitespace():
 
 
 def test_prompt_includes_context_and_source_text():
-    generator = ConcernPairGenerator(llm=DummyLLM())
+    generator = ConcernParser(llm=DummyLLM(), reports=[])
     sample_text = "I am concerned about how emergency calls are triaged."
     prompt = generator.build_prompt(sample_text)
 
@@ -39,8 +39,6 @@ def test_extract_for_reports_matches_url_and_parent_url():
             ConcernSet(concerns=[ConcernItem(concern="two")]),
         ]
     )
-    generator = ConcernPairGenerator(llm=llm)
-
     reports = [
         {
             GeneralConfig.COL_URL: "https://example.test/report-1",
@@ -61,7 +59,9 @@ def test_extract_for_reports_matches_url_and_parent_url():
         {"parent_url": "https://example.test/report-3", "response": "irrelevant"},
     ]
 
-    paired = generator.build_concerns(reports=reports, responses=responses)
+    generator = ConcernParser(llm=llm, reports=reports, responses=responses)
+
+    paired = generator.parse_concerns(output="object")
 
     assert paired.reports[0].url == reports[0][GeneralConfig.COL_URL]
     assert [item.concern for item in paired.reports[0].concerns] == ["one"]
@@ -76,8 +76,6 @@ def test_extract_for_reports_matches_url_and_parent_url():
 
 def test_as_df_flattens_concerns():
     llm = DummyLLM(responses=[ConcernSet(concerns=[ConcernItem(concern="one")])])
-    generator = ConcernPairGenerator(llm=llm)
-
     reports_df = pd.DataFrame(
         [
             {
@@ -89,7 +87,9 @@ def test_as_df_flattens_concerns():
         ]
     )
 
-    results = generator.build_concerns(reports=reports_df)
+    generator = ConcernParser(llm=llm, reports=reports_df)
+
+    results = generator.parse_concerns(output="object")
     df = results.as_df()
 
     assert len(df) == 1
@@ -109,3 +109,33 @@ def test_as_df_flattens_concerns():
         "Receiver B",
     ]
     assert json_ready["concerns"] == ["one"]
+
+
+def test_count_methods_require_parsed_concerns_for_concern_counts():
+    llm = DummyLLM(
+        responses=[ConcernSet(concerns=[ConcernItem(concern="concern one")])]
+    )
+    reports = [
+        {
+            GeneralConfig.COL_URL: "https://example.test/report-1",
+            GeneralConfig.COL_CONCERNS: "concern text",
+            GeneralConfig.COL_RECEIVER: "Recipient A",
+            GeneralConfig.COL_ID: "2024-0001",
+        }
+    ]
+    responses = [
+        {"parent_url": "https://example.test/report-1", "response": "resp A"},
+    ]
+
+    parser = ConcernParser(llm=llm, reports=reports, responses=responses)
+
+    assert parser.count("reports") == {"reports": 1}
+    response_counts = parser.count("responses")
+    assert response_counts["responses"] == 1
+    assert response_counts["mean_responses_per_report"] == 1.0
+
+    parser.parse_concerns()
+    assert parser.count("concerns") == {"concerns": 1}
+    combined = parser.count("all")
+    assert combined["reports"] == 1
+    assert combined["concerns"] == 1
