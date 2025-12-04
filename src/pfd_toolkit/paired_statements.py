@@ -2,10 +2,12 @@
 
 This module focuses on converting the free-text "Matters of Concern" section
 into a structured list of concise, discrete concerns suitable for downstream
-pairing and analysis.
+pairing and analysis, and on linking those concerns to actions described in
+response documents.
 """
 from __future__ import annotations
 
+import json
 from typing import Any, Iterable, List, Mapping, Sequence
 
 import pandas as pd
@@ -31,6 +33,58 @@ class ConcernItem(BaseModel):
         return cleaned
 
 
+class ActionPhrase(BaseModel):
+    """Short description of an action or commitment from a response."""
+
+    action_phrase: str = Field(
+        ..., description="One concise action or commitment drawn from a response."
+    )
+
+    @field_validator("action_phrase")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("action_phrase text cannot be empty")
+        return cleaned
+
+
+class ResponseAuthor(BaseModel):
+    """Author of a response and their associated actions."""
+
+    author: str = Field(..., description="Name of the individual or organisation.")
+    action_phrases: List[ActionPhrase] = Field(
+        default_factory=list,
+        description="List of discrete actions or commitments attributed to this author.",
+    )
+
+    @field_validator("author")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("author name cannot be empty")
+        return cleaned
+
+
+class ConcernResponseItem(BaseModel):
+    """A concern paired with response authors and their action phrases."""
+
+    concern: str = Field(..., description="Concern text copied from the report.")
+    responses: List[ResponseAuthor] = Field(
+        default_factory=list,
+        description="Authors and their actions linked to this concern.",
+    )
+
+    @field_validator("concern")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("concern text cannot be empty")
+        return cleaned
+
+
 class ConcernSet(BaseModel):
     """Ordered collection of concerns extracted from a PFD report."""
 
@@ -40,6 +94,15 @@ class ConcernSet(BaseModel):
             "A list of discrete concerns, kept in the same order as the "
             "original Matters of Concern section."
         ),
+    )
+
+
+class ConcernResponseSet(BaseModel):
+    """Responses mapped to concerns for a single PFD report."""
+
+    concerns: List[ConcernResponseItem] = Field(
+        default_factory=list,
+        description="List of concerns with any linked responses and action phrases.",
     )
 
 
@@ -59,6 +122,10 @@ class ReportConcerns(BaseModel):
     responses: List[str] = Field(
         default_factory=list,
         description="All response texts linked to this report's URL (one-to-many).",
+    )
+    concern_responses: ConcernResponseSet | None = Field(
+        default=None,
+        description="Structured responses paired with each concern when available.",
     )
 
     @property
@@ -89,6 +156,11 @@ class ConcernResults(BaseModel):
             )
         return serialised
 
+    def as_json(self) -> str:
+        """Return a JSON string serialising the concerns list."""
+
+        return json.dumps(self.as_list(), ensure_ascii=False, indent=2)
+
     def as_df(self) -> pd.DataFrame:
         """Return a flat DataFrame, one row per concern."""
 
@@ -103,6 +175,112 @@ class ConcernResults(BaseModel):
                         "concern": item.concern,
                     }
                 )
+        return pd.DataFrame(rows)
+
+
+class ReportConcernResponses(BaseModel):
+    """Concern-response pairings for a single report."""
+
+    url: str = Field(..., description="Canonical URL for the PFD report.")
+    report_id: str | None = Field(
+        default=None, description="Unique identifier scraped from the report URL."
+    )
+    recipients: List[str] = Field(
+        default_factory=list, description="Recipient list split from the reports CSV."
+    )
+    responses: List[str] = Field(
+        default_factory=list,
+        description="All response texts linked to this report's URL (one-to-many).",
+    )
+    concern_responses: ConcernResponseSet = Field(
+        default_factory=ConcernResponseSet,
+        description="Structured concerns with linked response authors and actions.",
+    )
+
+
+class ResponseResults(BaseModel):
+    """Container for multiple reports worth of concern-response pairings."""
+
+    reports: List[ReportConcernResponses] = Field(default_factory=list)
+
+    def as_list(self) -> List[dict[str, Any]]:
+        """Return a JSON-ready list of concern-response mappings."""
+
+        serialised: List[dict[str, Any]] = []
+        for report in self.reports:
+            serialised.append(
+                {
+                    GeneralConfig.COL_URL: report.url,
+                    GeneralConfig.COL_ID: report.report_id,
+                    GeneralConfig.COL_RECEIVER: report.recipients,
+                    "responses": report.responses,
+                    "concern_responses": [
+                        {
+                            "concern": item.concern,
+                            "responses": [
+                                {
+                                    "author": response.author,
+                                    "action_phrases": [
+                                        action.action_phrase
+                                        for action in response.action_phrases
+                                    ],
+                                }
+                                for response in item.responses
+                            ],
+                        }
+                        for item in report.concern_responses.concerns
+                    ],
+                }
+            )
+        return serialised
+
+    def as_json(self) -> str:
+        """Return a JSON string serialising concern-response mappings."""
+
+        return json.dumps(self.as_list(), ensure_ascii=False, indent=2)
+
+    def as_df(self) -> pd.DataFrame:
+        """Return a flat DataFrame, one row per action phrase."""
+
+        rows: List[dict[str, Any]] = []
+        for report in self.reports:
+            for item in report.concern_responses.concerns:
+                if not item.responses:
+                    rows.append(
+                        {
+                            GeneralConfig.COL_URL: report.url,
+                            GeneralConfig.COL_ID: report.report_id,
+                            GeneralConfig.COL_RECEIVER: report.recipients,
+                            "concern": item.concern,
+                            "response_author": "[no response]",
+                            "action_phrase": "[no response]",
+                        }
+                    )
+                    continue
+                for response in item.responses:
+                    if not response.action_phrases:
+                        rows.append(
+                            {
+                                GeneralConfig.COL_URL: report.url,
+                                GeneralConfig.COL_ID: report.report_id,
+                                GeneralConfig.COL_RECEIVER: report.recipients,
+                                "concern": item.concern,
+                                "response_author": response.author,
+                                "action_phrase": "[no response]",
+                            }
+                        )
+                        continue
+                    for action in response.action_phrases:
+                        rows.append(
+                            {
+                                GeneralConfig.COL_URL: report.url,
+                                GeneralConfig.COL_ID: report.report_id,
+                                GeneralConfig.COL_RECEIVER: report.recipients,
+                                "concern": item.concern,
+                                "response_author": response.author,
+                                "action_phrase": action.action_phrase,
+                            }
+                        )
         return pd.DataFrame(rows)
 
 
@@ -139,6 +317,7 @@ class ConcernParser:
         self.reports = reports
         self.responses = responses
         self._results: ConcernResults | None = None
+        self._response_results: ResponseResults | None = None
 
     def build_prompt(self, concerns_section: str) -> str:
         """Build a detailed prompt to split a concerns section into items."""
@@ -176,6 +355,7 @@ class ConcernParser:
         result = self.llm.generate(
             prompts=[prompt],
             response_format=ConcernSet,
+            tqdm_extra_kwargs={"desc": "Pulling out discrete concerns"},
         )[0]
         if isinstance(result, ConcernSet):
             return result
@@ -185,7 +365,11 @@ class ConcernParser:
         """Batch-process multiple concerns sections."""
 
         prompts = [self.build_prompt(section) for section in concerns_sections]
-        outputs = self.llm.generate(prompts=prompts, response_format=ConcernSet)
+        outputs = self.llm.generate(
+            prompts=prompts,
+            response_format=ConcernSet,
+            tqdm_extra_kwargs={"desc": "Pulling out discrete concerns"},
+        )
         parsed: List[ConcernSet] = []
         for idx, result in enumerate(outputs):
             if isinstance(result, ConcernSet):
@@ -194,12 +378,14 @@ class ConcernParser:
                 raise ValueError(f"Unexpected LLM response at index {idx}: {result}")
         return parsed
 
-    def parse_concerns(self, output: str = "json") -> ConcernResults | list[dict[str, Any]] | pd.DataFrame:
+    def parse_concerns(
+        self, output: str = "json"
+    ) -> ConcernResults | list[dict[str, Any]] | pd.DataFrame:
         """Parse discrete concerns from Matters of Concern text in PFD reports.
 
         Parameters
         ----------
-        output : {"json", "dataframe", "object"}
+        output : {"json", "json_str", "dataframe", "object"}
             Controls the return type. ``"json"`` (default) returns a list of
             JSON-serialisable dictionaries. ``"dataframe"`` returns a pandas
             DataFrame with one row per concern. ``"object"`` returns the
@@ -207,6 +393,7 @@ class ConcernParser:
         """
 
         report_records = self._records_from_table(self.reports)
+        self._response_results = None
         self._validate_report_columns(report_records)
         response_lookup = self._response_lookup(self.responses)
 
@@ -243,12 +430,179 @@ class ConcernParser:
 
         if output == "json":
             return self._results.as_list()
+        if output == "json_str":
+            return self._results.as_json()
         if output == "dataframe":
             return self._results.as_df()
         if output == "object":
             return self._results
 
-        raise ValueError("output must be one of {'json', 'dataframe', 'object'}")
+        raise ValueError(
+            "output must be one of {'json', 'json_str', 'dataframe', 'object'}"
+        )
+
+    def build_response_prompt(
+        self,
+        concerns: Sequence[ConcernItem],
+        responses: Sequence[str],
+        recipients: Sequence[str],
+    ) -> str:
+        """Build a prompt to map concerns to action phrases in responses."""
+
+        concern_lines = "\n".join(f"- {item.concern}" for item in concerns)
+        response_block = "\n\n---\n\n".join(r.strip() for r in responses if r.strip())
+        response_block = response_block or "[no response text supplied]"
+        recipient_line = "; ".join(recipients) if recipients else "[not specified]"
+
+        return (
+            "You are assisting with Prevention of Future Deaths (PFD) reports in "
+            "England and Wales. Each concern below has already been distilled "
+            "from a coroner's report. You are given response documents that may "
+            "address these concerns.\n\n"
+            "Your task is to link each concern to short action phrases describing "
+            "what the response author says they will do. Keep the concern text "
+            "exactly as provided and only include action phrases that directly "
+            "address a listed concern. The adequacy of the actions is out of "
+            "scope—simply capture and group them.\n\n"
+            "Guidance for extracting actions:\n"
+            "- Treat each response author (person or organisation) as a parent and "
+            "list their discrete action phrases beneath them.\n"
+            "- Prefer 5–25 word action phrases that summarise commitments or steps.\n"
+            "- Ignore narrative background or text unrelated to the concerns.\n"
+            "- If a concern has no matching response, use author '[no response]' "
+            "with a single action phrase '[no response]'.\n"
+            "- Do not invent actions or add concerns beyond those supplied.\n\n"
+            "Report recipients (for context):\n"
+            f"{recipient_line}\n\n"
+            "Concerns to map:\n"
+            f"{concern_lines}\n\n"
+            "Response text:\n"
+            f"{response_block}"
+        )
+
+    def parse_responses(
+        self, output: str = "json"
+    ) -> ResponseResults | list[dict[str, Any]] | pd.DataFrame:
+        """Link parsed concerns to discrete response actions.
+
+        Parameters
+        ----------
+        output : {"json", "json_str", "dataframe", "object"}
+            Controls the return type. ``"json"`` (default) returns a list of
+            JSON-serialisable dictionaries. ``"dataframe"`` returns a pandas
+            DataFrame with one row per action phrase. ``"object"`` returns the
+            :class:`ResponseResults` instance for further manipulation.
+        """
+
+        if self._results is None:
+            raise ValueError("parse_concerns() must be run before parse_responses()")
+
+        reports = self._results.reports
+        if not reports:
+            self._response_results = ResponseResults(reports=[])
+            if output == "json":
+                return []
+            if output == "json_str":
+                return "[]"
+            if output == "dataframe":
+                return pd.DataFrame()
+            if output == "object":
+                return self._response_results
+            raise ValueError(
+                "output must be one of {'json', 'json_str', 'dataframe', 'object'}"
+            )
+
+        prompts = [
+            self.build_response_prompt(r.concerns, r.responses, r.recipients)
+            for r in reports
+        ]
+        outputs = self.llm.generate(
+            prompts=prompts,
+            response_format=ConcernResponseSet,
+            tqdm_extra_kwargs={"desc": "Finding actions for each concern"},
+        )
+
+        paired_reports: List[ReportConcernResponses] = []
+        for idx, (report, output_set) in enumerate(zip(reports, outputs)):
+            if not isinstance(output_set, ConcernResponseSet):
+                raise ValueError(
+                    f"Unexpected LLM response at index {idx}: {output_set}"
+                )
+            aligned = self._align_responses_to_concerns(report.concerns, output_set)
+            paired_reports.append(
+                ReportConcernResponses(
+                    url=report.url,
+                    report_id=report.report_id,
+                    recipients=report.recipients,
+                    responses=report.responses,
+                    concern_responses=aligned,
+                )
+            )
+
+        self._response_results = ResponseResults(reports=paired_reports)
+
+        if output == "json":
+            return self._response_results.as_list()
+        if output == "json_str":
+            return self._response_results.as_json()
+        if output == "dataframe":
+            return self._response_results.as_df()
+        if output == "object":
+            return self._response_results
+
+        raise ValueError(
+            "output must be one of {'json', 'json_str', 'dataframe', 'object'}"
+        )
+
+    def _align_responses_to_concerns(
+        self, concerns: Sequence[ConcernItem], parsed: ConcernResponseSet
+    ) -> ConcernResponseSet:
+        """Ensure every concern has at least one response placeholder."""
+
+        lookup: dict[str, ConcernResponseItem] = {
+            item.concern: item for item in parsed.concerns
+        }
+        aligned: List[ConcernResponseItem] = []
+        for concern in concerns:
+            candidate = lookup.get(concern.concern)
+            if candidate:
+                aligned.append(
+                    ConcernResponseItem(
+                        concern=concern.concern,
+                        responses=self._ensure_actions(candidate.responses),
+                    )
+                )
+            else:
+                aligned.append(
+                    ConcernResponseItem(
+                        concern=concern.concern,
+                        responses=[self._no_response_author()],
+                    )
+                )
+        return ConcernResponseSet(concerns=aligned)
+
+    def _ensure_actions(
+        self, responses: Sequence[ResponseAuthor] | None
+    ) -> List[ResponseAuthor]:
+        """Guarantee at least one action phrase per response author."""
+
+        ensured: List[ResponseAuthor] = []
+        for response in responses or []:
+            actions = list(response.action_phrases) or [
+                ActionPhrase(action_phrase="[no response]")
+            ]
+            ensured.append(
+                ResponseAuthor(author=response.author, action_phrases=actions)
+            )
+        if not ensured:
+            ensured.append(self._no_response_author())
+        return ensured
+
+    def _no_response_author(self) -> ResponseAuthor:
+        return ResponseAuthor(
+            author="[no response]",
+            action_phrases=[ActionPhrase(action_phrase="[no response]")],
+        )
 
     def _records_from_table(self, table: Iterable[Mapping[str, Any]] | Any) -> List[Mapping[str, Any]]:
         """Convert a DataFrame-like object or iterable of mappings into records."""
@@ -311,13 +665,15 @@ class ConcernParser:
 
         Parameters
         ----------
-        target : {"reports", "responses", "concerns", "all"}
+        target : {"reports", "responses", "concerns", "action_phrases", "all"}
             Selects what to count. ``"reports"`` returns the number of PFD
             reports supplied to the parser. ``"responses"`` counts response
             documents and includes mean, median, and maximum responses per
             report. ``"concerns"`` counts discrete concerns and requires that
-            :meth:`parse_concerns` has been run. ``"all"`` returns a combined
-            dictionary of all metrics.
+            :meth:`parse_concerns` has been run. ``"action_phrases"`` counts
+            discrete action phrases and requires that :meth:`parse_responses`
+            has been run. ``"all"`` returns a combined dictionary of all
+            metrics.
         """
 
         target = target.lower()
@@ -349,17 +705,36 @@ class ConcernParser:
             total_concerns = sum(len(report.concerns) for report in self._results.reports)
             return {"concerns": total_concerns}
 
+        def action_phrase_counts(require_parsed: bool = True) -> dict[str, int]:
+            if self._response_results is None:
+                if require_parsed:
+                    raise ValueError(
+                        "parse_responses() must be run before counting action phrases"
+                    )
+                return {"action_phrases": 0}
+            total_actions = 0
+            for report in self._response_results.reports:
+                for item in report.concern_responses.concerns:
+                    for response in item.responses:
+                        total_actions += len(response.action_phrases)
+            return {"action_phrases": total_actions}
+
         if target == "reports":
             return report_count()
         if target == "responses":
             return response_counts()
         if target == "concerns":
             return concern_counts()
+        if target == "action_phrases":
+            return action_phrase_counts()
         if target == "all":
             metrics: dict[str, Any] = {}
             metrics.update(report_count())
             metrics.update(response_counts())
             metrics.update(concern_counts())
+            metrics.update(action_phrase_counts(require_parsed=False))
             return metrics
 
-        raise ValueError("target must be one of {'reports', 'responses', 'concerns', 'all'}")
+        raise ValueError(
+            "target must be one of {'reports', 'responses', 'concerns', 'action_phrases', 'all'}"
+        )
