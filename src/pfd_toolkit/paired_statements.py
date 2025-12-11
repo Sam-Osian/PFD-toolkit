@@ -49,6 +49,94 @@ class ActionPhrase(BaseModel):
         return cleaned
 
 
+class ActionabilityActionPhraseElements(BaseModel):
+    """Per-element actionability assessment for an action phrase."""
+
+    action_phrase: str = Field(
+        ..., description="One concise action or commitment drawn from a response."
+    )
+    agent: bool = Field(..., description="Identifies who will act.")
+    action: bool = Field(..., description="Contains a verb of commitment or obligation.")
+    object_: bool = Field(
+        ...,
+        alias="object",
+        description="Specifies what will be acted upon.",
+    )
+    constraints: bool = Field(
+        ..., description="Includes time, place, quantity, or resource constraints."
+    )
+    accountability_cues: bool = Field(
+        ..., description="Mentions recipients, evidence, follow-up, or escalation."
+    )
+
+    @property
+    def actionability_score(self) -> int:
+        """Compute a 0–5 score from boolean element flags."""
+
+        return int(
+            self.agent
+            + self.action
+            + self.object_
+            + self.constraints
+            + self.accountability_cues
+        )
+
+    @field_validator("action_phrase")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("action_phrase text cannot be empty")
+        return cleaned
+
+    @field_validator("agent", "action", "object_", "constraints", "accountability_cues", mode="before")
+    @classmethod
+    def _coerce_bool(cls, value: Any) -> bool:
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "yes", "y", "1"}:
+                return True
+            if lowered in {"false", "no", "n", "0"}:
+                return False
+        return bool(value)
+
+
+class ActionabilityActionPhrase(BaseModel):
+    """An action phrase paired with an actionability score."""
+
+    action_phrase: str = Field(
+        ..., description="One concise action or commitment drawn from a response."
+    )
+    actionability_score: int = Field(
+        ...,
+        ge=0,
+        le=5,
+        description=(
+            "Actionability rating from 0 (no actionable elements) to 5 (all "
+            "elements present)."
+        ),
+    )
+
+    @field_validator("action_phrase")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("action_phrase text cannot be empty")
+        return cleaned
+
+    @field_validator("actionability_score")
+    @classmethod
+    def _clamp_score(cls, value: int) -> int:
+        if not isinstance(value, int):
+            raise TypeError("actionability_score must be an integer")
+        if value < 0:
+            return 0
+        if value > 5:
+            return 5
+        return value
+
+
 class ResponseAuthor(BaseModel):
     """Respondent of a response and their associated actions."""
 
@@ -98,6 +186,42 @@ class ConcernResponseItem(BaseModel):
         return cleaned
 
 
+class ActionabilityConcern(BaseModel):
+    """Actionability assessments for all action phrases linked to a concern."""
+
+    concern: str = Field(..., description="Concern text copied from the report.")
+    action_phrases: List[ActionabilityActionPhrase] = Field(
+        default_factory=list,
+        description="Action phrases with associated actionability scores.",
+    )
+
+    @field_validator("concern")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("concern text cannot be empty")
+        return cleaned
+
+
+class ActionabilityConcernElements(BaseModel):
+    """Boolean element coverage for action phrases linked to a concern."""
+
+    concern: str = Field(..., description="Concern text copied from the report.")
+    action_phrases: List[ActionabilityActionPhraseElements] = Field(
+        default_factory=list,
+        description="Action phrases with element-level actionability flags.",
+    )
+
+    @field_validator("concern")
+    @classmethod
+    def _normalise_text(cls, value: str) -> str:
+        cleaned = " ".join((value or "").split()).strip()
+        if not cleaned:
+            raise ValueError("concern text cannot be empty")
+        return cleaned
+
+
 class ConcernSet(BaseModel):
     """Ordered collection of concerns extracted from a PFD report."""
 
@@ -116,6 +240,24 @@ class ConcernResponseSet(BaseModel):
     concerns: List[ConcernResponseItem] = Field(
         default_factory=list,
         description="List of concerns with any linked responses and action phrases.",
+    )
+
+
+class ActionabilitySet(BaseModel):
+    """Actionability assessments mapped to concerns for a single report."""
+
+    concerns: List[ActionabilityConcern] = Field(
+        default_factory=list,
+        description="List of concerns with actionability scores for action phrases.",
+    )
+
+
+class ActionabilityElementsSet(BaseModel):
+    """Element-level assessments mapped to concerns for a single report."""
+
+    concerns: List[ActionabilityConcernElements] = Field(
+        default_factory=list,
+        description="List of concerns with element-level actionability flags.",
     )
 
 
@@ -299,6 +441,79 @@ class ResponseResults(BaseModel):
         return pd.DataFrame(rows)
 
 
+class ReportActionability(BaseModel):
+    """Actionability scores for a single report's action phrases."""
+
+    url: str = Field(..., description="Canonical URL for the PFD report.")
+    report_id: str | None = Field(
+        default=None, description="Unique identifier scraped from the report URL."
+    )
+    recipients: List[str] = Field(
+        default_factory=list, description="Recipient list split from the reports CSV."
+    )
+    concern_actionability: ActionabilitySet = Field(
+        default_factory=ActionabilitySet,
+        description="Actionability ratings grouped by concern.",
+    )
+
+
+class ActionabilityResults(BaseModel):
+    """Container for multiple reports worth of actionability ratings."""
+
+    reports: List[ReportActionability] = Field(default_factory=list)
+
+    def as_list(self) -> List[dict[str, Any]]:
+        """Return a JSON-ready list of actionability assessments."""
+
+        serialised: List[dict[str, Any]] = []
+        for report in self.reports:
+            serialised.append(
+                {
+                    GeneralConfig.COL_URL: report.url,
+                    GeneralConfig.COL_ID: report.report_id,
+                    GeneralConfig.COL_RECEIVER: report.recipients,
+                    "concern_actionability": [
+                        {
+                            "concern": item.concern,
+                            "action_phrases": [
+                                {
+                                    "action_phrase": action.action_phrase,
+                                    "actionability_score": action.actionability_score,
+                                }
+                                for action in item.action_phrases
+                            ],
+                        }
+                        for item in report.concern_actionability.concerns
+                    ],
+                }
+            )
+        return serialised
+
+    def as_json(self) -> str:
+        """Return a JSON string serialising actionability ratings."""
+
+        return json.dumps(self.as_list(), ensure_ascii=False, indent=2)
+
+    def as_df(self) -> pd.DataFrame:
+        """Return a flat DataFrame, one row per action phrase score."""
+
+        rows: List[dict[str, Any]] = []
+        for report in self.reports:
+            for item in report.concern_actionability.concerns:
+                for action in item.action_phrases:
+                    rows.append(
+                        {
+                            GeneralConfig.COL_URL: report.url,
+                            GeneralConfig.COL_ID: report.report_id,
+                            GeneralConfig.COL_RECEIVER: report.recipients,
+                            "concern": item.concern,
+                            "action_phrase": action.action_phrase,
+                            "actionability_score": action.actionability_score,
+                        }
+                    )
+        return pd.DataFrame(rows)
+
+
 class ConcernParser:
     """LLM-based manipulation of coroners' concerns.
 
@@ -333,6 +548,7 @@ class ConcernParser:
         self.responses = responses
         self._results: ConcernResults | None = None
         self._response_results: ResponseResults | None = None
+        self._actionability_results: ActionabilityResults | None = None
 
     def build_prompt(self, concerns_section: str) -> str:
         """Build a detailed prompt to split a concerns section into items."""
@@ -507,6 +723,50 @@ class ConcernParser:
             f"{response_block}"
         )
 
+    def build_actionability_prompt(
+        self, concern_responses: Sequence[ConcernResponseItem]
+    ) -> str:
+        """Prompt to score the actionability of action phrases."""
+
+        concern_lines: list[str] = []
+        for idx, item in enumerate(concern_responses, start=1):
+            actions = [
+                action.action_phrase
+                for response in item.responses
+                for action in response.action_phrases
+            ]
+            action_block = "\n".join(f"    - {action}" for action in actions)
+            concern_lines.append(
+                "\n".join(
+                    [
+                        f"Concern {idx}: {item.concern}",
+                        "  Action phrases:",
+                        action_block or "    - [no response]",
+                    ]
+                )
+            )
+
+        guidance = "\n".join(
+            [
+                "For each action phrase, identify whether it explicitly includes each element below.",
+                "Return a boolean (True/False) for each element in the schema and do not calculate totals:",
+                " - Agent: who will act (I / we / named role or organisation).",
+                " - Action: verbs of commitment or obligation.",
+                " - Object: the thing to be acted upon.",
+                " - Constraints: time, place, quantity, resources.",
+                " - Accountability cues: recipients, evidence, follow-up, escalation.",
+                "Keep the concern and action phrase text exactly as provided and do not invent details.",
+                "Populate only the `concerns` and nested `action_phrases` fields of the response schema.",
+            ]
+        )
+
+        return (
+            "You are scoring the actionability of responses linked to coroner concerns.\n\n"
+            f"{guidance}\n\n"
+            "Concerns and action phrases to assess:\n"
+            + "\n\n".join(concern_lines)
+        )
+
     def parse_responses(
         self, output: str = "json"
     ) -> ResponseResults | list[dict[str, Any]] | pd.DataFrame:
@@ -585,6 +845,81 @@ class ConcernParser:
             "output must be one of {'json', 'json_str', 'dataframe', 'object'}"
         )
 
+    def assess_actionability(
+        self, output: str = "json"
+    ) -> ActionabilityResults | list[dict[str, Any]] | pd.DataFrame:
+        """Score the actionability of parsed action phrases.
+
+        Parameters
+        ----------
+        output : {"json", "json_str", "dataframe", "object"}
+            Controls the return type. ``"json"`` (default) returns a list of
+            JSON-serialisable dictionaries. ``"dataframe"`` returns a pandas
+            DataFrame with one row per action phrase and score. ``"object"``
+            returns the :class:`ActionabilityResults` instance for further
+            manipulation.
+        """
+
+        if self._response_results is None:
+            raise ValueError("parse_responses() must be run before assess_actionability()")
+
+        reports = self._response_results.reports
+        if not reports:
+            self._actionability_results = ActionabilityResults(reports=[])
+            if output == "json":
+                return []
+            if output == "json_str":
+                return "[]"
+            if output == "dataframe":
+                return pd.DataFrame()
+            if output == "object":
+                return self._actionability_results
+            raise ValueError(
+                "output must be one of {'json', 'json_str', 'dataframe', 'object'}"
+            )
+
+        prompts = [
+            self.build_actionability_prompt(r.concern_responses.concerns) for r in reports
+        ]
+        outputs = self.llm.generate(
+            prompts=prompts,
+            response_format=ActionabilityElementsSet,
+            tqdm_extra_kwargs={"desc": "Assessing actionability elements"},
+        )
+
+        scored_reports: List[ReportActionability] = []
+        for idx, (report, output_set) in enumerate(zip(reports, outputs)):
+            if not isinstance(output_set, ActionabilityElementsSet):
+                raise ValueError(
+                    f"Unexpected LLM response at index {idx}: {output_set}"
+                )
+            aligned = self._align_actionability(
+                report.concern_responses.concerns, output_set
+            )
+            scored_reports.append(
+                ReportActionability(
+                    url=report.url,
+                    report_id=report.report_id,
+                    recipients=report.recipients,
+                    concern_actionability=aligned,
+                )
+            )
+
+        self._actionability_results = ActionabilityResults(reports=scored_reports)
+
+        if output == "json":
+            return self._actionability_results.as_list()
+        if output == "json_str":
+            return self._actionability_results.as_json()
+        if output == "dataframe":
+            return self._actionability_results.as_df()
+        if output == "object":
+            return self._actionability_results
+
+        raise ValueError(
+            "output must be one of {'json', 'json_str', 'dataframe', 'object'}"
+        )
+
     def _align_responses_to_concerns(
         self,
         concerns: Sequence[ConcernItem],
@@ -614,6 +949,48 @@ class ConcernParser:
                     )
                 )
         return ConcernResponseSet(concerns=aligned)
+
+    def _align_actionability(
+        self,
+        concerns: Sequence[ConcernResponseItem],
+        parsed: ActionabilityElementsSet,
+    ) -> ActionabilitySet:
+        """Ensure each action phrase receives a score and preserve ordering."""
+
+        lookup: dict[str, ActionabilityConcernElements] = {
+            item.concern: item for item in parsed.concerns
+        }
+        aligned: List[ActionabilityConcern] = []
+        for concern in concerns:
+            parsed_concern = lookup.get(concern.concern)
+            aligned_actions = self._align_actionability_actions(concern, parsed_concern)
+            aligned.append(
+                ActionabilityConcern(concern=concern.concern, action_phrases=aligned_actions)
+            )
+        return ActionabilitySet(concerns=aligned)
+
+    def _align_actionability_actions(
+        self,
+        concern: ConcernResponseItem,
+        parsed: ActionabilityConcernElements | None,
+    ) -> List[ActionabilityActionPhrase]:
+        """Align scored actions to the original action phrases for a concern."""
+
+        actions = [
+            action.action_phrase
+            for response in concern.responses
+            for action in response.action_phrases
+        ]
+        score_lookup: dict[str, int] = {
+            action.action_phrase: action.actionability_score
+            for action in (parsed.action_phrases if parsed else [])
+        }
+        return [
+            ActionabilityActionPhrase(
+                action_phrase=text, actionability_score=score_lookup.get(text, 0)
+            )
+            for text in actions
+        ]
 
     def _ensure_actions(
         self, responses: Sequence[ResponseAuthor] | None, recipients: Sequence[str] | None

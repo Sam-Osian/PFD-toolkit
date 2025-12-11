@@ -17,9 +17,9 @@
             ]
           },
           {
-            "respondent": "Chief Executive Officer South East Coast Ambulance Service NHS Foundation Trust",
+            "respondent": "South East Coast Ambulance Service NHS Foundation Trust",
             "action_phrases": [
-              "SECAmb follows principles including clinical intervention within 30 minutes or automatic upgrade if not, and use of TOXBASE® for each overdose incident."
+              "SECAmb follows updated overdose guidance including clinical review within 30 minutes and use of TOXBASE® for each overdose incident."
             ]
           }
         ]
@@ -34,15 +34,15 @@
             ]
           },
           {
-            "respondent": "Chief Executive Officer South East Coast Ambulance Service NHS Foundation Trust",
+            "respondent": "South East Coast Ambulance Service NHS Foundation Trust",
             "action_phrases": [
-              "SECAmb follows principles including clinical intervention within 30 minutes or automatic upgrade if not, and use of TOXBASE® for each overdose incident."
+              "SECAmb follows updated overdose guidance including clinical review within 30 minutes and use of TOXBASE® for each overdose incident."
             ]
           }
         ]
       },
       {
-        "concern": "The NHS Pathways system does not reflect the time-sensitive nature of effective treatment for [REDACTED] ingestion and does not assign a higher disposition requiring more urgent attendance than category 3 when [REDACTED] ingestion is known.",
+        "concern": "The NHS Pathways system does not account for the time-sensitive nature of treatment effectiveness in cases of [REDACTED] ingestion and does not assign a higher disposition requiring more urgent attendance than category 3.",
         "responses": [
           {
             "respondent": "NHS England & NHS Improvement",
@@ -51,26 +51,26 @@
             ]
           },
           {
-            "respondent": "Chief Executive Officer South East Coast Ambulance Service NHS Foundation Trust",
+            "respondent": "South East Coast Ambulance Service NHS Foundation Trust",
             "action_phrases": [
-              "SECAmb follows principles including clinical intervention within 30 minutes or automatic upgrade if not, and use of TOXBASE® for each overdose incident."
+              "SECAmb follows updated overdose guidance including clinical review within 30 minutes and use of TOXBASE® for each overdose incident."
             ]
           }
         ]
       },
       {
-        "concern": "Clinicians within South East Coast Ambulance Service NHS Foundation Trust do not carry Methylene Blue, the antidote to [REDACTED] ingestion, on ambulances as it is not within national guidance.",
+        "concern": "Clinicians within South East Coast Ambulance Service NHS Foundation Trust do not carry Methylene Blue, the antidote to [REDACTED] ingestion, on ambulances as it is not included in national guidance.",
         "responses": [
           {
-            "respondent": "NHS England & NHS Improvement",
+            "respondent": "South East Coast Ambulance Service NHS Foundation Trust",
             "action_phrases": [
-              "NHS England does not mandate ambulance trusts to carry Methylene Blue; aware some specialist units carry it for severe cases."
+              "SECAmb reviews medication formulary in line with emerging guidance and will modify protocols as appropriate to maintain patient safety."
             ]
           },
           {
-            "respondent": "Chief Executive Officer South East Coast Ambulance Service NHS Foundation Trust",
+            "respondent": "NHS England & NHS Improvement",
             "action_phrases": [
-              "SECAmb employs a rigorous governance framework and currently does not carry Methylene Blue due to diagnostic, logistical, and cost challenges."
+              "[no response]"
             ]
           }
         ]
@@ -79,15 +79,15 @@
         "concern": "Treatment with Methylene Blue is only available when a patient reaches an acute hospital with an A&E department, but patients often enter cardiac arrest before arrival, and only some areas have ongoing trials where HART vehicles carry this antidote.",
         "responses": [
           {
-            "respondent": "NHS England & NHS Improvement",
+            "respondent": "South East Coast Ambulance Service NHS Foundation Trust",
             "action_phrases": [
-              "NHS England does not mandate ambulance trusts to carry Methylene Blue; aware some specialist units carry it for severe cases."
+              "SECAmb remains engaged with NHS ambulance services and will review future recommendations regarding methylene blue use and carriage."
             ]
           },
           {
-            "respondent": "Chief Executive Officer South East Coast Ambulance Service NHS Foundation Trust",
+            "respondent": "NHS England & NHS Improvement",
             "action_phrases": [
-              "SECAmb prioritises rapid hospital transfer for definitive care and will review future recommendations regarding Methylene Blue use."
+              "[no response]"
             ]
           }
         ]
@@ -134,7 +134,7 @@
     ],
     "concern_responses": [
       {
-        "concern": "Neither the NICE guideline [NG225] nor the Suffolk and North East Essex Integrated Care Board (SNEE) and Suffolk County Council (SCC) Joint Policy Document (Version 21 – January 2023) were applied in relation to the care and treatment extended to Erin in the West Suffolk Hospital Emergency Department during her attendance over the period 31 December 2022 to 1 January 2023.",
+        "concern": "Neither the NICE guideline [NG225] nor the Suffolk and North East Essex Health & Social Care Protocol for the Support of Children and Young People in Crisis (Version 21 – January 2023) were applied in relation to the care and treatment extended to Erin in the West Suffolk Hospital Emergency Department during her attendance over the period 31 December 2022 to 1 January 2023.",
         "responses": [
           {
             "respondent": "Chief Executive, West Suffolk NHS Foundation Trust",
@@ -156,7 +156,7 @@
           {
             "respondent": "Chief Executive, West Suffolk NHS Foundation Trust",
             "action_phrases": [
-              "Implemented extended Manchester Triage system for under 18s including automatic MHLT referral triggers for overdose cases, live on Ecare since two weeks ago."
+              "Implemented extended Manchester Triage system for under 18s including automatic MHLT referral triggers for overdose cases on E-Care as of two weeks ago"
             ]
           },
           {
@@ -181,7 +181,7 @@
     ],
     "concern_responses": [
       {
-        "concern": "Despite Lisa's LFTs being grossly elevated, the results once obtained in the laboratory were not phoned through by the laboratory staff to the clinical staff.",
+        "concern": "Despite Lisa's LFTs being grossly elevated, the results were not phoned through by the laboratory staff to the clinical staff once obtained.",
         "responses": [
           {
             "respondent": "Royal College of Obstetricians and Gynaecologists",
@@ -200,23 +200,11 @@
             "action_phrases": [
               "Next revision of guidance will emphasise need to agree local cut offs with clinicians, including for pregnancy."
             ]
-          },
-          {
-            "respondent": "Chief Midwife",
-            "action_phrases": [
-              "[no response]"
-            ]
-          },
-          {
-            "respondent": "Southwest Regional Midwife",
-            "action_phrases": [
-              "[no response]"
-            ]
           }
         ]
       },
       {
-        "concern": "The Royal College of Pathologists’ guidelines for urgent reporting only provide for phoning through results with levels above 750 for ALT, 300 for bilirubin and 354 for creatinine, and do not provide for different reporting levels for those taken in pregnant women.",
+        "concern": "The Royal College of Pathologists' guidelines for urgent reporting only require notification for ALT above 750, bilirubin above 300, and creatinine above 354, and do not provide different reporting levels for tests taken in pregnant women.",
         "responses": [
           {
             "respondent": "Royal College of Pathologists",
@@ -225,97 +213,61 @@
             ]
           },
           {
-            "respondent": "Royal College of Obstetricians and Gynaecologists",
-            "action_phrases": [
-              "RCOG will review the Royal College of Pathologists' response and ensure communication with members and inclusion in clinical guidance."
-            ]
-          },
-          {
             "respondent": "University Hospitals Bristol and Weston NHS Foundation Trust",
             "action_phrases": [
-              "UHBW has written to Royal Colleges to consider report and develop national guidance on LFT reference ranges in pregnancy."
+              "Written to Royal Colleges to consider report and develop national guidance on LFT urgent reporting thresholds in pregnancy."
             ]
           },
           {
-            "respondent": "Chief Midwife",
+            "respondent": "Royal College of Obstetricians and Gynaecologists",
             "action_phrases": [
-              "[no response]"
-            ]
-          },
-          {
-            "respondent": "Southwest Regional Midwife",
-            "action_phrases": [
-              "[no response]"
+              "RCOG will review Royal College of Pathologists' response and ensure communication with members and inclusion in clinical guidance."
             ]
           }
         ]
       },
       {
-        "concern": "Pregnancy specific conditions such as Acute Fatty Liver of Pregnancy (AFLP) can be potentially fatal at much lower levels of abnormal LFTs than those set currently by the Royal College of Pathologists.",
+        "concern": "Pregnancy-specific conditions such as Acute Fatty Liver of Pregnancy (AFLP) can be potentially fatal at much lower levels of abnormal LFTs than those set currently by the Royal College of Pathologists.",
         "responses": [
           {
             "respondent": "NHS England Chief Midwife",
             "action_phrases": [
-              "NHS England supports revision of Royal College of Pathologists’ guidelines to incorporate different urgent reporting levels for pregnancy."
+              "Support revision of Royal College of Pathologists’ guidelines to incorporate different urgent reporting levels for pregnancy."
             ]
           },
           {
             "respondent": "Royal College of Obstetricians and Gynaecologists",
             "action_phrases": [
-              "RCOG will review the Royal College of Pathologists' response and ensure communication with members and inclusion in clinical guidance."
+              "Provide online learning resource outlining key clinical features and management of AFLP."
             ]
           },
           {
             "respondent": "University Hospitals Bristol and Weston NHS Foundation Trust",
             "action_phrases": [
-              "UHBW has written to Royal Colleges to consider report and develop national guidance on LFT reference ranges in pregnancy."
-            ]
-          },
-          {
-            "respondent": "Royal College of Pathologists",
-            "action_phrases": [
-              "Next revision of guidance will emphasise need to agree local cut offs with clinicians, including for pregnancy."
-            ]
-          },
-          {
-            "respondent": "Southwest Regional Midwife",
-            "action_phrases": [
-              "[no response]"
+              "Written to Royal Colleges to consider report and develop national guidance on LFT urgent reporting thresholds in pregnancy."
             ]
           }
         ]
       },
       {
-        "concern": "As a result of the above, there was a delay in diagnosing Lisa's AFLP and starting appropriate treatment.",
+        "concern": "There was a delay in diagnosing AFLP and starting appropriate treatment as a result of the current reporting guidelines and lack of urgent communication of elevated LFT results.",
         "responses": [
           {
             "respondent": "Royal College of Obstetricians and Gynaecologists",
             "action_phrases": [
-              "RCOG provides online learning resource on AFLP and promotes multidisciplinary escalation and timely expert advice."
-            ]
-          },
-          {
-            "respondent": "NHS England Chief Midwife",
-            "action_phrases": [
-              "NHS England has established Maternal Medicine Networks to improve specialist advice and care for acute medical problems in pregnancy."
+              "Emphasise importance of escalation and multidisciplinary working in clinical guidance and quality improvement resources."
             ]
           },
           {
             "respondent": "University Hospitals Bristol and Weston NHS Foundation Trust",
             "action_phrases": [
-              "UHBW will implement national guidance on LFT urgent reporting and work with Royal Colleges to develop guidance."
+              "Will implement national guidance on urgent LFT reporting via a task and finish group once available."
             ]
           },
           {
             "respondent": "Royal College of Pathologists",
             "action_phrases": [
               "Next revision of guidance will emphasise need to agree local cut offs with clinicians, including for pregnancy."
-            ]
-          },
-          {
-            "respondent": "Southwest Regional Midwife",
-            "action_phrases": [
-              "[no response]"
             ]
           }
         ]
@@ -340,31 +292,25 @@
           {
             "respondent": "University Hospital of Coventry and Warwickshire NHS Trust",
             "action_phrases": [
-              "Developed and shared guidelines and a laminated quick reference guide with emergency contact numbers for renal services at UHCW to assist GEH staff."
+              "Produced laminated quick reference guide with emergency contact numbers for renal services at UHCW displayed across the Trust."
             ]
           },
           {
             "respondent": "George Eliot Hospital NHS Trust",
             "action_phrases": [
-              "Will contact the appropriate Trust where the patient is receiving their renal care and use the new guidelines for timely specialist engagement."
+              "Shared and cascaded renal management guidelines from UHCW with all Directorates to ensure relevant clinical staff awareness."
             ]
           },
           {
             "respondent": "UK Kidney Association",
             "action_phrases": [
-              "Recommended all hospital switchboards and Emergency Departments have a master copy of local specialist centre contact details for appropriate directing of queries."
+              "Recommended all hospital switchboards and Emergency Departments have master copy of local specialist centre contact details for appropriate query direction."
             ]
           },
           {
             "respondent": "British Transplant Society",
             "action_phrases": [
-              "Recommended all hospital switchboards and Emergency Departments have a master copy of local specialist centre contact details for appropriate directing of queries."
-            ]
-          },
-          {
-            "respondent": "NHS England",
-            "action_phrases": [
-              "Shared the report with regional colleagues and Integrated Care Boards for oversight and encouraged providers to respond regarding local arrangements."
+              "Recommended advising all staff of internal escalation routes to clarify whether off-site specialist input is required."
             ]
           }
         ]
@@ -375,31 +321,13 @@
           {
             "respondent": "University Hospital of Coventry and Warwickshire NHS Trust",
             "action_phrases": [
-              "Provided detailed guidelines illustrating sample collection requirements and communication protocols to GEH for sharing patient information with specialists."
+              "Developed and shared guidelines illustrating sample collection requirements and communication processes with specialist centres."
             ]
           },
           {
             "respondent": "George Eliot Hospital NHS Trust",
             "action_phrases": [
-              "Will follow the guidelines from UHCW for sample collection and timely communication with specialist centres."
-            ]
-          },
-          {
-            "respondent": "UK Kidney Association",
-            "action_phrases": [
-              "Advised electronic information sharing in real-time as the gold standard for sharing patient information between hospitals."
-            ]
-          },
-          {
-            "respondent": "British Transplant Society",
-            "action_phrases": [
-              "Advised electronic information sharing in real-time as the gold standard for sharing patient information between hospitals."
-            ]
-          },
-          {
-            "respondent": "NHS England",
-            "action_phrases": [
-              "Highlighted service specifications developed by specialist Clinical Reference Group defining standards of care including information sharing."
+              "Implemented guidelines detailing what information to provide and when to liaise with specialist renal centres."
             ]
           }
         ]
@@ -410,31 +338,13 @@
           {
             "respondent": "University Hospital of Coventry and Warwickshire NHS Trust",
             "action_phrases": [
-              "Shared and cascaded agreed guidelines within clinical teams and will place them on the intranet after ratification to improve accessibility."
+              "Agreed and cascaded renal care guidelines with GEH, to be placed on UHCW intranet after governance ratification."
             ]
           },
           {
             "respondent": "George Eliot Hospital NHS Trust",
             "action_phrases": [
-              "Received and are embedding the guidelines from UHCW to ensure relevant clinical staff are aware of protocols."
-            ]
-          },
-          {
-            "respondent": "UK Kidney Association",
-            "action_phrases": [
-              "Advised that care should be delivered by specialists who may not necessarily need to refer to guidelines to avoid misunderstanding urgency."
-            ]
-          },
-          {
-            "respondent": "British Transplant Society",
-            "action_phrases": [
-              "Advised that care should be delivered by specialists who may not necessarily need to refer to guidelines to avoid misunderstanding urgency."
-            ]
-          },
-          {
-            "respondent": "NHS England",
-            "action_phrases": [
-              "Referenced national programmes like GIRFT promoting clear pathways and standards to improve care and guideline awareness."
+              "Shared renal management guidelines and quick reference guides to improve understanding and urgency of specialist recommendations."
             ]
           }
         ]
@@ -445,31 +355,13 @@
           {
             "respondent": "University Hospital of Coventry and Warwickshire NHS Trust",
             "action_phrases": [
-              "Established a Service Level Agreement for renal specialists to visit GEH twice weekly and take responsibility for accepting renal patients for transfer."
+              "Established Service Level Agreement for renal specialists to visit GEH twice weekly and lead transfer decisions."
             ]
           },
           {
             "respondent": "George Eliot Hospital NHS Trust",
             "action_phrases": [
-              "Will engage in consultant-to-consultant clinical conversations to decide on patient transfers based on clinical need."
-            ]
-          },
-          {
-            "respondent": "UK Kidney Association",
-            "action_phrases": [
-              "Recommended that the local specialist renal centre assumes responsibility for recommending best location for care delivery and transfer decisions."
-            ]
-          },
-          {
-            "respondent": "British Transplant Society",
-            "action_phrases": [
-              "Recommended that the local specialist renal centre assumes responsibility for recommending best location for care delivery and transfer decisions."
-            ]
-          },
-          {
-            "respondent": "NHS England",
-            "action_phrases": [
-              "Encouraged providers to respond regarding local arrangements and processes for patient transfers and coordination."
+              "Implemented consultant-to-consultant referral process for transfer decisions based on clinical need."
             ]
           }
         ]
@@ -480,31 +372,13 @@
           {
             "respondent": "University Hospital of Coventry and Warwickshire NHS Trust",
             "action_phrases": [
-              "Implemented guidelines and SLA supporting consultant-to-consultant discussions to decide patient location based on clinical need."
+              "Agreed that renal specialists recommend best location for care, with decisions supported by SLA and guidelines."
             ]
           },
           {
             "respondent": "George Eliot Hospital NHS Trust",
             "action_phrases": [
-              "Will take each case individually and liaise with UHCW renal specialists to determine appropriate patient location."
-            ]
-          },
-          {
-            "respondent": "UK Kidney Association",
-            "action_phrases": [
-              "Recommended that specialist teams manage care location decisions, negotiating as needed for patients with multiple conditions."
-            ]
-          },
-          {
-            "respondent": "British Transplant Society",
-            "action_phrases": [
-              "Recommended that specialist teams manage care location decisions, negotiating as needed for patients with multiple conditions."
-            ]
-          },
-          {
-            "respondent": "NHS England",
-            "action_phrases": [
-              "Shared national oversight and encouraged local providers to ensure consistent care approaches through clear pathways."
+              "Follow consultant-to-consultant discussions to decide patient location based on clinical requirements."
             ]
           }
         ]
@@ -515,31 +389,13 @@
           {
             "respondent": "University Hospital of Coventry and Warwickshire NHS Trust",
             "action_phrases": [
-              "Finalised and agreed joint guidelines and SLA with GEH to ensure closer working and improved patient care coordination."
+              "Finalised shared guidelines and Service Level Agreement to ensure closer working and improved patient care with GEH."
             ]
           },
           {
             "respondent": "George Eliot Hospital NHS Trust",
             "action_phrases": [
-              "Collaborating with UHCW under the SLA and guidelines to improve joint working and patient care consistency."
-            ]
-          },
-          {
-            "respondent": "UK Kidney Association",
-            "action_phrases": [
-              "Recommended sharing guidelines and engaging patient associations to improve collaboration and care quality."
-            ]
-          },
-          {
-            "respondent": "British Transplant Society",
-            "action_phrases": [
-              "Recommended sharing guidelines and engaging patient associations to improve collaboration and care quality."
-            ]
-          },
-          {
-            "respondent": "NHS England",
-            "action_phrases": [
-              "Facilitating national learning through the Regulation 28 Working Group to share insights and improve collaborative care."
+              "Collaborated with UHCW to implement shared guidelines and SLA for effective specialist and non-specialist team coordination."
             ]
           }
         ]
@@ -559,18 +415,18 @@
           {
             "respondent": "Adult Social Care, Leicestershire County Council",
             "action_phrases": [
-              "Creating a visual flowchart of the accommodation process to clearly show next steps and share with individuals and their supporters by February 2025"
+              "Create a visual flowchart of the accommodation process to improve communication and manage expectations, to be introduced in February 2025."
             ]
           }
         ]
       },
       {
-        "concern": "Uncertainty in the timescales for moving accommodation, due to dependence on availability of suitable accommodation, requires careful management and communication as it can be a potential stressor or trigger for self-harm for those with a diagnosis of Emotionally Unstable Personality Disorder.",
+        "concern": "Uncertainty in the timescales for moving accommodation is an inherent issue that requires careful management and communication, as it depends on the availability of suitable accommodation.",
         "responses": [
           {
             "respondent": "Adult Social Care, Leicestershire County Council",
             "action_phrases": [
-              "Including guidance in weekly newsletter from 13th January 2025 to reassure individuals at each stage and be person-centred about move timescales to avoid stress"
+              "Include guidance in weekly newsletter from 13th January 2025 to reassure individuals and be person-centred about move timescales."
             ]
           }
         ]
@@ -581,7 +437,7 @@
           {
             "respondent": "Adult Social Care, Leicestershire County Council",
             "action_phrases": [
-              "Sharing the accommodation process flowchart with MDT and care providers to improve clarity on process stages and timescales by February 2025"
+              "Share the accommodation process flowchart with MDT, care providers, family, and friends to clarify stages and timescales from February 2025."
             ]
           }
         ]
@@ -592,7 +448,7 @@
           {
             "respondent": "Adult Social Care, Leicestershire County Council",
             "action_phrases": [
-              "Developing and implementing a visual flowchart and communication process for accommodation moves to clarify steps for community supporters by February 2025"
+              "Develop and implement a visual flowchart policy for clear communication of the accommodation process by February 2025."
             ]
           }
         ]
@@ -603,7 +459,7 @@
           {
             "respondent": "Adult Social Care, Leicestershire County Council",
             "action_phrases": [
-              "Introducing a new internal review procedure for unexpected deaths for Adult Social Care managers to go live in January 2025"
+              "Implement a new internal review procedure for unexpected deaths for all Adult Social Care managers from January 2025."
             ]
           }
         ]
@@ -619,103 +475,106 @@
     ],
     "concern_responses": [
       {
-        "concern": "There is a real lack of specialist rehabilitation for women, particularly those who represent low or medium risk of harm to others but a high risk of self-harm, who are mostly shut out from Approved Premises (AP), resulting in little or no effective rehabilitative provision for this cohort.",
+        "concern": "There is a real lack of specialist rehabilitation for women, particularly those who represent only a low or medium risk of harm to others but a high risk of self-harm, with little or no effective system of rehabilitative provision for that cohort.",
         "responses": [
           {
             "respondent": "Probation Service",
             "action_phrases": [
-              "New initiatives including the Women’s Justice Board and Women’s Policy Framework launched to improve outcomes and focus on accommodation for women in the criminal justice system."
-            ]
-          },
-          {
-            "respondent": "Steps2Recovery",
-            "action_phrases": [
-              "[no response]"
+              "New initiatives launched including Women’s Justice Board and Women’s Policy Framework to improve outcomes for women in custody and on probation."
             ]
           }
         ]
       },
       {
-        "concern": "Provision for specialist rehabilitation accommodation can become dependent on small charities and individual generosity, leading to patchwork services with unclear access and criteria, as happened in this case.",
+        "concern": "The Approved Premises (AP) system is over-subscribed and not well understood as an option for medium risk women, effectively shutting out this cohort from access to APs.",
         "responses": [
           {
             "respondent": "Probation Service",
             "action_phrases": [
-              "[no response]"
-            ]
-          },
-          {
-            "respondent": "Steps2Recovery",
-            "action_phrases": [
-              "[no response]"
+              "Central Referral Process managed by experienced Female Central Referral Unit Manager to assess AP space needs for women."
             ]
           }
         ]
       },
       {
-        "concern": "Despite monitoring by the Probation Service, the situation regarding specialist rehabilitation accommodation for women is worsening, with a similar lack and apparent gender impact as found in the Corston review (2007) and Coll v SSJ case, creating ongoing risks of other deaths.",
+        "concern": "Provision for specialist rehabilitation can become dependent on small charities and related acts of individual generosity, leading to patchwork services with unclear access and unclear criteria.",
         "responses": [
           {
             "respondent": "Probation Service",
             "action_phrases": [
-              "Central Referral Process managed by experienced Female Central Referral Unit Manager to assess and allocate AP spaces for women with complex needs."
+              "[no response]"
             ]
           },
           {
             "respondent": "Steps2Recovery",
             "action_phrases": [
-              "[no response]"
+              "Engaged external consultant to review all policies and procedures ensuring a robust framework moving forward."
             ]
           }
         ]
       },
       {
-        "concern": "Probation officers responsible for finding accommodation and building release plans lack understanding of what accommodation is and is not available, as shown by the failure to realise that an AP might have been available and the failure to appreciate the urgency of finding CAS3 accommodation once the first specialist placement fell through, indicating a training need.",
+        "concern": "Despite monitoring by the Probation Service, the situation regarding specialist rehabilitation accommodation for women is worsening, with a continuing gender disparity similar to that found in the Corston review and Coll v SSJ case.",
         "responses": [
           {
             "respondent": "Probation Service",
             "action_phrases": [
-              "From September, Female AP briefings for all practitioners to emphasise availability of AP placements and promote community disposals to prevent loss of accommodation."
-            ]
-          },
-          {
-            "respondent": "Steps2Recovery",
-            "action_phrases": [
-              "[no response]"
+              "Women’s Justice Board oversight expected to renew focus on accommodation requirements for women in criminal justice system."
             ]
           }
         ]
       },
       {
-        "concern": "Steps to Recovery (S2R) has unclear placement offers and conditions, and insufficient recording of decisions around offers, withdrawal, and reconsideration, which risks unstructured decision-making that may not take all relevant matters into account.",
+        "concern": "Probation officers responsible for finding accommodation and building release plans lack understanding of what accommodation is and is not available, as shown by the failure to realize that an AP might have been available and the failure to appreciate the urgency of finding CAS3 accommodation after the first specialist placement fell through.",
         "responses": [
-          {
-            "respondent": "Steps2Recovery",
-            "action_phrases": [
-              "Implemented new ‘Offer/Acceptance’ document and improved recording on Lamplight system to clarify placement offers and decision-making."
-            ]
-          },
           {
             "respondent": "Probation Service",
             "action_phrases": [
-              "[no response]"
+              "From September, Female AP briefings for all practitioners to emphasise availability of AP placements for women with complex needs."
             ]
           }
         ]
       },
       {
-        "concern": "Withdrawing accommodation offers without first consulting the requesting organisation (such as prison staff) gives rise to risks, as these decisions are critically important and require great care.",
+        "concern": "There is a training need for probation officers to improve their knowledge of accommodation options and the implications for support planning.",
+        "responses": [
+          {
+            "respondent": "Probation Service",
+            "action_phrases": [
+              "Central Approved Premises Team promoting community disposals and engaging regional female leads to improve practitioner knowledge."
+            ]
+          }
+        ]
+      },
+      {
+        "concern": "Steps to Recovery (S2R) has unclear placement offers and conditions, with insufficient clarity around expectations attached to them.",
         "responses": [
           {
             "respondent": "Steps2Recovery",
             "action_phrases": [
-              "Pre-arrival contact with referring services two weeks prior to client arrival to confirm circumstances and consult before withdrawing offers."
+              "Implemented new ‘Offer/Acceptance’ document clearly communicating placement offers and conditions in writing and verbally."
             ]
-          },
+          }
+        ]
+      },
+      {
+        "concern": "S2R's recording of decisions around offers, withdrawal, and reconsideration needs improvement to ensure decisions are properly recorded and decision-making is structured and considers all relevant matters.",
+        "responses": [
           {
-            "respondent": "Probation Service",
+            "respondent": "Steps2Recovery",
             "action_phrases": [
-              "[no response]"
+              "All communications and decisions recorded on Lamplight case management system and regularly audited by senior management."
+            ]
+          }
+        ]
+      },
+      {
+        "concern": "Withdrawing accommodation offers without first consulting the requesting organisation, such as prison staff, creates risks and requires greater care due to the critical importance of these decisions.",
+        "responses": [
+          {
+            "respondent": "Steps2Recovery",
+            "action_phrases": [
+              "Contact referring service two weeks prior to client arrival to confirm no changes and consult before withdrawing offers."
             ]
           }
         ]
@@ -733,9 +592,9 @@
         "concern": "At times when the ambulance service is under extreme pressure, individuals who have fallen at home can wait many hours on the floor before paramedics can attend.",
         "responses": [
           {
-            "respondent": "Derby & Derbyshire ICB",
+            "respondent": "NHS Derby & Derbyshire Integrated Care Board",
             "action_phrases": [
-              "Work as a multi-agency group to minimise response times by EMAS during critical incidents."
+              "Continue to work as a multi-agency group to try and minimise response times by EMAS during critical incidents."
             ]
           }
         ]
@@ -744,20 +603,20 @@
         "concern": "Falls are given a lower categorisation by the ambulance service because it is not a life-threatening situation, leading to delayed response.",
         "responses": [
           {
-            "respondent": "Derby & Derbyshire ICB",
+            "respondent": "NHS Derby & Derbyshire Integrated Care Board",
             "action_phrases": [
-              "Seek to accelerate development and roll out of a falls prevention service including injurious falls for 2025/26."
+              "Seek to accelerate the development and roll out of a falls prevention service including consideration of an injurious falls service in 2025/26."
             ]
           }
         ]
       },
       {
-        "concern": "Resultant long lies can increase the risk of pneumonia, pressure damage and rhabdomyolysis.",
+        "concern": "Resultant long lies after falls can increase the risk of pneumonia, pressure damage and rhabdomyolysis.",
         "responses": [
           {
-            "respondent": "Derby & Derbyshire ICB",
+            "respondent": "NHS Derby & Derbyshire Integrated Care Board",
             "action_phrases": [
-              "Seek to implement options that further mitigate the risk of a long lie following a fall for all residents."
+              "Seek to implement options that further mitigate the risk of a long lie following a fall available to all residents in Derby & Derbyshire."
             ]
           }
         ]
@@ -766,9 +625,9 @@
         "concern": "Other than the ambulance service, there is no local falls service or team operating out of hours to assess patients and assist them off the floor following a fall.",
         "responses": [
           {
-            "respondent": "Derby & Derbyshire ICB",
+            "respondent": "NHS Derby & Derbyshire Integrated Care Board",
             "action_phrases": [
-              "Consider extending DHU falls recovery staff coverage to 20:00-08:00 with Team Up and virtual wards support next day."
+              "Consider extending DHU falls recovery provision to cover 20:00-08:00 with Team Up and virtual wards providing next day clinical support."
             ]
           }
         ]
@@ -788,7 +647,13 @@
           {
             "respondent": "National Institute for Health & Care Excellence (NICE)",
             "action_phrases": [
-              "Reviewed evidence and consulted experts to consider updating CG113 guideline on propranolol use for anxiety but decided not to update at this time."
+              "Reviewed evidence and consulted experts to consider updating CG113 guideline on propranolol for anxiety but decided not to update at this time."
+            ]
+          },
+          {
+            "respondent": "Medicines & Healthcare products Regulatory Agency (MHRA)",
+            "action_phrases": [
+              "Decided not to issue a drug safety update for propranolol after reviewing overdose risks and usage data."
             ]
           }
         ]
@@ -808,7 +673,7 @@
           {
             "respondent": "Department for Education",
             "action_phrases": [
-              "Convene a roundtable in early 2025 to explore social ostracism and lack of trust in formal processes in depth"
+              "Convene a roundtable in early 2025 to explore social ostracism and lack of trust in formal processes in more depth"
             ]
           }
         ]
@@ -819,13 +684,13 @@
           {
             "respondent": "Department for Education",
             "action_phrases": [
-              "Introduce new OfS condition E6 from August 2025 requiring universities to publish policies and procedures for harassment and sexual misconduct"
+              "Convene a roundtable in early 2025 to explore social ostracism and lack of trust in formal processes in more depth"
             ]
           }
         ]
       },
       {
-        "concern": "Social ostracism can have severe and lasting negative impacts on mental health, leading to feelings of isolation, shame, guilt, and worthlessness, all of which are recognised risk factors for suicide.",
+        "concern": "Social ostracism can have severe and lasting negative impacts on mental health, leading to feelings of isolation, shame, guilt, and worthlessness, which are recognised risk factors for suicide.",
         "responses": [
           {
             "respondent": "Department for Education",
@@ -841,7 +706,7 @@
           {
             "respondent": "Department for Education",
             "action_phrases": [
-              "Convene a roundtable in early 2025 to explore social ostracism and lack of trust in formal processes in depth"
+              "Introduce OfS condition E6 from August 2025 requiring universities to publish harassment policies and ensure fair, sensitive reporting processes"
             ]
           }
         ]
@@ -852,7 +717,7 @@
           {
             "respondent": "Department for Education",
             "action_phrases": [
-              "Expand University Mental Health Charter Programme with 113 universities committed to principles including community-building"
+              "Convene a roundtable in early 2025 to explore social ostracism and lack of trust in formal processes in more depth"
             ]
           }
         ]
@@ -890,7 +755,7 @@
           {
             "respondent": "Salford Royal Hospital Foundation Trust",
             "action_phrases": [
-              "Secondary investigations like CT scans will be frontloaded for patients meeting NICE criteria while awaiting clinical review."
+              "Secondary investigations like CT scans will be frontloaded for patients meeting NICE guidelines while awaiting clinical review."
             ]
           },
           {
@@ -907,7 +772,7 @@
           {
             "respondent": "Salford Royal Hospital Foundation Trust",
             "action_phrases": [
-              "The new SOP requires nursing and clinical staff to assess mental capacity for patients wishing to leave and escalate concerns appropriately."
+              "The new SOP mandates nursing and clinical staff to assess mental capacity for patients wishing to leave and escalate concerns appropriately."
             ]
           },
           {
@@ -924,7 +789,7 @@
           {
             "respondent": "Salford Royal Hospital Foundation Trust",
             "action_phrases": [
-              "A draft SOP for patients leaving before assessment is under NCA approval, detailing staff responsibilities and safeguarding measures, with approval expected by 6 February 2025."
+              "A draft SOP for patients leaving before clinical assessment is under NCA approval, detailing staff responsibilities and safeguarding measures, with approval expected by 6 February 2025."
             ]
           },
           {
@@ -953,13 +818,25 @@
           {
             "respondent": "Royal College of General Practitioners",
             "action_phrases": [
-              "The Royal College of General Practitioners remains committed to supporting ongoing educational resources for both the GP Curriculum and Continuing Professional Development in this area."
+              "Support ongoing educational resources for GP Curriculum and Continuing Professional Development on appendicitis diagnosis."
             ]
           },
           {
             "respondent": "Royal College of Surgeons",
             "action_phrases": [
-              "Early formal clinical examination and adjunctive investigations of abdominal ultrasound +/- abdominal CT scan would aid early diagnosis."
+              "Publish anonymised educational Surgical Safety vignette and discuss case with NHSE Surgical Safety Lead."
+            ]
+          },
+          {
+            "respondent": "President Royal, Royal College of Paediatricians and Child Health",
+            "action_phrases": [
+              "Share report and suggestions for local improvement with paediatric members via patient safety portal."
+            ]
+          },
+          {
+            "respondent": "President of the Royal College of Radiologists",
+            "action_phrases": [
+              "[no response]"
             ]
           }
         ]
@@ -970,18 +847,54 @@
           {
             "respondent": "Royal College of Surgeons",
             "action_phrases": [
-              "We are exploring explicit reference to retrocaecal appendicitis in CCRISP and Clinical Skills in Emergency Surgery courses, with CCRISP update scheduled for 2025."
+              "Explore explicit reference to retrocaecal appendicitis in CCRISP and Clinical Skills in Emergency Surgery courses by 2025."
+            ]
+          },
+          {
+            "respondent": "Royal College of General Practitioners",
+            "action_phrases": [
+              "[no response]"
+            ]
+          },
+          {
+            "respondent": "President Royal, Royal College of Paediatricians and Child Health",
+            "action_phrases": [
+              "[no response]"
+            ]
+          },
+          {
+            "respondent": "President of the Royal College of Radiologists",
+            "action_phrases": [
+              "Advocate prompt assessment by experienced clinicians including expert surgeons and radiologists."
             ]
           }
         ]
       },
       {
-        "concern": "Retrocaecal appendicitis presentation is not a rare presentation of either acute appendicitis or generalised abdominal pain, despite the slant of available literature.",
+        "concern": "Retrocaecal appendicitis presentation is not a rare presentation of either acute appendicitis or generalised abdominal pain (both common presenting features in the young).",
         "responses": [
           {
             "respondent": "Royal College of Surgeons",
             "action_phrases": [
-              "Shared report with Specialty Advisory Committee Chairs for consideration during upcoming curricula reviews to ensure retrocaecal appendicitis is addressed."
+              "Share report with Specialty Advisory Committee Chairs for consideration during curricula reviews."
+            ]
+          },
+          {
+            "respondent": "Royal College of General Practitioners",
+            "action_phrases": [
+              "Highlight retrocaecal appendicitis features in NICE CKS guidance and GP training materials."
+            ]
+          },
+          {
+            "respondent": "President Royal, Royal College of Paediatricians and Child Health",
+            "action_phrases": [
+              "Include diagnosis of acute abdominal pain in core paediatric training syllabus and signpost GIRFT Best Practice Pathway."
+            ]
+          },
+          {
+            "respondent": "President of the Royal College of Radiologists",
+            "action_phrases": [
+              "Advocate using similar imaging strategies for retrocaecal appendicitis as for general appendicitis."
             ]
           }
         ]
@@ -990,15 +903,27 @@
         "concern": "The availability and use of bedside/departmental ultrasound scanning in abdominal pain (e.g. in the young) at any time, but especially out of hours.",
         "responses": [
           {
-            "respondent": "Royal College of Radiologists",
+            "respondent": "President of the Royal College of Radiologists",
             "action_phrases": [
-              "Advocate prompt assessment by experienced clinicians and early transfer to specialist centres given workforce shortages impacting ultrasound availability, especially out of hours."
+              "Advocate prompt imaging referral and note ultrasound availability varies greatly, with CT available 24/7 in UK hospitals."
+            ]
+          },
+          {
+            "respondent": "Royal College of General Practitioners",
+            "action_phrases": [
+              "Note bedside ultrasound scanning not routinely available in hospital emergency or primary care; policy change and investment needed."
             ]
           },
           {
             "respondent": "Royal College of Surgeons",
             "action_phrases": [
-              "Noted out of hours paediatric radiology ultrasound provision is determined by local Trusts/ICBs; advice from Royal College of Radiologists may be sought."
+              "[no response]"
+            ]
+          },
+          {
+            "respondent": "President Royal, Royal College of Paediatricians and Child Health",
+            "action_phrases": [
+              "[no response]"
             ]
           }
         ]
@@ -1007,21 +932,27 @@
         "concern": "The training of doctors in considering the diagnosis as a possible differential to generalised abdominal pain.",
         "responses": [
           {
-            "respondent": "Royal College of Paediatricians and Child Health",
+            "respondent": "President Royal, Royal College of Paediatricians and Child Health",
             "action_phrases": [
-              "Ensure paediatric training syllabus includes clinical assessment and differential diagnosis of acute abdominal pain, and signpost Best Practice Pathway Resource for paediatric acute abdominal pain and appendicectomy."
-            ]
-          },
-          {
-            "respondent": "Royal College of General Practitioners",
-            "action_phrases": [
-              "Support ongoing educational resources for GP Curriculum and Continuing Professional Development regarding appendicitis diagnosis and management."
+              "Emphasise clinical assessment and differential diagnosis in paediatric training syllabus and share learning via patient safety portal."
             ]
           },
           {
             "respondent": "Royal College of Surgeons",
             "action_phrases": [
-              "Maintain coverage of retrocaecal appendicitis diagnosis and management in surgical curricula and examinations, with continual review."
+              "Ensure retrocaecal appendicitis diagnosis and management included in surgical curricula and review courses by 2025."
+            ]
+          },
+          {
+            "respondent": "Royal College of General Practitioners",
+            "action_phrases": [
+              "Support GP training in telephone consultation, triage, and urgent care including appendicitis differential diagnosis."
+            ]
+          },
+          {
+            "respondent": "President of the Royal College of Radiologists",
+            "action_phrases": [
+              "[no response]"
             ]
           }
         ]
@@ -1042,13 +973,13 @@
           {
             "respondent": "Cannock Chase Hospital",
             "action_phrases": [
-              "Look at risk reduction strategies including improved use of automation and ensuring storage, recording and audit processes are robust"
+              "Plan to look at risk reduction strategies including improved use of automation and ensuring storage, recording and audit processes are robust."
             ]
           },
           {
             "respondent": "NHS England",
             "action_phrases": [
-              "Continue to explore and support improvements in controlled, authorised and auditable access to medicines"
+              "Will continue to explore and support improvements in controlled, authorised and auditable access to medicines."
             ]
           }
         ]
@@ -1065,7 +996,7 @@
           {
             "respondent": "NHS England",
             "action_phrases": [
-              "Consider the hospital’s response and any actions arising from this in due course"
+              "Will consider the hospital’s response and any actions arising from this in due course."
             ]
           }
         ]
@@ -1093,13 +1024,13 @@
           {
             "respondent": "Driver Vehicle Standards Agency",
             "action_phrases": [
-              "Provides advice on aquaplaning through driving tests, theory test materials, and guidance documents"
+              "Provides advice on aquaplaning in driving tests and publishes guidance for all drivers"
             ]
           },
           {
             "respondent": "Royal Society for the Prevention of Accidents",
             "action_phrases": [
-              "Create and share digital education materials on aquaplaning awareness through social media and website by Q2 2025"
+              "Will create and share digital education materials on aquaplaning awareness through social media and website by Q2 2025"
             ]
           }
         ]
@@ -1116,30 +1047,30 @@
           {
             "respondent": "Driver Vehicle Standards Agency",
             "action_phrases": [
-              "Includes guidance on reducing speed in wet conditions within driver education and theory tests"
+              "Includes guidance on reducing speed in wet conditions within driver education and published materials"
             ]
           },
           {
             "respondent": "Royal Society for the Prevention of Accidents",
             "action_phrases": [
-              "Engage with Department for Transport and DVSA regarding coroner's findings by Q4 2024"
+              "[no response]"
             ]
           }
         ]
       },
       {
-        "concern": "Basic knowledge about braking and steering should be known by drivers if a vehicle experiences aquaplaning.",
+        "concern": "Basic knowledge about braking and steering should be provided to drivers in case a vehicle experiences aquaplaning.",
         "responses": [
           {
             "respondent": "Department of Transport",
             "action_phrases": [
-              "Notes Rules 117 to 126 of the Highway Code cover vehicle control including skidding and braking affected by water"
+              "Notes Rules 117-126 of the Highway Code cover vehicle control including skidding and steering in wet conditions"
             ]
           },
           {
             "respondent": "Driver Vehicle Standards Agency",
             "action_phrases": [
-              "Ensures driving tests and guidance include skills for handling aquaplaning and braking"
+              "Ensures driving tests and guidance include skills for handling aquaplaning and wet road conditions"
             ]
           },
           {
@@ -1162,13 +1093,13 @@
           {
             "respondent": "Driver Vehicle Standards Agency",
             "action_phrases": [
-              "Provides aquaplaning advice through theory test materials and guidance documents despite no specific Highway Code mention"
+              "Uses the Highway Code and DES as source materials for theory tests including aquaplaning content"
             ]
           },
           {
             "respondent": "Royal Society for the Prevention of Accidents",
             "action_phrases": [
-              "[no response]"
+              "Will engage with Department for Transport and DVSA regarding coroner's findings by Q4 2024"
             ]
           }
         ]
@@ -1189,7 +1120,7 @@
           {
             "respondent": "Secretary of State for Health and Social Care",
             "action_phrases": [
-              "Publish 10-Year Health Plan in Spring 2025 focusing on reforms to improve NHS performance including ambulance response times"
+              "Publish the 10-Year Health Plan in Spring 2025 focusing on reforms to improve NHS performance including ambulance response times."
             ]
           },
           {
@@ -1201,7 +1132,7 @@
         ]
       },
       {
-        "concern": "The current wording of some of the script used by Call Handlers under NHS Pathways creates an impression that an ambulance has been dispatched when this is not the case, with phrases such as ‘An emergency ambulance has been arranged’, ‘we will be with you as soon as possible, as soon as an ambulance is available’ and ‘if you can ask for someone to meet and direct the vehicle and shut any dogs away if there are any’ potentially giving a misleading impression that could deter callers from taking steps to obtain faster help.",
+        "concern": "The current wording of some of the script used by Call Handlers under NHS Pathways creates an impression that an ambulance has been dispatched when this is not the case, with phrases such as ‘An emergency ambulance has been arranged’, ‘we will be with you as soon as possible, as soon as an ambulance is available’ and ‘if you can ask for someone to meet and direct the vehicle and shut any dogs away if there are any’ potentially misleading callers.",
         "responses": [
           {
             "respondent": "Secretary of State for Health and Social Care",
@@ -1218,12 +1149,12 @@
         ]
       },
       {
-        "concern": "Under the NHS Pathways paradigm, there is a potential for an ambulance response to be cancelled without this first being discussed with the person who dialed 999 and requested an ambulance.",
+        "concern": "Under the NHS Pathways paradigm, there is potential for an ambulance response to be cancelled without this first being discussed with the person who dialed 999 and requested an ambulance.",
         "responses": [
           {
             "respondent": "Chief Executive, NHS England",
             "action_phrases": [
-              "Confirm NHS 111 and 999 services have local Standard Operating Procedures to manage ambulance cancellations"
+              "Confirm that ambulance cancellations are managed locally with Standard Operating Procedures outside NHS Pathways system."
             ]
           },
           {
@@ -1288,7 +1219,7 @@
     ],
     "concern_responses": [
       {
-        "concern": "The pedestrian crossing area across Jersey Road is an uncontrolled crossing with no pedestrian traffic lights, no demand button, and no sound signals, despite spanning a dual carriageway with a 40mph speed limit and three lanes in both directions separated by a raised central kerb.",
+        "concern": "The pedestrian crossing area across Jersey Road is an uncontrolled crossing with no pedestrian traffic lights, no demand button, and no sound signals, despite spanning a dual carriageway with a 40mph speed limit and three lanes in both directions.",
         "responses": [
           {
             "respondent": "Transport for London (TfL)",
@@ -1299,7 +1230,7 @@
           {
             "respondent": "London Borough of Hounslow (LBH)",
             "action_phrases": [
-              "Working with TfL to consult on and ensure new signal-controlled pedestrian and cyclist crossings across the A4 and Jersey Road are technically sound and meet local needs."
+              "Working with TfL to consult on and ensure new signal-controlled pedestrian and cyclist crossings meet local users' needs, aiming for design finalisation in 2025-26."
             ]
           },
           {
@@ -1339,7 +1270,7 @@
           {
             "respondent": "Transport for London (TfL)",
             "action_phrases": [
-              "Proposing new pedestrian crossing design to hold traffic on the A4, allowing pedestrians time to cross safely with pedestrian signals and push button units."
+              "Proposing new pedestrian crossing design to hold traffic on the A4, allowing pedestrians time to cross safely with signalised facilities."
             ]
           },
           {
@@ -1362,7 +1293,7 @@
           {
             "respondent": "Transport for London (TfL)",
             "action_phrases": [
-              "Conducted thorough review of collision data and considering additional highway layout changes to reduce collision risk beyond crossing improvements."
+              "Conducted thorough review of historic collision data and considering additional highway layout changes to reduce collision risk."
             ]
           },
           {
@@ -1385,19 +1316,19 @@
           {
             "respondent": "Transport for London (TfL)",
             "action_phrases": [
-              "Aiming to implement the pedestrian crossing improvement scheme in 2026 after traffic modelling, public engagement, design, and contractor mobilisation."
+              "Aiming to implement the proposed crossing improvements in 2026 after traffic modelling, public engagement, design, and contractor mobilisation."
             ]
           },
           {
             "respondent": "London Borough of Hounslow (LBH)",
             "action_phrases": [
-              "Expecting TfL's proposals to be finalised by 2025-26 and constructed in 2026-27, working to secure priority implementation of safety measures."
+              "Continuing to work with TfL and stakeholders to secure priority implementation of safety measures expected in 2026-27."
             ]
           },
           {
             "respondent": "Department for Transport (DfT)",
             "action_phrases": [
-              "Clarified no consent is required from DfT for the crossing redesign; funding is TfL's responsibility from revenue sources outside DfT."
+              "Clarified no consent or approvals are required from DfT for the crossing redesign; funding is managed by TfL."
             ]
           }
         ]
@@ -1408,13 +1339,13 @@
           {
             "respondent": "Transport for London (TfL)",
             "action_phrases": [
-              "Committed to progressing through governance stages and monitoring new crossings for at least 48 months post-implementation."
+              "Committing to monitor operation and performance of new crossings for at least 48 months post-implementation including safety audits."
             ]
           },
           {
             "respondent": "London Borough of Hounslow (LBH)",
             "action_phrases": [
-              "Committed to working with TfL and stakeholders to secure priority implementation of the safety improvements."
+              "[no response]"
             ]
           },
           {
@@ -1431,19 +1362,19 @@
           {
             "respondent": "Transport for London (TfL)",
             "action_phrases": [
-              "Leading the design and delivery of pedestrian crossing improvements and coordinating with LBH for minor works on their road network."
+              "Leading the design and delivery of formal pedestrian crossings and working with LBH on minor works to improve safety at the junction."
             ]
           },
           {
             "respondent": "London Borough of Hounslow (LBH)",
             "action_phrases": [
-              "Collaborating with TfL to facilitate interim temporary measures and support delivery of the crossing improvement scheme."
+              "Collaborating with TfL to review and approve designs and facilitate interim safety measures like additional signage."
             ]
           },
           {
             "respondent": "Department for Transport (DfT)",
             "action_phrases": [
-              "Confirmed no direct involvement or consent required; funding and implementation decisions rest with TfL and LBH."
+              "Providing guidance and clarifying that no consent is required for TfL's safety improvements; funding is TfL's responsibility."
             ]
           }
         ]
@@ -1481,9 +1412,9 @@
         "concern": "Maintaining ketamine's classification as a class B drug is likely to encourage others to start or continue using it under the false impression it is safer due to its lower classification compared to class A drugs.",
         "responses": [
           {
-            "respondent": "The Home Secretary",
+            "respondent": "Minister of State for Policing, Fire and Crime Prevention",
             "action_phrases": [
-              "Intend to commission the ACMD to conduct an updated harms assessment of ketamine in the forthcoming three-year work programme."
+              "Intend to commission the ACMD to conduct an updated harms assessment of ketamine as part of the forthcoming three-year work programme commission cycle"
             ]
           }
         ]
@@ -1492,20 +1423,20 @@
         "concern": "Ketamine use causes huge long-term life-changing health problems, including long-term urological and liver damage, which in Mr Boland's case led to his death.",
         "responses": [
           {
-            "respondent": "The Home Secretary",
+            "respondent": "Minister of State for Policing, Fire and Crime Prevention",
             "action_phrases": [
-              "Intend to commission the ACMD to conduct an updated harms assessment of ketamine in the forthcoming three-year work programme."
+              "Intend to commission the ACMD to conduct an updated harms assessment of ketamine as part of the forthcoming three-year work programme commission cycle"
             ]
           }
         ]
       },
       {
-        "concern": "There is a significant increase in the illicit use of ketamine leading to a rise in potentially fatal health problems seen by clinicians, with the extent of these risks rarely understood by users until health damage has occurred.",
+        "concern": "There is a significant increase in the illicit use of ketamine leading to a rise in potentially fatal health problems seen by clinicians, with the extent of these risks rarely understood by users until the damage has been done to their health.",
         "responses": [
           {
-            "respondent": "The Home Secretary",
+            "respondent": "Minister of State for Policing, Fire and Crime Prevention",
             "action_phrases": [
-              "Intend to commission the ACMD to conduct an updated harms assessment of ketamine in the forthcoming three-year work programme."
+              "Intend to commission the ACMD to conduct an updated harms assessment of ketamine as part of the forthcoming three-year work programme commission cycle"
             ]
           }
         ]
@@ -1524,15 +1455,9 @@
         "concern": "There is a lack of accommodation available to the Probation Service in which prisoners released from custody may properly be placed, including both Approved Premises (which are the responsibility of the MoJ) and more generally through the local authority to avoid homelessness.",
         "responses": [
           {
-            "respondent": "Ministry of Justice",
+            "respondent": "Ministry of Justice and Ministry of Housing, Communities and Local Government",
             "action_phrases": [
               "Expanded Approved Premises by 169 spaces and increased women's provision by over 30% to improve accommodation availability."
-            ]
-          },
-          {
-            "respondent": "Secretary of State for Housing, Communities, and Local Government",
-            "action_phrases": [
-              "Awarded approximately £33 million to local authorities via the Accommodation for Ex Offenders scheme to support ex-offenders into settled private rented tenancies."
             ]
           }
         ]
@@ -1541,15 +1466,9 @@
         "concern": "As a consequence of the lack of suitable accommodation, some prisoners are released and become effectively homeless, which increases difficulties in supervision.",
         "responses": [
           {
-            "respondent": "Ministry of Justice",
+            "respondent": "Ministry of Justice and Ministry of Housing, Communities and Local Government",
             "action_phrases": [
-              "Provides Community Accommodation Service tiers including CAS3 offering up to 12 weeks transitional accommodation with support to prevent homelessness for prison leavers."
-            ]
-          },
-          {
-            "respondent": "Secretary of State for Housing, Communities, and Local Government",
-            "action_phrases": [
-              "Increasing funding for homelessness services by £233 million next year to maintain and develop pathways for prison leavers into settled accommodation."
+              "Provide CAS3 transitional accommodation with 2603 bedspaces expanding annually to support prison leavers at risk of homelessness."
             ]
           }
         ]
@@ -1558,15 +1477,9 @@
         "concern": "Some prisoners are accommodated at unsuitable premises, as happened in this instance.",
         "responses": [
           {
-            "respondent": "Ministry of Justice",
+            "respondent": "Ministry of Justice and Ministry of Housing, Communities and Local Government",
             "action_phrases": [
-              "Deploys 49 Strategic Housing Specialists to identify and deliver solutions removing barriers to suitable accommodation for prison leavers."
-            ]
-          },
-          {
-            "respondent": "Secretary of State for Housing, Communities, and Local Government",
-            "action_phrases": [
-              "[no response]"
+              "Homelessness Prevention Teams coordinate multi-agency efforts to identify appropriate accommodation pathways for prison leavers."
             ]
           }
         ]
@@ -1586,7 +1499,7 @@
           {
             "respondent": "Coventry and Warwickshire Partnership Trust",
             "action_phrases": [
-              "Updated Section 17 Leave Policy with cross-directorate input and provided a Section 17 toolkit including step-by-step guidance on the Trust intranet."
+              "Updated Section 17 Leave Policy with cross-directorate input and provided a Section 17 toolkit on the Trust intranet including step-by-step guidance and checklists."
             ]
           }
         ]
@@ -1597,7 +1510,7 @@
           {
             "respondent": "Coventry and Warwickshire Partnership Trust",
             "action_phrases": [
-              "Developed and implemented a 'contact card' with key phone numbers for patients accessing leave to contact support services."
+              "Developed and implemented a 'contact card' with key phone numbers for patients accessing leave to ensure they can seek help if needed."
             ]
           }
         ]
@@ -1798,7 +1711,7 @@
           {
             "respondent": "Safeguarding Adults Team, East Riding of Yorkshire Council",
             "action_phrases": [
-              "Implemented a new service model and forms since November 2023 to improve safeguarding adults enquiry quality and outcomes."
+              "Implemented a new service and practice model with improved forms and training since November 2023 to support good safeguarding practice."
             ]
           }
         ]
@@ -1820,7 +1733,7 @@
           {
             "respondent": "Safeguarding Adults Team, East Riding of Yorkshire Council",
             "action_phrases": [
-              "Launched new forms leading practitioners through recording enquiries with the voice of the person and family at the heart of the record."
+              "Launched new forms guiding practitioners to record enquiry methodology and include the voice of the person and family at the heart of the record."
             ]
           }
         ]
@@ -1831,7 +1744,7 @@
           {
             "respondent": "Safeguarding Adults Team, East Riding of Yorkshire Council",
             "action_phrases": [
-              "Implemented a training programme and weekly practice forum to support high quality safeguarding adults enquiry practice."
+              "Implemented a training programme and weekly practice forum to support high quality safeguarding enquiry practice."
             ]
           }
         ]
@@ -1842,18 +1755,18 @@
           {
             "respondent": "Safeguarding Adults Team, East Riding of Yorkshire Council",
             "action_phrases": [
-              "Implemented new paperwork requiring workers to share outcomes and recommendations with relevant parties and monitor compliance."
+              "Introduced new paperwork requiring workers to share outcomes and recommendations with relevant parties and monitor compliance."
             ]
           }
         ]
       },
       {
-        "concern": "There was a lack of professional curiosity, and the full review process was not followed or documented properly.",
+        "concern": "There was a lack of professional curiosity and the full review process was not followed or documented properly.",
         "responses": [
           {
             "respondent": "Safeguarding Adults Team, East Riding of Yorkshire Council",
             "action_phrases": [
-              "Accompanied new forms rollout with training refreshing expectations and encouraging professional curiosity."
+              "Accompanied new forms with guidance encouraging professional curiosity and thorough enquiry recording."
             ]
           }
         ]
@@ -1864,7 +1777,7 @@
           {
             "respondent": "Safeguarding Adults Team, East Riding of Yorkshire Council",
             "action_phrases": [
-              "Launched safeguarding audit overseen by principal social worker to measure quality and identify themes for improvement."
+              "Remodelled safeguarding adults service with a dedicated hub and locality teams to ensure robust, person-centred enquiries and continuous improvement."
             ]
           }
         ]
@@ -1879,10 +1792,22 @@
     ],
     "concern_responses": [
       {
-        "concern": "No evidence has been presented as to the knowledge of Henry Joseph Grierson's discontinuation of CAMHS treatment and intention to discharge from Recovery Steps by the safeguarding team at Huddersfield New College.",
+        "concern": "No evidence has been presented as to the knowledge of Henry Joseph Grierson's discontinuation of referral and treatment from CAMHS and his intention to discharge himself from Recovery Steps by the safeguarding team at Huddersfield New College.",
         "responses": [
           {
             "respondent": "Huddersfield New College",
+            "action_phrases": [
+              "[no response]"
+            ]
+          },
+          {
+            "respondent": "CAMHS",
+            "action_phrases": [
+              "[no response]"
+            ]
+          },
+          {
+            "respondent": "Recovery Steps",
             "action_phrases": [
               "[no response]"
             ]
@@ -1897,14 +1822,9 @@
             "action_phrases": [
               "[no response]"
             ]
-          }
-        ]
-      },
-      {
-        "concern": "The latest communication concerning Mr Grierson's mental health provided by CAMHS was dated October 2023, with no subsequent updates.",
-        "responses": [
+          },
           {
-            "respondent": "CAMHS",
+            "respondent": "Mr Grierson",
             "action_phrases": [
               "[no response]"
             ]
@@ -1912,7 +1832,7 @@
         ]
       },
       {
-        "concern": "Communication between Huddersfield New College and CAMHS and Recovery Steps was not seemingly maintained to enable the college's awareness of Mr Grierson's current mental health in April 2024 and the decisions taken by himself and his family to remove such external support.",
+        "concern": "Communication between Huddersfield New College and CAMHS and Recovery Steps was not seemingly maintained to enable an awareness by the college of the current mental health of Mr Grierson in April 2024 and the decisions taken by himself and his family to remove such external support.",
         "responses": [
           {
             "respondent": "Huddersfield New College",
@@ -1944,34 +1864,34 @@
     ],
     "concern_responses": [
       {
-        "concern": "The path at the location of Mrs Friedhoff's accident is only about 2 metres wide, which is significantly narrower than the national guidance of 3.5 metres for such a path, creating an obvious accident risk for pedestrians and cyclists.",
+        "concern": "The path at the location of Mrs Friedhoff’s accident is only about 2 metres wide, which is significantly narrower than the national guidance of 3.5 metres for such a path, creating an obvious accident risk for pedestrians and cyclists.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
             "action_phrases": [
-              "Plan to undertake surveying of people cycling and pedestrian use in the Iffley lock area in spring/summer 2025 to better understand user volumes and speeds."
+              "[no response]"
             ]
           }
         ]
       },
       {
-        "concern": "The path is a shared space heavily used by cyclists for leisure and commuting, some traveling at significant speed in close proximity to pedestrians, despite cyclists not being permitted to use it unless they have permission.",
+        "concern": "The path is a shared space heavily used by cyclists for leisure and commuting, some traveling at significant speed in close proximity to pedestrians, despite cyclists not being permitted to use the footpath unless they have permission.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
             "action_phrases": [
-              "Plan to undertake surveying of people cycling and pedestrian use in the Iffley lock area in spring/summer 2025 to better understand user volumes and speeds."
+              "Organise promotional events from spring 2025 highlighting safe and responsible towpath use including cyclist behaviour."
             ]
           }
         ]
       },
       {
-        "concern": "The surface of the path has been upgraded in recent years, which has probably encouraged increased use by cyclists and enabled them to cycle faster, increasing the risk of accidents.",
+        "concern": "The surface of the path has been upgraded in recent years, which has probably encouraged increased use by cyclists and enabled them to cycle faster, increasing the risk of serious injury to pedestrians.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
             "action_phrases": [
-              "Plan to undertake surveying of people cycling and pedestrian use in the Iffley lock area in spring/summer 2025 to better understand user volumes and speeds."
+              "Carry out monitoring of cycle and pedestrian use including speed in spring/summer 2025 to inform interventions."
             ]
           }
         ]
@@ -1982,7 +1902,7 @@
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
             "action_phrases": [
-              "Plan to audit signage in winter/early 2025 and implement additional signage at key entrance points by summer 2025."
+              "Audit and review signage in winter/early 2025 with implementation of additional signage by summer 2025."
             ]
           }
         ]
@@ -1993,13 +1913,13 @@
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
             "action_phrases": [
-              "Plan to organise promotional events from spring 2025 highlighting safe and responsible use of the towpath to improve user behaviour."
+              "[no response]"
             ]
           }
         ]
       },
       {
-        "concern": "Physical measures such as gates or similar to slow cyclists have not been implemented, despite being discussed as a potential safety improvement.",
+        "concern": "Physical measures such as gates or similar to slow cyclists have not been implemented, which could reduce the risk of accidents.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
@@ -2010,7 +1930,7 @@
         ]
       },
       {
-        "concern": "Segregation lines have not been applied due to the narrow width of the path, limiting options for separating pedestrians and cyclists.",
+        "concern": "Segregation lines have not been applied, likely due to the narrow width of the path, which limits options for separating pedestrians and cyclists.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
@@ -2021,7 +1941,7 @@
         ]
       },
       {
-        "concern": "Reconfiguring the path to redirect it through the small woods present at the location, potentially creating two separate paths for pedestrians and cyclists, has not been pursued.",
+        "concern": "The path has not been reconfigured to redirect through the small woods present at the location, which may offer an opportunity to create two separate paths, one gated for pedestrians and one for cyclists.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
@@ -2032,12 +1952,12 @@
         ]
       },
       {
-        "concern": "Oxfordshire County Council (OCC) and the Environment Agency have not yet carried out a comprehensive safety review in conjunction with other stakeholders to identify and implement mitigating measures to prevent future accidents that could result in death.",
+        "concern": "There is a risk that accidents similar to Mrs Friedhoff’s may continue to occur that could result in death, indicating the need for a safety review by OCC in conjunction with the Environment Agency and other stakeholders.",
         "responses": [
           {
             "respondent": "Director of Highways and Operations Oxfordshire County Council",
             "action_phrases": [
-              "County council and Environment Agency to undertake volunteer vegetation clearance work around Iffley lock in winter/early 2025."
+              "[no response]"
             ]
           }
         ]
@@ -2081,7 +2001,7 @@
           {
             "respondent": "Chief Executive, NHS England",
             "action_phrases": [
-              "Invested £2.3 billion from 2019/20 to 2023/24 and allocated £42 million recurrent funding from 2024/25 to recommission inpatient care aligned with local models"
+              "Allocated £42 million recurrent investment from 2024/25 for Integrated Care Boards to recommission inpatient care aligned with local models"
             ]
           }
         ]
@@ -2096,23 +2016,12 @@
     ],
     "concern_responses": [
       {
-        "concern": "Mrs Tromans' Waterlow score was underestimated on admission to the Emergency Department, leading to a failure to identify her very high risk of pressure sores.",
+        "concern": "Mrs Tromans' Waterlow score was underestimated on admission, leading to a failure to identify her very high risk of pressure sores during her almost 18-hour stay in the Emergency Department where she was positioned on a trolley without pressure area care.",
         "responses": [
           {
             "respondent": "University Hospitals Birmingham NHS Foundation Trust",
             "action_phrases": [
-              "Implement a project in ED including targeted training, new pressure-relieving trolley mattresses, pillows for heel offloading, and updated Waterlow score documentation booklet."
-            ]
-          }
-        ]
-      },
-      {
-        "concern": "Mrs Tromans spent almost 18 hours in the Emergency Department positioned on a trolley without pressure area care, likely contributing to tissue damage.",
-        "responses": [
-          {
-            "respondent": "University Hospitals Birmingham NHS Foundation Trust",
-            "action_phrases": [
-              "Introduce skin champions in ED with comprehensive training and audit trolley mattresses for effective pressure reduction."
+              "Implement targeted ED staff training, new pressure-relieving trolley mattresses, pillows for heel offloading, updated Waterlow score booklet, skin champions, and trolley mattress audits"
             ]
           }
         ]
@@ -2123,7 +2032,7 @@
           {
             "respondent": "University Hospitals Birmingham NHS Foundation Trust",
             "action_phrases": [
-              "Conduct weekly audits of repositioning in AMU with real-time feedback and implement the Response Assessment Tool (RAT) for pressure ulcer events."
+              "Conduct weekly repositioning audits in AMU with real-time feedback, hold Tissue Viability Link Worker training events, and implement the Response Assessment Tool for compliance"
             ]
           }
         ]
@@ -2134,7 +2043,7 @@
           {
             "respondent": "University Hospitals Birmingham NHS Foundation Trust",
             "action_phrases": [
-              "Update wound assessment chart and provide staff training with bi-monthly sessions to ensure proper documentation and care plans."
+              "Use updated Wound Assessment Chart with staff training and monitor usage through patient assessments and quarterly audits"
             ]
           }
         ]
@@ -2145,7 +2054,7 @@
           {
             "respondent": "University Hospitals Birmingham NHS Foundation Trust",
             "action_phrases": [
-              "Revise investigation process to include individual staff statements and embed findings into reports for improved assurance and learning dissemination."
+              "Revise investigation process to include individual staff statements and embed findings into roundtable reports with shared learning and regular leadership updates"
             ]
           }
         ]
