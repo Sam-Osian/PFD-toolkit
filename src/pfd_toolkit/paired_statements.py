@@ -65,21 +65,12 @@ class ActionabilityActionPhraseElements(BaseModel):
     constraints: bool = Field(
         ..., description="Includes time, place, quantity, or resource constraints."
     )
-    accountability_cues: bool = Field(
-        ..., description="Mentions recipients, evidence, follow-up, or escalation."
-    )
 
     @property
     def actionability_score(self) -> int:
-        """Compute a 0–5 score from boolean element flags."""
+        """Compute a 0–4 score from boolean element flags."""
 
-        return int(
-            self.agent
-            + self.action
-            + self.object_
-            + self.constraints
-            + self.accountability_cues
-        )
+        return int(self.agent + self.action + self.object_ + self.constraints)
 
     @field_validator("action_phrase")
     @classmethod
@@ -89,7 +80,7 @@ class ActionabilityActionPhraseElements(BaseModel):
             raise ValueError("action_phrase text cannot be empty")
         return cleaned
 
-    @field_validator("agent", "action", "object_", "constraints", "accountability_cues", mode="before")
+    @field_validator("agent", "action", "object_", "constraints", mode="before")
     @classmethod
     def _coerce_bool(cls, value: Any) -> bool:
         if isinstance(value, str):
@@ -110,9 +101,9 @@ class ActionabilityActionPhrase(BaseModel):
     actionability_score: int = Field(
         ...,
         ge=0,
-        le=5,
+        le=4,
         description=(
-            "Actionability rating from 0 (no actionable elements) to 5 (all "
+            "Actionability rating from 0 (no actionable elements) to 4 (all "
             "elements present)."
         ),
     )
@@ -132,8 +123,8 @@ class ActionabilityActionPhrase(BaseModel):
             raise TypeError("actionability_score must be an integer")
         if value < 0:
             return 0
-        if value > 5:
-            return 5
+        if value > 4:
+            return 4
         return value
 
 
@@ -715,6 +706,12 @@ class ConcernParser:
             "recipient/respondent, list each intended respondent with a single "
             "action phrase '[no response]'.\n"
             "- Do not invent actions or add concerns beyond those supplied.\n\n"
+            "Where the response text provides them, make sure each action phrase includes: "
+            "Agent (who will act), Action (verbs of commitment or obligation), "
+            "Object (what will be acted upon), and Constraints (time, deadlines, "
+            "place, quantity, resources). If any of these details are missing "
+            "from the text, do not force them into the action phrase—stay "
+            "faithful to the supplied wording.\n\n"
             "Report recipients (for context):\n"
             f"{recipient_line}\n\n"
             "Concerns to map:\n"
@@ -751,10 +748,10 @@ class ConcernParser:
                 "For each action phrase, identify whether it explicitly includes each element below.",
                 "Return a boolean (True/False) for each element in the schema and do not calculate totals:",
                 " - Agent: who will act (I / we / named role or organisation).",
-                " - Action: verbs of commitment or obligation.",
+                " - Action: concrete verbs of commitment or obligation; passive wording alone does not count as action.",
                 " - Object: the thing to be acted upon.",
-                " - Constraints: time, place, quantity, resources.",
-                " - Accountability cues: recipients, evidence, follow-up, escalation.",
+                " - Constraints: time, place, quantity, resources. If an action is described in the past tense, assume any time requirement has been satisfied.",
+                "The actionability score is the count of True elements (0–4).",
                 "Keep the concern and action phrase text exactly as provided and do not invent details.",
                 "Populate only the `concerns` and nested `action_phrases` fields of the response schema.",
             ]
