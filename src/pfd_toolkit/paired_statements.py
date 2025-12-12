@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable, List, Mapping, Sequence
 
+import matplotlib.pyplot as plt
 import pandas as pd
 from pydantic import BaseModel, Field, field_validator
 
@@ -503,6 +504,42 @@ class ActionabilityResults(BaseModel):
                         }
                     )
         return pd.DataFrame(rows)
+
+    def plot_actionability_scores(
+        self, ax: plt.Axes | None = None, figsize: tuple[int, int] = (8, 6)
+    ) -> plt.Axes:
+        """Plot a bar chart counting action phrases by actionability score.
+
+        Parameters
+        ----------
+        ax
+            Optional matplotlib axes to draw on. A new figure and axes are
+            created when omitted.
+        figsize
+            Figure size used when constructing new axes.
+
+        Returns
+        -------
+        matplotlib.axes.Axes
+            The axes containing the rendered bar chart.
+        """
+
+        df = self.as_df()
+        if df.empty:
+            raise ValueError("No actionability scores available to plot.")
+
+        counts = df["actionability_score"].value_counts().reindex(range(5), fill_value=0)
+
+        if ax is None:
+            _, ax = plt.subplots(figsize=figsize)
+
+        ax.bar(counts.index, counts.values, color="#4C6EF5")
+        ax.set_xlabel("Actionability score")
+        ax.set_ylabel("Number of action phrases")
+        ax.set_title("Action phrases by actionability score")
+        ax.set_xticks(range(5))
+        plt.tight_layout()
+        return ax
 
 
 class ConcernParser:
