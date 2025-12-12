@@ -747,11 +747,12 @@ class ConcernParser:
             [
                 "For each action phrase, identify whether it explicitly includes each element below.",
                 "Return a boolean (True/False) for each element in the schema and do not calculate totals:",
-                " - Agent: who will act (I / we / named role or organisation).",
-                " - Action: concrete verbs of commitment or obligation; passive wording alone does not count as action.",
-                " - Object: the thing to be acted upon.",
-                " - Constraints: time, place, quantity, resources. If an action is described in the past tense, assume any time requirement has been satisfied.",
+                " - Agent: who will act (I / we / named role or organisation) in the action phrase itself (not implied).",
+                " - Action: a new, concrete verb of commitment or obligation to do something. Passive verbs (e.g. 'will be considered') or statements about what already happens do not count as an action.",
+                " - Object: the thing to be acted upon, stated explicitly alongside the action.",
+                " - Constraints: specific time, place, quantity, or resource conditions that limit the action (e.g. dates, frequencies, deadlines). Vague phrases such as 'in due course' or 'as soon as possible' are insufficient. If an action is described in the past tense, assume any time requirement has been satisfied.",
                 "The actionability score is the count of True elements (0–4).",
+                "Only mark an element True when it is explicitly present in the action phrase. Something the speaker is already doing does not count as a new action.",
                 "Keep the concern and action phrase text exactly as provided and do not invent details.",
                 "Populate only the `concerns` and nested `action_phrases` fields of the response schema.",
             ]
