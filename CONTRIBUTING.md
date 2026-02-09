@@ -137,3 +137,4 @@ Each commit should explain what was changed and why.
 The `docs/` folder contains user-facing documentation built with MkDocs. While this overview lives outside the documentation site, you may still find additional context there (tutorials, API reference, contribution guidelines).
 
 If you run into problems or have questions about the architecture, open an issue on GitHub or ping [@sam-osian](https://github.com/sam-osian) for guidance.
+
