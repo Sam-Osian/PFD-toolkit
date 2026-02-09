@@ -1,0 +1,28 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PFD Toolkit AI Workbench · Beta</title>
+    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}">
+</head>
+<body>
+    <div class="app-shell">
+        {% block sidebar %}{% endblock %}
+        <main class="main">
+            {% if messages %}
+                <div class="messages">
+                    {% for message in messages %}
+                        <div class="message {{ message.tags|default:'info' }}">
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    <script src="{% static 'workbench/workbench.js' %}"></script>
+</body>
+</html>
