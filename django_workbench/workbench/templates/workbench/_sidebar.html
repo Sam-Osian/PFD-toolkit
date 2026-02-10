@@ -1,0 +1,54 @@
+{% load static %}
+<aside class="sidebar" id="app-sidebar">
+    <div class="sidebar-main">
+        <div class="sidebar-brand-row">
+            <a href="{% url 'workbench:index' %}" class="sidebar-brand" aria-label="PFD Toolkit Workbench home">
+                <span class="sidebar-brand__badge">
+                    <img src="{% static 'workbench/badge-circle.png' %}" alt="PFD Toolkit" class="sidebar-logo">
+                </span>
+                <span class="sidebar-brand__text">
+                    <strong>PFD Toolkit Workbench</strong>
+                    <small>Analyse PFD reports with AI</small>
+                </span>
+            </a>
+            <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Collapse sidebar" aria-expanded="true">
+                <span aria-hidden="true">⇤</span>
+            </button>
+        </div>
+
+        <nav class="sidebar-nav" aria-label="Primary">
+            <a href="{% url 'workbench:index' %}" class="sidebar-nav__item {% if current_page == 'home' %}is-active{% endif %}" data-tooltip="Home">
+                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__label">Home</span>
+                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
+            </a>
+            <a href="{% url 'workbench:explore' %}" class="sidebar-nav__item {% if current_page == 'explore' %}is-active{% endif %}" data-tooltip="Explore PFDs">
+                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__label">Explore PFDs</span>
+                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
+            </a>
+            <div class="sidebar-nav__item is-disabled" aria-disabled="true" data-tooltip="Settings">
+                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__label">Settings</span>
+                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
+            </div>
+            <div class="sidebar-nav__item is-disabled" aria-disabled="true" data-tooltip="Network">
+                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__label">Network</span>
+                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
+            </div>
+        </nav>
+    </div>
+
+    <div class="sidebar-bottom">
+        <div class="sidebar-nav__item is-disabled is-secondary" aria-disabled="true" data-tooltip="Activity">
+            <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+            <span class="sidebar-nav__label">Activity</span>
+            <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
+        </div>
+        <div class="sidebar-footer-card">
+            <span class="sidebar-chip">Beta</span>
+            <span class="sidebar-footer-text">Workbench OS preview</span>
+        </div>
+    </div>
+</aside>

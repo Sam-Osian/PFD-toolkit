@@ -1,4 +1,6 @@
 (function () {
+    document.documentElement.classList.add("js-enabled");
+
     function byId(id) {
         return document.getElementById(id);
     }
@@ -160,9 +162,9 @@
         popupContent.className = "dataset-cell-popup__content";
         popup.appendChild(popupContent);
         document.body.appendChild(popup);
+
         const textMeasureCanvas = document.createElement("canvas");
         const textMeasureContext = textMeasureCanvas.getContext("2d");
-
         let activeCell = null;
 
         function decodeEscapedNewlines(value) {
@@ -202,7 +204,6 @@
             const textPx = measureLongestLinePx(text);
             const contentPaddingPx = 34;
 
-            // Keep short metadata popups compact but still proportional to content length.
             if (isVeryShortField) {
                 if (totalLength <= 28) {
                     return clampNumber(textPx + contentPaddingPx, 95, 220);
@@ -258,8 +259,8 @@
             if (!fullText) {
                 return;
             }
-            const decodedText = decodeEscapedNewlines(fullText);
 
+            const decodedText = decodeEscapedNewlines(fullText);
             if (activeCell && activeCell !== cell) {
                 activeCell.classList.remove("is-active");
             }
@@ -337,12 +338,88 @@
         window.addEventListener("resize", hidePopup);
     }
 
+    function setupSidebarCollapse() {
+        const toggleButton = byId("sidebar-toggle");
+        if (!toggleButton) {
+            return;
+        }
+
+        const storageKey = "workbench.sidebarCollapsed";
+
+        function setCollapsedState(collapsed) {
+            document.body.classList.toggle("sidebar-collapsed", collapsed);
+            toggleButton.setAttribute("aria-expanded", String(!collapsed));
+            try {
+                window.localStorage.setItem(storageKey, collapsed ? "1" : "0");
+            } catch (error) {
+                // Ignore storage issues.
+            }
+        }
+
+        let collapsed = false;
+        try {
+            collapsed = window.localStorage.getItem(storageKey) === "1";
+        } catch (error) {
+            collapsed = false;
+        }
+
+        if (window.innerWidth <= 980) {
+            collapsed = false;
+        }
+        setCollapsedState(collapsed);
+
+        toggleButton.addEventListener("click", function () {
+            const isCollapsed = document.body.classList.contains("sidebar-collapsed");
+            setCollapsedState(!isCollapsed);
+        });
+
+        window.addEventListener("resize", function () {
+            if (window.innerWidth <= 980 && document.body.classList.contains("sidebar-collapsed")) {
+                setCollapsedState(false);
+            }
+        });
+    }
+
+    function setupRevealAnimations() {
+        const revealNodes = Array.from(document.querySelectorAll(".reveal-up"));
+        if (!revealNodes.length) {
+            return;
+        }
+
+        if (!("IntersectionObserver" in window)) {
+            revealNodes.forEach((node) => node.classList.add("is-visible"));
+            return;
+        }
+
+        const observer = new IntersectionObserver(
+            (entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add("is-visible");
+                        observer.unobserve(entry.target);
+                    }
+                });
+            },
+            {
+                threshold: 0.15,
+                rootMargin: "0px 0px -8% 0px",
+            }
+        );
+
+        revealNodes.forEach((node, index) => {
+            node.style.transitionDelay = `${Math.min(index * 45, 180)}ms`;
+            observer.observe(node);
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         toggleProviderFields();
         toggleDiscoverTrimFields();
         toggleTruncationTypeFields();
         setupFeatureGrid();
         setupDatasetCellPreview();
+        setupSidebarCollapse();
+        setupRevealAnimations();
 
         const provider = byId("provider_override");
         if (provider) {

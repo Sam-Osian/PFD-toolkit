@@ -1,0 +1,66 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench home-workbench">
+    <section class="beta-banner reveal-up">
+        <div class="beta-banner__content">
+            <span class="beta-banner__pill">Beta</span>
+            <div>
+                <div class="beta-banner__headline">Welcome to the beta version of PFD Toolkit Workbench.</div>
+                <div class="beta-banner__subtext">Because this app is still in development, there might be some bugs we have not squashed yet.</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="hero-section reveal-up">
+        <div class="hero-copy">
+            <span class="hero-badge">PFD Toolkit · AI Workbench <span class="hero-badge-beta">Beta</span></span>
+            <h1>Command the narrative of Prevention of Future Death reports.</h1>
+            <p>
+                Load official reports, triage them against strategic focus areas, and extract structured evidence in minutes.
+                The streamlined workspace keeps your data, models, and insights aligned from discovery through delivery.
+            </p>
+            <div class="hero-checklist">
+                <span class="hero-pill">1. Load and curate source data</span>
+                <span class="hero-pill">2. Screen topics and themes with LLMs</span>
+                <span class="hero-pill">3. Capture structured insights for reporting</span>
+            </div>
+            <a href="{% url 'workbench:explore' %}" class="button hero-cta">Open Explore PFDs</a>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+            <div class="hero-kpi">
+                <span class="hero-kpi-value">{{ reports_count }}</span>
+                <span class="hero-kpi-label">Reports currently in view</span>
+                <span class="hero-kpi-range">{{ earliest_display }} - {{ latest_display }}</span>
+            </div>
+        </div>
+    </section>
+
+    {% if not dataset_available %}
+        <section class="empty-onboarding reveal-up">
+            <span class="section-kicker">Workspace locked</span>
+            <h2>Load reports to activate your workspace.</h2>
+            <p>Use the sidebar to import Prevention of Future Death reports and unlock metrics, datasets, and guided actions.</p>
+        </section>
+    {% else %}
+        <section class="metric-row reveal-up">
+            <div class="metric-card">
+                <span class="metric-label">Reports in view</span>
+                <span class="metric-value">{{ reports_count }}</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Earliest report</span>
+                <span class="metric-value">{{ earliest_display }}</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-label">Latest report</span>
+                <span class="metric-value">{{ latest_display }}</span>
+            </div>
+        </section>
+    {% endif %}
+</div>
+{% endblock %}

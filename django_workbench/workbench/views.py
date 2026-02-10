@@ -749,46 +749,67 @@ def _handle_revert_reports(request: HttpRequest) -> None:
     messages.success(request, "Reverted to the initially loaded reports.")
 
 
-@require_http_methods(["GET", "POST"])
+def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
+    _update_sidebar_state(request)
+    action = request.POST.get("action", "")
+
+    if action == "load_reports":
+        _handle_load_reports(request)
+    elif action == "set_active_action":
+        _handle_set_active_action(request)
+    elif action == "filter_reports":
+        _handle_filter_reports(request)
+    elif action == "discover_themes":
+        _handle_discover_themes(request)
+    elif action == "accept_themes":
+        _handle_accept_themes(request)
+    elif action == "discard_themes":
+        _handle_discard_themes(request)
+    elif action == "extract_features":
+        _handle_extract_features(request)
+    elif action == "undo":
+        if undo_last_change(request.session):
+            messages.success(request, "Reverted to the previous state.")
+    elif action == "redo":
+        if redo_last_change(request.session):
+            messages.success(request, "Reapplied the next state.")
+    elif action == "start_over":
+        _handle_start_over(request)
+    elif action == "revert_reports":
+        _handle_revert_reports(request)
+    elif action == "download_bundle":
+        try:
+            return _bundle_download_response(request)
+        except Exception as exc:
+            messages.info(request, str(exc))
+
+    request.session.modified = True
+    return None
+
+
+@require_http_methods(["GET"])
 def index(request: HttpRequest) -> HttpResponse:
+    return home(request)
+
+
+@require_http_methods(["GET"])
+def home(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    context = _build_context(request)
+    context["current_page"] = "home"
+    return render(request, "workbench/home.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def explore(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
 
     if request.method == "POST":
-        _update_sidebar_state(request)
-        action = request.POST.get("action", "")
-
-        if action == "load_reports":
-            _handle_load_reports(request)
-        elif action == "set_active_action":
-            _handle_set_active_action(request)
-        elif action == "filter_reports":
-            _handle_filter_reports(request)
-        elif action == "discover_themes":
-            _handle_discover_themes(request)
-        elif action == "accept_themes":
-            _handle_accept_themes(request)
-        elif action == "discard_themes":
-            _handle_discard_themes(request)
-        elif action == "extract_features":
-            _handle_extract_features(request)
-        elif action == "undo":
-            if undo_last_change(request.session):
-                messages.success(request, "Reverted to the previous state.")
-        elif action == "redo":
-            if redo_last_change(request.session):
-                messages.success(request, "Reapplied the next state.")
-        elif action == "start_over":
-            _handle_start_over(request)
-        elif action == "revert_reports":
-            _handle_revert_reports(request)
-        elif action == "download_bundle":
-            try:
-                return _bundle_download_response(request)
-            except Exception as exc:
-                messages.info(request, str(exc))
-
-        request.session.modified = True
-        return redirect("workbench:index")
+        response = _handle_post_action(request)
+        if response is not None:
+            return response
+        return redirect("workbench:explore")
 
     context = _build_context(request)
-    return render(request, "workbench/index.html", context)
+    context["current_page"] = "explore"
+    return render(request, "workbench/explore.html", context)
