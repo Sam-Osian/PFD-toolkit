@@ -18,22 +18,30 @@
 
         <nav class="sidebar-nav" aria-label="Primary">
             <a href="{% url 'workbench:index' %}" class="sidebar-nav__item {% if current_page == 'home' %}is-active{% endif %}" data-tooltip="Home">
-                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__icon" aria-hidden="true">
+                    <img src="{% static 'icons/nav_bar/home.png' %}" alt="" class="sidebar-nav__icon-image">
+                </span>
                 <span class="sidebar-nav__label">Home</span>
                 <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </a>
             <a href="{% url 'workbench:explore' %}" class="sidebar-nav__item {% if current_page == 'explore' %}is-active{% endif %}" data-tooltip="Explore PFDs">
-                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__icon" aria-hidden="true">
+                    <img src="{% static 'icons/nav_bar/explore.png' %}" alt="" class="sidebar-nav__icon-image">
+                </span>
                 <span class="sidebar-nav__label">Explore PFDs</span>
                 <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </a>
-            <div class="sidebar-nav__item is-disabled" aria-disabled="true" data-tooltip="Settings">
-                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+            <a href="{% url 'workbench:settings' %}" class="sidebar-nav__item {% if current_page == 'settings' %}is-active{% endif %}" data-tooltip="Settings">
+                <span class="sidebar-nav__icon" aria-hidden="true">
+                    <img src="{% static 'icons/nav_bar/settings.png' %}" alt="" class="sidebar-nav__icon-image">
+                </span>
                 <span class="sidebar-nav__label">Settings</span>
                 <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
-            </div>
+            </a>
             <div class="sidebar-nav__item is-disabled" aria-disabled="true" data-tooltip="Network">
-                <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+                <span class="sidebar-nav__icon" aria-hidden="true">
+                    <img src="{% static 'icons/nav_bar/network.png' %}" alt="" class="sidebar-nav__icon-image">
+                </span>
                 <span class="sidebar-nav__label">Network</span>
                 <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </div>
@@ -42,7 +50,9 @@
 
     <div class="sidebar-bottom">
         <div class="sidebar-nav__item is-disabled is-secondary" aria-disabled="true" data-tooltip="Activity">
-            <span class="sidebar-nav__icon" aria-hidden="true">◻</span>
+            <span class="sidebar-nav__icon" aria-hidden="true">
+                <img src="{% static 'icons/nav_bar/network.png' %}" alt="" class="sidebar-nav__icon-image">
+            </span>
             <span class="sidebar-nav__label">Activity</span>
             <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
         </div>

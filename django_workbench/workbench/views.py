@@ -297,6 +297,7 @@ def _handle_load_reports(request: HttpRequest) -> None:
     clear_outputs_for_new_dataset(session)
     session["history"] = []
     session["redo_history"] = []
+    session["explore_onboarded"] = True
     reset_repro_tracking(session)
 
     load_kwargs = {
@@ -782,6 +783,9 @@ def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
             return _bundle_download_response(request)
         except Exception as exc:
             messages.info(request, str(exc))
+    elif action == "save_settings":
+        request.session["explore_onboarded"] = True
+        messages.success(request, "Settings updated.")
 
     request.session.modified = True
     return None
@@ -811,5 +815,26 @@ def explore(request: HttpRequest) -> HttpResponse:
         return redirect("workbench:explore")
 
     context = _build_context(request)
+    if (
+        not request.session.get("explore_onboarded")
+        and (context.get("openai_api_key") or context.get("openrouter_api_key"))
+    ):
+        request.session["explore_onboarded"] = True
+    context["show_config_modal"] = not request.session.get("explore_onboarded", False)
     context["current_page"] = "explore"
     return render(request, "workbench/explore.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def settings_page(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+
+    if request.method == "POST":
+        response = _handle_post_action(request)
+        if response is not None:
+            return response
+        return redirect("workbench:settings")
+
+    context = _build_context(request)
+    context["current_page"] = "settings"
+    return render(request, "workbench/settings.html", context)
