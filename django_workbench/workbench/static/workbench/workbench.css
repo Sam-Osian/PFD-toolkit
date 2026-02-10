@@ -521,10 +521,57 @@ hr.sidebar-divider {
     border: 1px solid rgba(129, 140, 248, 0.32);
 }
 
+.data-card .table-wrap {
+    max-height: clamp(18rem, 56vh, 42rem);
+}
+
 .data-table {
     width: 100%;
     border-collapse: collapse;
     min-width: 780px;
+}
+
+.data-card .data-table {
+    table-layout: fixed;
+    min-width: 1320px;
+}
+
+.data-card .data-table th.dataset-col-id,
+.data-card .data-table td.dataset-col-id,
+.data-card .data-table th.dataset-col-date,
+.data-card .data-table td.dataset-col-date {
+    width: 7.5rem;
+    min-width: 7.5rem;
+}
+
+.data-card .data-table th.dataset-col-meta,
+.data-card .data-table td.dataset-col-meta {
+    width: 11rem;
+    min-width: 11rem;
+}
+
+.data-card .data-table th.dataset-col-url,
+.data-card .data-table td.dataset-col-url {
+    width: 14rem;
+    min-width: 14rem;
+}
+
+.data-card .data-table th.dataset-col-long,
+.data-card .data-table td.dataset-col-long {
+    width: 20rem;
+    min-width: 20rem;
+}
+
+.data-card .data-table th.dataset-col-standard,
+.data-card .data-table td.dataset-col-standard {
+    width: 12rem;
+    min-width: 12rem;
+}
+
+.data-card .data-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
 }
 
 .data-table thead th {
@@ -547,6 +594,58 @@ hr.sidebar-divider {
 
 .data-table tbody tr:hover td {
     background: rgba(32, 41, 86, 0.85);
+}
+
+.data-card .data-table tbody td.dataset-cell-previewable {
+    cursor: pointer;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.data-card .data-table tbody td .dataset-cell-clamp {
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    max-height: calc(2 * 1.35em);
+}
+
+.data-card .data-table tbody td.dataset-cell-previewable:focus-visible,
+.data-card .data-table tbody td.dataset-cell-previewable.is-active {
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.7);
+    background: rgba(38, 53, 104, 0.95);
+}
+
+.dataset-cell-popup {
+    position: fixed;
+    z-index: 1100;
+    display: none;
+    width: auto;
+    min-width: 0;
+    max-width: min(44rem, calc(100vw - 1.5rem));
+    background: rgba(10, 18, 45, 0.98);
+    border: 1px solid rgba(129, 140, 248, 0.55);
+    border-radius: 14px;
+    box-shadow: 0 18px 42px rgba(5, 8, 28, 0.6);
+}
+
+.dataset-cell-popup.is-visible {
+    display: block;
+}
+
+.dataset-cell-popup__content {
+    max-height: min(40vh, 20rem);
+    overflow-y: auto;
+    padding: 0.8rem 0.9rem;
+    color: rgba(231, 236, 255, 0.96);
+    font-size: 0.9rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .theme-summary-card {
@@ -807,5 +906,9 @@ hr.sidebar-divider {
     .inline-grid-two,
     .form-row {
         grid-template-columns: 1fr;
+    }
+
+    .data-card .table-wrap {
+        max-height: 52vh;
     }
 }

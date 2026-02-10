@@ -90,11 +90,259 @@
         bindRemoveButtons();
     }
 
+    function setupDatasetCellPreview() {
+        const datasetTable = document.querySelector(".data-card .data-table");
+        if (!datasetTable) {
+            return;
+        }
+
+        const headerCells = Array.from(datasetTable.querySelectorAll("thead th"));
+        const bodyRows = Array.from(datasetTable.querySelectorAll("tbody tr"));
+        if (!headerCells.length) {
+            return;
+        }
+
+        function getColumnClass(headerText) {
+            const label = (headerText || "").trim().toLowerCase();
+            if (label === "id") {
+                return "dataset-col-id";
+            }
+            if (label.includes("date")) {
+                return "dataset-col-date";
+            }
+            if (label.includes("url")) {
+                return "dataset-col-url";
+            }
+            if (
+                label.includes("investigation") ||
+                label.includes("circumstances") ||
+                label.includes("concern")
+            ) {
+                return "dataset-col-long";
+            }
+            if (
+                label.includes("coroner") ||
+                label.includes("area") ||
+                label.includes("receiver")
+            ) {
+                return "dataset-col-meta";
+            }
+            return "dataset-col-standard";
+        }
+
+        const columnClasses = headerCells.map((th) => {
+            const columnClass = getColumnClass(th.innerText);
+            th.classList.add(columnClass);
+            return columnClass;
+        });
+
+        bodyRows.forEach((row) => {
+            Array.from(row.children).forEach((cell, index) => {
+                const columnClass = columnClasses[index];
+                if (columnClass) {
+                    cell.classList.add(columnClass);
+                }
+            });
+        });
+
+        const cells = datasetTable.querySelectorAll("tbody td");
+        if (!cells.length) {
+            return;
+        }
+
+        const popup = document.createElement("div");
+        popup.className = "dataset-cell-popup";
+        popup.setAttribute("role", "dialog");
+        popup.setAttribute("aria-modal", "false");
+        popup.setAttribute("aria-label", "Full cell text");
+
+        const popupContent = document.createElement("div");
+        popupContent.className = "dataset-cell-popup__content";
+        popup.appendChild(popupContent);
+        document.body.appendChild(popup);
+        const textMeasureCanvas = document.createElement("canvas");
+        const textMeasureContext = textMeasureCanvas.getContext("2d");
+
+        let activeCell = null;
+
+        function decodeEscapedNewlines(value) {
+            return String(value || "")
+                .replace(/\\r\\n/g, "\n")
+                .replace(/\\n/g, "\n")
+                .replace(/\\r/g, "\n");
+        }
+
+        function clampNumber(value, min, max) {
+            return Math.min(max, Math.max(min, value));
+        }
+
+        function measureLongestLinePx(text) {
+            if (!textMeasureContext) {
+                return 0;
+            }
+            const font = window.getComputedStyle(popupContent).font;
+            if (font) {
+                textMeasureContext.font = font;
+            }
+            const lines = String(text || "").split("\n");
+            let widest = 0;
+            lines.forEach((line) => {
+                const width = textMeasureContext.measureText(line).width;
+                widest = Math.max(widest, width);
+            });
+            return widest;
+        }
+
+        function computePopupWidthPx(text, cell) {
+            const totalLength = String(text || "").trim().length;
+            const isVeryShortField =
+                cell.classList.contains("dataset-col-id") ||
+                cell.classList.contains("dataset-col-date") ||
+                cell.classList.contains("dataset-col-meta");
+            const textPx = measureLongestLinePx(text);
+            const contentPaddingPx = 34;
+
+            // Keep short metadata popups compact but still proportional to content length.
+            if (isVeryShortField) {
+                if (totalLength <= 28) {
+                    return clampNumber(textPx + contentPaddingPx, 95, 220);
+                }
+                const compactTargetPx = Math.max(textPx + contentPaddingPx, Math.sqrt(totalLength) * 16);
+                return clampNumber(compactTargetPx, 120, 280);
+            }
+
+            if (totalLength <= 24) {
+                return clampNumber(textPx + contentPaddingPx, 120, 340);
+            }
+
+            const targetPx = Math.max(textPx + contentPaddingPx, Math.sqrt(totalLength) * 22);
+            return clampNumber(targetPx, 220, 700);
+        }
+
+        function hidePopup() {
+            popup.classList.remove("is-visible");
+            popup.style.width = "";
+            if (activeCell) {
+                activeCell.classList.remove("is-active");
+                activeCell = null;
+            }
+        }
+
+        function positionPopup(cell) {
+            const margin = 12;
+            const cellRect = cell.getBoundingClientRect();
+            const popupRect = popup.getBoundingClientRect();
+
+            let left = cellRect.left;
+            let top = cellRect.bottom + 8;
+
+            if (left + popupRect.width > window.innerWidth - margin) {
+                left = window.innerWidth - popupRect.width - margin;
+            }
+            if (left < margin) {
+                left = margin;
+            }
+            if (top + popupRect.height > window.innerHeight - margin) {
+                top = cellRect.top - popupRect.height - 8;
+            }
+            if (top < margin) {
+                top = margin;
+            }
+
+            popup.style.left = `${left}px`;
+            popup.style.top = `${top}px`;
+        }
+
+        function showPopup(cell) {
+            const fullText = (cell.dataset.fullText || "").trim();
+            if (!fullText) {
+                return;
+            }
+            const decodedText = decodeEscapedNewlines(fullText);
+
+            if (activeCell && activeCell !== cell) {
+                activeCell.classList.remove("is-active");
+            }
+
+            activeCell = cell;
+            activeCell.classList.add("is-active");
+            popup.style.width = `${Math.round(computePopupWidthPx(decodedText, cell))}px`;
+            popupContent.textContent = decodedText;
+            popup.classList.add("is-visible");
+            positionPopup(cell);
+        }
+
+        cells.forEach((cell) => {
+            const fullText = (cell.innerText || "").trim();
+            if (!fullText) {
+                return;
+            }
+
+            cell.dataset.fullText = fullText;
+            const clamp = document.createElement("div");
+            clamp.className = "dataset-cell-clamp";
+            clamp.textContent = fullText;
+            cell.textContent = "";
+            cell.appendChild(clamp);
+            cell.classList.add("dataset-cell-previewable");
+            cell.setAttribute("tabindex", "0");
+            cell.setAttribute("role", "button");
+            cell.setAttribute("aria-label", "Show full cell text");
+
+            cell.addEventListener("click", function (event) {
+                event.stopPropagation();
+                if (activeCell === cell && popup.classList.contains("is-visible")) {
+                    hidePopup();
+                    return;
+                }
+                showPopup(cell);
+            });
+
+            cell.addEventListener("keydown", function (event) {
+                if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    showPopup(cell);
+                }
+                if (event.key === "Escape") {
+                    hidePopup();
+                }
+            });
+        });
+
+        document.addEventListener("click", function (event) {
+            if (!popup.classList.contains("is-visible")) {
+                return;
+            }
+            if (popup.contains(event.target)) {
+                return;
+            }
+            const clickedCell = event.target.closest(".data-card .data-table tbody td");
+            if (clickedCell) {
+                return;
+            }
+            hidePopup();
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                hidePopup();
+            }
+        });
+
+        const datasetWrap = document.querySelector(".data-card .table-wrap");
+        if (datasetWrap) {
+            datasetWrap.addEventListener("scroll", hidePopup, { passive: true });
+        }
+
+        window.addEventListener("resize", hidePopup);
+    }
+
     document.addEventListener("DOMContentLoaded", function () {
         toggleProviderFields();
         toggleDiscoverTrimFields();
         toggleTruncationTypeFields();
         setupFeatureGrid();
+        setupDatasetCellPreview();
 
         const provider = byId("provider_override");
         if (provider) {
