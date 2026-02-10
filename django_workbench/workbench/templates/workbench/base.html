@@ -5,26 +5,40 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PFD Toolkit AI Workbench · Beta</title>
-    <link rel="stylesheet" href="{% static 'workbench/vendor/overlayscrollbars.min.css' %}?v=20260210h">
-    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260210h">
+    <link rel="stylesheet" href="{% static 'workbench/vendor/overlayscrollbars.min.css' %}?v=20260210u">
+    <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css">
+    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260210u">
 </head>
 <body class="page-{{ current_page|default:'home' }}">
+    <script>
+        (function () {
+            try {
+                if (window.innerWidth > 980 && window.localStorage.getItem("workbench.sidebarCollapsed") === "1") {
+                    document.body.classList.add("sidebar-collapsed");
+                }
+            } catch (error) {
+                // Ignore storage access issues.
+            }
+        })();
+    </script>
     <div class="app-shell">
         {% block sidebar %}{% endblock %}
-        <main class="main">
-            {% if messages %}
-                <div class="messages">
-                    {% for message in messages %}
-                        <div class="message {{ message.tags|default:'info' }}">
-                            <span>{{ message }}</span>
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
-            {% block content %}{% endblock %}
+        <main class="main" id="main-root">
+            <div id="page-content" data-page="{{ current_page|default:'home' }}">
+                {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                            <div class="message {{ message.tags|default:'info' }}">
+                                <span>{{ message }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% block content %}{% endblock %}
+            </div>
         </main>
     </div>
-    <script src="{% static 'workbench/vendor/overlayscrollbars.browser.es6.min.js' %}?v=20260210h"></script>
-    <script src="{% static 'workbench/workbench.js' %}?v=20260210h"></script>
+    <script src="{% static 'workbench/vendor/overlayscrollbars.browser.es6.min.js' %}?v=20260210u"></script>
+    <script src="{% static 'workbench/workbench.js' %}?v=20260210u"></script>
 </body>
 </html>

@@ -12,38 +12,34 @@
                 </span>
             </a>
             <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-label="Collapse sidebar" aria-expanded="true">
-                <span aria-hidden="true">⇤</span>
+                <i class="hgi hgi-stroke hgi-arrow-left-02 sidebar-toggle__icon" aria-hidden="true"></i>
             </button>
         </div>
 
         <nav class="sidebar-nav" aria-label="Primary">
-            <a href="{% url 'workbench:index' %}" class="sidebar-nav__item {% if current_page == 'home' %}is-active{% endif %}" data-tooltip="Home">
+            <a href="{% url 'workbench:index' %}" class="sidebar-nav__item {% if current_page == 'home' %}is-active{% endif %}" data-tooltip="Home" data-page-link="home" {% if current_page == 'home' %}aria-current="page"{% endif %}>
                 <span class="sidebar-nav__icon" aria-hidden="true">
-                    <img src="{% static 'icons/nav_bar/home.png' %}" alt="" class="sidebar-nav__icon-image">
+                    <i class="hgi hgi-stroke hgi-home-01 sidebar-nav__icon-glyph"></i>
                 </span>
                 <span class="sidebar-nav__label">Home</span>
-                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </a>
-            <a href="{% url 'workbench:explore' %}" class="sidebar-nav__item {% if current_page == 'explore' %}is-active{% endif %}" data-tooltip="Explore PFDs">
+            <a href="{% url 'workbench:explore' %}" class="sidebar-nav__item {% if current_page == 'explore' %}is-active{% endif %}" data-tooltip="Explore PFDs" data-page-link="explore" {% if current_page == 'explore' %}aria-current="page"{% endif %}>
                 <span class="sidebar-nav__icon" aria-hidden="true">
-                    <img src="{% static 'icons/nav_bar/explore.png' %}" alt="" class="sidebar-nav__icon-image">
+                    <i class="hgi hgi-stroke hgi-chart-bar-line sidebar-nav__icon-glyph"></i>
                 </span>
                 <span class="sidebar-nav__label">Explore PFDs</span>
-                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </a>
-            <a href="{% url 'workbench:settings' %}" class="sidebar-nav__item {% if current_page == 'settings' %}is-active{% endif %}" data-tooltip="Settings">
+            <a href="{% url 'workbench:settings' %}" class="sidebar-nav__item {% if current_page == 'settings' %}is-active{% endif %}" data-tooltip="Settings" data-page-link="settings" {% if current_page == 'settings' %}aria-current="page"{% endif %}>
                 <span class="sidebar-nav__icon" aria-hidden="true">
-                    <img src="{% static 'icons/nav_bar/settings.png' %}" alt="" class="sidebar-nav__icon-image">
+                    <i class="hgi hgi-stroke hgi-settings-02 sidebar-nav__icon-glyph"></i>
                 </span>
                 <span class="sidebar-nav__label">Settings</span>
-                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </a>
             <div class="sidebar-nav__item is-disabled" aria-disabled="true" data-tooltip="Network">
                 <span class="sidebar-nav__icon" aria-hidden="true">
-                    <img src="{% static 'icons/nav_bar/network.png' %}" alt="" class="sidebar-nav__icon-image">
+                    <i class="hgi hgi-stroke hgi-link-04 sidebar-nav__icon-glyph"></i>
                 </span>
                 <span class="sidebar-nav__label">Network</span>
-                <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
             </div>
         </nav>
     </div>
@@ -51,10 +47,9 @@
     <div class="sidebar-bottom">
         <div class="sidebar-nav__item is-disabled is-secondary" aria-disabled="true" data-tooltip="Activity">
             <span class="sidebar-nav__icon" aria-hidden="true">
-                <img src="{% static 'icons/nav_bar/network.png' %}" alt="" class="sidebar-nav__icon-image">
+                <i class="hgi hgi-stroke hgi-activity-01 sidebar-nav__icon-glyph"></i>
             </span>
             <span class="sidebar-nav__label">Activity</span>
-            <span class="sidebar-nav__arrow" aria-hidden="true">→</span>
         </div>
         <div class="sidebar-footer-card">
             <span class="sidebar-chip">Beta</span>

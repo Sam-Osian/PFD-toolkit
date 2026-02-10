@@ -698,7 +698,7 @@ def _bundle_download_response(request: HttpRequest) -> HttpResponse:
     include_dataset = _bool_from_post(request, "download_include_dataset", default=True)
     include_theme = _bool_from_post(request, "download_include_theme", default=False)
     include_feature_grid = _bool_from_post(request, "download_include_feature_grid", default=False)
-    include_script = _bool_from_post(request, "download_include_script", default=True)
+    include_script = _bool_from_post(request, "download_include_script", default=False)
 
     files: list[tuple[str, bytes]] = []
     if include_dataset and not reports_df.empty:
@@ -712,6 +712,12 @@ def _bundle_download_response(request: HttpRequest) -> HttpResponse:
 
     if not files:
         raise ValueError("Select at least one resource above to enable the download.")
+
+    # If only the dataset is selected, return CSV directly instead of a ZIP archive.
+    if len(files) == 1 and files[0][0] == "pfd_reports.csv":
+        response = HttpResponse(files[0][1], content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="pfd_reports.csv"'
+        return response
 
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
