@@ -92,6 +92,59 @@
         bindRemoveButtons();
     }
 
+    function setupTableScrollbars() {
+        const osGlobal = window.OverlayScrollbarsGlobal;
+        if (!osGlobal || typeof osGlobal.OverlayScrollbars !== "function") {
+            return;
+        }
+
+        const OverlayScrollbars = osGlobal.OverlayScrollbars;
+        const tableWraps = document.querySelectorAll(".explore-surface .table-wrap");
+        tableWraps.forEach((tableWrap) => {
+            if (OverlayScrollbars.valid && OverlayScrollbars.valid(tableWrap)) {
+                return;
+            }
+
+            OverlayScrollbars(tableWrap, {
+                overflow: {
+                    x: "scroll",
+                    y: "scroll",
+                },
+                scrollbars: {
+                    theme: "os-theme-workbench",
+                    autoHide: "move",
+                    autoHideDelay: 520,
+                    clickScroll: true,
+                },
+            });
+        });
+    }
+
+    function setupPageScrollbar() {
+        const osGlobal = window.OverlayScrollbarsGlobal;
+        if (!osGlobal || typeof osGlobal.OverlayScrollbars !== "function") {
+            return;
+        }
+
+        const OverlayScrollbars = osGlobal.OverlayScrollbars;
+        const pageRoot = document.body;
+        if (!pageRoot) {
+            return;
+        }
+        if (OverlayScrollbars.valid && OverlayScrollbars.valid(pageRoot)) {
+            return;
+        }
+
+        OverlayScrollbars(pageRoot, {
+            scrollbars: {
+                theme: "os-theme-workbench",
+                autoHide: "move",
+                autoHideDelay: 520,
+                clickScroll: true,
+            },
+        });
+    }
+
     function setupDatasetCellPreview() {
         const datasetTable = document.querySelector(".data-card .data-table");
         if (!datasetTable) {
@@ -332,6 +385,10 @@
 
         const datasetWrap = document.querySelector(".data-card .table-wrap");
         if (datasetWrap) {
+            const viewport = datasetWrap.querySelector("[data-overlayscrollbars-viewport]");
+            if (viewport) {
+                viewport.addEventListener("scroll", hidePopup, { passive: true });
+            }
             datasetWrap.addEventListener("scroll", hidePopup, { passive: true });
         }
 
@@ -413,6 +470,8 @@
     }
 
     document.addEventListener("DOMContentLoaded", function () {
+        setupTableScrollbars();
+        setupPageScrollbar();
         toggleProviderFields();
         toggleDiscoverTrimFields();
         toggleTruncationTypeFields();

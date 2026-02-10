@@ -1,0 +1,28 @@
+{
+  "name": "pfd-toolkit",
+  "version": "1.0.0",
+  "description": "[![Python](https://img.shields.io/pypi/pyversions/pfd-toolkit)](https://pypi.org/project/pfd-toolkit/) [![PyTest](https://github.com/sam-osian/pfd-toolkit/actions/workflows/test.yml/badge.svg?label=pytest)](https://github.com/sam-osian/pfd-toolkit/actions/workflows/test.yml) [![Licence](https://img.shields.io/github/license/sam-osian/PFD-toolkit)](LICENCE) [![DOI](https://zenodo.org/badge/941220174.svg)](https://doi.org/10.5281/zenodo.15729717)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sam-Osian/PFD-toolkit.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Sam-Osian/PFD-toolkit/issues"
+  },
+  "homepage": "https://github.com/Sam-Osian/PFD-toolkit#readme",
+  "dependencies": {
+    "overlayscrollbars": "^2.14.0"
+  }
+}

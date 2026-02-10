@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>PFD Toolkit AI Workbench · Beta</title>
+    <link rel="stylesheet" href="{% static 'workbench/vendor/overlayscrollbars.min.css' %}?v=20260210h">
     <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260210h">
 </head>
 <body class="page-{{ current_page|default:'home' }}">
@@ -23,6 +24,7 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+    <script src="{% static 'workbench/vendor/overlayscrollbars.browser.es6.min.js' %}?v=20260210h"></script>
     <script src="{% static 'workbench/workbench.js' %}?v=20260210h"></script>
 </body>
 </html>
