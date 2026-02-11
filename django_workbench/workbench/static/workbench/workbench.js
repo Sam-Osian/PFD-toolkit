@@ -750,7 +750,88 @@
         });
     }
 
+    function setupGlobalLoadingOverlay() {
+        if (document.body.dataset.globalLoadingBound === "1") {
+            return;
+        }
+        document.body.dataset.globalLoadingBound = "1";
+
+        const overlay = byId("global-loading-overlay");
+        const messageNode = byId("global-loading-message");
+        if (!overlay || !messageNode) {
+            return;
+        }
+
+        const LONG_RUNNING_ACTIONS = new Set([
+            "load_reports",
+            "filter_reports",
+            "discover_themes",
+            "extract_features",
+        ]);
+
+        const ACTION_MESSAGES = {
+            load_reports: "Loading report data and preparing your workspace...",
+            filter_reports: "Screening reports...",
+            discover_themes: "Discovering themes and building a preview...",
+            extract_features: "Extracting structured fields...",
+        };
+
+        function showLoader(message) {
+            messageNode.textContent = message || "Running your request...";
+            overlay.classList.add("is-active");
+            overlay.setAttribute("aria-hidden", "false");
+            document.body.classList.add("loading-active");
+        }
+
+        function hideLoader() {
+            overlay.classList.remove("is-active");
+            overlay.setAttribute("aria-hidden", "true");
+            document.body.classList.remove("loading-active");
+        }
+
+        function getSubmittedAction(form, submitter) {
+            if (submitter && submitter.name === "action") {
+                return (submitter.value || "").trim();
+            }
+            const directAction = form.querySelector("input[name='action']");
+            if (directAction) {
+                return (directAction.value || "").trim();
+            }
+            return "";
+        }
+
+        document.addEventListener("submit", function (event) {
+            const form = event.target.closest("form");
+            if (!form || event.defaultPrevented) {
+                return;
+            }
+            if (form.hasAttribute("data-dataset-goto")) {
+                return;
+            }
+
+            const action = getSubmittedAction(form, event.submitter);
+            if (!LONG_RUNNING_ACTIONS.has(action)) {
+                return;
+            }
+
+            showLoader(ACTION_MESSAGES[action] || "Running your request...");
+        }, true);
+
+        window.addEventListener("pageshow", hideLoader);
+        document.addEventListener("visibilitychange", function () {
+            if (document.visibilityState === "visible") {
+                hideLoader();
+            }
+        });
+
+        window.WorkbenchLoading = {
+            show: showLoader,
+            hide: hideLoader,
+        };
+    }
+
     function initializePageFeatures() {
+        setupGlobalLoadingOverlay();
         setupTableScrollbars();
         setupPageScrollbar();
         toggleProviderFields();

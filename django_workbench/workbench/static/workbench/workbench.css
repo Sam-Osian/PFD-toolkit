@@ -71,6 +71,111 @@ body::after {
     z-index: -1;
 }
 
+.global-loading-overlay {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.4rem;
+    background: rgba(8, 11, 26, 0.34);
+    backdrop-filter: blur(7px) saturate(110%);
+    -webkit-backdrop-filter: blur(7px) saturate(110%);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0s linear 0.2s;
+    z-index: 1000;
+}
+
+.global-loading-overlay.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition: opacity 0.2s ease;
+}
+
+.global-loading-card {
+    width: min(92vw, 420px);
+    border-radius: 20px;
+    border: 1px solid rgba(191, 205, 255, 0.2);
+    background: linear-gradient(164deg, rgba(22, 28, 43, 0.96), rgba(16, 21, 36, 0.94));
+    box-shadow: 0 24px 55px rgba(0, 0, 0, 0.44);
+    display: grid;
+    gap: 1rem;
+    justify-items: center;
+    text-align: center;
+    padding: 1.45rem 1.3rem 1.25rem;
+}
+
+.global-loading-orb {
+    position: relative;
+    width: 64px;
+    height: 64px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.global-loading-ring {
+    position: absolute;
+    border-radius: 999px;
+    border-style: solid;
+    border-color: transparent;
+}
+
+.global-loading-ring--outer {
+    width: 64px;
+    height: 64px;
+    border-width: 2.5px;
+    border-top-color: rgba(147, 214, 255, 0.92);
+    border-right-color: rgba(156, 171, 255, 0.84);
+    animation: global-loading-spin 1.05s linear infinite;
+}
+
+.global-loading-ring--inner {
+    width: 42px;
+    height: 42px;
+    border-width: 2px;
+    border-bottom-color: rgba(171, 186, 255, 0.94);
+    border-left-color: rgba(131, 204, 255, 0.8);
+    animation: global-loading-spin 0.74s linear infinite reverse;
+}
+
+.global-loading-core {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(220, 236, 255, 0.95);
+    box-shadow: 0 0 18px rgba(154, 215, 255, 0.76);
+}
+
+.global-loading-copy h3 {
+    margin: 0;
+    font-family: 'Sora', sans-serif;
+    font-size: 1.02rem;
+    letter-spacing: -0.01em;
+}
+
+.global-loading-copy p {
+    margin: 0.34rem 0 0;
+    font-size: 0.9rem;
+    color: var(--text-soft);
+}
+
+body.loading-active {
+    overflow: hidden;
+}
+
+@keyframes global-loading-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .app-shell {
     display: grid;
     grid-template-columns: 292px minmax(0, 1fr);

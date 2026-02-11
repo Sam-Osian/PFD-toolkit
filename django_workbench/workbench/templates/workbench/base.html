@@ -7,7 +7,7 @@
     <title>PFD Toolkit AI Workbench · Beta</title>
     <link rel="stylesheet" href="{% static 'workbench/vendor/overlayscrollbars.min.css' %}?v=20260211l">
     <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css">
-    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260211l">
+    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260211m">
 </head>
 <body class="page-{{ current_page|default:'home' }}">
     <script>
@@ -38,7 +38,19 @@
             </div>
         </main>
     </div>
+    <div class="global-loading-overlay" id="global-loading-overlay" role="status" aria-live="polite" aria-hidden="true">
+        <section class="global-loading-card" aria-label="Please wait">
+            <div class="global-loading-orb" aria-hidden="true">
+                <span class="global-loading-ring global-loading-ring--outer"></span>
+                <span class="global-loading-ring global-loading-ring--inner"></span>
+                <span class="global-loading-core"></span>
+            </div>
+            <div class="global-loading-copy">
+                <p id="global-loading-message">Running your request...</p>
+            </div>
+        </section>
+    </div>
     <script src="{% static 'workbench/vendor/overlayscrollbars.browser.es6.min.js' %}?v=20260211l"></script>
-    <script src="{% static 'workbench/workbench.js' %}?v=20260211l"></script>
+    <script src="{% static 'workbench/workbench.js' %}?v=20260211m"></script>
 </body>
 </html>
