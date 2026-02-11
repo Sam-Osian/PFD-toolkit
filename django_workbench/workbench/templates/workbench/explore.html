@@ -9,6 +9,91 @@
     {% include "workbench/_workspace_hud.html" %}
 
     {% if dataset_available %}
+        <section class="explore-surface explore-surface--dashboard explore-dashboard reveal-up" id="explore-dashboard">
+            <div class="section-card-header section-card-header--inline">
+                <div>
+                    <span class="section-kicker">Interactive dashboard</span>
+                    <h3>Explore PFD reports</h3>
+                    <p id="dashboard-status">Loading dashboard...</p>
+                </div>
+                <button type="button" class="button-secondary" id="dashboard-filter-reset">Reset filters</button>
+            </div>
+
+            <div class="dashboard-filter-row">
+                <section class="dashboard-filter-field" data-dashboard-filter="coroner">
+                    <span>Coroner</span>
+                    <div class="dashboard-filter-badges" id="dashboard-badges-coroner"></div>
+                    <input
+                        id="dashboard-filter-coroner-search"
+                        class="dashboard-filter-search"
+                        type="search"
+                        placeholder="Search coroners..."
+                        autocomplete="off"
+                    >
+                    <div class="dashboard-filter-options" id="dashboard-options-coroner"></div>
+                </section>
+                <section class="dashboard-filter-field" data-dashboard-filter="area">
+                    <span>Area</span>
+                    <div class="dashboard-filter-badges" id="dashboard-badges-area"></div>
+                    <input
+                        id="dashboard-filter-area-search"
+                        class="dashboard-filter-search"
+                        type="search"
+                        placeholder="Search areas..."
+                        autocomplete="off"
+                    >
+                    <div class="dashboard-filter-options" id="dashboard-options-area"></div>
+                </section>
+                <section class="dashboard-filter-field" data-dashboard-filter="receiver">
+                    <span>Receiver</span>
+                    <div class="dashboard-filter-badges" id="dashboard-badges-receiver"></div>
+                    <input
+                        id="dashboard-filter-receiver-search"
+                        class="dashboard-filter-search"
+                        type="search"
+                        placeholder="Search receivers..."
+                        autocomplete="off"
+                    >
+                    <div class="dashboard-filter-options" id="dashboard-options-receiver"></div>
+                </section>
+            </div>
+
+            <div class="dashboard-stat-grid">
+                <article class="dashboard-stat-tile">
+                    <span class="dashboard-stat-tile__label">Reports shown</span>
+                    <strong class="dashboard-stat-tile__value" id="dashboard-stat-reports">{{ reports_count }}</strong>
+                </article>
+                <article class="dashboard-stat-tile">
+                    <span class="dashboard-stat-tile__label">Unique coroners</span>
+                    <strong class="dashboard-stat-tile__value" id="dashboard-stat-coroners">0</strong>
+                </article>
+                <article class="dashboard-stat-tile">
+                    <span class="dashboard-stat-tile__label">Receiver links</span>
+                    <strong class="dashboard-stat-tile__value" id="dashboard-stat-receiver-links">0</strong>
+                </article>
+            </div>
+
+            <div class="dashboard-chart-grid">
+                <article class="dashboard-chart-card">
+                    <h4>Reports by month</h4>
+                    <div class="dashboard-chart" id="dashboard-chart-monthly"></div>
+                </article>
+                <article class="dashboard-chart-card">
+                    <h4>Top coroners</h4>
+                    <div class="dashboard-chart" id="dashboard-chart-coroner"></div>
+                </article>
+                <article class="dashboard-chart-card">
+                    <h4>Top areas</h4>
+                    <div class="dashboard-chart" id="dashboard-chart-area"></div>
+                </article>
+                <article class="dashboard-chart-card">
+                    <h4>Top receivers</h4>
+                    <div class="dashboard-chart" id="dashboard-chart-receiver"></div>
+                </article>
+            </div>
+        </section>
+        {{ explore_dashboard_payload|json_script:"explore-dashboard-data" }}
+
         {% include "workbench/_dataset_table_section.html" with workspace_label="Workspace" %}
 
         {% if theme_summary_html %}

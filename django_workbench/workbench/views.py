@@ -5,6 +5,7 @@ import json
 import zipfile
 from datetime import date
 from io import BytesIO
+from urllib.parse import urlencode
 from typing import Any, Optional
 
 import pandas as pd
@@ -72,6 +73,184 @@ def _df_to_html(df: pd.DataFrame, table_class: str = "data-table") -> str:
         na_rep="",
         escape=False,
     )
+
+
+def _normalise_dashboard_value(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        cleaned = value.strip()
+    else:
+        try:
+            if pd.isna(value):
+                return ""
+        except TypeError:
+            pass
+        cleaned = str(value).strip()
+
+    lowered = cleaned.lower()
+    if lowered in {"nan", "nat", "none"}:
+        return ""
+    return cleaned
+
+
+def _split_dashboard_receivers(value: Any) -> list[str]:
+    raw = _normalise_dashboard_value(value)
+    if not raw:
+        return []
+
+    seen: set[str] = set()
+    receivers: list[str] = []
+    for chunk in raw.split(";"):
+        cleaned = _normalise_dashboard_value(chunk)
+        if not cleaned:
+            continue
+        lowered = cleaned.casefold()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        receivers.append(cleaned)
+    return receivers
+
+
+def _build_explore_dashboard_payload(reports_df: pd.DataFrame) -> dict[str, Any]:
+    if reports_df.empty:
+        return {
+            "rows": [],
+            "options": {
+                "coroners": [],
+                "areas": [],
+                "receivers": [],
+            },
+        }
+
+    row_count = len(reports_df)
+    default_series = pd.Series([""] * row_count, index=reports_df.index, dtype=object)
+
+    if "date" in reports_df.columns:
+        date_series = pd.to_datetime(reports_df["date"], errors="coerce")
+    else:
+        date_series = pd.Series([pd.NaT] * row_count, index=reports_df.index, dtype="datetime64[ns]")
+
+    coroner_series = reports_df["coroner"] if "coroner" in reports_df.columns else default_series
+    area_series = reports_df["area"] if "area" in reports_df.columns else default_series
+    receiver_series = reports_df["receiver"] if "receiver" in reports_df.columns else default_series
+
+    rows: list[dict[str, Any]] = []
+    coroners: set[str] = set()
+    areas: set[str] = set()
+    receivers: set[str] = set()
+
+    for date_value, coroner_value, area_value, receiver_value in zip(
+        date_series,
+        coroner_series,
+        area_series,
+        receiver_series,
+    ):
+        date_iso = ""
+        if pd.notna(date_value):
+            date_iso = date_value.strftime("%Y-%m-%d")
+
+        coroner = _normalise_dashboard_value(coroner_value)
+        area = _normalise_dashboard_value(area_value)
+        receiver_parts = _split_dashboard_receivers(receiver_value)
+
+        if coroner:
+            coroners.add(coroner)
+        if area:
+            areas.add(area)
+        for receiver_name in receiver_parts:
+            receivers.add(receiver_name)
+
+        rows.append(
+            {
+                "date": date_iso,
+                "year_month": date_iso[:7] if date_iso else "",
+                "coroner": coroner,
+                "area": area,
+                "receivers": receiver_parts,
+            }
+        )
+
+    sort_key = lambda value: value.casefold()
+    return {
+        "rows": rows,
+        "options": {
+            "coroners": sorted(coroners, key=sort_key),
+            "areas": sorted(areas, key=sort_key),
+            "receivers": sorted(receivers, key=sort_key),
+        },
+    }
+
+
+def _parse_explore_filter_values(values: list[str]) -> list[str]:
+    unique: dict[str, str] = {}
+    for value in values:
+        cleaned = _normalise_dashboard_value(value)
+        if not cleaned:
+            continue
+        key = cleaned.casefold()
+        if key not in unique:
+            unique[key] = cleaned
+    return list(unique.values())
+
+
+def _get_explore_dashboard_filters(request: HttpRequest) -> dict[str, list[str]]:
+    return {
+        "coroner": _parse_explore_filter_values(request.GET.getlist("coroner")),
+        "area": _parse_explore_filter_values(request.GET.getlist("area")),
+        "receiver": _parse_explore_filter_values(request.GET.getlist("receiver")),
+    }
+
+
+def _apply_explore_dashboard_filters(
+    reports_df: pd.DataFrame, filters: dict[str, list[str]]
+) -> pd.DataFrame:
+    if reports_df.empty:
+        return reports_df
+
+    selected_coroners = set(item.casefold() for item in filters.get("coroner", []))
+    selected_areas = set(item.casefold() for item in filters.get("area", []))
+    selected_receivers = set(item.casefold() for item in filters.get("receiver", []))
+
+    if not selected_coroners and not selected_areas and not selected_receivers:
+        return reports_df
+
+    filtered_df = reports_df.copy()
+
+    if selected_coroners:
+        coroner_series = (
+            filtered_df["coroner"].map(_normalise_dashboard_value)
+            if "coroner" in filtered_df.columns
+            else pd.Series([""] * len(filtered_df), index=filtered_df.index, dtype=object)
+        )
+        coroner_mask = coroner_series.map(lambda value: value.casefold() in selected_coroners)
+        filtered_df = filtered_df.loc[coroner_mask]
+
+    if selected_areas:
+        area_series = (
+            filtered_df["area"].map(_normalise_dashboard_value)
+            if "area" in filtered_df.columns
+            else pd.Series([""] * len(filtered_df), index=filtered_df.index, dtype=object)
+        )
+        area_mask = area_series.map(lambda value: value.casefold() in selected_areas)
+        filtered_df = filtered_df.loc[area_mask]
+
+    if selected_receivers:
+        receiver_series = (
+            filtered_df["receiver"]
+            if "receiver" in filtered_df.columns
+            else pd.Series([""] * len(filtered_df), index=filtered_df.index, dtype=object)
+        )
+        receiver_mask = receiver_series.map(
+            lambda value: any(
+                receiver_name.casefold() in selected_receivers
+                for receiver_name in _split_dashboard_receivers(value)
+            )
+        )
+        filtered_df = filtered_df.loc[receiver_mask]
+
+    return filtered_df.reset_index(drop=True)
 
 
 def _serialize_preview_state(preview_state: dict[str, Any]) -> dict[str, Any]:
@@ -177,7 +356,9 @@ def _update_sidebar_state(request: HttpRequest) -> None:
 def _build_context(request: HttpRequest) -> dict[str, Any]:
     session = request.session
 
-    reports_df = get_dataframe(session, "reports_df")
+    reports_df_full = get_dataframe(session, "reports_df")
+    dashboard_filters = _get_explore_dashboard_filters(request)
+    reports_df = _apply_explore_dashboard_filters(reports_df_full, dashboard_filters)
     theme_summary_df = get_dataframe(session, "theme_summary_table")
     feature_grid_df = _get_feature_grid_df(request, use_default=True)
     feature_grid_raw = _get_feature_grid_df(request, use_default=False)
@@ -190,8 +371,8 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         for row in feature_grid_df.to_dict(orient="records")
     ]
 
-    if session.get("reports_df_initial") is None and not reports_df.empty:
-        set_dataframe(session, "reports_df_initial", reports_df)
+    if session.get("reports_df_initial") is None and not reports_df_full.empty:
+        set_dataframe(session, "reports_df_initial", reports_df_full)
 
     reports_count = len(reports_df)
     page_size = 100
@@ -243,6 +424,14 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
 
     history_depth = len(session.get("history", []))
     redo_depth = len(session.get("redo_history", []))
+    dashboard_filter_query = urlencode(
+        [
+            *[("coroner", value) for value in dashboard_filters["coroner"]],
+            *[("area", value) for value in dashboard_filters["area"]],
+            *[("receiver", value) for value in dashboard_filters["receiver"]],
+        ],
+        doseq=True,
+    )
 
     return {
         "reports_df": reports_df,
@@ -281,6 +470,11 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "report_start_date": session.get("report_start_date", date(2013, 1, 1).isoformat()),
         "report_end_date": session.get("report_end_date", date.today().isoformat()),
         "report_limit": session.get("report_limit"),
+        "workspace_dataset_token": session.get("reports_df") or "",
+        "dashboard_selected_coroners": dashboard_filters["coroner"],
+        "dashboard_selected_areas": dashboard_filters["area"],
+        "dashboard_selected_receivers": dashboard_filters["receiver"],
+        "dashboard_filter_query": dashboard_filter_query,
     }
 
 
@@ -923,6 +1117,12 @@ def explore(request: HttpRequest) -> HttpResponse:
         return redirect("workbench:explore")
 
     context = _build_context(request)
+    context["explore_dashboard_payload"] = _build_explore_dashboard_payload(get_dataframe(request.session, "reports_df"))
+    context["explore_dashboard_payload"]["selected"] = {
+        "coroner": context.get("dashboard_selected_coroners", []),
+        "area": context.get("dashboard_selected_areas", []),
+        "receiver": context.get("dashboard_selected_receivers", []),
+    }
     _set_explore_modal_flag(request, context, "explore")
     context["current_page"] = "explore"
     return render(request, "workbench/explore.html", context)

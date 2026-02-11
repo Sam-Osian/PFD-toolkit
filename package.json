@@ -23,6 +23,7 @@
   },
   "homepage": "https://github.com/Sam-Osian/PFD-toolkit#readme",
   "dependencies": {
+    "echarts": "^6.0.0",
     "overlayscrollbars": "^2.14.0"
   }
 }

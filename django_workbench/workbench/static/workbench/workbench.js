@@ -619,6 +619,13 @@
         }
         document.body.dataset.paginationBound = "1";
 
+        function buildUrlWithSharedQuery(baseUrl, sharedQuery) {
+            if (!sharedQuery) {
+                return baseUrl;
+            }
+            return `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${sharedQuery}`;
+        }
+
         function replaceDatasetFromHtml(html, targetUrl) {
             const wrapper = document.createElement("div");
             wrapper.innerHTML = html.trim();
@@ -663,6 +670,10 @@
                     window.location.href = targetUrl;
                 });
         }
+
+        window.WorkbenchDatasetPanel = {
+            fetchAndSwapDataset: fetchAndSwapDataset,
+        };
 
         document.addEventListener("click", function (event) {
             const link = event.target.closest(".dataset-pagination__actions a[data-dataset-panel-url]");
@@ -709,10 +720,560 @@
 
             const panelBase = form.getAttribute("data-dataset-panel-base") || "/dataset-panel/";
             const browserBase = form.getAttribute("data-dataset-browser-base") || "?page=";
-            const panelUrl = `${panelBase}?page=${page}`;
-            const targetUrl = `${browserBase}${page}`;
+            const sharedQuery = (form.getAttribute("data-dataset-shared-query") || "").trim();
+            const panelUrl = buildUrlWithSharedQuery(`${panelBase}?page=${page}`, sharedQuery);
+            const targetUrl = buildUrlWithSharedQuery(`${browserBase}${page}`, sharedQuery);
             fetchAndSwapDataset(panelUrl, targetUrl);
         });
+    }
+
+    function setupExploreDashboard() {
+        const root = byId("explore-dashboard");
+        if (!root) {
+            return;
+        }
+
+        const dataNode = byId("explore-dashboard-data");
+        if (!dataNode) {
+            return;
+        }
+
+        const resetButton = byId("dashboard-filter-reset");
+        const statusNode = byId("dashboard-status");
+        const statReports = byId("dashboard-stat-reports");
+        const statCoroners = byId("dashboard-stat-coroners");
+        const statReceiverLinks = byId("dashboard-stat-receiver-links");
+        const searchCoroner = byId("dashboard-filter-coroner-search");
+        const searchArea = byId("dashboard-filter-area-search");
+        const searchReceiver = byId("dashboard-filter-receiver-search");
+        const optionsCoroner = byId("dashboard-options-coroner");
+        const optionsArea = byId("dashboard-options-area");
+        const optionsReceiver = byId("dashboard-options-receiver");
+        const badgesCoroner = byId("dashboard-badges-coroner");
+        const badgesArea = byId("dashboard-badges-area");
+        const badgesReceiver = byId("dashboard-badges-receiver");
+        const filterCoronerField = root.querySelector("[data-dashboard-filter='coroner']");
+        const filterAreaField = root.querySelector("[data-dashboard-filter='area']");
+        const filterReceiverField = root.querySelector("[data-dashboard-filter='receiver']");
+
+        const chartRoots = {
+            monthly: byId("dashboard-chart-monthly"),
+            coroner: byId("dashboard-chart-coroner"),
+            area: byId("dashboard-chart-area"),
+            receiver: byId("dashboard-chart-receiver"),
+        };
+
+        if (
+            !resetButton ||
+            !statReports ||
+            !statCoroners ||
+            !statReceiverLinks ||
+            !searchCoroner ||
+            !searchArea ||
+            !searchReceiver ||
+            !optionsCoroner ||
+            !optionsArea ||
+            !optionsReceiver ||
+            !badgesCoroner ||
+            !badgesArea ||
+            !badgesReceiver ||
+            !filterCoronerField ||
+            !filterAreaField ||
+            !filterReceiverField ||
+            !chartRoots.monthly ||
+            !chartRoots.coroner ||
+            !chartRoots.area ||
+            !chartRoots.receiver
+        ) {
+            return;
+        }
+
+        if (root.dataset.bound === "1") {
+            if (window.echarts && typeof window.echarts.getInstanceByDom === "function") {
+                Object.values(chartRoots).forEach((chartRoot) => {
+                    const instance = window.echarts.getInstanceByDom(chartRoot);
+                    if (instance) {
+                        instance.resize();
+                    }
+                });
+            }
+            return;
+        }
+        root.dataset.bound = "1";
+
+        function setStatus(text) {
+            if (statusNode) {
+                statusNode.textContent = text;
+            }
+        }
+
+        let payload = {};
+        try {
+            payload = JSON.parse(dataNode.textContent || "{}");
+        } catch (error) {
+            setStatus("Dashboard data could not be parsed.");
+            return;
+        }
+
+        if (!window.echarts || typeof window.echarts.init !== "function") {
+            setStatus("ECharts is not available. Reload the page and try again.");
+            return;
+        }
+
+        const rows = Array.isArray(payload.rows) ? payload.rows : [];
+        const options = payload && typeof payload.options === "object" ? payload.options : {};
+        const selected = payload && typeof payload.selected === "object" ? payload.selected : {};
+        const coronerOptions = Array.isArray(options.coroners) ? options.coroners : [];
+        const areaOptions = Array.isArray(options.areas) ? options.areas : [];
+        const receiverOptions = Array.isArray(options.receivers) ? options.receivers : [];
+
+        const TOP_N = 12;
+        const UNKNOWN_LABEL = "Not specified";
+        const gridTextColor = "rgba(209, 220, 255, 0.7)";
+        const splitLineColor = "rgba(156, 173, 232, 0.18)";
+
+        function normaliseValue(value) {
+            if (typeof value !== "string") {
+                if (value === null || value === undefined) {
+                    return "";
+                }
+                return String(value).trim();
+            }
+            return value.trim();
+        }
+
+        function normaliseReceivers(rawReceivers) {
+            if (!Array.isArray(rawReceivers) || !rawReceivers.length) {
+                return [];
+            }
+            return rawReceivers
+                .map((value) => normaliseValue(value))
+                .filter((value) => Boolean(value));
+        }
+
+        const charts = {};
+        Object.entries(chartRoots).forEach(([chartName, chartRoot]) => {
+            const existingInstance = window.echarts.getInstanceByDom(chartRoot);
+            if (existingInstance) {
+                existingInstance.dispose();
+            }
+            charts[chartName] = window.echarts.init(chartRoot, null, { renderer: "canvas" });
+        });
+
+        const selectedFilters = {
+            coroner: new Set(Array.isArray(selected.coroner) ? selected.coroner.map(normaliseValue).filter(Boolean) : []),
+            area: new Set(Array.isArray(selected.area) ? selected.area.map(normaliseValue).filter(Boolean) : []),
+            receiver: new Set(Array.isArray(selected.receiver) ? selected.receiver.map(normaliseValue).filter(Boolean) : []),
+        };
+        const filterFieldNodes = {
+            coroner: filterCoronerField,
+            area: filterAreaField,
+            receiver: filterReceiverField,
+        };
+        let openFilterName = "";
+
+        function setOpenFilter(fieldName) {
+            openFilterName = fieldName || "";
+            Object.entries(filterFieldNodes).forEach(([name, node]) => {
+                node.classList.toggle("is-open", name === openFilterName);
+            });
+        }
+
+        function syncBrowserUrl() {
+            const params = new URLSearchParams(window.location.search);
+            params.delete("page");
+            ["coroner", "area", "receiver"].forEach((field) => {
+                params.delete(field);
+                Array.from(selectedFilters[field]).forEach((value) => params.append(field, value));
+            });
+            const query = params.toString();
+            const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}`;
+            window.history.replaceState(window.history.state, "", nextUrl);
+        }
+
+        function buildFilterQueryString() {
+            const params = new URLSearchParams();
+            ["coroner", "area", "receiver"].forEach((field) => {
+                Array.from(selectedFilters[field]).forEach((value) => params.append(field, value));
+            });
+            return params.toString();
+        }
+
+        function refreshDatasetTable() {
+            if (!window.WorkbenchDatasetPanel || typeof window.WorkbenchDatasetPanel.fetchAndSwapDataset !== "function") {
+                return;
+            }
+            const query = buildFilterQueryString();
+            const panelUrl = `/dataset-panel/?page=1${query ? `&${query}` : ""}`;
+            const targetUrl = `?page=1${query ? `&${query}` : ""}`;
+            window.WorkbenchDatasetPanel.fetchAndSwapDataset(panelUrl, targetUrl);
+        }
+
+        function toSortedCountRows(counter) {
+            return Array.from(counter.entries())
+                .sort((left, right) => {
+                    if (right[1] !== left[1]) {
+                        return right[1] - left[1];
+                    }
+                    return left[0].localeCompare(right[0], undefined, { sensitivity: "base" });
+                })
+                .map(([name, value]) => ({ name, value }));
+        }
+
+        function filterRows(sourceRows) {
+            return sourceRows.filter((row) => {
+                const rowCoroner = normaliseValue(row.coroner);
+                const rowArea = normaliseValue(row.area);
+                const rowReceivers = normaliseReceivers(row.receivers);
+
+                if (selectedFilters.coroner.size && !selectedFilters.coroner.has(rowCoroner)) {
+                    return false;
+                }
+                if (selectedFilters.area.size && !selectedFilters.area.has(rowArea)) {
+                    return false;
+                }
+                if (selectedFilters.receiver.size) {
+                    const hasMatch = rowReceivers.some((value) => selectedFilters.receiver.has(value));
+                    if (!hasMatch) {
+                        return false;
+                    }
+                }
+                if (selectedFilters.receiver.size && !rowReceivers.length) {
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function computeMonthlySeries(sourceRows) {
+            const monthlyCounts = new Map();
+            sourceRows.forEach((row) => {
+                const month = normaliseValue(row.year_month);
+                if (!month) {
+                    return;
+                }
+                monthlyCounts.set(month, (monthlyCounts.get(month) || 0) + 1);
+            });
+
+            return Array.from(monthlyCounts.entries())
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([name, value]) => ({ name, value }));
+        }
+
+        function computeTopValues(sourceRows, fieldName) {
+            const counts = new Map();
+            sourceRows.forEach((row) => {
+                const value = normaliseValue(row[fieldName]) || UNKNOWN_LABEL;
+                counts.set(value, (counts.get(value) || 0) + 1);
+            });
+            return toSortedCountRows(counts).slice(0, TOP_N);
+        }
+
+        function computeTopReceivers(sourceRows) {
+            const counts = new Map();
+            sourceRows.forEach((row) => {
+                const receiverList = normaliseReceivers(row.receivers);
+                if (!receiverList.length) {
+                    counts.set(UNKNOWN_LABEL, (counts.get(UNKNOWN_LABEL) || 0) + 1);
+                    return;
+                }
+                receiverList.forEach((receiverName) => {
+                    counts.set(receiverName, (counts.get(receiverName) || 0) + 1);
+                });
+            });
+            return toSortedCountRows(counts).slice(0, TOP_N);
+        }
+
+        function renderMonthlyChart(seriesRows) {
+            const months = seriesRows.map((row) => row.name);
+            const counts = seriesRows.map((row) => row.value);
+            charts.monthly.setOption(
+                {
+                    animationDuration: 240,
+                    tooltip: { trigger: "axis" },
+                    grid: { left: 44, right: 12, top: 24, bottom: 28 },
+                    xAxis: {
+                        type: "category",
+                        data: months,
+                        axisLabel: { color: gridTextColor, rotate: 30 },
+                        axisLine: { lineStyle: { color: splitLineColor } },
+                    },
+                    yAxis: {
+                        type: "value",
+                        axisLabel: { color: gridTextColor },
+                        splitLine: { lineStyle: { color: splitLineColor } },
+                    },
+                    series: [
+                        {
+                            type: "line",
+                            smooth: true,
+                            showSymbol: false,
+                            lineStyle: { width: 2.2, color: "#66d7ff" },
+                            itemStyle: { color: "#66d7ff" },
+                            areaStyle: { color: "rgba(102, 215, 255, 0.18)" },
+                            data: counts,
+                        },
+                    ],
+                    graphic: !seriesRows.length
+                        ? [
+                            {
+                                type: "text",
+                                left: "center",
+                                top: "middle",
+                                style: {
+                                    text: "No dated reports for this filter.",
+                                    fill: "rgba(210, 220, 255, 0.7)",
+                                    fontSize: 13,
+                                },
+                            },
+                        ]
+                        : [],
+                },
+                true
+            );
+        }
+
+        function renderBarChart(chart, seriesRows, colorHex, emptyText) {
+            const labels = seriesRows.map((row) => row.name);
+            const values = seriesRows.map((row) => row.value);
+            chart.setOption(
+                {
+                    animationDuration: 240,
+                    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+                    grid: { left: 140, right: 16, top: 24, bottom: 24 },
+                    xAxis: {
+                        type: "value",
+                        axisLabel: { color: gridTextColor },
+                        splitLine: { lineStyle: { color: splitLineColor } },
+                    },
+                    yAxis: {
+                        type: "category",
+                        inverse: true,
+                        data: labels,
+                        axisLabel: {
+                            color: gridTextColor,
+                            overflow: "truncate",
+                            width: 130,
+                        },
+                        axisLine: { lineStyle: { color: splitLineColor } },
+                    },
+                    series: [
+                        {
+                            type: "bar",
+                            barMaxWidth: 22,
+                            data: values,
+                            itemStyle: {
+                                color: colorHex,
+                                borderRadius: [0, 6, 6, 0],
+                            },
+                        },
+                    ],
+                    graphic: !seriesRows.length
+                        ? [
+                            {
+                                type: "text",
+                                left: "center",
+                                top: "middle",
+                                style: {
+                                    text: emptyText,
+                                    fill: "rgba(210, 220, 255, 0.7)",
+                                    fontSize: 13,
+                                },
+                            },
+                        ]
+                        : [],
+                },
+                true
+            );
+        }
+
+        function updateStatCards(sourceRows) {
+            const uniqueCoroners = new Set();
+            let receiverLinks = 0;
+
+            sourceRows.forEach((row) => {
+                const coroner = normaliseValue(row.coroner);
+                if (coroner) {
+                    uniqueCoroners.add(coroner);
+                }
+                const receiverList = normaliseReceivers(row.receivers);
+                receiverLinks += receiverList.length;
+            });
+
+            statReports.textContent = sourceRows.length.toLocaleString();
+            statCoroners.textContent = uniqueCoroners.size.toLocaleString();
+            statReceiverLinks.textContent = receiverLinks.toLocaleString();
+        }
+
+        function renderDashboard() {
+            const visibleRows = filterRows(rows);
+            updateStatCards(visibleRows);
+
+            const monthlyRows = computeMonthlySeries(visibleRows);
+            const topCoroners = computeTopValues(visibleRows, "coroner");
+            const topAreas = computeTopValues(visibleRows, "area");
+            const topReceivers = computeTopReceivers(visibleRows);
+
+            renderMonthlyChart(monthlyRows);
+            renderBarChart(
+                charts.coroner,
+                topCoroners,
+                "#5b9dff",
+                "No coroner values for this filter."
+            );
+            renderBarChart(
+                charts.area,
+                topAreas,
+                "#7ac26b",
+                "No area values for this filter."
+            );
+            renderBarChart(
+                charts.receiver,
+                topReceivers,
+                "#f2a85a",
+                "No receiver values for this filter."
+            );
+
+            setStatus(`Showing ${visibleRows.length.toLocaleString()} of ${rows.length.toLocaleString()} reports.`);
+        }
+
+        function renderFilterControl(fieldName, allOptions, searchInput, optionsNode, badgesNode) {
+            function createBadge(value) {
+                const badge = document.createElement("button");
+                badge.type = "button";
+                badge.className = "dashboard-selection-badge";
+                badge.title = `Remove ${value}`;
+                badge.innerHTML = `<span>${value}</span><i aria-hidden="true">x</i>`;
+                badge.addEventListener("click", function () {
+                    selectedFilters[fieldName].delete(value);
+                    renderDashboard();
+                    renderFilterControl(fieldName, allOptions, searchInput, optionsNode, badgesNode);
+                    syncBrowserUrl();
+                    refreshDatasetTable();
+                });
+                return badge;
+            }
+
+            function createOption(value) {
+                const selectedNow = selectedFilters[fieldName].has(value);
+                const optionButton = document.createElement("button");
+                optionButton.type = "button";
+                optionButton.className = `dashboard-option-item${selectedNow ? " is-selected" : ""}`;
+                optionButton.innerHTML = `<span>${value}</span><strong>${selectedNow ? "Selected" : "Add"}</strong>`;
+                optionButton.addEventListener("click", function () {
+                    if (selectedNow) {
+                        selectedFilters[fieldName].delete(value);
+                    } else {
+                        selectedFilters[fieldName].add(value);
+                    }
+                    renderDashboard();
+                    renderFilterControl(fieldName, allOptions, searchInput, optionsNode, badgesNode);
+                    syncBrowserUrl();
+                    refreshDatasetTable();
+                });
+                return optionButton;
+            }
+
+            function paintBadges() {
+                badgesNode.innerHTML = "";
+                const selectedValues = Array.from(selectedFilters[fieldName]).sort((a, b) =>
+                    a.localeCompare(b, undefined, { sensitivity: "base" })
+                );
+                if (!selectedValues.length) {
+                    const empty = document.createElement("span");
+                    empty.className = "dashboard-filter-empty";
+                    empty.textContent = "All selected";
+                    badgesNode.appendChild(empty);
+                    return;
+                }
+                selectedValues.forEach((value) => badgesNode.appendChild(createBadge(value)));
+            }
+
+            function paintOptions() {
+                optionsNode.innerHTML = "";
+                const searchTerm = normaliseValue(searchInput.value).toLowerCase();
+                const filteredOptions = allOptions.filter((value) => {
+                    if (!searchTerm) {
+                        return true;
+                    }
+                    return value.toLowerCase().includes(searchTerm);
+                });
+                if (!filteredOptions.length) {
+                    const empty = document.createElement("div");
+                    empty.className = "dashboard-filter-empty";
+                    empty.textContent = "No matches";
+                    optionsNode.appendChild(empty);
+                    return;
+                }
+                filteredOptions.slice(0, 120).forEach((value) => {
+                    optionsNode.appendChild(createOption(value));
+                });
+            }
+
+            paintBadges();
+            paintOptions();
+        }
+
+        function resetFilters() {
+            selectedFilters.coroner.clear();
+            selectedFilters.area.clear();
+            selectedFilters.receiver.clear();
+            searchCoroner.value = "";
+            searchArea.value = "";
+            searchReceiver.value = "";
+            renderDashboard();
+            renderFilterControl("coroner", coronerOptions, searchCoroner, optionsCoroner, badgesCoroner);
+            renderFilterControl("area", areaOptions, searchArea, optionsArea, badgesArea);
+            renderFilterControl("receiver", receiverOptions, searchReceiver, optionsReceiver, badgesReceiver);
+            syncBrowserUrl();
+            refreshDatasetTable();
+        }
+
+        [
+            { field: "coroner", options: coronerOptions, search: searchCoroner, list: optionsCoroner, badges: badgesCoroner },
+            { field: "area", options: areaOptions, search: searchArea, list: optionsArea, badges: badgesArea },
+            { field: "receiver", options: receiverOptions, search: searchReceiver, list: optionsReceiver, badges: badgesReceiver },
+        ].forEach((config) => {
+            const containerNode = filterFieldNodes[config.field];
+            containerNode.addEventListener("click", function () {
+                setOpenFilter(config.field);
+            });
+            config.search.addEventListener("input", function () {
+                renderFilterControl(config.field, config.options, config.search, config.list, config.badges);
+            });
+            config.search.addEventListener("focus", function () {
+                setOpenFilter(config.field);
+            });
+        });
+
+        document.addEventListener("click", function (event) {
+            if (!openFilterName) {
+                return;
+            }
+            const openFieldNode = filterFieldNodes[openFilterName];
+            if (!openFieldNode) {
+                setOpenFilter("");
+                return;
+            }
+            if (!openFieldNode.contains(event.target)) {
+                setOpenFilter("");
+            }
+        });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                setOpenFilter("");
+            }
+        });
+
+        resetButton.addEventListener("click", resetFilters);
+        window.addEventListener("resize", function () {
+            Object.values(charts).forEach((chart) => chart.resize());
+        });
+
+        renderFilterControl("coroner", coronerOptions, searchCoroner, optionsCoroner, badgesCoroner);
+        renderFilterControl("area", areaOptions, searchArea, optionsArea, badgesArea);
+        renderFilterControl("receiver", receiverOptions, searchReceiver, optionsReceiver, badgesReceiver);
+        renderDashboard();
     }
 
     function setupConfigModalDismiss() {
@@ -843,6 +1404,7 @@
         setupStartOverConfirm();
         setupDownloadBundleModal();
         setupDatasetPagination();
+        setupExploreDashboard();
         setupConfigModalDismiss();
 
         const provider = byId("provider_override");
@@ -870,24 +1432,41 @@
             return;
         }
 
-        const pageCache = new Map();
-        let activePath = window.location.pathname;
-        if (contentRoot.firstElementChild) {
-            pageCache.set(activePath, contentRoot.firstElementChild);
+        function getWorkspaceToken(rootNode) {
+            if (!rootNode || !rootNode.dataset) {
+                return "";
+            }
+            return rootNode.dataset.workspaceToken || "";
         }
 
-        function swapTo(pathname, page, node, pushHistory) {
+        const pageCache = new Map();
+        let activePath = window.location.pathname;
+        let activeWorkspaceToken = getWorkspaceToken(contentRoot);
+        if (contentRoot.firstElementChild) {
+            pageCache.set(activePath, {
+                node: contentRoot.firstElementChild,
+                workspaceToken: activeWorkspaceToken,
+            });
+        }
+
+        function swapTo(pathname, page, node, pushHistory, workspaceToken) {
             if (!node) {
                 return;
             }
             contentRoot.replaceChildren(node);
             contentRoot.dataset.page = page;
+            contentRoot.dataset.workspaceToken = workspaceToken || "";
             applyBodyPageClass(page);
             syncSidebarActive(page);
             if (pushHistory) {
-                window.history.pushState({ path: pathname, page: page }, "", pathname);
+                window.history.pushState(
+                    { path: pathname, page: page, workspaceToken: workspaceToken || "" },
+                    "",
+                    pathname
+                );
             }
             activePath = pathname;
+            activeWorkspaceToken = workspaceToken || "";
             initializePageFeatures();
             if (typeof contentRoot.animate === "function") {
                 contentRoot.animate(
@@ -922,13 +1501,20 @@
             event.preventDefault();
             const currentNode = contentRoot.firstElementChild;
             if (currentNode) {
-                pageCache.set(currentPath, currentNode);
+                pageCache.set(currentPath, {
+                    node: currentNode,
+                    workspaceToken: activeWorkspaceToken,
+                });
             }
 
             const targetPage = link.getAttribute("data-page-link") || getPageFromPath(targetPath);
-            if (pageCache.has(targetPath)) {
-                swapTo(targetPath, targetPage, pageCache.get(targetPath), true);
+            const cachedEntry = pageCache.get(targetPath);
+            if (cachedEntry && cachedEntry.workspaceToken === activeWorkspaceToken) {
+                swapTo(targetPath, targetPage, cachedEntry.node, true, cachedEntry.workspaceToken);
                 return;
+            }
+            if (cachedEntry) {
+                pageCache.delete(targetPath);
             }
 
             fetch(targetPath, {
@@ -951,12 +1537,16 @@
                     const page = incomingRoot && incomingRoot.dataset.page
                         ? incomingRoot.dataset.page
                         : targetPage;
+                    const workspaceToken = incomingRoot ? getWorkspaceToken(incomingRoot) : "";
                     if (!incomingNode) {
                         window.location.href = targetPath;
                         return;
                     }
-                    pageCache.set(targetPath, incomingNode);
-                    swapTo(targetPath, page, incomingNode, true);
+                    pageCache.set(targetPath, {
+                        node: incomingNode,
+                        workspaceToken: workspaceToken,
+                    });
+                    swapTo(targetPath, page, incomingNode, true, workspaceToken);
                 })
                 .catch(() => {
                     window.location.href = targetPath;
@@ -968,10 +1558,14 @@
             const page = getPageFromPath(path);
             const currentNode = contentRoot.firstElementChild;
             if (currentNode) {
-                pageCache.set(activePath, currentNode);
+                pageCache.set(activePath, {
+                    node: currentNode,
+                    workspaceToken: activeWorkspaceToken,
+                });
             }
-            if (pageCache.has(path)) {
-                swapTo(path, page, pageCache.get(path), false);
+            const cachedEntry = pageCache.get(path);
+            if (cachedEntry && cachedEntry.workspaceToken === activeWorkspaceToken) {
+                swapTo(path, page, cachedEntry.node, false, cachedEntry.workspaceToken);
                 return;
             }
             window.location.reload();
