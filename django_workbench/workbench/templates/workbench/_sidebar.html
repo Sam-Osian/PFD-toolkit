@@ -47,11 +47,23 @@
                 </span>
                 <span class="sidebar-nav__label">Extract data</span>
             </a>
-            <div class="sidebar-nav__item is-disabled" aria-disabled="true" data-tooltip="Network">
+            <div class="sidebar-nav__item is-disabled is-coming-soon" aria-disabled="true" data-tooltip="Network (Coming soon)">
                 <span class="sidebar-nav__icon" aria-hidden="true">
                     <i class="hgi hgi-stroke hgi-link-04 sidebar-nav__icon-glyph"></i>
                 </span>
-                <span class="sidebar-nav__label">Network</span>
+                <span class="sidebar-nav__meta">
+                    <span class="sidebar-nav__label">Network</span>
+                    <span class="sidebar-badge sidebar-badge--coming-soon">Coming soon</span>
+                </span>
+            </div>
+            <div class="sidebar-nav__item is-disabled is-coming-soon" aria-disabled="true" data-tooltip="Research (Coming soon)">
+                <span class="sidebar-nav__icon" aria-hidden="true">
+                    <i class="hgi hgi-stroke hgi-search-01 sidebar-nav__icon-glyph"></i>
+                </span>
+                <span class="sidebar-nav__meta">
+                    <span class="sidebar-nav__label">Research</span>
+                    <span class="sidebar-badge sidebar-badge--coming-soon">Coming soon</span>
+                </span>
             </div>
             <a href="{% url 'workbench:settings' %}" class="sidebar-nav__item {% if current_page == 'settings' %}is-active{% endif %}" data-tooltip="Settings" data-page-link="settings" {% if current_page == 'settings' %}aria-current="page"{% endif %}>
                 <span class="sidebar-nav__icon" aria-hidden="true">

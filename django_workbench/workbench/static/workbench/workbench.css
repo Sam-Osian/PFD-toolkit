@@ -392,6 +392,54 @@ body.sidebar-collapsed .sidebar-toggle__icon {
     text-overflow: ellipsis;
 }
 
+.sidebar-nav__meta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.52rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.sidebar-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font-size: 0.61rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    padding: 0.14rem 0.48rem;
+}
+
+.sidebar-badge--coming-soon {
+    border-color: rgba(146, 240, 255, 0.5);
+    color: rgba(230, 249, 255, 0.96);
+    background: linear-gradient(140deg, rgba(76, 132, 240, 0.38), rgba(38, 194, 206, 0.34));
+    box-shadow: inset 0 0 0 1px rgba(238, 249, 255, 0.16), 0 6px 14px rgba(25, 108, 139, 0.25);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    pointer-events: none;
+}
+
+.sidebar-nav__item.is-coming-soon {
+    opacity: 0.56;
+    pointer-events: auto;
+}
+
+.sidebar-nav__item.is-coming-soon:hover {
+    opacity: 0.74;
+}
+
+.sidebar-nav__item.is-coming-soon:hover .sidebar-badge--coming-soon {
+    opacity: 1;
+    transform: translateX(0);
+}
+
 .sidebar-bottom {
     display: grid;
     gap: 0.5rem;
@@ -440,6 +488,7 @@ body.sidebar-collapsed .sidebar-brand {
 
 body.sidebar-collapsed .sidebar-brand__text,
 body.sidebar-collapsed .sidebar-nav__label,
+body.sidebar-collapsed .sidebar-nav__meta,
 body.sidebar-collapsed .sidebar-footer-text {
     display: none;
 }
