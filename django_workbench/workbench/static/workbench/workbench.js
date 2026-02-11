@@ -1,7 +1,7 @@
 (function () {
     document.documentElement.classList.add("js-enabled");
     const PAGE_CLASS_PREFIX = "page-";
-    const KNOWN_PAGES = ["home", "explore", "filter", "themes", "extract", "settings"];
+    const KNOWN_PAGES = ["home", "explore", "themes", "extract", "settings"];
 
     function byId(id) {
         return document.getElementById(id);
@@ -12,7 +12,7 @@
             return "explore";
         }
         if (pathname.startsWith("/filter")) {
-            return "filter";
+            return "explore";
         }
         if (pathname.startsWith("/analyse-themes")) {
             return "themes";
@@ -613,6 +613,308 @@
         });
     }
 
+    function setupTopbarQuickSettings() {
+        const openButtons = document.querySelectorAll("[data-topbar-open]");
+        const closeButtons = document.querySelectorAll("[data-topbar-close]");
+        const popovers = Array.from(document.querySelectorAll(".topbar-popover-backdrop"));
+        if (!openButtons.length || !popovers.length) {
+            return;
+        }
+        if (document.body.dataset.topbarQuickSettingsBound === "1") {
+            return;
+        }
+        document.body.dataset.topbarQuickSettingsBound = "1";
+
+        const popoverByKey = {
+            "report-limit": byId("report-limit-popover"),
+            "date-range": byId("date-range-popover"),
+            "llm-settings": byId("llm-settings-popover"),
+        };
+
+        function closeAllPopovers(restoreFocusTarget) {
+            popovers.forEach((popover) => {
+                if (popover) {
+                    popover.classList.add("hidden");
+                }
+            });
+            if (restoreFocusTarget) {
+                restoreFocusTarget.focus();
+            }
+        }
+
+        openButtons.forEach((button) => {
+            button.addEventListener("click", function () {
+                const key = button.getAttribute("data-topbar-open");
+                const targetPopover = popoverByKey[key];
+                if (!targetPopover) {
+                    return;
+                }
+                closeAllPopovers();
+                targetPopover.classList.remove("hidden");
+            });
+        });
+
+        closeButtons.forEach((button) => {
+            button.addEventListener("click", function () {
+                closeAllPopovers();
+            });
+        });
+
+        popovers.forEach((popover) => {
+            popover.addEventListener("click", function (event) {
+                if (event.target === popover) {
+                    closeAllPopovers();
+                }
+            });
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                closeAllPopovers();
+            }
+        });
+    }
+
+    function setupTopbarLimitControls() {
+        const slider = document.querySelector("[data-topbar-limit-slider]");
+        const numberInput = document.querySelector("[data-topbar-limit-number]");
+        if (!slider || !numberInput) {
+            return;
+        }
+        if (slider.dataset.bound === "1") {
+            return;
+        }
+        slider.dataset.bound = "1";
+
+        function clampToSlider(value) {
+            const parsed = Number(value);
+            if (!Number.isFinite(parsed)) {
+                return Number(slider.min || 1);
+            }
+            const min = Number(slider.min || 1);
+            const max = Number(slider.max || 5000);
+            return Math.max(min, Math.min(max, Math.round(parsed)));
+        }
+
+        slider.addEventListener("input", function () {
+            numberInput.value = String(clampToSlider(slider.value));
+        });
+
+        numberInput.addEventListener("input", function () {
+            slider.value = String(clampToSlider(numberInput.value));
+        });
+    }
+
+    function setupTopbarLLMProviderToggle() {
+        const provider = byId("topbar_provider_override");
+        const openaiFields = byId("topbar-openai-fields");
+        const openrouterFields = byId("topbar-openrouter-fields");
+        if (!provider || !openaiFields || !openrouterFields) {
+            return;
+        }
+        if (provider.dataset.bound === "1") {
+            return;
+        }
+        provider.dataset.bound = "1";
+
+        function paintProviderFields() {
+            const isOpenRouter = provider.value === "OpenRouter";
+            openaiFields.classList.toggle("hidden", isOpenRouter);
+            openrouterFields.classList.toggle("hidden", !isOpenRouter);
+        }
+
+        provider.addEventListener("change", paintProviderFields);
+        paintProviderFields();
+    }
+
+    function setupTopbarAIResetConfirm() {
+        const confirmModal = byId("topbar-ai-reset-confirm");
+        if (!confirmModal) {
+            return;
+        }
+        if (confirmModal.dataset.bound === "1") {
+            return;
+        }
+        confirmModal.dataset.bound = "1";
+
+        const forms = document.querySelectorAll("form.js-ai-reset-form");
+        if (!forms.length) {
+            return;
+        }
+
+        const cancelButton = confirmModal.querySelector("[data-topbar-ai-reset-cancel]");
+        const confirmButton = confirmModal.querySelector("[data-topbar-ai-reset-confirm]");
+        const aiFeaturesUsed = confirmModal.getAttribute("data-ai-features-used") === "1";
+        let pendingForm = null;
+
+        function closeConfirm() {
+            confirmModal.classList.add("hidden");
+            pendingForm = null;
+        }
+
+        function openConfirm(form) {
+            pendingForm = form;
+            confirmModal.classList.remove("hidden");
+        }
+
+        forms.forEach((form) => {
+            form.addEventListener("submit", function (event) {
+                if (!aiFeaturesUsed) {
+                    return;
+                }
+                if (form.dataset.aiResetConfirmed === "1") {
+                    delete form.dataset.aiResetConfirmed;
+                    return;
+                }
+                event.preventDefault();
+                openConfirm(form);
+            });
+        });
+
+        if (cancelButton) {
+            cancelButton.addEventListener("click", closeConfirm);
+        }
+
+        if (confirmButton) {
+            confirmButton.addEventListener("click", function () {
+                if (!pendingForm) {
+                    closeConfirm();
+                    return;
+                }
+                pendingForm.dataset.aiResetConfirmed = "1";
+                const formToSubmit = pendingForm;
+                closeConfirm();
+                formToSubmit.requestSubmit();
+            });
+        }
+
+        confirmModal.addEventListener("click", function (event) {
+            if (event.target === confirmModal) {
+                closeConfirm();
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !confirmModal.classList.contains("hidden")) {
+                closeConfirm();
+            }
+        });
+    }
+
+    function setupTopbarDateValidation() {
+        const form = byId("date-range-popover") ? byId("date-range-popover").querySelector("form") : null;
+        const startInput = byId("topbar_report_start_date");
+        const endInput = byId("topbar_report_end_date");
+        if (!form || !startInput || !endInput) {
+            return;
+        }
+        if (form.dataset.dateValidationBound === "1") {
+            return;
+        }
+        form.dataset.dateValidationBound = "1";
+
+        function isValidDDMMYYYY(value) {
+            const raw = String(value || "").trim();
+            const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+            if (!match) {
+                return false;
+            }
+            const day = Number(match[1]);
+            const month = Number(match[2]);
+            const year = Number(match[3]);
+            const parsed = new Date(year, month - 1, day);
+            return (
+                parsed.getFullYear() === year
+                && parsed.getMonth() === month - 1
+                && parsed.getDate() === day
+            );
+        }
+
+        function validateField(input) {
+            const value = String(input.value || "").trim();
+            if (!value) {
+                input.setCustomValidity("Enter a date in DD/MM/YYYY format.");
+                return false;
+            }
+            if (!isValidDDMMYYYY(value)) {
+                input.setCustomValidity("Use a real date in DD/MM/YYYY format (e.g. 11/02/2026).");
+                return false;
+            }
+            input.setCustomValidity("");
+            return true;
+        }
+
+        [startInput, endInput].forEach((input) => {
+            input.addEventListener("input", function () {
+                validateField(input);
+            });
+            input.addEventListener("blur", function () {
+                validateField(input);
+            });
+        });
+
+        form.addEventListener("submit", function (event) {
+            const startValid = validateField(startInput);
+            const endValid = validateField(endInput);
+            if (!startValid || !endValid) {
+                event.preventDefault();
+                form.reportValidity();
+            }
+        });
+    }
+
+    function setupAdvancedAIFilterPopover() {
+        const openButton = document.querySelector("[data-advanced-ai-filter-open]");
+        const cancelButton = document.querySelector("[data-advanced-ai-filter-cancel]");
+        const backdrop = byId("advanced-ai-popover-backdrop");
+        const form = document.querySelector("#advanced-ai-popover-backdrop form");
+        if (!openButton || !cancelButton || !backdrop || !form) {
+            return;
+        }
+        if (openButton.dataset.bound === "1") {
+            return;
+        }
+        openButton.dataset.bound = "1";
+
+        const queryInput = byId("advanced_ai_search_query");
+
+        function openPopover() {
+            backdrop.classList.remove("hidden");
+            if (queryInput) {
+                queryInput.focus();
+            }
+        }
+
+        function closePopover(restoreFocus) {
+            backdrop.classList.add("hidden");
+            if (restoreFocus) {
+                openButton.focus();
+            }
+        }
+
+        openButton.addEventListener("click", openPopover);
+        cancelButton.addEventListener("click", function () {
+            closePopover(true);
+        });
+        backdrop.addEventListener("click", function (event) {
+            if (event.target === backdrop) {
+                closePopover(false);
+            }
+        });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !backdrop.classList.contains("hidden")) {
+                closePopover(true);
+            }
+        });
+
+        form.addEventListener("submit", function () {
+            closePopover(false);
+            if (window.WorkbenchLoading && typeof window.WorkbenchLoading.show === "function") {
+                window.WorkbenchLoading.show("Screening reports...");
+            }
+        });
+    }
+
     function setupDatasetPagination() {
         if (document.body.dataset.paginationBound === "1") {
             return;
@@ -643,6 +945,7 @@
             window.history.replaceState(window.history.state, "", targetUrl);
             setupTableScrollbars();
             setupDatasetCellPreview();
+            setupDatasetCollapse();
 
             if (typeof incomingDataset.animate === "function") {
                 incomingDataset.animate(
@@ -724,6 +1027,49 @@
             const panelUrl = buildUrlWithSharedQuery(`${panelBase}?page=${page}`, sharedQuery);
             const targetUrl = buildUrlWithSharedQuery(`${browserBase}${page}`, sharedQuery);
             fetchAndSwapDataset(panelUrl, targetUrl);
+        });
+    }
+
+    function setupDatasetCollapse() {
+        const root = document.querySelector(".explore-surface--dataset[data-dataset-collapse-root]");
+        if (!root) {
+            return;
+        }
+
+        const toggle = root.querySelector("[data-dataset-collapse-toggle]");
+        const label = root.querySelector("[data-dataset-collapse-label]");
+        if (!toggle || !label) {
+            return;
+        }
+        if (toggle.dataset.bound === "1") {
+            return;
+        }
+        toggle.dataset.bound = "1";
+
+        const storageKey = "workbench.datasetExpanded";
+        let expanded = false;
+        try {
+            expanded = window.localStorage.getItem(storageKey) === "1";
+        } catch (error) {
+            expanded = false;
+        }
+
+        function paint(isExpanded) {
+            root.classList.toggle("is-collapsed", !isExpanded);
+            toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            label.textContent = isExpanded ? "Hide individual reports" : "Show individual reports";
+        }
+
+        paint(expanded);
+
+        toggle.addEventListener("click", function () {
+            expanded = !expanded;
+            paint(expanded);
+            try {
+                window.localStorage.setItem(storageKey, expanded ? "1" : "0");
+            } catch (error) {
+                // Ignore storage access issues.
+            }
         });
     }
 
@@ -1399,10 +1745,17 @@
         toggleDiscoverTrimFields();
         toggleTruncationTypeFields();
         setupFeatureGrid();
+        setupDatasetCollapse();
         setupDatasetCellPreview();
         setupRevealAnimations();
         setupStartOverConfirm();
         setupDownloadBundleModal();
+        setupTopbarQuickSettings();
+        setupTopbarLimitControls();
+        setupTopbarLLMProviderToggle();
+        setupTopbarAIResetConfirm();
+        setupTopbarDateValidation();
+        setupAdvancedAIFilterPopover();
         setupDatasetPagination();
         setupExploreDashboard();
         setupConfigModalDismiss();

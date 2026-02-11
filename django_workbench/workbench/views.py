@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import zipfile
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from urllib.parse import urlencode
 from typing import Any, Optional
@@ -56,10 +56,38 @@ def _bool_from_post(request: HttpRequest, key: str, default: bool = False) -> bo
 
 
 def _parse_date(value: str, default: date) -> date:
-    try:
-        return date.fromisoformat((value or "").strip())
-    except ValueError:
+    raw = (value or "").strip()
+    if not raw:
         return default
+
+    for parser in (date.fromisoformat, lambda item: datetime.strptime(item, "%d/%m/%Y").date()):
+        try:
+            return parser(raw)
+        except ValueError:
+            continue
+    return default
+
+
+def _parse_date_strict(value: str) -> Optional[date]:
+    raw = (value or "").strip()
+    if not raw:
+        return None
+
+    if "/" in raw:
+        try:
+            return datetime.strptime(raw, "%d/%m/%Y").date()
+        except ValueError:
+            return None
+
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _format_date_ddmmyyyy(value: str, default: date) -> str:
+    parsed = _parse_date(value, default)
+    return parsed.strftime("%d/%m/%Y")
 
 
 def _df_to_html(df: pd.DataFrame, table_class: str = "data-table") -> str:
@@ -432,6 +460,21 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         ],
         doseq=True,
     )
+    report_limit = session.get("report_limit")
+    if isinstance(report_limit, int) and report_limit > 0:
+        report_limit_for_slider = min(5000, max(1, report_limit))
+    else:
+        report_limit_for_slider = min(5000, max(1, reports_count or 500))
+
+    ai_features_used = bool(
+        session.get("reports_df_modified")
+        or session.get("screener_result")
+        or session.get("extractor_result")
+        or session.get("summary_result")
+        or session.get("theme_model_schema")
+        or session.get("theme_summary_table")
+        or session.get("preview_state")
+    )
 
     return {
         "reports_df": reports_df,
@@ -469,7 +512,17 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "max_parallel_workers": int(session.get("max_parallel_workers", 8) or 8),
         "report_start_date": session.get("report_start_date", date(2013, 1, 1).isoformat()),
         "report_end_date": session.get("report_end_date", date.today().isoformat()),
-        "report_limit": session.get("report_limit"),
+        "report_start_date_display": _format_date_ddmmyyyy(
+            session.get("report_start_date", ""),
+            date(2013, 1, 1),
+        ),
+        "report_end_date_display": _format_date_ddmmyyyy(
+            session.get("report_end_date", ""),
+            date.today(),
+        ),
+        "report_limit": report_limit,
+        "report_limit_for_slider": report_limit_for_slider,
+        "ai_features_used": ai_features_used,
         "workspace_dataset_token": session.get("reports_df") or "",
         "dashboard_selected_coroners": dashboard_filters["coroner"],
         "dashboard_selected_areas": dashboard_filters["area"],
@@ -481,8 +534,17 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
 def _handle_load_reports(request: HttpRequest) -> None:
     session = request.session
 
-    start_date = _parse_date(request.POST.get("report_start_date", ""), date(2013, 1, 1))
-    end_date = _parse_date(request.POST.get("report_end_date", ""), date.today())
+    start_raw = request.POST.get("report_start_date", "")
+    end_raw = request.POST.get("report_end_date", "")
+    start_date = _parse_date_strict(start_raw)
+    end_date = _parse_date_strict(end_raw)
+
+    if start_date is None:
+        messages.error(request, "Start date is invalid. Use DD/MM/YYYY format, for example 01/01/2013.")
+        return
+    if end_date is None:
+        messages.error(request, "End date is invalid. Use DD/MM/YYYY format, for example 11/02/2026.")
+        return
 
     if end_date < start_date:
         messages.error(request, "End date must be on or after the start date.")
@@ -1130,19 +1192,13 @@ def explore(request: HttpRequest) -> HttpResponse:
 
 @require_http_methods(["GET", "POST"])
 def filter_page(request: HttpRequest) -> HttpResponse:
-    init_state(request.session)
-    _ensure_workspace_reports_loaded(request)
-
     if request.method == "POST":
+        init_state(request.session)
+        _ensure_workspace_reports_loaded(request)
         response = _handle_post_action(request)
         if response is not None:
             return response
-        return redirect("workbench:filter")
-
-    context = _build_context(request)
-    _set_explore_modal_flag(request, context, "filter")
-    context["current_page"] = "filter"
-    return render(request, "workbench/filter.html", context)
+    return redirect("workbench:explore")
 
 
 @require_http_methods(["GET", "POST"])

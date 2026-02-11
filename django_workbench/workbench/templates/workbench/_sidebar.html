@@ -29,12 +29,6 @@
                 </span>
                 <span class="sidebar-nav__label">Explore PFDs</span>
             </a>
-            <a href="{% url 'workbench:filter' %}" class="sidebar-nav__item {% if current_page == 'filter' %}is-active{% endif %}" data-tooltip="Filter" data-page-link="filter" {% if current_page == 'filter' %}aria-current="page"{% endif %}>
-                <span class="sidebar-nav__icon" aria-hidden="true">
-                    <i class="hgi hgi-stroke hgi-filter-horizontal sidebar-nav__icon-glyph"></i>
-                </span>
-                <span class="sidebar-nav__label">Filter</span>
-            </a>
             <a href="{% url 'workbench:themes' %}" class="sidebar-nav__item {% if current_page == 'themes' %}is-active{% endif %}" data-tooltip="Analyse themes" data-page-link="themes" {% if current_page == 'themes' %}aria-current="page"{% endif %}>
                 <span class="sidebar-nav__icon" aria-hidden="true">
                     <i class="hgi hgi-stroke hgi-bulb sidebar-nav__icon-glyph"></i>

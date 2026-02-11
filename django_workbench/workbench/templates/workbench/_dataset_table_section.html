@@ -1,86 +1,96 @@
-<section class="explore-surface explore-surface--dataset data-card reveal-up">
+<section class="explore-surface explore-surface--dataset data-card reveal-up is-collapsed" data-dataset-collapse-root>
     <div class="section-card-header">
-        <div>
-            <span class="section-kicker section-kicker--workspace">{{ workspace_label|default:"Workspace dataset" }}</span>
-        </div>
+        <button
+            type="button"
+            class="button-secondary dataset-collapse-toggle"
+            data-dataset-collapse-toggle
+            aria-expanded="false"
+            aria-controls="dataset-collapse-body"
+            title="Show or hide individual reports"
+        >
+            <i class="hgi hgi-stroke hgi-arrow-down-01 dataset-collapse-toggle__icon" aria-hidden="true"></i>
+            <span data-dataset-collapse-label>Show individual reports</span>
+        </button>
     </div>
-    {% if reports_html %}
-        <div class="table-wrap">{{ reports_html|safe }}</div>
-        <div class="dataset-pagination">
-            <span class="dataset-pagination__meta">Showing {{ reports_page_from }}-{{ reports_page_to }} of {{ reports_count }}</span>
-            <div class="dataset-pagination__actions">
-                {% if reports_page > 1 %}
-                    <a
-                        href="?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                        data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                        class="button-secondary dataset-page-btn dataset-page-btn--first"
-                    >
-                        <i class="hgi hgi-stroke hgi-home-01" aria-hidden="true"></i>
-                        <span>Go to Page 1</span>
-                    </a>
-                {% else %}
-                    <span class="button-secondary is-disabled dataset-page-btn dataset-page-btn--first" aria-disabled="true">
-                        <i class="hgi hgi-stroke hgi-home-01" aria-hidden="true"></i>
-                        <span>Go to Page 1</span>
-                    </span>
-                {% endif %}
+    <div class="dataset-collapse-panel" id="dataset-collapse-body" data-dataset-collapse-body>
+        {% if reports_html %}
+            <div class="table-wrap">{{ reports_html|safe }}</div>
+            <div class="dataset-pagination">
+                <span class="dataset-pagination__meta">Showing {{ reports_page_from }}-{{ reports_page_to }} of {{ reports_count }}</span>
+                <div class="dataset-pagination__actions">
+                    {% if reports_page > 1 %}
+                        <a
+                            href="?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            class="button-secondary dataset-page-btn dataset-page-btn--first"
+                        >
+                            <i class="hgi hgi-stroke hgi-home-01" aria-hidden="true"></i>
+                            <span>Go to Page 1</span>
+                        </a>
+                    {% else %}
+                        <span class="button-secondary is-disabled dataset-page-btn dataset-page-btn--first" aria-disabled="true">
+                            <i class="hgi hgi-stroke hgi-home-01" aria-hidden="true"></i>
+                            <span>Go to Page 1</span>
+                        </span>
+                    {% endif %}
 
-                {% if reports_prev_page %}
-                    <a
-                        href="?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                        data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                        class="button-secondary dataset-page-btn dataset-page-btn--icon"
-                        aria-label="Previous page"
+                    {% if reports_prev_page %}
+                        <a
+                            href="?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            class="button-secondary dataset-page-btn dataset-page-btn--icon"
+                            aria-label="Previous page"
+                        >
+                            <i class="hgi hgi-stroke hgi-arrow-left-02" aria-hidden="true"></i>
+                            <span class="sr-only">Previous</span>
+                        </a>
+                    {% else %}
+                        <span class="button-secondary is-disabled dataset-page-btn dataset-page-btn--icon" aria-disabled="true">
+                            <i class="hgi hgi-stroke hgi-arrow-left-02" aria-hidden="true"></i>
+                            <span class="sr-only">Previous</span>
+                        </span>
+                    {% endif %}
+                    <span class="dataset-pagination__page">Page {{ reports_page }} of {{ reports_total_pages }}</span>
+                    {% if reports_next_page %}
+                        <a
+                            href="?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            class="button-secondary dataset-page-btn dataset-page-btn--icon"
+                            aria-label="Next page"
+                        >
+                            <i class="hgi hgi-stroke hgi-arrow-right-02" aria-hidden="true"></i>
+                            <span class="sr-only">Next</span>
+                        </a>
+                    {% else %}
+                        <span class="button-secondary is-disabled dataset-page-btn dataset-page-btn--icon" aria-disabled="true">
+                            <i class="hgi hgi-stroke hgi-arrow-right-02" aria-hidden="true"></i>
+                            <span class="sr-only">Next</span>
+                        </span>
+                    {% endif %}
+                    <form
+                        class="dataset-pagination__goto"
+                        data-dataset-goto
+                        data-dataset-panel-base="{% url 'workbench:dataset_panel' %}"
+                        data-dataset-browser-base="?page="
+                        data-dataset-shared-query="{{ dashboard_filter_query }}"
                     >
-                        <i class="hgi hgi-stroke hgi-arrow-left-02" aria-hidden="true"></i>
-                        <span class="sr-only">Previous</span>
-                    </a>
-                {% else %}
-                    <span class="button-secondary is-disabled dataset-page-btn dataset-page-btn--icon" aria-disabled="true">
-                        <i class="hgi hgi-stroke hgi-arrow-left-02" aria-hidden="true"></i>
-                        <span class="sr-only">Previous</span>
-                    </span>
-                {% endif %}
-                <span class="dataset-pagination__page">Page {{ reports_page }} of {{ reports_total_pages }}</span>
-                {% if reports_next_page %}
-                    <a
-                        href="?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                        data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                        class="button-secondary dataset-page-btn dataset-page-btn--icon"
-                        aria-label="Next page"
-                    >
-                        <i class="hgi hgi-stroke hgi-arrow-right-02" aria-hidden="true"></i>
-                        <span class="sr-only">Next</span>
-                    </a>
-                {% else %}
-                    <span class="button-secondary is-disabled dataset-page-btn dataset-page-btn--icon" aria-disabled="true">
-                        <i class="hgi hgi-stroke hgi-arrow-right-02" aria-hidden="true"></i>
-                        <span class="sr-only">Next</span>
-                    </span>
-                {% endif %}
-                <form
-                    class="dataset-pagination__goto"
-                    data-dataset-goto
-                    data-dataset-panel-base="{% url 'workbench:dataset_panel' %}"
-                    data-dataset-browser-base="?page="
-                    data-dataset-shared-query="{{ dashboard_filter_query }}"
-                >
-                    <label for="dataset-page-input" class="sr-only">Go to page</label>
-                    <input
-                        id="dataset-page-input"
-                        name="page"
-                        type="number"
-                        min="1"
-                        max="{{ reports_total_pages }}"
-                        value="{{ reports_page }}"
-                        aria-label="Page number"
-                    >
-                    <button type="submit" class="button-secondary dataset-page-btn dataset-page-btn--goto">
-                        <i class="hgi hgi-stroke hgi-arrow-right-02" aria-hidden="true"></i>
-                        <span>Go</span>
-                    </button>
-                </form>
+                        <label for="dataset-page-input" class="sr-only">Go to page</label>
+                        <input
+                            id="dataset-page-input"
+                            name="page"
+                            type="number"
+                            min="1"
+                            max="{{ reports_total_pages }}"
+                            value="{{ reports_page }}"
+                            aria-label="Page number"
+                        >
+                        <button type="submit" class="button-secondary dataset-page-btn dataset-page-btn--goto">
+                            <i class="hgi hgi-stroke hgi-arrow-right-02" aria-hidden="true"></i>
+                            <span>Go</span>
+                        </button>
+                    </form>
+                </div>
             </div>
-        </div>
-    {% endif %}
+        {% endif %}
+    </div>
 </section>

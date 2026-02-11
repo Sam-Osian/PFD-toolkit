@@ -115,6 +115,60 @@
                 <div class="table-wrap">{{ theme_summary_html|safe }}</div>
             </section>
         {% endif %}
+
+        <section class="explore-surface explore-surface--advanced-ai advanced-ai-features reveal-up">
+            <div class="section-card-header">
+                <span class="section-kicker">Advanced AI features</span>
+                <h3>AI workflows</h3>
+            </div>
+            <article class="advanced-ai-feature-card">
+                <div class="advanced-ai-feature-card__head">
+                    <h4>Filter reports</h4>
+                    <p>Use AI screening to keep only reports relevant to your research query, with optional supporting spans.</p>
+                </div>
+                <div class="advanced-ai-feature-card__actions">
+                    <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-filter-open>
+                        <i class="hgi hgi-stroke hgi-filter-horizontal" aria-hidden="true"></i>
+                        <span>Filter reports</span>
+                    </button>
+                </div>
+            </article>
+        </section>
     {% endif %}
+    <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-popover-backdrop" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-popover-title">
+        <section class="advanced-ai-popover">
+            <div class="advanced-ai-popover__head">
+                <span class="section-kicker">Advanced AI features</span>
+                <h3 id="advanced-ai-popover-title">Filter reports</h3>
+                <p>Define a query and keep only the records that match your research focus.</p>
+            </div>
+
+            <form method="post" class="workflow-clean-form advanced-ai-popover__form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="filter_reports">
+
+                <div class="workflow-clean-field">
+                    <label for="advanced_ai_search_query">What should be treated as relevant?</label>
+                    <textarea id="advanced_ai_search_query" name="search_query" class="workflow-clean-prompt" placeholder="e.g. Reports where delayed emergency response, poor inter-agency handoffs, or missed escalation may have contributed to death."></textarea>
+                </div>
+
+                <details class="expander workflow-clean-expander">
+                    <summary>Advanced options</summary>
+                    <div class="expander-content">
+                        <div class="workflow-clean-options">
+                            <label class="checkbox"><input type="checkbox" name="filter_df" checked> <span>Keep only matching reports</span></label>
+                            <label class="checkbox"><input type="checkbox" name="produce_spans"> <span>Include supporting quotes</span></label>
+                            <label class="checkbox"><input type="checkbox" name="drop_spans"> <span>Remove quote columns after screening</span></label>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="advanced-ai-popover__actions">
+                    <button type="button" class="button-secondary" data-advanced-ai-filter-cancel>Cancel</button>
+                    <button type="submit" class="button-primary">Run filter</button>
+                </div>
+            </form>
+        </section>
+    </div>
 </div>
 {% endblock %}

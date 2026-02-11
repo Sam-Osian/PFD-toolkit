@@ -1,25 +1,21 @@
 <section class="explore-action-rail-wrap reveal-up">
     <div class="explore-action-rail" role="toolbar" aria-label="Workspace controls">
         <div class="explore-action-rail__stats" aria-label="Workspace summary">
-            <div class="explore-top-stat">
+            <button type="button" class="explore-top-stat explore-top-stat--interactive" data-topbar-open="report-limit" title="Set report limit">
                 <span class="explore-top-stat__label">Reports in view</span>
                 <span class="explore-top-stat__value">{{ reports_count }}</span>
-            </div>
-            <div class="explore-top-stat">
-                <span class="explore-top-stat__label">Earliest report</span>
-                <span class="explore-top-stat__value">{{ earliest_display }}</span>
-            </div>
-            <div class="explore-top-stat">
-                <span class="explore-top-stat__label">Latest report</span>
-                <span class="explore-top-stat__value">{{ latest_display }}</span>
-            </div>
-            <div class="explore-top-stat explore-top-stat--status">
+            </button>
+            <button type="button" class="explore-top-stat explore-top-stat--interactive" data-topbar-open="date-range" title="Set report date range">
+                <span class="explore-top-stat__label">Earliest / latest report</span>
+                <span class="explore-top-stat__value">{{ earliest_display }} - {{ latest_display }}</span>
+            </button>
+            <button type="button" class="explore-top-stat explore-top-stat--status explore-top-stat--interactive" data-topbar-open="llm-settings" title="Edit LLM settings">
                 <span class="explore-top-stat__label">LLM status</span>
                 <span class="explore-top-stat__value explore-status-value">
                     <span class="explore-status-dot {% if llm_ready %}is-ready{% else %}is-not-ready{% endif %}" aria-hidden="true"></span>
                     {% if llm_ready %}Initialised{% else %}Not initialised{% endif %}
                 </span>
-            </div>
+            </button>
         </div>
 
         <div class="explore-action-rail__controls">
@@ -68,6 +64,137 @@
         </div>
     </div>
 </section>
+
+<div class="topbar-popover-backdrop hidden" id="report-limit-popover" aria-modal="true" role="dialog" aria-labelledby="report-limit-title">
+    <section class="topbar-popover">
+        <div class="topbar-popover__head">
+            <span class="section-kicker">Quick settings</span>
+            <h3 id="report-limit-title">Reports in view</h3>
+            <p>Set how many recent reports to load into the workspace.</p>
+        </div>
+        <form method="post" class="topbar-popover-form js-ai-reset-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="load_reports">
+            <input type="hidden" name="report_start_date" value="{{ report_start_date }}">
+            <input type="hidden" name="report_end_date" value="{{ report_end_date }}">
+            <div class="topbar-popover-field">
+                <label for="topbar_report_limit_number">Number of reports</label>
+                <div class="topbar-limit-inputs">
+                    <input id="topbar_report_limit_slider" type="range" min="1" max="5000" step="1" value="{{ report_limit_for_slider }}" data-topbar-limit-slider>
+                    <input id="topbar_report_limit_number" name="n_reports" type="number" min="1" step="1" value="{{ report_limit|default:report_limit_for_slider }}" data-topbar-limit-number>
+                </div>
+                <small class="field-help">Use the slider for quick changes or enter an exact number.</small>
+            </div>
+            <div class="topbar-popover__actions">
+                <button type="button" class="button-secondary" data-topbar-close>Cancel</button>
+                <button type="submit" class="button-primary">Load reports</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<div class="topbar-popover-backdrop hidden" id="date-range-popover" aria-modal="true" role="dialog" aria-labelledby="date-range-title">
+    <section class="topbar-popover">
+        <div class="topbar-popover__head">
+            <span class="section-kicker">Quick settings</span>
+            <h3 id="date-range-title">Report date range</h3>
+            <p>Choose the start and end dates to load reports. Use DD/MM/YYYY format.</p>
+        </div>
+        <form method="post" class="topbar-popover-form js-ai-reset-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="load_reports">
+            <input type="hidden" name="n_reports" value="{{ report_limit|default_if_none:'' }}">
+            <div class="topbar-date-grid">
+                <div class="topbar-popover-field">
+                    <label for="topbar_report_start_date">Start date (DD/MM/YYYY)</label>
+                    <input id="topbar_report_start_date" name="report_start_date" type="text" inputmode="numeric" placeholder="e.g. 01/01/2013" value="{{ report_start_date_display }}" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" maxlength="10" required autocomplete="off">
+                </div>
+                <div class="topbar-popover-field">
+                    <label for="topbar_report_end_date">End date (DD/MM/YYYY)</label>
+                    <input id="topbar_report_end_date" name="report_end_date" type="text" inputmode="numeric" placeholder="e.g. 11/02/2026" value="{{ report_end_date_display }}" pattern="[0-9]{2}/[0-9]{2}/[0-9]{4}" maxlength="10" required autocomplete="off">
+                </div>
+            </div>
+            <div class="topbar-popover__actions">
+                <button type="button" class="button-secondary" data-topbar-close>Cancel</button>
+                <button type="submit" class="button-primary">Load reports</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<div class="topbar-popover-backdrop hidden" id="llm-settings-popover" aria-modal="true" role="dialog" aria-labelledby="llm-settings-title">
+    <section class="topbar-popover">
+        <div class="topbar-popover__head">
+            <span class="section-kicker">Quick settings</span>
+            <h3 id="llm-settings-title">LLM settings</h3>
+            <p>Update your model provider and credentials without leaving Explore.</p>
+        </div>
+        <form method="post" class="topbar-popover-form" id="topbar-llm-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save_settings">
+
+            <div class="topbar-popover-field">
+                <label for="topbar_provider_override">Provider</label>
+                <select id="topbar_provider_override" name="provider_override">
+                    <option value="OpenAI" {% if provider == 'OpenAI' %}selected{% endif %}>OpenAI</option>
+                    <option value="OpenRouter" {% if provider == 'OpenRouter' %}selected{% endif %}>OpenRouter</option>
+                </select>
+            </div>
+
+            <div class="topbar-provider-fields {% if provider == 'OpenRouter' %}hidden{% endif %}" id="topbar-openai-fields">
+                <div class="topbar-popover-field">
+                    <label for="topbar_openai_api_key">OpenAI API key</label>
+                    <input id="topbar_openai_api_key" name="openai_api_key" type="password" value="{{ openai_api_key }}" autocomplete="off">
+                </div>
+                <div class="topbar-popover-field">
+                    <label for="topbar_openai_base_url">Custom OpenAI base URL (optional)</label>
+                    <input id="topbar_openai_base_url" name="openai_base_url" type="url" value="{{ openai_base_url }}" placeholder="https://api.openai.com/v1">
+                </div>
+            </div>
+
+            <div class="topbar-provider-fields {% if provider != 'OpenRouter' %}hidden{% endif %}" id="topbar-openrouter-fields">
+                <div class="topbar-popover-field">
+                    <label for="topbar_openrouter_api_key">OpenRouter API key</label>
+                    <input id="topbar_openrouter_api_key" name="openrouter_api_key" type="password" value="{{ openrouter_api_key }}" autocomplete="off">
+                </div>
+                <div class="topbar-popover-field">
+                    <label for="topbar_openrouter_base_url">OpenRouter base URL</label>
+                    <input id="topbar_openrouter_base_url" name="openrouter_base_url" type="url" value="{{ openrouter_base_url }}" placeholder="https://openrouter.ai/api/v1">
+                </div>
+            </div>
+
+            <div class="topbar-date-grid">
+                <div class="topbar-popover-field">
+                    <label for="topbar_model_name">Model</label>
+                    <select id="topbar_model_name" name="model_name">
+                        <option value="gpt-4.1-mini" {% if model_name == 'gpt-4.1-mini' %}selected{% endif %}>gpt-4.1-mini</option>
+                        <option value="gpt-4.1" {% if model_name == 'gpt-4.1' %}selected{% endif %}>gpt-4.1</option>
+                    </select>
+                </div>
+                <div class="topbar-popover-field">
+                    <label for="topbar_max_parallel_workers">Max parallel workers</label>
+                    <input id="topbar_max_parallel_workers" name="max_parallel_workers" type="number" min="1" max="32" step="1" value="{{ max_parallel_workers }}">
+                </div>
+            </div>
+
+            <div class="topbar-popover__actions">
+                <button type="button" class="button-secondary" data-topbar-close>Cancel</button>
+                <button type="submit" class="button-primary">Save settings</button>
+            </div>
+        </form>
+    </section>
+</div>
+
+<div class="confirm-modal-backdrop hidden" id="topbar-ai-reset-confirm" aria-modal="true" role="dialog" aria-labelledby="topbar-ai-reset-title" data-ai-features-used="{% if ai_features_used %}1{% else %}0{% endif %}">
+    <section class="confirm-modal">
+        <h3 id="topbar-ai-reset-title">Reload reports and reset AI outputs?</h3>
+        <p>Changing report scope will reload the dataset and clear Filter, Discover, and Extract outputs for this workspace.</p>
+        <div class="confirm-modal__actions">
+            <button type="button" class="button-secondary" data-topbar-ai-reset-cancel>Cancel</button>
+            <button type="button" class="button-primary" data-topbar-ai-reset-confirm>Confirm and continue</button>
+        </div>
+    </section>
+</div>
 
 <div class="confirm-modal-backdrop hidden" id="start-over-confirm" aria-modal="true" role="dialog" aria-labelledby="start-over-confirm-title">
     <section class="confirm-modal">
