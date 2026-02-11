@@ -1,0 +1,87 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench explore-workbench os-workbench workflow-clean workflow-clean--extract">
+    {% include "workbench/_workspace_hud.html" %}
+
+    <section class="explore-surface workflow-clean-shell reveal-up">
+        <div class="workflow-clean-head">
+            <span class="section-kicker">Extract data</span>
+            <h3>Extract data</h3>
+            <p>Define the fields to capture and enrich the same working dataset with structured outputs.</p>
+        </div>
+
+        <form method="post" class="workflow-clean-form workflow-clean-form--wide">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="extract_features">
+
+            <div class="workflow-clean-field">
+                <label>Fields to extract</label>
+                <div class="workflow-clean-table-wrap">
+                    <table class="feature-table workflow-clean-feature-table">
+                        <thead>
+                            <tr>
+                                <th>Field name</th>
+                                <th>Description</th>
+                                <th>Type</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="feature-grid-body">
+                            {% for row in feature_rows %}
+                            <tr>
+                                <td><input name="feature_name" value="{{ row.field_name|default:'' }}" placeholder="e.g. hazard_type"></td>
+                                <td><input name="feature_description" value="{{ row.description|default:'' }}" placeholder="What should be extracted?"></td>
+                                <td>
+                                    <select name="feature_type">
+                                        <option value="Free text" {% if row.type == 'Free text' %}selected{% endif %}>Free text</option>
+                                        <option value="Conditional (True/False)" {% if row.type == 'Conditional (True/False)' %}selected{% endif %}>Conditional (True/False)</option>
+                                        <option value="Whole number" {% if row.type == 'Whole number' %}selected{% endif %}>Whole number</option>
+                                        <option value="Decimal number" {% if row.type == 'Decimal number' %}selected{% endif %}>Decimal number</option>
+                                    </select>
+                                </td>
+                                <td><button type="button" class="button-secondary button-inline remove-feature-row">Remove</button></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="workflow-clean-actions">
+                <button id="add-feature-row" type="button" class="button-secondary">Add field</button>
+            </div>
+
+            <details class="expander workflow-clean-expander">
+                <summary>Advanced options</summary>
+                <div class="expander-content">
+                    <div class="workflow-clean-options">
+                        <label class="checkbox"><input type="checkbox" name="extract_produce_spans"> <span>Include supporting quotes</span></label>
+                        <label class="checkbox"><input type="checkbox" name="extract_drop_spans"> <span>Drop quote columns in output</span></label>
+                        <label class="checkbox"><input type="checkbox" name="extract_force_assign"> <span>Always assign a value</span></label>
+                        <label class="checkbox"><input type="checkbox" name="extract_allow_multiple"> <span>Allow multi-value categories</span></label>
+                        <label class="checkbox"><input type="checkbox" name="extract_skip_if_present" checked> <span>Skip rows already populated</span></label>
+                    </div>
+
+                    <div class="workflow-clean-field">
+                        <label for="extract_extra_instructions">Extra guidance (optional)</label>
+                        <textarea id="extract_extra_instructions" name="extract_extra_instructions" placeholder="e.g. Prefer explicit evidence and avoid inferred values unless strongly justified."></textarea>
+                    </div>
+                </div>
+            </details>
+
+            <div class="workflow-clean-actions">
+                <button type="submit" class="button-primary">Extract data fields</button>
+            </div>
+        </form>
+    </section>
+
+    {% include "workbench/_workspace_dataset.html" %}
+</div>
+
+{% include "workbench/_workspace_config_modal.html" %}
+{% endblock %}

@@ -1,7 +1,7 @@
 (function () {
     document.documentElement.classList.add("js-enabled");
     const PAGE_CLASS_PREFIX = "page-";
-    const KNOWN_PAGES = ["home", "explore", "settings"];
+    const KNOWN_PAGES = ["home", "explore", "filter", "themes", "extract", "settings"];
 
     function byId(id) {
         return document.getElementById(id);
@@ -10,6 +10,15 @@
     function getPageFromPath(pathname) {
         if (pathname.startsWith("/explore-pfds")) {
             return "explore";
+        }
+        if (pathname.startsWith("/filter")) {
+            return "filter";
+        }
+        if (pathname.startsWith("/analyse-themes")) {
+            return "themes";
+        }
+        if (pathname.startsWith("/extract-data")) {
+            return "extract";
         }
         if (pathname.startsWith("/settings")) {
             return "settings";
@@ -189,6 +198,9 @@
 
         const headerCells = Array.from(datasetTable.querySelectorAll("thead th"));
         const bodyRows = Array.from(datasetTable.querySelectorAll("tbody tr"));
+        if (bodyRows.length > 120) {
+            return;
+        }
         if (!headerCells.length) {
             return;
         }
@@ -601,6 +613,143 @@
         });
     }
 
+    function setupDatasetPagination() {
+        if (document.body.dataset.paginationBound === "1") {
+            return;
+        }
+        document.body.dataset.paginationBound = "1";
+
+        function replaceDatasetFromHtml(html, targetUrl) {
+            const wrapper = document.createElement("div");
+            wrapper.innerHTML = html.trim();
+            const incomingDataset = wrapper.querySelector(".explore-surface--dataset.data-card");
+            const currentDataset = document.querySelector("#page-content .explore-surface--dataset.data-card");
+
+            if (!incomingDataset || !currentDataset) {
+                window.location.href = targetUrl;
+                return;
+            }
+
+            incomingDataset.classList.remove("reveal-up");
+            incomingDataset.classList.add("is-visible");
+            currentDataset.replaceWith(incomingDataset);
+            window.history.replaceState(window.history.state, "", targetUrl);
+            setupTableScrollbars();
+            setupDatasetCellPreview();
+
+            if (typeof incomingDataset.animate === "function") {
+                incomingDataset.animate(
+                    [{ opacity: 0.9 }, { opacity: 1 }],
+                    { duration: 90, easing: "linear" }
+                );
+            }
+        }
+
+        function fetchAndSwapDataset(panelUrl, targetUrl) {
+            fetch(panelUrl, {
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                credentials: "same-origin",
+            })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error("Pagination request failed");
+                    }
+                    return response.text();
+                })
+                .then((html) => replaceDatasetFromHtml(html, targetUrl))
+                .catch(() => {
+                    window.location.href = targetUrl;
+                });
+        }
+
+        document.addEventListener("click", function (event) {
+            const link = event.target.closest(".dataset-pagination__actions a[data-dataset-panel-url]");
+            if (!link) {
+                return;
+            }
+            if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+                return;
+            }
+
+            const panelUrlRaw = link.getAttribute("data-dataset-panel-url");
+            if (!panelUrlRaw) {
+                return;
+            }
+            const panelUrl = new URL(panelUrlRaw, window.location.origin);
+            const targetUrl = new URL(link.href, window.location.origin);
+            if (targetUrl.origin !== window.location.origin) {
+                return;
+            }
+
+            event.preventDefault();
+            fetchAndSwapDataset(panelUrl.pathname + panelUrl.search, targetUrl.pathname + targetUrl.search);
+        });
+
+        document.addEventListener("submit", function (event) {
+            const form = event.target.closest("form[data-dataset-goto]");
+            if (!form) {
+                return;
+            }
+            event.preventDefault();
+
+            const input = form.querySelector("input[name='page']");
+            if (!input) {
+                return;
+            }
+            const max = Number(input.max || "1");
+            const min = Number(input.min || "1");
+            let page = Number(input.value || "1");
+            if (!Number.isFinite(page)) {
+                page = min;
+            }
+            page = Math.max(min, Math.min(max, Math.floor(page)));
+            input.value = String(page);
+
+            const panelBase = form.getAttribute("data-dataset-panel-base") || "/dataset-panel/";
+            const browserBase = form.getAttribute("data-dataset-browser-base") || "?page=";
+            const panelUrl = `${panelBase}?page=${page}`;
+            const targetUrl = `${browserBase}${page}`;
+            fetchAndSwapDataset(panelUrl, targetUrl);
+        });
+    }
+
+    function setupConfigModalDismiss() {
+        const modal = byId("config-modal");
+        if (!modal) {
+            return;
+        }
+        if (modal.dataset.bound === "1") {
+            return;
+        }
+        modal.dataset.bound = "1";
+
+        const cancelButton = modal.querySelector("[data-config-cancel]");
+        document.body.classList.add("modal-open");
+
+        function closeModal() {
+            modal.classList.add("hidden");
+            document.body.classList.remove("modal-open");
+        }
+
+        if (cancelButton) {
+            cancelButton.addEventListener("click", closeModal);
+        }
+
+        modal.addEventListener("click", function (event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+                closeModal();
+            }
+        });
+    }
+
     function initializePageFeatures() {
         setupTableScrollbars();
         setupPageScrollbar();
@@ -612,6 +761,8 @@
         setupRevealAnimations();
         setupStartOverConfirm();
         setupDownloadBundleModal();
+        setupDatasetPagination();
+        setupConfigModalDismiss();
 
         const provider = byId("provider_override");
         if (provider && provider.dataset.bound !== "1") {

@@ -1,0 +1,142 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench explore-workbench os-workbench workflow-clean workflow-clean--themes">
+    {% include "workbench/_workspace_hud.html" %}
+
+    <section class="explore-surface workflow-clean-shell reveal-up">
+        <div class="workflow-clean-head">
+            <span class="section-kicker">Analyse themes</span>
+            <h3>Analyse themes</h3>
+            <p>Generate candidate themes from the current workspace, then preview and apply assignments.</p>
+        </div>
+
+        <div class="workflow-clean-grid">
+            <form method="post" class="workflow-clean-form workflow-clean-form--wide">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="discover_themes">
+
+                <div class="workflow-clean-field">
+                    <label for="extra_theme_instructions">Extra guidance (optional)</label>
+                    <textarea id="extra_theme_instructions" name="extra_theme_instructions" placeholder="e.g. Prioritise systemic failures and communication risks."></textarea>
+                </div>
+
+                <details class="expander workflow-clean-expander">
+                    <summary>Advanced options</summary>
+                    <div class="expander-content">
+                        <div class="workflow-clean-stack">
+                            <div class="workflow-clean-field">
+                                <label for="trim_approach">How should reports be prepared?</label>
+                                <select id="trim_approach" name="trim_approach">
+                                    <option value="truncate">Truncate report text first (default)</option>
+                                    <option value="summarise">Summarise each report first</option>
+                                </select>
+                            </div>
+
+                            <div id="discover-truncation-block" class="workflow-clean-stack">
+                                <div class="workflow-clean-field">
+                                    <label for="truncation_limit_type">Truncation limit type</label>
+                                    <select id="truncation_limit_type" name="truncation_limit_type">
+                                        <option value="tokens">Tokens</option>
+                                        <option value="words">Words</option>
+                                    </select>
+                                </div>
+                                <div id="discover-tokens-block" class="workflow-clean-field">
+                                    <label for="max_tokens">Max tokens</label>
+                                    <input id="max_tokens" name="max_tokens" type="number" min="500" step="250" value="3000">
+                                </div>
+                                <div id="discover-words-block" class="workflow-clean-field hidden">
+                                    <label for="max_words">Max words</label>
+                                    <input id="max_words" name="max_words" type="number" min="100" step="100" value="1500">
+                                </div>
+                            </div>
+
+                            <div id="discover-summary-block" class="hidden workflow-clean-field">
+                                <label for="summarise_intensity">Summary intensity</label>
+                                <select id="summarise_intensity" name="summarise_intensity">
+                                    <option value="low">Detailed paragraph</option>
+                                    <option value="medium" selected>Concise summary</option>
+                                    <option value="high">Short summary</option>
+                                    <option value="very high">One or two sentences</option>
+                                </select>
+                            </div>
+
+                            <div class="workflow-clean-two-col">
+                                <div class="workflow-clean-field">
+                                    <label for="warning_threshold">Warn above token estimate</label>
+                                    <input id="warning_threshold" name="warning_threshold" type="number" min="1000" step="1000" value="100000">
+                                </div>
+                                <div class="workflow-clean-field">
+                                    <label for="error_threshold">Stop above token estimate</label>
+                                    <input id="error_threshold" name="error_threshold" type="number" min="1000" step="1000" value="500000">
+                                </div>
+                            </div>
+
+                            <div class="workflow-clean-two-col">
+                                <div class="workflow-clean-field">
+                                    <label for="min_themes">Minimum themes (optional)</label>
+                                    <input id="min_themes" name="min_themes" placeholder="e.g. 5">
+                                </div>
+                                <div class="workflow-clean-field">
+                                    <label for="max_themes">Maximum themes (optional)</label>
+                                    <input id="max_themes" name="max_themes" placeholder="e.g. 10">
+                                </div>
+                            </div>
+
+                            <div class="workflow-clean-field">
+                                <label for="seed_topics">Seed topics (optional)</label>
+                                <textarea id="seed_topics" name="seed_topics" placeholder='["Communication", "Medication safety"]'></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="workflow-clean-actions">
+                    <button type="submit" class="button-primary">Discover themes</button>
+                </div>
+            </form>
+
+            <aside class="workflow-clean-side">
+                <div class="workflow-clean-side__head">
+                    <h4>Theme preview</h4>
+                    <p>After discovery runs, a preview pop-up will ask whether to apply or cancel.</p>
+                </div>
+            </aside>
+        </div>
+    </section>
+
+    {% include "workbench/_workspace_dataset.html" %}
+</div>
+
+{% if preview_state and preview_state.type == 'discover' %}
+<div class="confirm-modal-backdrop confirm-modal-backdrop--locked" aria-modal="true" role="dialog" aria-labelledby="theme-preview-title">
+    <section class="confirm-modal confirm-modal--wide">
+        <h3 id="theme-preview-title">Apply discovered themes?</h3>
+        <p>Review the preview and choose whether to apply these theme assignments to the current workspace.</p>
+        {% if preview_theme_summary_html %}
+            <div class="table-wrap">{{ preview_theme_summary_html|safe }}</div>
+        {% else %}
+            <p class="help-text">No theme assignments were returned in the preview.</p>
+        {% endif %}
+        <div class="confirm-modal__actions">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="discard_themes">
+                <button type="submit" class="button-secondary">Cancel</button>
+            </form>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="accept_themes">
+                <button type="submit" class="button-primary">Apply</button>
+            </form>
+        </div>
+    </section>
+</div>
+{% endif %}
+
+{% include "workbench/_workspace_config_modal.html" %}
+{% endblock %}

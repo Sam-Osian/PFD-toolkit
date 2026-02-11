@@ -76,8 +76,8 @@
 
             <div class="config-grid config-grid--two config-grid--align-end">
                 <div class="field-group">
-                    <label for="n_reports">Limit recent reports (optional)</label>
-                    <input id="n_reports" name="n_reports" type="text" placeholder="e.g. 1000">
+                    <label for="n_reports">Limit recent reports</label>
+                    <input id="n_reports" name="n_reports" type="number" min="1" step="1" value="{{ report_limit|default_if_none:'' }}" placeholder="Leave blank for all reports">
                 </div>
                 <div class="field-group">
                     <label class="checkbox">

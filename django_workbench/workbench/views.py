@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import zipfile
 from datetime import date
-from io import BytesIO, StringIO
+from io import BytesIO
 from typing import Any, Optional
 
 import pandas as pd
@@ -28,6 +28,7 @@ from .state import (
     clear_outputs_for_new_dataset,
     clear_preview_state,
     dataframe_to_payload,
+    dataframe_from_payload,
     format_call,
     get_dataframe,
     get_repro_script_text,
@@ -86,12 +87,7 @@ def _deserialize_preview_state(preview_state: Any) -> Optional[dict[str, Any]]:
         return None
     payload = dict(preview_state)
     for key in ("summary_df", "preview_df", "theme_summary"):
-        payload[key] = pd.DataFrame()
-        if isinstance(preview_state.get(key), str):
-            try:
-                payload[key] = pd.read_json(StringIO(preview_state[key]), orient="split")
-            except ValueError:
-                payload[key] = pd.DataFrame()
+        payload[key] = dataframe_from_payload(preview_state.get(key))
     return payload
 
 
@@ -165,6 +161,17 @@ def _update_sidebar_state(request: HttpRequest) -> None:
     if "report_end_date" in request.POST:
         parsed_end = _parse_date(request.POST.get("report_end_date", ""), date.today())
         session["report_end_date"] = parsed_end.isoformat()
+    if "n_reports" in request.POST:
+        n_reports_raw = (request.POST.get("n_reports") or "").strip()
+        if not n_reports_raw:
+            session["report_limit"] = None
+        else:
+            try:
+                n_reports = int(n_reports_raw)
+                if n_reports > 0:
+                    session["report_limit"] = n_reports
+            except ValueError:
+                pass
 
 
 def _build_context(request: HttpRequest) -> dict[str, Any]:
@@ -187,6 +194,18 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         set_dataframe(session, "reports_df_initial", reports_df)
 
     reports_count = len(reports_df)
+    page_size = 100
+    try:
+        page = int((request.GET.get("page") or "1").strip())
+    except ValueError:
+        page = 1
+    page = max(1, page)
+    total_pages = max(1, (reports_count + page_size - 1) // page_size)
+    if page > total_pages:
+        page = total_pages
+    page_start = (page - 1) * page_size
+    page_end = page_start + page_size
+    reports_page_df = reports_df.iloc[page_start:page_end].copy()
     earliest_display = "-"
     latest_display = "-"
     if not reports_df.empty and "date" in reports_df.columns:
@@ -227,7 +246,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
 
     return {
         "reports_df": reports_df,
-        "reports_html": _df_to_html(reports_df),
+        "reports_html": _df_to_html(reports_page_df),
         "theme_summary_df": theme_summary_sorted,
         "theme_summary_html": _df_to_html(theme_summary_sorted),
         "preview_state": preview_state,
@@ -235,6 +254,12 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "feature_rows": feature_rows_ui,
         "has_feature_grid": not feature_grid_raw.empty,
         "reports_count": reports_count,
+        "reports_page": page,
+        "reports_total_pages": total_pages,
+        "reports_page_from": (page_start + 1) if reports_count else 0,
+        "reports_page_to": min(page_end, reports_count),
+        "reports_prev_page": page - 1 if page > 1 else None,
+        "reports_next_page": page + 1 if page < total_pages else None,
         "earliest_display": earliest_display,
         "latest_display": latest_display,
         "active_action": active_action,
@@ -255,6 +280,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "max_parallel_workers": int(session.get("max_parallel_workers", 8) or 8),
         "report_start_date": session.get("report_start_date", date(2013, 1, 1).isoformat()),
         "report_end_date": session.get("report_end_date", date.today().isoformat()),
+        "report_limit": session.get("report_limit"),
     }
 
 
@@ -269,15 +295,18 @@ def _handle_load_reports(request: HttpRequest) -> None:
         return
 
     n_reports_raw = (request.POST.get("n_reports") or "").strip()
-    n_reports: Optional[int] = None
+    n_reports: Optional[int]
     if n_reports_raw:
         try:
             n_reports = int(n_reports_raw)
-            if n_reports < 0:
+            if n_reports <= 0:
                 raise ValueError
         except ValueError:
-            messages.error(request, "Please enter a whole number for the report limit.")
+            messages.error(request, "Please enter a whole number greater than 0 for the report limit.")
             return
+        session["report_limit"] = n_reports
+    else:
+        n_reports = session.get("report_limit")
 
     refresh = _bool_from_post(request, "refresh", default=False)
 
@@ -290,6 +319,9 @@ def _handle_load_reports(request: HttpRequest) -> None:
         )
     except Exception as exc:
         messages.error(request, f"Could not load reports: {exc}")
+        return
+    if df.empty:
+        messages.error(request, "No reports were returned. Please adjust the date range.")
         return
 
     set_dataframe(session, "reports_df", df)
@@ -314,6 +346,55 @@ def _handle_load_reports(request: HttpRequest) -> None:
     )
 
     messages.success(request, f"Loaded {len(df):,} reports into the workspace.")
+
+
+def _ensure_workspace_reports_loaded(request: HttpRequest) -> None:
+    session = request.session
+    reports_df = get_dataframe(session, "reports_df")
+    if not reports_df.empty:
+        return
+
+    start_date = _parse_date(session.get("report_start_date", ""), date(2013, 1, 1))
+    end_date = _parse_date(session.get("report_end_date", ""), date.today())
+    if end_date < start_date:
+        end_date = date.today()
+        start_date = date(2013, 1, 1)
+        session["report_start_date"] = start_date.isoformat()
+        session["report_end_date"] = end_date.isoformat()
+
+    try:
+        df = load_reports_dataframe(
+            start_date=start_date,
+            end_date=end_date,
+            n_reports=session.get("report_limit"),
+            refresh=False,
+        )
+    except Exception as exc:
+        messages.error(request, f"Could not load default reports: {exc}")
+        return
+    if df.empty:
+        messages.error(request, "No reports were returned for the default date range.")
+        return
+
+    set_dataframe(session, "reports_df", df)
+    set_dataframe(session, "reports_df_initial", df)
+    clear_outputs_for_new_dataset(session)
+    session["history"] = []
+    session["redo_history"] = []
+    reset_repro_tracking(session)
+
+    load_kwargs = {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "n_reports": session.get("report_limit"),
+        "refresh": False,
+    }
+    record_repro_action(
+        session,
+        "load_reports",
+        "Load in reports",
+        format_call("reports_df = load_reports", load_kwargs),
+    )
 
 
 def _handle_set_active_action(request: HttpRequest) -> None:
@@ -797,6 +878,25 @@ def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
     return None
 
 
+def _set_explore_modal_flag(
+    request: HttpRequest, context: dict[str, Any], current_page: str
+) -> None:
+    if current_page == "explore":
+        context["show_config_modal"] = False
+        return
+
+    if current_page in {"filter", "themes", "extract"}:
+        context["show_config_modal"] = not bool(context.get("llm_ready", False))
+        return
+
+    if (
+        not request.session.get("explore_onboarded")
+        and (context.get("openai_api_key") or context.get("openrouter_api_key"))
+    ):
+        request.session["explore_onboarded"] = True
+    context["show_config_modal"] = not request.session.get("explore_onboarded", False)
+
+
 @require_http_methods(["GET"])
 def index(request: HttpRequest) -> HttpResponse:
     return home(request)
@@ -805,6 +905,7 @@ def index(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def home(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
     context["current_page"] = "home"
     return render(request, "workbench/home.html", context)
@@ -813,6 +914,7 @@ def home(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET", "POST"])
 def explore(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
 
     if request.method == "POST":
         response = _handle_post_action(request)
@@ -821,19 +923,66 @@ def explore(request: HttpRequest) -> HttpResponse:
         return redirect("workbench:explore")
 
     context = _build_context(request)
-    if (
-        not request.session.get("explore_onboarded")
-        and (context.get("openai_api_key") or context.get("openrouter_api_key"))
-    ):
-        request.session["explore_onboarded"] = True
-    context["show_config_modal"] = not request.session.get("explore_onboarded", False)
+    _set_explore_modal_flag(request, context, "explore")
     context["current_page"] = "explore"
     return render(request, "workbench/explore.html", context)
 
 
 @require_http_methods(["GET", "POST"])
+def filter_page(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+
+    if request.method == "POST":
+        response = _handle_post_action(request)
+        if response is not None:
+            return response
+        return redirect("workbench:filter")
+
+    context = _build_context(request)
+    _set_explore_modal_flag(request, context, "filter")
+    context["current_page"] = "filter"
+    return render(request, "workbench/filter.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def themes_page(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+
+    if request.method == "POST":
+        response = _handle_post_action(request)
+        if response is not None:
+            return response
+        return redirect("workbench:themes")
+
+    context = _build_context(request)
+    _set_explore_modal_flag(request, context, "themes")
+    context["current_page"] = "themes"
+    return render(request, "workbench/themes.html", context)
+
+
+@require_http_methods(["GET", "POST"])
+def extract_page(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+
+    if request.method == "POST":
+        response = _handle_post_action(request)
+        if response is not None:
+            return response
+        return redirect("workbench:extract")
+
+    context = _build_context(request)
+    _set_explore_modal_flag(request, context, "extract")
+    context["current_page"] = "extract"
+    return render(request, "workbench/extract.html", context)
+
+
+@require_http_methods(["GET", "POST"])
 def settings_page(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
 
     if request.method == "POST":
         response = _handle_post_action(request)
@@ -844,3 +993,11 @@ def settings_page(request: HttpRequest) -> HttpResponse:
     context = _build_context(request)
     context["current_page"] = "settings"
     return render(request, "workbench/settings.html", context)
+
+
+@require_http_methods(["GET"])
+def dataset_panel(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    context = _build_context(request)
+    return render(request, "workbench/_dataset_table_section.html", context)

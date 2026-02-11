@@ -38,6 +38,16 @@ body {
     scroll-behavior: smooth;
 }
 
+::selection {
+    background: rgba(122, 196, 255, 0.36);
+    color: #031422;
+}
+
+::-moz-selection {
+    background: rgba(122, 196, 255, 0.36);
+    color: #031422;
+}
+
 body::before {
     content: "";
     position: fixed;
@@ -1701,14 +1711,13 @@ body.sidebar-collapsed .sidebar-nav__item {
     justify-content: flex-end;
     width: 100%;
     position: sticky;
-    top: -1.2rem;
+    top: 0;
     z-index: 1200;
-    min-height: 3.2rem;
-    padding: 0.36rem 0.75rem 0.32rem 0.75rem;
-    margin: -0.35rem -0.6rem 0.55rem;
+    min-height: 3.3rem;
+    padding: 0.4rem 0.75rem;
+    margin: 0 0 0.65rem;
     background: linear-gradient(180deg, rgba(7, 14, 39, 0.9), rgba(8, 14, 36, 0.76));
-    border-top: 1px solid rgba(160, 173, 255, 0.22);
-    border-bottom: 1px solid rgba(160, 173, 255, 0.22);
+    border: none;
     backdrop-filter: blur(4px);
 }
 
@@ -1804,6 +1813,10 @@ body.sidebar-collapsed .sidebar-nav__item {
     height: 2.18rem;
     justify-content: center;
     padding: 0;
+}
+
+.action-rail-btn--compact {
+    min-width: 4.8rem;
 }
 
 .action-rail-btn--share {
@@ -1939,7 +1952,7 @@ body.sidebar-collapsed .sidebar-nav__item {
 .explore-surface {
     padding: 1.45rem 0 0;
     border: none;
-    border-top: 1px solid rgba(173, 187, 255, 0.12);
+    border-top: none;
     background: transparent;
 }
 
@@ -1959,6 +1972,87 @@ body.sidebar-collapsed .sidebar-nav__item {
     border: 1px solid rgba(166, 177, 255, 0.12);
     border-radius: 12px;
     background: rgba(9, 13, 33, 0.45);
+}
+
+.dataset-pagination {
+    margin-top: 0.72rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.7rem;
+    flex-wrap: wrap;
+}
+
+.dataset-pagination__meta {
+    color: rgba(213, 223, 255, 0.74);
+    font-size: 0.78rem;
+}
+
+.dataset-pagination__actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.dataset-pagination__actions .button-secondary {
+    text-decoration: none;
+}
+
+.dataset-pagination__actions .button-secondary.is-disabled {
+    opacity: 0.42;
+    pointer-events: none;
+}
+
+.dataset-pagination__page {
+    color: rgba(228, 236, 255, 0.9);
+    font-size: 0.78rem;
+    min-width: 7.6rem;
+    text-align: center;
+}
+
+.dataset-page-btn {
+    min-height: 2.05rem;
+    padding: 0.45rem 0.68rem;
+}
+
+.dataset-page-btn--icon {
+    min-width: 2.2rem;
+    justify-content: center;
+    padding: 0.45rem 0.5rem;
+}
+
+.dataset-page-btn--icon i {
+    font-size: 1rem;
+}
+
+.dataset-page-btn--first {
+    gap: 0.38rem;
+    font-size: 0.74rem;
+    padding: 0.34rem 0.54rem;
+    min-height: 1.86rem;
+}
+
+.dataset-pagination__goto {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+}
+
+.dataset-pagination__goto input {
+    width: 3.35rem;
+    min-height: 1.86rem;
+    padding: 0.34rem 0.44rem;
+}
+
+.dataset-page-btn--goto {
+    min-height: 1.86rem;
+    padding: 0.34rem 0.5rem;
+    font-size: 0.76rem;
+}
+
+.dataset-page-btn--goto i {
+    font-size: 0.84rem;
 }
 
 .data-table thead th {
@@ -2118,6 +2212,14 @@ body.modal-open {
     padding: 1rem 1.05rem;
 }
 
+.confirm-modal--wide {
+    width: min(1100px, 100% - 2rem);
+}
+
+.confirm-modal--wide .table-wrap {
+    margin-top: 0.9rem;
+}
+
 .confirm-modal h3 {
     font-size: 1.06rem;
 }
@@ -2145,6 +2247,200 @@ body.modal-open {
 .feature-table th,
 .feature-table td {
     border-bottom: 1px solid rgba(156, 169, 239, 0.2);
+}
+
+.explore-top-stat--status {
+    min-width: 11.5rem;
+}
+
+.explore-status-value {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+}
+
+.explore-status-dot {
+    width: 0.48rem;
+    height: 0.48rem;
+    border-radius: 999px;
+    display: inline-block;
+}
+
+.explore-status-dot.is-ready {
+    background: rgba(118, 248, 172, 0.92);
+    box-shadow: 0 0 0 3px rgba(118, 248, 172, 0.18);
+}
+
+.explore-status-dot.is-not-ready {
+    background: rgba(255, 169, 179, 0.88);
+    box-shadow: 0 0 0 3px rgba(255, 169, 179, 0.16);
+}
+
+.workflow-clean .workflow-clean-shell {
+    border-top: none;
+    padding-top: 1.7rem;
+}
+
+.workflow-clean-head {
+    max-width: 72ch;
+}
+
+.workflow-clean-head h3 {
+    margin-top: 0.42rem;
+    font-size: clamp(1.2rem, 1.8vw, 1.45rem);
+}
+
+.workflow-clean-head p {
+    margin-top: 0.55rem;
+    color: rgba(218, 227, 255, 0.76);
+    line-height: 1.66;
+}
+
+.workflow-clean-grid {
+    margin-top: 1.25rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 28rem);
+    gap: 1.45rem;
+    align-items: start;
+}
+
+.workflow-clean-form {
+    margin-top: 1.22rem;
+    border-top: none;
+    background: transparent;
+    padding: 0;
+    display: grid;
+    gap: 0.9rem;
+}
+
+.workflow-clean-form--wide {
+    margin-top: 1.25rem;
+}
+
+.workflow-clean-field {
+    margin-top: 0;
+}
+
+.workflow-clean-prompt {
+    min-height: 9.5rem;
+}
+
+.workflow-clean-stack {
+    display: grid;
+    gap: 0.8rem;
+}
+
+.workflow-clean-two-col {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.workflow-clean-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.9rem 1rem;
+    padding: 0.3rem 0;
+}
+
+.workflow-clean-actions {
+    display: flex;
+    gap: 0.66rem;
+}
+
+.workflow-clean-table-wrap {
+    margin-top: 0.2rem;
+    border-top: 1px solid rgba(165, 178, 255, 0.24);
+}
+
+.workflow-clean-feature-table {
+    margin-top: 0;
+}
+
+.workflow-clean-feature-table th,
+.workflow-clean-feature-table td {
+    padding: 0.62rem 0.38rem;
+    border-bottom-color: rgba(156, 169, 239, 0.19);
+}
+
+.workflow-clean-side {
+    margin-top: 1.25rem;
+    border-left: 1px solid rgba(166, 177, 255, 0.22);
+    padding-left: 1.1rem;
+    min-height: 12rem;
+}
+
+.workflow-clean-side__head h4 {
+    font-size: 0.97rem;
+}
+
+.workflow-clean-side__head p {
+    margin-top: 0.32rem;
+    color: rgba(208, 219, 255, 0.72);
+    font-size: 0.85rem;
+    line-height: 1.52;
+}
+
+.workflow-clean-side .table-wrap {
+    margin-top: 0.82rem;
+}
+
+.workflow-clean-side__actions {
+    margin-top: 0.76rem;
+    display: flex;
+    gap: 0.58rem;
+    flex-wrap: wrap;
+}
+
+.workflow-clean-expander {
+    margin-top: 0.25rem;
+}
+
+.workflow-clean-expander > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+}
+
+.workflow-clean-expander > summary::after {
+    content: "⌄";
+    font-size: 0.92rem;
+    line-height: 1;
+    color: rgba(221, 231, 255, 0.8);
+    flex-shrink: 0;
+    transition: transform 0.22s ease, color 0.22s ease;
+}
+
+.workflow-clean-expander[open] > summary::after {
+    content: "⌃";
+    color: rgba(240, 246, 255, 0.94);
+}
+
+.workflow-clean-expander .expander-content {
+    max-height: 0;
+    opacity: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    transition: max-height 0.28s ease, opacity 0.24s ease, padding 0.28s ease;
+}
+
+.workflow-clean-expander[open] .expander-content {
+    max-height: 1200px;
+    opacity: 1;
+    padding-top: 0.1rem;
+    padding-bottom: 0.9rem;
+}
+
+.confirm-modal-backdrop--locked {
+    cursor: default;
+}
+
+body.page-filter .workflow-clean .workflow-clean-shell,
+body.page-themes .workflow-clean .workflow-clean-shell,
+body.page-extract .workflow-clean .workflow-clean-shell {
+    background: transparent;
 }
 
 @media (max-width: 1280px) {
@@ -2185,9 +2481,9 @@ body.modal-open {
     }
 
     .explore-action-rail-wrap {
-        top: -0.72rem;
-        padding-top: 0;
-        margin: -0.52rem -0.05rem 0.42rem;
+        top: 0;
+        padding-top: 0.24rem;
+        margin: 0 0 0.48rem;
         padding-right: 0.5rem;
         padding-left: 0.5rem;
     }
@@ -2209,12 +2505,6 @@ body.modal-open {
         padding: 0.44rem 0.6rem;
     }
 
-    .action-rail-btn--icon {
-        width: 2.08rem;
-        min-width: 2.08rem;
-        height: 2.08rem;
-    }
-
     .download-popover {
         right: 0;
         top: calc(100% + 0.38rem);
@@ -2222,6 +2512,18 @@ body.modal-open {
 
     .workflow-selector {
         gap: 0.45rem;
+    }
+
+    .workflow-clean-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow-clean-side {
+        margin-top: 0.6rem;
+        border-left: none;
+        border-top: 1px solid rgba(166, 177, 255, 0.2);
+        padding-top: 0.86rem;
+        padding-left: 0;
     }
 }
 
@@ -2263,6 +2565,29 @@ body.modal-open {
     .download-popover {
         width: calc(100vw - 1.2rem);
         right: -0.25rem;
+    }
+
+    .workflow-clean-two-col {
+        grid-template-columns: 1fr;
+    }
+
+    .workflow-clean-options {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.55rem;
+    }
+
+    .dataset-pagination {
+        align-items: flex-start;
+    }
+
+    .dataset-pagination__actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .dataset-pagination__goto {
+        margin-left: auto;
     }
 }
 

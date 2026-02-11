@@ -3,15 +3,23 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
+from collections import OrderedDict
 from datetime import date
 from io import StringIO
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
+from uuid import uuid4
 
 import pandas as pd
 
 REPRO_SCRIPT_KEY = "repro_script_lines"
 REPRO_ACTION_COUNTS_KEY = "repro_action_counts"
 LLM_SIGNATURE_KEY = "llm_config_signature"
+FRAME_PAYLOAD_PREFIX = "framefile:"
+FRAME_CACHE_DIR = Path(tempfile.gettempdir()) / "pfd_workbench_frames"
+FRAME_MEMORY_CACHE: "OrderedDict[str, pd.DataFrame]" = OrderedDict()
+FRAME_MEMORY_CACHE_MAX = 6
 
 SNAPSHOT_KEYS = [
     "reports_df",
@@ -77,6 +85,7 @@ def init_state(session: dict[str, Any]) -> None:
         "max_parallel_workers": 8,
         "report_start_date": date(2013, 1, 1).isoformat(),
         "report_end_date": date.today().isoformat(),
+        "report_limit": None,
         REPRO_SCRIPT_KEY: _initial_repro_script_lines(),
         REPRO_ACTION_COUNTS_KEY: {},
         LLM_SIGNATURE_KEY: None,
@@ -94,12 +103,41 @@ def dataframe_to_payload(df: Optional[pd.DataFrame]) -> Optional[str]:
             df = pd.DataFrame(df)
         except ValueError:
             return None
-    return df.to_json(orient="split", date_format="iso")
+    FRAME_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    frame_path = FRAME_CACHE_DIR / f"{uuid4().hex}.pkl"
+    df.to_pickle(frame_path)
+    # Keep the cache bounded to avoid unbounded growth in /tmp.
+    cache_files = sorted(FRAME_CACHE_DIR.glob("*.pkl"), key=lambda item: item.stat().st_mtime, reverse=True)
+    for stale_file in cache_files[800:]:
+        try:
+            stale_file.unlink()
+        except OSError:
+            continue
+    return f"{FRAME_PAYLOAD_PREFIX}{frame_path}"
 
 
 def dataframe_from_payload(payload: Any) -> pd.DataFrame:
     if not payload or not isinstance(payload, str):
         return pd.DataFrame()
+    if payload.startswith(FRAME_PAYLOAD_PREFIX):
+        frame_key = payload
+        cached = FRAME_MEMORY_CACHE.get(frame_key)
+        if isinstance(cached, pd.DataFrame):
+            FRAME_MEMORY_CACHE.move_to_end(frame_key)
+            return cached
+
+        frame_path = Path(payload[len(FRAME_PAYLOAD_PREFIX):])
+        if not frame_path.exists():
+            return pd.DataFrame()
+        try:
+            df = pd.read_pickle(frame_path)
+            FRAME_MEMORY_CACHE[frame_key] = df
+            FRAME_MEMORY_CACHE.move_to_end(frame_key)
+            while len(FRAME_MEMORY_CACHE) > FRAME_MEMORY_CACHE_MAX:
+                FRAME_MEMORY_CACHE.popitem(last=False)
+            return df
+        except Exception:
+            return pd.DataFrame()
     try:
         return pd.read_json(StringIO(payload), orient="split")
     except ValueError:

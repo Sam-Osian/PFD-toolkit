@@ -9,5 +9,9 @@ urlpatterns = [
     path("", views.index, name="index"),
     path("home/", views.home, name="home"),
     path("explore-pfds/", views.explore, name="explore"),
+    path("filter/", views.filter_page, name="filter"),
+    path("analyse-themes/", views.themes_page, name="themes"),
+    path("extract-data/", views.extract_page, name="extract"),
     path("settings/", views.settings_page, name="settings"),
+    path("dataset-panel/", views.dataset_panel, name="dataset_panel"),
 ]

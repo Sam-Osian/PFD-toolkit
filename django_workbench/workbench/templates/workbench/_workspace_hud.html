@@ -1,0 +1,85 @@
+<section class="explore-action-rail-wrap reveal-up">
+    <div class="explore-action-rail" role="toolbar" aria-label="Workspace controls">
+        <div class="explore-action-rail__stats" aria-label="Workspace summary">
+            <div class="explore-top-stat">
+                <span class="explore-top-stat__label">Reports in view</span>
+                <span class="explore-top-stat__value">{{ reports_count }}</span>
+            </div>
+            <div class="explore-top-stat">
+                <span class="explore-top-stat__label">Earliest report</span>
+                <span class="explore-top-stat__value">{{ earliest_display }}</span>
+            </div>
+            <div class="explore-top-stat">
+                <span class="explore-top-stat__label">Latest report</span>
+                <span class="explore-top-stat__value">{{ latest_display }}</span>
+            </div>
+            <div class="explore-top-stat explore-top-stat--status">
+                <span class="explore-top-stat__label">LLM status</span>
+                <span class="explore-top-stat__value explore-status-value">
+                    <span class="explore-status-dot {% if llm_ready %}is-ready{% else %}is-not-ready{% endif %}" aria-hidden="true"></span>
+                    {% if llm_ready %}Initialised{% else %}Not initialised{% endif %}
+                </span>
+            </div>
+        </div>
+
+        <div class="explore-action-rail__controls">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="undo">
+                <button type="submit" class="action-rail-btn action-rail-btn--compact" {% if history_depth == 0 %}disabled{% endif %} aria-label="Undo" title="Undo{% if history_depth %} ({{ history_depth }}){% endif %}">
+                    <i class="hgi hgi-stroke hgi-undo action-rail-btn__icon"></i>
+                    <span>Undo</span>
+                </button>
+            </form>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="redo">
+                <button type="submit" class="action-rail-btn action-rail-btn--compact" {% if redo_depth == 0 %}disabled{% endif %} aria-label="Redo" title="Redo{% if redo_depth %} ({{ redo_depth }}){% endif %}">
+                    <i class="hgi hgi-stroke hgi-redo action-rail-btn__icon"></i>
+                    <span>Redo</span>
+                </button>
+            </form>
+            <button type="button" class="action-rail-btn action-rail-btn--icon action-rail-btn--danger" data-start-over-open {% if not workspace_active %}disabled{% endif %} aria-label="Start over" title="Start over">
+                <i class="hgi hgi-stroke hgi-refresh action-rail-btn__icon"></i>
+                <span class="sr-only">Start over</span>
+            </button>
+            <button type="button" class="action-rail-btn action-rail-btn--download" data-download-open aria-label="Download reports" {% if not dataset_available %}disabled{% endif %}>
+                <i class="hgi hgi-stroke hgi-download-01 action-rail-btn__share-mark" aria-hidden="true"></i>
+                <span>Download reports</span>
+            </button>
+            <button type="button" class="action-rail-btn action-rail-btn--share" aria-label="Share">
+                <i class="hgi hgi-stroke hgi-user action-rail-btn__share-mark" aria-hidden="true"></i>
+                <span>Share</span>
+            </button>
+            <div class="download-popover hidden" id="download-popover" role="dialog" aria-label="Download reports options">
+                <form method="post" class="download-bundle-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="download_bundle">
+                    <label class="checkbox"><input type="checkbox" name="download_include_dataset" checked> <span>Working dataset</span></label>
+                    <label class="checkbox"><input type="checkbox" name="download_include_theme" {% if has_theme_summary %}checked{% endif %} {% if not has_theme_summary %}disabled{% endif %}> <span>Theme table</span></label>
+                    <label class="checkbox"><input type="checkbox" name="download_include_feature_grid" {% if has_feature_grid %}checked{% endif %} {% if not has_feature_grid %}disabled{% endif %}> <span>Custom feature grid</span></label>
+                    <label class="checkbox"><input type="checkbox" name="download_include_script"> <span>Reproducible Python script</span></label>
+                    <div class="download-popover__actions">
+                        <button type="button" class="button-secondary" data-download-cancel>Cancel</button>
+                        <button type="submit" class="button-primary">Download</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+
+<div class="confirm-modal-backdrop hidden" id="start-over-confirm" aria-modal="true" role="dialog" aria-labelledby="start-over-confirm-title">
+    <section class="confirm-modal">
+        <h3 id="start-over-confirm-title">Start over?</h3>
+        <p>This will clear the active workspace state and return to the loaded dataset.</p>
+        <div class="confirm-modal__actions">
+            <button type="button" class="button-secondary" data-start-over-cancel>Cancel</button>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="start_over">
+                <button type="submit" class="button-primary">Confirm start over</button>
+            </form>
+        </div>
+    </section>
+</div>

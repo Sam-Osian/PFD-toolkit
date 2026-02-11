@@ -1,0 +1,40 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench explore-workbench os-workbench">
+    {% include "workbench/_workspace_hud.html" %}
+
+    <section class="explore-surface os-network-shell reveal-up">
+        <div class="section-card-header">
+            <span class="section-kicker">Network</span>
+            <h3>Relationship map</h3>
+            <p>Preview graph-ready signals from the same active workspace. This area is ready for network visual modules.</p>
+        </div>
+        <div class="os-network-metrics">
+            <article class="os-mini-card">
+                <span class="os-mini-card__label">Active reports</span>
+                <strong>{{ reports_count }}</strong>
+            </article>
+            <article class="os-mini-card">
+                <span class="os-mini-card__label">Theme table</span>
+                <strong>{% if has_theme_summary %}Available{% else %}Not generated{% endif %}</strong>
+            </article>
+            <article class="os-mini-card">
+                <span class="os-mini-card__label">Dataset scope</span>
+                <strong>{{ earliest_display }} to {{ latest_display }}</strong>
+            </article>
+        </div>
+        <div class="os-network-canvas">
+            <span>Network visualisation modules can plug in here without breaking workflow state continuity.</span>
+        </div>
+    </section>
+
+    {% include "workbench/_workspace_dataset.html" %}
+</div>
+
+{% include "workbench/_workspace_config_modal.html" %}
+{% endblock %}
