@@ -2296,6 +2296,10 @@ body.sidebar-collapsed .sidebar-nav__item {
     display: none;
 }
 
+.advanced-ai-popover-backdrop--confirm {
+    z-index: 1270;
+}
+
 .advanced-ai-popover {
     width: min(52rem, calc(100vw - 2.4rem));
     max-height: calc(100vh - 2.4rem);

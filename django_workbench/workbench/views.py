@@ -306,6 +306,25 @@ def _resolve_reports_for_ai_action(request: HttpRequest) -> tuple[pd.DataFrame, 
     return _apply_explore_dashboard_filters(reports_df, post_filters), post_filters
 
 
+def _theme_columns_from_schema(theme_schema: Any) -> list[str]:
+    if not isinstance(theme_schema, dict):
+        return []
+    properties = theme_schema.get("properties")
+    if not isinstance(properties, dict):
+        return []
+    return [str(column).strip() for column in properties.keys() if str(column).strip()]
+
+
+def _has_existing_theme_assignments(session: dict[str, Any], reports_df: pd.DataFrame) -> bool:
+    theme_schema = session.get("theme_model_schema")
+    theme_columns = _theme_columns_from_schema(theme_schema)
+    if theme_columns and not reports_df.empty:
+        if any(column in reports_df.columns for column in theme_columns):
+            return True
+    theme_summary_df = get_dataframe(session, "theme_summary_table")
+    return not theme_summary_df.empty
+
+
 WORKBOOK_TITLE_MAX_LENGTH = 120
 WORKBOOK_SNAPSHOT_MAX_BYTES = 2_500_000
 WORKBOOK_TITLE_ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9 -]+$")
@@ -654,6 +673,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         or session.get("theme_summary_table")
         or session.get("preview_state")
     )
+    has_existing_themes = _has_existing_theme_assignments(session, reports_df_full)
 
     return {
         "reports_df": reports_df,
@@ -702,6 +722,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "report_limit": report_limit,
         "report_limit_for_slider": report_limit_for_slider,
         "ai_features_used": ai_features_used,
+        "has_existing_themes": has_existing_themes,
         "workspace_dataset_token": session.get("reports_df") or "",
         "dashboard_selected_coroners": dashboard_filters["coroner"],
         "dashboard_selected_areas": dashboard_filters["area"],
@@ -931,6 +952,33 @@ def _handle_discover_themes(request: HttpRequest) -> None:
         else:
             messages.info(request, "Load reports before discovering themes.")
         return
+
+    all_reports_df = get_dataframe(session, "reports_df")
+    existing_theme_schema = session.get("theme_model_schema")
+    existing_theme_columns = [
+        column for column in _theme_columns_from_schema(existing_theme_schema)
+        if column in all_reports_df.columns
+    ]
+    has_existing_themes = _has_existing_theme_assignments(session, all_reports_df)
+    rerun_confirmed = _bool_from_post(request, "confirm_rerun_themes", default=False)
+
+    if has_existing_themes and not rerun_confirmed:
+        messages.warning(
+            request,
+            "Themes are already applied to this workspace. To run discovery again, first confirm that you want to discard existing themes.",
+        )
+        return
+
+    if has_existing_themes:
+        push_history_snapshot(session)
+        cleaned_reports_df = all_reports_df.drop(columns=existing_theme_columns, errors="ignore").copy()
+        set_dataframe(session, "reports_df", cleaned_reports_df)
+        clear_outputs_for_modified_dataset(session)
+        reports_df = (
+            _apply_explore_dashboard_filters(cleaned_reports_df, dashboard_filters)
+            if any(dashboard_filters[field] for field in ("coroner", "area", "receiver"))
+            else cleaned_reports_df
+        )
 
     try:
         llm_client = build_llm(session)

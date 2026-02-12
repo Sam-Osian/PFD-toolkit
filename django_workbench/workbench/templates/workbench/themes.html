@@ -16,9 +16,10 @@
         </div>
 
         <div class="workflow-clean-grid">
-            <form method="post" class="workflow-clean-form workflow-clean-form--wide">
+            <form method="post" class="workflow-clean-form workflow-clean-form--wide" data-theme-rerun-confirm-form data-has-existing-themes="{% if has_existing_themes %}1{% else %}0{% endif %}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="discover_themes">
+                <input type="hidden" name="confirm_rerun_themes" value="0" data-confirm-rerun-themes>
 
                 <div class="workflow-clean-field">
                     <label for="extra_theme_instructions">Extra guidance (optional)</label>
@@ -110,6 +111,17 @@
     </section>
 
     {% include "workbench/_workspace_dataset.html" %}
+</div>
+
+<div class="confirm-modal-backdrop hidden" id="theme-rerun-confirm-modal" aria-modal="true" role="dialog" aria-labelledby="theme-rerun-confirm-title">
+    <section class="confirm-modal">
+        <h3 id="theme-rerun-confirm-title">Run theme discovery again?</h3>
+        <p>Existing theme assignments will be removed from the current workspace before a new discovery run starts.</p>
+        <div class="confirm-modal__actions">
+            <button type="button" class="button-secondary" data-theme-rerun-cancel>Cancel</button>
+            <button type="button" class="button-primary" data-theme-rerun-confirm>Run and replace themes</button>
+        </div>
+    </section>
 </div>
 
 {% if preview_state and preview_state.type == 'discover' %}

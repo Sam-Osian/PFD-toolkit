@@ -1035,7 +1035,11 @@
         const confirmCancel = document.querySelector("[data-advanced-ai-manual-filter-cancel]");
         const confirmKeep = document.querySelector("[data-advanced-ai-manual-filter-keep]");
         const confirmDiscard = document.querySelector("[data-advanced-ai-manual-filter-discard]");
+        const themeRerunBackdrop = byId("advanced-ai-theme-rerun-confirm-popover");
+        const themeRerunCancel = document.querySelector("[data-advanced-ai-theme-rerun-cancel]");
+        const themeRerunConfirm = document.querySelector("[data-advanced-ai-theme-rerun-confirm]");
         let pendingManualFilterConfirm = null;
+        let pendingThemeRerunConfirm = null;
 
         function getDashboardManualFilters() {
             if (
@@ -1078,6 +1082,14 @@
             });
         }
 
+        function hasExistingThemes(form) {
+            return form && form.dataset && form.dataset.hasExistingThemes === "1";
+        }
+
+        function getThemeRerunInput(form) {
+            return form ? form.querySelector("input[data-confirm-rerun-themes]") : null;
+        }
+
         function openManualFilterConfirm(config) {
             if (!confirmBackdrop || !confirmList || !confirmMessage) {
                 return false;
@@ -1111,6 +1123,21 @@
             return true;
         }
 
+        function openThemeRerunConfirm(config) {
+            if (!themeRerunBackdrop) {
+                return false;
+            }
+            if (window.WorkbenchLoading && typeof window.WorkbenchLoading.hide === "function") {
+                window.WorkbenchLoading.hide();
+            }
+            pendingThemeRerunConfirm = config;
+            if (config.sourceBackdrop) {
+                config.sourceBackdrop.classList.add("hidden");
+            }
+            themeRerunBackdrop.classList.remove("hidden");
+            return true;
+        }
+
         function closeManualFilterConfirm(restoreSource) {
             if (confirmBackdrop) {
                 confirmBackdrop.classList.add("hidden");
@@ -1123,6 +1150,20 @@
                 pendingManualFilterConfirm.sourceBackdrop.classList.remove("hidden");
             }
             pendingManualFilterConfirm = null;
+        }
+
+        function closeThemeRerunConfirm(restoreSource) {
+            if (themeRerunBackdrop) {
+                themeRerunBackdrop.classList.add("hidden");
+            }
+            if (
+                restoreSource &&
+                pendingThemeRerunConfirm &&
+                pendingThemeRerunConfirm.sourceBackdrop
+            ) {
+                pendingThemeRerunConfirm.sourceBackdrop.classList.remove("hidden");
+            }
+            pendingThemeRerunConfirm = null;
         }
 
         if (confirmCancel && !confirmCancel.dataset.bound) {
@@ -1163,6 +1204,36 @@
                 pending.form.requestSubmit(pending.submitter || undefined);
             });
         }
+        if (themeRerunCancel && !themeRerunCancel.dataset.bound) {
+            themeRerunCancel.dataset.bound = "1";
+            themeRerunCancel.addEventListener("click", function () {
+                closeThemeRerunConfirm(true);
+            });
+        }
+        if (themeRerunBackdrop && !themeRerunBackdrop.dataset.bound) {
+            themeRerunBackdrop.dataset.bound = "1";
+            themeRerunBackdrop.addEventListener("click", function (event) {
+                if (event.target === themeRerunBackdrop) {
+                    closeThemeRerunConfirm(true);
+                }
+            });
+        }
+        if (themeRerunConfirm && !themeRerunConfirm.dataset.bound) {
+            themeRerunConfirm.dataset.bound = "1";
+            themeRerunConfirm.addEventListener("click", function () {
+                if (!pendingThemeRerunConfirm || !pendingThemeRerunConfirm.form) {
+                    return;
+                }
+                const pending = pendingThemeRerunConfirm;
+                const confirmInput = getThemeRerunInput(pending.form);
+                if (confirmInput) {
+                    confirmInput.value = "1";
+                }
+                pending.form.dataset.themeRerunConfirmed = "1";
+                closeThemeRerunConfirm(false);
+                pending.form.requestSubmit(pending.submitter || undefined);
+            });
+        }
 
         function bindPopover(config) {
             const openButton = document.querySelector(config.openSelector);
@@ -1177,6 +1248,11 @@
 
             function openPopover() {
                 backdrop.classList.remove("hidden");
+                const confirmInput = getThemeRerunInput(form);
+                if (confirmInput) {
+                    confirmInput.value = "0";
+                }
+                delete form.dataset.themeRerunConfirmed;
                 if (initialFocus) {
                     initialFocus.focus();
                 }
@@ -1191,14 +1267,36 @@
 
             openButton.onclick = openPopover;
             cancelButton.onclick = function () {
+                const confirmInput = getThemeRerunInput(form);
+                if (confirmInput) {
+                    confirmInput.value = "0";
+                }
+                delete form.dataset.themeRerunConfirmed;
                 closePopover(true);
             };
             backdrop.onclick = function (event) {
                 if (event.target === backdrop) {
+                    const confirmInput = getThemeRerunInput(form);
+                    if (confirmInput) {
+                        confirmInput.value = "0";
+                    }
+                    delete form.dataset.themeRerunConfirmed;
                     closePopover(false);
                 }
             };
             form.onsubmit = function (event) {
+                if (typeof config.beforeSubmit === "function") {
+                    const handled = config.beforeSubmit({
+                        event: event,
+                        form: form,
+                        backdrop: backdrop,
+                        submitter: event.submitter || null,
+                    });
+                    if (handled) {
+                        return;
+                    }
+                }
+
                 const decision = form.dataset.manualFilterDecision || "";
                 const filters = getDashboardManualFilters();
                 const hasFilters = hasDashboardManualFilters(filters);
@@ -1223,8 +1321,8 @@
                     clearManualFilterHiddenInputs(form);
                 }
                 form.dataset.manualFilterDecision = "";
-            closePopover(false);
-        };
+                closePopover(false);
+            };
         }
 
         bindPopover({
@@ -1245,6 +1343,49 @@
             initialFocusId: "extra_theme_instructions",
             loadingMessage: "Discovering themes and building a preview...",
             actionLabel: "discover themes",
+            beforeSubmit: function (context) {
+                const form = context.form;
+                const confirmInput = getThemeRerunInput(form);
+                if (!hasExistingThemes(form)) {
+                    if (confirmInput) {
+                        confirmInput.value = "0";
+                    }
+                    delete form.dataset.themeRerunConfirmed;
+                    return false;
+                }
+                if (form.dataset.themeRerunConfirmed === "1") {
+                    if (confirmInput) {
+                        confirmInput.value = "1";
+                    }
+                    delete form.dataset.themeRerunConfirmed;
+                    return false;
+                }
+
+                context.event.preventDefault();
+                const opened = openThemeRerunConfirm({
+                    form: form,
+                    submitter: context.submitter || null,
+                    sourceBackdrop: context.backdrop,
+                });
+                if (!opened) {
+                    const approved = window.confirm(
+                        "Theme discovery has already been applied. Run again and replace existing theme assignments?"
+                    );
+                    if (!approved) {
+                        if (confirmInput) {
+                            confirmInput.value = "0";
+                        }
+                        return true;
+                    }
+                    if (confirmInput) {
+                        confirmInput.value = "1";
+                    }
+                    form.dataset.themeRerunConfirmed = "1";
+                    form.requestSubmit(context.submitter || undefined);
+                    return true;
+                }
+                return true;
+            },
         });
 
         bindPopover({
@@ -1266,10 +1407,100 @@
             if (event.key !== "Escape") {
                 return;
             }
+            if (pendingThemeRerunConfirm && themeRerunBackdrop && !themeRerunBackdrop.classList.contains("hidden")) {
+                closeThemeRerunConfirm(true);
+                return;
+            }
+            if (pendingManualFilterConfirm && confirmBackdrop && !confirmBackdrop.classList.contains("hidden")) {
+                closeManualFilterConfirm(true);
+                return;
+            }
             const visibleBackdrops = document.querySelectorAll(
                 ".advanced-ai-popover-backdrop:not(.hidden):not(.advanced-ai-popover-backdrop--locked)"
             );
             visibleBackdrops.forEach((node) => node.classList.add("hidden"));
+        });
+    }
+
+    function setupThemeRerunConfirmModal() {
+        const form = document.querySelector("form[data-theme-rerun-confirm-form]");
+        const modal = byId("theme-rerun-confirm-modal");
+        const cancelButton = document.querySelector("[data-theme-rerun-cancel]");
+        const confirmButton = document.querySelector("[data-theme-rerun-confirm]");
+        if (!form || !modal || modal.dataset.bound === "1") {
+            return;
+        }
+        modal.dataset.bound = "1";
+
+        const confirmInput = form.querySelector("input[data-confirm-rerun-themes]");
+        let pendingSubmitter = null;
+
+        function openModal(submitter) {
+            pendingSubmitter = submitter || null;
+            modal.classList.remove("hidden");
+            document.body.classList.add("modal-open");
+        }
+
+        function closeModal(restoreFocus) {
+            modal.classList.add("hidden");
+            document.body.classList.remove("modal-open");
+            if (restoreFocus && pendingSubmitter && typeof pendingSubmitter.focus === "function") {
+                pendingSubmitter.focus();
+            }
+            pendingSubmitter = null;
+        }
+
+        form.addEventListener("submit", function (event) {
+            const hasExisting = form.dataset.hasExistingThemes === "1";
+            if (!hasExisting) {
+                if (confirmInput) {
+                    confirmInput.value = "0";
+                }
+                delete form.dataset.themeRerunConfirmed;
+                return;
+            }
+            if (form.dataset.themeRerunConfirmed === "1") {
+                if (confirmInput) {
+                    confirmInput.value = "1";
+                }
+                delete form.dataset.themeRerunConfirmed;
+                return;
+            }
+            event.preventDefault();
+            if (confirmInput) {
+                confirmInput.value = "0";
+            }
+            openModal(event.submitter || null);
+        });
+
+        if (cancelButton) {
+            cancelButton.addEventListener("click", function () {
+                closeModal(true);
+            });
+        }
+
+        if (confirmButton) {
+            confirmButton.addEventListener("click", function () {
+                form.dataset.themeRerunConfirmed = "1";
+                if (confirmInput) {
+                    confirmInput.value = "1";
+                }
+                const submitter = pendingSubmitter;
+                closeModal(false);
+                form.requestSubmit(submitter || undefined);
+            });
+        }
+
+        modal.addEventListener("click", function (event) {
+            if (event.target === modal) {
+                closeModal(true);
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+                closeModal(true);
+            }
         });
     }
 
@@ -2404,6 +2635,7 @@
         setupTopbarDateValidation();
         setupSettingsLoadReportsConfirm();
         setupAdvancedAIPopovers();
+        setupThemeRerunConfirmModal();
         setupDatasetPagination();
         setupExploreDashboard();
         setupWorkbookControls();

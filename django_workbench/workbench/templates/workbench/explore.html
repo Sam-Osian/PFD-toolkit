@@ -189,9 +189,10 @@
                 <p>Generate candidate themes and review a preview before applying assignments.</p>
             </div>
 
-            <form method="post" class="workflow-clean-form advanced-ai-popover__form" data-advanced-ai-discover-form>
+            <form method="post" class="workflow-clean-form advanced-ai-popover__form" data-advanced-ai-discover-form data-has-existing-themes="{% if has_existing_themes %}1{% else %}0{% endif %}">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="discover_themes">
+                <input type="hidden" name="confirm_rerun_themes" value="0" data-confirm-rerun-themes>
 
                 <div class="workflow-clean-field">
                     <label for="extra_theme_instructions">Extra guidance (optional)</label>
@@ -365,6 +366,20 @@
                 <button type="button" class="button-secondary" data-advanced-ai-manual-filter-cancel>Cancel</button>
                 <button type="button" class="button-secondary" data-advanced-ai-manual-filter-discard>Discard manual filters</button>
                 <button type="button" class="button-primary" data-advanced-ai-manual-filter-keep>Run for current selection</button>
+            </div>
+        </section>
+    </div>
+
+    <div class="advanced-ai-popover-backdrop advanced-ai-popover-backdrop--confirm hidden" id="advanced-ai-theme-rerun-confirm-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-theme-rerun-confirm-title">
+        <section class="advanced-ai-popover">
+            <div class="advanced-ai-popover__head">
+                <span class="section-kicker">Theme reset required</span>
+                <h3 id="advanced-ai-theme-rerun-confirm-title">Run theme discovery again?</h3>
+                <p>Existing theme assignments will be removed from the current workspace before a new discovery run starts.</p>
+            </div>
+            <div class="advanced-ai-popover__actions">
+                <button type="button" class="button-secondary" data-advanced-ai-theme-rerun-cancel>Cancel</button>
+                <button type="button" class="button-primary" data-advanced-ai-theme-rerun-confirm>Run and replace themes</button>
             </div>
         </section>
     </div>
