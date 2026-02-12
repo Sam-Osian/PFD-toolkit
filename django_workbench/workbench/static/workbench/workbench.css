@@ -193,6 +193,7 @@ body.sidebar-collapsed .app-shell {
     position: relative;
     position: sticky;
     top: 1.2rem;
+    z-index: 1300;
     height: calc(100vh - 2.4rem);
     display: flex;
     flex-direction: column;
@@ -323,7 +324,9 @@ body.sidebar-collapsed .sidebar-toggle__icon {
     text-decoration: none;
     color: var(--text-soft);
     background: transparent;
-    transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
+    transform-origin: center left;
+    will-change: transform, box-shadow, background-color;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .sidebar-nav__item::before {
@@ -341,8 +344,13 @@ body.sidebar-collapsed .sidebar-toggle__icon {
 }
 
 .sidebar-nav__item:hover {
-    background: rgba(142, 156, 255, 0.07);
+    border-color: rgba(166, 177, 255, 0.2);
+    background:
+        linear-gradient(100deg, rgba(141, 156, 255, 0.18), rgba(99, 201, 255, 0.16)),
+        rgba(142, 156, 255, 0.07);
     color: var(--text);
+    transform: translateX(5px) scale(1.018);
+    box-shadow: 0 12px 26px rgba(8, 16, 49, 0.44);
 }
 
 .sidebar-nav__item.is-active {
@@ -501,6 +509,24 @@ body.sidebar-collapsed .sidebar-nav__item {
     grid-template-columns: 1fr;
     justify-items: center;
     padding: 0.62rem 0.42rem;
+}
+
+body.sidebar-collapsed .sidebar-nav__item:hover,
+body.sidebar-collapsed .sidebar-nav__item:focus-visible {
+    border-color: rgba(166, 177, 255, 0.26);
+    background: rgba(116, 132, 255, 0.14);
+    transform: scale(1.02);
+    box-shadow: 0 10px 24px rgba(8, 14, 44, 0.45);
+}
+
+body.sidebar-collapsed .sidebar-nav__item:hover .sidebar-nav__icon,
+body.sidebar-collapsed .sidebar-nav__item:focus-visible .sidebar-nav__icon {
+    transform: scale(1.14);
+    filter: drop-shadow(0 0 10px rgba(138, 201, 255, 0.35));
+}
+
+body.sidebar-collapsed .sidebar-nav__icon {
+    transition: transform 0.2s ease, filter 0.2s ease;
 }
 
 body.sidebar-collapsed .sidebar-nav__item[data-tooltip]:hover::after,
