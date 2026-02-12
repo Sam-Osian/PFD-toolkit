@@ -914,6 +914,117 @@
         });
     }
 
+    function setupSettingsLoadReportsConfirm() {
+        const form = document.querySelector(".settings-workbench .config-form");
+        const openButton = document.querySelector("[data-settings-load-open]");
+        const confirmModal = byId("settings-load-reports-confirm");
+        if (!form || !openButton) {
+            return;
+        }
+        if (form.dataset.loadConfirmBound === "1") {
+            return;
+        }
+        form.dataset.loadConfirmBound = "1";
+
+        if (!confirmModal) {
+            openButton.addEventListener("click", function (event) {
+                if (form.dataset.loadReportsConfirmed === "1") {
+                    return;
+                }
+                const allowed = window.confirm(
+                    "Loading reports will refresh your existing workspace. Any unsaved workflow changes and generated outputs will be lost. Continue?"
+                );
+                if (!allowed) {
+                    event.preventDefault();
+                    return;
+                }
+                form.dataset.loadReportsConfirmed = "1";
+            });
+            return;
+        }
+
+        const cancelButton = confirmModal.querySelector("[data-settings-load-cancel]");
+        const confirmButton = confirmModal.querySelector("[data-settings-load-confirm]");
+        let pendingSubmitter = null;
+
+        function closeConfirm(restoreFocus) {
+            confirmModal.classList.add("hidden");
+            document.body.classList.remove("modal-open");
+            if (restoreFocus && pendingSubmitter && typeof pendingSubmitter.focus === "function") {
+                pendingSubmitter.focus();
+            }
+            pendingSubmitter = null;
+        }
+
+        function openConfirm(submitter) {
+            pendingSubmitter = submitter;
+            confirmModal.classList.remove("hidden");
+            document.body.classList.add("modal-open");
+            if (cancelButton) {
+                cancelButton.focus();
+            }
+        }
+
+        if (openButton) {
+            openButton.addEventListener("click", function (event) {
+                if (form.dataset.loadReportsConfirmed === "1") {
+                    return;
+                }
+                event.preventDefault();
+                openConfirm(openButton);
+            });
+        }
+
+        form.addEventListener("submit", function (event) {
+            const submitter = event.submitter;
+            const actionValue = submitter ? submitter.value : "";
+            if (actionValue !== "load_reports") {
+                return;
+            }
+            if (form.dataset.loadReportsConfirmed === "1") {
+                delete form.dataset.loadReportsConfirmed;
+                return;
+            }
+            event.preventDefault();
+            openConfirm(submitter);
+        });
+
+        if (cancelButton) {
+            cancelButton.addEventListener("click", function () {
+                closeConfirm(true);
+            });
+        }
+
+        if (confirmButton) {
+            confirmButton.addEventListener("click", function () {
+                if (!pendingSubmitter) {
+                    closeConfirm(false);
+                    return;
+                }
+                form.dataset.loadReportsConfirmed = "1";
+                const submitter = pendingSubmitter;
+                closeConfirm(false);
+                if (typeof form.requestSubmit === "function") {
+                    form.requestSubmit(submitter);
+                    return;
+                }
+                submitter.click();
+            });
+        }
+
+        confirmModal.addEventListener("click", function (event) {
+            if (event.target === confirmModal) {
+                closeConfirm(true);
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !confirmModal.classList.contains("hidden")) {
+                closeConfirm(true);
+            }
+        });
+    }
+
     function setupAdvancedAIPopovers() {
         const confirmBackdrop = byId("advanced-ai-manual-filter-confirm-popover");
         const confirmList = byId("advanced-ai-manual-filter-list");
@@ -2025,6 +2136,7 @@
         setupTopbarLLMProviderToggle();
         setupTopbarAIResetConfirm();
         setupTopbarDateValidation();
+        setupSettingsLoadReportsConfirm();
         setupAdvancedAIPopovers();
         setupDatasetPagination();
         setupExploreDashboard();
@@ -2065,18 +2177,16 @@
         const pageCache = new Map();
         let activePath = window.location.pathname;
         let activeWorkspaceToken = getWorkspaceToken(contentRoot);
-        if (contentRoot.firstElementChild) {
-            pageCache.set(activePath, {
-                node: contentRoot.firstElementChild,
-                workspaceToken: activeWorkspaceToken,
-            });
-        }
+        pageCache.set(activePath, {
+            html: contentRoot.innerHTML,
+            workspaceToken: activeWorkspaceToken,
+        });
 
-        function swapTo(pathname, page, node, pushHistory, workspaceToken) {
-            if (!node) {
+        function swapTo(pathname, page, html, pushHistory, workspaceToken) {
+            if (typeof html !== "string") {
                 return;
             }
-            contentRoot.replaceChildren(node);
+            contentRoot.innerHTML = html;
             contentRoot.dataset.page = page;
             contentRoot.dataset.workspaceToken = workspaceToken || "";
             applyBodyPageClass(page);
@@ -2122,18 +2232,15 @@
             }
 
             event.preventDefault();
-            const currentNode = contentRoot.firstElementChild;
-            if (currentNode) {
-                pageCache.set(currentPath, {
-                    node: currentNode,
-                    workspaceToken: activeWorkspaceToken,
-                });
-            }
+            pageCache.set(currentPath, {
+                html: contentRoot.innerHTML,
+                workspaceToken: activeWorkspaceToken,
+            });
 
             const targetPage = link.getAttribute("data-page-link") || getPageFromPath(targetPath);
             const cachedEntry = pageCache.get(targetPath);
             if (cachedEntry && cachedEntry.workspaceToken === activeWorkspaceToken) {
-                swapTo(targetPath, targetPage, cachedEntry.node, true, cachedEntry.workspaceToken);
+                swapTo(targetPath, targetPage, cachedEntry.html, true, cachedEntry.workspaceToken);
                 return;
             }
             if (cachedEntry) {
@@ -2156,20 +2263,20 @@
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, "text/html");
                     const incomingRoot = doc.querySelector("#page-content");
-                    const incomingNode = incomingRoot ? incomingRoot.firstElementChild : null;
+                    const incomingHtml = incomingRoot ? incomingRoot.innerHTML : "";
                     const page = incomingRoot && incomingRoot.dataset.page
                         ? incomingRoot.dataset.page
                         : targetPage;
                     const workspaceToken = incomingRoot ? getWorkspaceToken(incomingRoot) : "";
-                    if (!incomingNode) {
+                    if (!incomingRoot) {
                         window.location.href = targetPath;
                         return;
                     }
                     pageCache.set(targetPath, {
-                        node: incomingNode,
+                        html: incomingHtml,
                         workspaceToken: workspaceToken,
                     });
-                    swapTo(targetPath, page, incomingNode, true, workspaceToken);
+                    swapTo(targetPath, page, incomingHtml, true, workspaceToken);
                 })
                 .catch(() => {
                     window.location.href = targetPath;
@@ -2179,16 +2286,13 @@
         window.addEventListener("popstate", function () {
             const path = window.location.pathname;
             const page = getPageFromPath(path);
-            const currentNode = contentRoot.firstElementChild;
-            if (currentNode) {
-                pageCache.set(activePath, {
-                    node: currentNode,
-                    workspaceToken: activeWorkspaceToken,
-                });
-            }
+            pageCache.set(activePath, {
+                html: contentRoot.innerHTML,
+                workspaceToken: activeWorkspaceToken,
+            });
             const cachedEntry = pageCache.get(path);
             if (cachedEntry && cachedEntry.workspaceToken === activeWorkspaceToken) {
-                swapTo(path, page, cachedEntry.node, false, cachedEntry.workspaceToken);
+                swapTo(path, page, cachedEntry.html, false, cachedEntry.workspaceToken);
                 return;
             }
             window.location.reload();

@@ -1366,6 +1366,18 @@ button:disabled {
     gap: 0.6rem;
 }
 
+.settings-category {
+    margin-top: 0.7rem;
+}
+
+.settings-category__heading {
+    display: block;
+    font-family: 'Sora', sans-serif;
+    font-size: 0.84rem;
+    font-weight: 650;
+    color: rgba(240, 245, 255, 0.94);
+}
+
 .config-modal-backdrop {
     position: fixed;
     inset: 0;
