@@ -37,7 +37,7 @@
                 <i class="hgi hgi-stroke hgi-refresh action-rail-btn__icon"></i>
                 <span class="sr-only">Start over</span>
             </button>
-            <button type="button" class="action-rail-btn action-rail-btn--download" data-download-open aria-label="Download reports" {% if not dataset_available %}disabled{% endif %}>
+            <button type="button" class="action-rail-btn action-rail-btn--download" data-download-open aria-label="Download reports" {% if not dataset_available and not excluded_reports_available %}disabled{% endif %}>
                 <i class="hgi hgi-stroke hgi-download-01 action-rail-btn__share-mark" aria-hidden="true"></i>
                 <span>Download reports</span>
             </button>
@@ -73,6 +73,9 @@
                     {% csrf_token %}
                     <input type="hidden" name="action" value="download_bundle">
                     <label class="checkbox"><input type="checkbox" name="download_include_dataset" checked> <span>Working dataset</span></label>
+                    {% if excluded_reports_available %}
+                        <label class="checkbox"><input type="checkbox" name="download_include_excluded" checked> <span>Excluded reports</span></label>
+                    {% endif %}
                     <label class="checkbox"><input type="checkbox" name="download_include_theme" {% if has_theme_summary %}checked{% endif %} {% if not has_theme_summary %}disabled{% endif %}> <span>Theme table</span></label>
                     <label class="checkbox"><input type="checkbox" name="download_include_feature_grid" {% if has_feature_grid %}checked{% endif %} {% if not has_feature_grid %}disabled{% endif %}> <span>Custom feature grid</span></label>
                     <label class="checkbox"><input type="checkbox" name="download_include_script"> <span>Reproducible Python script</span></label>

@@ -190,26 +190,16 @@
     }
 
     function setupDatasetCellPreview() {
-        const datasetTable = document.querySelector(".data-card .data-table");
-        if (!datasetTable) {
-            return;
-        }
-        if (datasetTable.dataset.previewBound === "1") {
-            return;
-        }
-        datasetTable.dataset.previewBound = "1";
-
-        const headerCells = Array.from(datasetTable.querySelectorAll("thead th"));
-        const bodyRows = Array.from(datasetTable.querySelectorAll("tbody tr"));
-        if (bodyRows.length > 120) {
-            return;
-        }
-        if (!headerCells.length) {
+        const datasetTables = Array.from(document.querySelectorAll(".data-card .data-table"));
+        if (!datasetTables.length) {
             return;
         }
 
         function getColumnClass(headerText) {
             const label = (headerText || "").trim().toLowerCase();
+            if (label === "actions" || label === "restore") {
+                return "dataset-col-action";
+            }
             if (label === "id") {
                 return "dataset-col-id";
             }
@@ -236,23 +226,41 @@
             return "dataset-col-standard";
         }
 
-        const columnClasses = headerCells.map((th) => {
-            const columnClass = getColumnClass(th.innerText);
-            th.classList.add(columnClass);
-            return columnClass;
-        });
+        const previewCells = [];
+        datasetTables.forEach((datasetTable) => {
+            if (datasetTable.dataset.previewBound === "1") {
+                return;
+            }
+            datasetTable.dataset.previewBound = "1";
 
-        bodyRows.forEach((row) => {
-            Array.from(row.children).forEach((cell, index) => {
-                const columnClass = columnClasses[index];
-                if (columnClass) {
-                    cell.classList.add(columnClass);
-                }
+            const headerCells = Array.from(datasetTable.querySelectorAll("thead th"));
+            const bodyRows = Array.from(datasetTable.querySelectorAll("tbody tr"));
+            if (bodyRows.length > 120 || !headerCells.length) {
+                return;
+            }
+
+            const columnClasses = headerCells.map((th) => {
+                const columnClass = getColumnClass(th.innerText);
+                th.classList.add(columnClass);
+                return columnClass;
             });
+
+            bodyRows.forEach((row) => {
+                Array.from(row.children).forEach((cell, index) => {
+                    const columnClass = columnClasses[index];
+                    if (columnClass) {
+                        cell.classList.add(columnClass);
+                    }
+                });
+            });
+
+            const cells = datasetTable.querySelectorAll(
+                "tbody td:not(.dataset-row-actions-cell):not(.dataset-row-restore-cell)"
+            );
+            cells.forEach((cell) => previewCells.push(cell));
         });
 
-        const cells = datasetTable.querySelectorAll("tbody td");
-        if (!cells.length) {
+        if (!previewCells.length) {
             return;
         }
 
@@ -377,7 +385,7 @@
             positionPopup(cell);
         }
 
-        cells.forEach((cell) => {
+        previewCells.forEach((cell) => {
             const fullText = (cell.innerText || "").trim();
             if (!fullText) {
                 return;
@@ -421,7 +429,9 @@
             if (popup.contains(event.target)) {
                 return;
             }
-            const clickedCell = event.target.closest(".data-card .data-table tbody td");
+            const clickedCell = event.target.closest(
+                ".data-card .data-table tbody td:not(.dataset-row-actions-cell):not(.dataset-row-restore-cell)"
+            );
             if (clickedCell) {
                 return;
             }
@@ -434,16 +444,204 @@
             }
         });
 
-        const datasetWrap = document.querySelector(".data-card .table-wrap");
-        if (datasetWrap) {
+        const datasetWraps = document.querySelectorAll(".data-card .table-wrap");
+        datasetWraps.forEach((datasetWrap) => {
             const viewport = datasetWrap.querySelector("[data-overlayscrollbars-viewport]");
             if (viewport) {
                 viewport.addEventListener("scroll", hidePopup, { passive: true });
             }
             datasetWrap.addEventListener("scroll", hidePopup, { passive: true });
-        }
+        });
 
         window.addEventListener("resize", hidePopup);
+    }
+
+    function setupDatasetRowActions() {
+        function closeAllRowPopovers(exceptPopover) {
+            document.querySelectorAll("[data-row-delete-popover]").forEach((popover) => {
+                if (exceptPopover && popover === exceptPopover) {
+                    return;
+                }
+                const root = popover.closest("[data-row-actions-root]");
+                popover.classList.add("hidden");
+                if (root) {
+                    root.classList.remove("is-open");
+                }
+            });
+        }
+
+        if (document.body.dataset.datasetRowActionsBound === "1") {
+            return;
+        }
+        document.body.dataset.datasetRowActionsBound = "1";
+
+        function openPopoverForRoot(root) {
+            if (!root) {
+                return;
+            }
+            const popover = root.querySelector("[data-row-delete-popover]");
+            if (!popover) {
+                return;
+            }
+            closeAllRowPopovers(popover);
+            popover.classList.remove("hidden");
+            root.classList.add("is-open");
+            const reasonInput = root.querySelector("textarea[name='exclusion_reason']");
+            if (reasonInput) {
+                reasonInput.focus();
+            }
+        }
+
+        function closePopoverForRoot(root, restoreFocus) {
+            if (!root) {
+                return;
+            }
+            const popover = root.querySelector("[data-row-delete-popover]");
+            const toggle = root.querySelector("[data-row-delete-toggle]");
+            if (popover) {
+                popover.classList.add("hidden");
+            }
+            root.classList.remove("is-open");
+            if (restoreFocus && toggle) {
+                toggle.focus();
+            }
+        }
+
+        document.addEventListener("click", function (event) {
+            const toggle = event.target.closest("[data-row-delete-toggle]");
+            if (toggle) {
+                const root = toggle.closest("[data-row-actions-root]");
+                if (!root) {
+                    return;
+                }
+                event.preventDefault();
+                event.stopPropagation();
+                const popover = root.querySelector("[data-row-delete-popover]");
+                if (!popover) {
+                    return;
+                }
+                if (popover.classList.contains("hidden")) {
+                    openPopoverForRoot(root);
+                } else {
+                    closePopoverForRoot(root, true);
+                }
+                return;
+            }
+
+            const cancelButton = event.target.closest("[data-row-delete-cancel]");
+            if (cancelButton) {
+                const root = cancelButton.closest("[data-row-actions-root]");
+                event.preventDefault();
+                event.stopPropagation();
+                closePopoverForRoot(root, true);
+                return;
+            }
+
+            if (event.target.closest("[data-row-delete-popover]")) {
+                event.stopPropagation();
+            }
+        });
+
+        document.addEventListener("pointerdown", function (event) {
+            if (event.target.closest("[data-row-actions-root]")) {
+                return;
+            }
+            closeAllRowPopovers();
+        }, true);
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape") {
+                closeAllRowPopovers();
+            }
+        });
+    }
+
+    function setupDatasetMutations() {
+        if (document.body.dataset.datasetMutationsBound === "1") {
+            return;
+        }
+        document.body.dataset.datasetMutationsBound = "1";
+
+        let inFlight = false;
+
+        function applyPageContentFromHtml(html, responseUrl) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const incomingRoot = doc.querySelector("#page-content");
+            const currentRoot = byId("page-content");
+            if (!incomingRoot || !currentRoot) {
+                return false;
+            }
+
+            currentRoot.innerHTML = incomingRoot.innerHTML;
+            currentRoot.dataset.page = incomingRoot.dataset.page || "explore";
+            currentRoot.dataset.workspaceToken = incomingRoot.dataset.workspaceToken || "";
+
+            const page = currentRoot.dataset.page || getPageFromPath(window.location.pathname);
+            applyBodyPageClass(page);
+            syncSidebarActive(page);
+
+            if (responseUrl) {
+                try {
+                    const target = new URL(responseUrl, window.location.origin);
+                    window.history.replaceState(window.history.state, "", target.pathname + target.search);
+                } catch (error) {
+                    // Ignore URL parse issues.
+                }
+            }
+
+            initializePageFeatures();
+            return true;
+        }
+
+        document.addEventListener("submit", function (event) {
+            const form = event.target.closest("form[data-dataset-mutate]");
+            if (!form) {
+                return;
+            }
+            event.preventDefault();
+
+            if (inFlight) {
+                return;
+            }
+            inFlight = true;
+
+            const submitButton = event.submitter;
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            const targetUrl = form.getAttribute("action") || window.location.href;
+            const body = new FormData(form);
+
+            fetch(targetUrl, {
+                method: "POST",
+                body: body,
+                credentials: "same-origin",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+            })
+                .then((response) => response.text().then((text) => ({ response, text })))
+                .then(({ response, text }) => {
+                    if (!response.ok) {
+                        throw new Error("Dataset update failed");
+                    }
+                    const swapped = applyPageContentFromHtml(text, response.url);
+                    if (!swapped) {
+                        throw new Error("Dataset update response was invalid");
+                    }
+                })
+                .catch(() => {
+                    window.location.href = targetUrl;
+                })
+                .finally(() => {
+                    inFlight = false;
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                    }
+                });
+        }, true);
     }
 
     function setupSidebarCollapse() {
@@ -617,10 +815,7 @@
     }
 
     function setupTopbarQuickSettings() {
-        const openButtons = document.querySelectorAll("[data-topbar-open]");
-        const closeButtons = document.querySelectorAll("[data-topbar-close]");
-        const popovers = Array.from(document.querySelectorAll(".topbar-popover-backdrop"));
-        if (!openButtons.length || !popovers.length) {
+        if (!document.querySelector(".topbar-popover-backdrop")) {
             return;
         }
         if (document.body.dataset.topbarQuickSettingsBound === "1") {
@@ -628,12 +823,20 @@
         }
         document.body.dataset.topbarQuickSettingsBound = "1";
 
-        const popoverByKey = {
-            "report-limit": byId("report-limit-popover"),
-            "date-range": byId("date-range-popover"),
-            "llm-settings": byId("llm-settings-popover"),
-        };
         let active = null;
+
+        function getPopoverByKey(key) {
+            if (key === "report-limit") {
+                return byId("report-limit-popover");
+            }
+            if (key === "date-range") {
+                return byId("date-range-popover");
+            }
+            if (key === "llm-settings") {
+                return byId("llm-settings-popover");
+            }
+            return null;
+        }
 
         function positionPopover(popover, button) {
             const panel = popover.querySelector(".topbar-popover");
@@ -662,12 +865,10 @@
         }
 
         function closeAllPopovers(restoreFocusTarget) {
-            popovers.forEach((popover) => {
-                if (popover) {
-                    popover.classList.add("hidden");
-                    popover.style.left = "";
-                    popover.style.top = "";
-                }
+            document.querySelectorAll(".topbar-popover-backdrop").forEach((popover) => {
+                popover.classList.add("hidden");
+                popover.style.left = "";
+                popover.style.top = "";
             });
             active = null;
             if (restoreFocusTarget) {
@@ -675,28 +876,43 @@
             }
         }
 
-        openButtons.forEach((button) => {
-            button.addEventListener("click", function () {
-                const key = button.getAttribute("data-topbar-open");
-                const targetPopover = popoverByKey[key];
+        function isActivePopoverVisible() {
+            return Boolean(
+                active &&
+                active.popover &&
+                active.button &&
+                active.button.isConnected &&
+                !active.popover.classList.contains("hidden")
+            );
+        }
+
+        document.addEventListener("click", function (event) {
+            const openButton = event.target.closest("[data-topbar-open]");
+            if (openButton) {
+                const key = openButton.getAttribute("data-topbar-open");
+                const targetPopover = getPopoverByKey(key);
                 if (!targetPopover) {
                     return;
                 }
-                if (active && active.popover === targetPopover && !targetPopover.classList.contains("hidden")) {
-                    closeAllPopovers(button);
+                if (
+                    active &&
+                    active.popover === targetPopover &&
+                    !targetPopover.classList.contains("hidden")
+                ) {
+                    closeAllPopovers(openButton);
                     return;
                 }
                 closeAllPopovers();
                 targetPopover.classList.remove("hidden");
-                positionPopover(targetPopover, button);
-                active = { popover: targetPopover, button: button };
-            });
-        });
+                positionPopover(targetPopover, openButton);
+                active = { popover: targetPopover, button: openButton };
+                return;
+            }
 
-        closeButtons.forEach((button) => {
-            button.addEventListener("click", function () {
+            const closeButton = event.target.closest("[data-topbar-close]");
+            if (closeButton) {
                 closeAllPopovers();
-            });
+            }
         });
 
         document.addEventListener("pointerdown", function (event) {
@@ -717,13 +933,13 @@
         });
 
         window.addEventListener("resize", function () {
-            if (active && active.popover && active.button && !active.popover.classList.contains("hidden")) {
+            if (isActivePopoverVisible()) {
                 positionPopover(active.popover, active.button);
             }
         });
 
         window.addEventListener("scroll", function () {
-            if (active && active.popover && active.button && !active.popover.classList.contains("hidden")) {
+            if (isActivePopoverVisible()) {
                 positionPopover(active.popover, active.button);
             }
         }, { passive: true, capture: true });
@@ -1534,6 +1750,7 @@
             window.history.replaceState(window.history.state, "", targetUrl);
             setupTableScrollbars();
             setupDatasetCellPreview();
+            setupDatasetRowActions();
             setupDatasetCollapse();
 
             if (typeof incomingDataset.animate === "function") {
@@ -1662,6 +1879,53 @@
         });
     }
 
+    function setupExcludedReportsCollapse() {
+        const root = document.querySelector(".explore-surface--excluded[data-excluded-collapse-root]");
+        if (!root) {
+            return;
+        }
+
+        const toggle = root.querySelector("[data-excluded-collapse-toggle]");
+        const label = root.querySelector("[data-excluded-collapse-label]");
+        if (!toggle || !label) {
+            return;
+        }
+        if (toggle.dataset.bound === "1") {
+            return;
+        }
+        toggle.dataset.bound = "1";
+
+        const storageKey = "workbench.excludedReportsExpanded";
+        const excludedCount = Number(root.dataset.excludedCount || "0");
+        let expanded = false;
+        try {
+            expanded = window.localStorage.getItem(storageKey) === "1";
+        } catch (error) {
+            expanded = false;
+        }
+
+        function paint(isExpanded) {
+            root.classList.toggle("is-collapsed", !isExpanded);
+            toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            const countText = Number.isFinite(excludedCount) ? ` (${excludedCount})` : "";
+            label.textContent = isExpanded
+                ? `Hide excluded reports${countText}`
+                : `Show excluded reports${countText}`;
+        }
+
+        paint(expanded);
+
+        toggle.addEventListener("click", function () {
+            expanded = !expanded;
+            paint(expanded);
+            try {
+                window.localStorage.setItem(storageKey, expanded ? "1" : "0");
+            } catch (error) {
+                // Ignore storage access issues.
+            }
+        });
+    }
+
     function setupThemeSummaryCollapse() {
         const root = document.querySelector(".explore-surface--theme[data-theme-collapse-root]");
         if (!root) {
@@ -1768,14 +2032,32 @@
 
         if (root.dataset.bound === "1") {
             if (window.echarts && typeof window.echarts.getInstanceByDom === "function") {
-                Object.values(chartRoots).forEach((chartRoot) => {
+                const chartNodes = Object.values(chartRoots);
+                const hasAllInstances = chartNodes.every((chartRoot) => {
                     const instance = window.echarts.getInstanceByDom(chartRoot);
-                    if (instance) {
-                        instance.resize();
+                    if (!instance) {
+                        return false;
                     }
+                    if (typeof instance.getDom === "function" && instance.getDom() !== chartRoot) {
+                        // Cached markup can carry stale instance IDs; clear mismatched instances.
+                        if (typeof instance.dispose === "function") {
+                            instance.dispose();
+                        }
+                        return false;
+                    }
+                    return true;
                 });
+                if (hasAllInstances) {
+                    chartNodes.forEach((chartRoot) => {
+                        const instance = window.echarts.getInstanceByDom(chartRoot);
+                        if (instance) {
+                            instance.resize();
+                        }
+                    });
+                    return;
+                }
             }
-            return;
+            delete root.dataset.bound;
         }
         root.dataset.bound = "1";
 
@@ -2623,8 +2905,11 @@
         toggleTruncationTypeFields();
         setupFeatureGrid();
         setupDatasetCollapse();
+        setupExcludedReportsCollapse();
         setupThemeSummaryCollapse();
         setupDatasetCellPreview();
+        setupDatasetRowActions();
+        setupDatasetMutations();
         setupRevealAnimations();
         setupStartOverConfirm();
         setupDownloadBundleModal();
@@ -2674,11 +2959,31 @@
             return rootNode.dataset.workspaceToken || "";
         }
 
+        function snapshotPageHtmlForCache(rootNode) {
+            if (!rootNode) {
+                return "";
+            }
+            const clone = rootNode.cloneNode(true);
+            const nodes = [clone, ...clone.querySelectorAll("*")];
+            nodes.forEach((node) => {
+                if (typeof node.getAttributeNames !== "function") {
+                    return;
+                }
+                node.getAttributeNames().forEach((name) => {
+                    const lower = String(name || "").toLowerCase();
+                    if (lower === "data-bound" || (lower.startsWith("data-") && lower.endsWith("-bound"))) {
+                        node.removeAttribute(name);
+                    }
+                });
+            });
+            return clone.innerHTML;
+        }
+
         const pageCache = new Map();
         let activePath = window.location.pathname;
         let activeWorkspaceToken = getWorkspaceToken(contentRoot);
         pageCache.set(activePath, {
-            html: contentRoot.innerHTML,
+            html: snapshotPageHtmlForCache(contentRoot),
             workspaceToken: activeWorkspaceToken,
         });
 
@@ -2732,8 +3037,9 @@
             }
 
             event.preventDefault();
+            activeWorkspaceToken = getWorkspaceToken(contentRoot);
             pageCache.set(currentPath, {
-                html: contentRoot.innerHTML,
+                html: snapshotPageHtmlForCache(contentRoot),
                 workspaceToken: activeWorkspaceToken,
             });
 
@@ -2763,7 +3069,7 @@
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(html, "text/html");
                     const incomingRoot = doc.querySelector("#page-content");
-                    const incomingHtml = incomingRoot ? incomingRoot.innerHTML : "";
+                    const incomingHtml = incomingRoot ? snapshotPageHtmlForCache(incomingRoot) : "";
                     const page = incomingRoot && incomingRoot.dataset.page
                         ? incomingRoot.dataset.page
                         : targetPage;
@@ -2786,8 +3092,9 @@
         window.addEventListener("popstate", function () {
             const path = window.location.pathname;
             const page = getPageFromPath(path);
+            activeWorkspaceToken = getWorkspaceToken(contentRoot);
             pageCache.set(activePath, {
-                html: contentRoot.innerHTML,
+                html: snapshotPageHtmlForCache(contentRoot),
                 workspaceToken: activeWorkspaceToken,
             });
             const cachedEntry = pageCache.get(path);

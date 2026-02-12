@@ -145,6 +145,11 @@
             </div>
         </section>
     {% endif %}
+
+    {% if excluded_reports_available %}
+        {% include "workbench/_excluded_reports_section.html" %}
+    {% endif %}
+
     <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-popover-backdrop" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-popover-title">
         <section class="advanced-ai-popover">
             <div class="advanced-ai-popover__head">

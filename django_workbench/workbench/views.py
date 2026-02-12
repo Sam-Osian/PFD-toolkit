@@ -10,7 +10,7 @@ from datetime import date, datetime
 from io import BytesIO, StringIO
 from urllib.parse import urlencode
 from typing import Any, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pandas as pd
 from django.contrib import messages
@@ -100,7 +100,10 @@ def _format_date_ddmmyyyy(value: str, default: date) -> str:
 def _df_to_html(df: pd.DataFrame, table_class: str = "data-table") -> str:
     if df.empty:
         return ""
-    display_df = df.copy()
+    display_df = df.copy().drop(
+        columns=[WORKBENCH_ROW_ID_COL, EXCLUSION_REASON_COL],
+        errors="ignore",
+    )
     return display_df.to_html(
         index=False,
         classes=table_class,
@@ -108,6 +111,159 @@ def _df_to_html(df: pd.DataFrame, table_class: str = "data-table") -> str:
         na_rep="",
         escape=False,
     )
+
+
+def _normalise_row_id(raw_value: Any) -> str:
+    return str(raw_value or "").strip()
+
+
+def _ensure_workbench_row_ids(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    if df.empty:
+        return df.copy(), False
+
+    result_df = df.copy()
+    changed = False
+
+    if WORKBENCH_ROW_ID_COL not in result_df.columns:
+        result_df[WORKBENCH_ROW_ID_COL] = [uuid4().hex for _ in range(len(result_df))]
+        return result_df, True
+
+    seen: set[str] = set()
+    normalised_ids: list[str] = []
+    for value in result_df[WORKBENCH_ROW_ID_COL].tolist():
+        row_id = _normalise_row_id(value)
+        if not row_id or row_id in seen:
+            row_id = uuid4().hex
+            changed = True
+        seen.add(row_id)
+        normalised_ids.append(row_id)
+
+    if list(result_df[WORKBENCH_ROW_ID_COL].astype(str)) != normalised_ids:
+        changed = True
+    result_df[WORKBENCH_ROW_ID_COL] = normalised_ids
+    return result_df, changed
+
+
+def _normalise_excluded_reports_df(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
+    if df.empty:
+        return pd.DataFrame(columns=[WORKBENCH_ROW_ID_COL, EXCLUSION_REASON_COL]), False
+
+    result_df, changed = _ensure_workbench_row_ids(df)
+    if EXCLUSION_REASON_COL not in result_df.columns:
+        result_df[EXCLUSION_REASON_COL] = ""
+        changed = True
+    else:
+        reasons = result_df[EXCLUSION_REASON_COL].map(lambda value: str(value or "").strip())
+        if not reasons.equals(result_df[EXCLUSION_REASON_COL]):
+            changed = True
+        result_df[EXCLUSION_REASON_COL] = reasons
+    return result_df, changed
+
+
+def _get_reports_df_with_row_ids(session: dict[str, Any]) -> pd.DataFrame:
+    reports_df = get_dataframe(session, "reports_df")
+    reports_df, changed = _ensure_workbench_row_ids(reports_df)
+    if changed:
+        set_dataframe(session, "reports_df", reports_df)
+    return reports_df
+
+
+def _set_reports_df_with_row_ids(session: dict[str, Any], key: str, df: pd.DataFrame) -> pd.DataFrame:
+    normalised_df, _ = _ensure_workbench_row_ids(df)
+    set_dataframe(session, key, normalised_df)
+    return normalised_df
+
+
+def _get_excluded_reports_df(session: dict[str, Any]) -> pd.DataFrame:
+    excluded_df = get_dataframe(session, "excluded_reports_df")
+    excluded_df, changed = _normalise_excluded_reports_df(excluded_df)
+    if changed:
+        set_dataframe(session, "excluded_reports_df", excluded_df)
+    return excluded_df
+
+
+def _set_excluded_reports_df(session: dict[str, Any], excluded_df: pd.DataFrame) -> None:
+    normalised_df, _ = _normalise_excluded_reports_df(excluded_df)
+    if normalised_df.empty:
+        session["excluded_reports_df"] = None
+        return
+    set_dataframe(session, "excluded_reports_df", normalised_df)
+
+
+def _format_dataset_cell_value(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except TypeError:
+        pass
+    if isinstance(value, (list, tuple, dict)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
+def _dataset_table_rows(
+    df: pd.DataFrame,
+    *,
+    include_reason: bool = False,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    if df.empty:
+        return [], []
+
+    row_ids = (
+        df[WORKBENCH_ROW_ID_COL]
+        if WORKBENCH_ROW_ID_COL in df.columns
+        else pd.Series([""] * len(df), index=df.index, dtype=object)
+    )
+    reason_series = (
+        df[EXCLUSION_REASON_COL]
+        if include_reason and EXCLUSION_REASON_COL in df.columns
+        else pd.Series([""] * len(df), index=df.index, dtype=object)
+    )
+
+    display_df = df.drop(columns=[WORKBENCH_ROW_ID_COL, EXCLUSION_REASON_COL], errors="ignore").copy()
+    columns = [str(column) for column in display_df.columns]
+    if include_reason:
+        columns.append(EXCLUSION_REASON_LABEL)
+
+    rows: list[dict[str, Any]] = []
+    for index, row in display_df.iterrows():
+        cells = [_format_dataset_cell_value(row[column]) for column in display_df.columns]
+        if include_reason:
+            cells.append(_format_dataset_cell_value(reason_series.loc[index]))
+        rows.append(
+            {
+                "row_id": _normalise_row_id(row_ids.loc[index]),
+                "cells": cells,
+            }
+        )
+
+    return columns, rows
+
+
+def _build_excluded_reports_context(
+    excluded_df: pd.DataFrame,
+    *,
+    allow_restore: bool,
+) -> dict[str, Any]:
+    columns, rows = _dataset_table_rows(excluded_df, include_reason=True)
+    return {
+        "excluded_reports_count": len(excluded_df),
+        "excluded_reports_columns": columns,
+        "excluded_reports_rows": rows,
+        "excluded_reports_available": bool(rows),
+        "excluded_reports_restore_enabled": allow_restore,
+    }
+
+
+def _excluded_reports_export_df(excluded_df: pd.DataFrame) -> pd.DataFrame:
+    if excluded_df.empty:
+        return pd.DataFrame()
+    export_df = excluded_df.copy().drop(columns=[WORKBENCH_ROW_ID_COL], errors="ignore")
+    if EXCLUSION_REASON_COL in export_df.columns:
+        export_df = export_df.rename(columns={EXCLUSION_REASON_COL: "reason_for_exclusion"})
+    return export_df
 
 
 def _normalise_dashboard_value(value: Any) -> str:
@@ -298,7 +454,7 @@ def _apply_explore_dashboard_filters(
 
 def _resolve_reports_for_ai_action(request: HttpRequest) -> tuple[pd.DataFrame, dict[str, list[str]]]:
     session = request.session
-    reports_df = get_dataframe(session, "reports_df")
+    reports_df = _get_reports_df_with_row_ids(session)
     post_filters = _get_post_dashboard_filters(request)
     has_post_filters = any(post_filters[field] for field in ("coroner", "area", "receiver"))
     if not has_post_filters:
@@ -328,6 +484,9 @@ def _has_existing_theme_assignments(session: dict[str, Any], reports_df: pd.Data
 WORKBOOK_TITLE_MAX_LENGTH = 120
 WORKBOOK_SNAPSHOT_MAX_BYTES = 2_500_000
 WORKBOOK_TITLE_ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9 -]+$")
+WORKBENCH_ROW_ID_COL = "_workbench_row_id"
+EXCLUSION_REASON_COL = "_exclusion_reason"
+EXCLUSION_REASON_LABEL = "Reason for exclusion"
 
 
 def _normalise_workbook_id(raw_value: str) -> Optional[str]:
@@ -406,15 +565,17 @@ def _snapshot_dataframe_from_payload(payload: Any) -> pd.DataFrame:
 
 
 def _build_workbook_snapshot(request: HttpRequest, selected_filters: dict[str, list[str]]) -> dict[str, Any]:
-    reports_df_full = get_dataframe(request.session, "reports_df")
+    reports_df_full = _get_reports_df_with_row_ids(request.session)
     reports_df_filtered = _apply_explore_dashboard_filters(reports_df_full, selected_filters)
     theme_summary_df = get_dataframe(request.session, "theme_summary_table")
+    excluded_reports_df = _get_excluded_reports_df(request.session)
 
     payload = _build_explore_dashboard_payload(reports_df_filtered)
     payload["selected"] = selected_filters
     return {
         "dashboard_payload": payload,
         "reports_df": _snapshot_dataframe_to_payload(reports_df_filtered),
+        "excluded_reports_df": _snapshot_dataframe_to_payload(excluded_reports_df),
         "theme_summary_df": _snapshot_dataframe_to_payload(theme_summary_df),
         "saved_from_path": request.path,
     }
@@ -452,12 +613,16 @@ def _selected_filters_from_snapshot(snapshot: dict[str, Any]) -> dict[str, list[
 
 def _restore_workspace_from_snapshot(request: HttpRequest, snapshot: dict[str, Any]) -> None:
     session = request.session
-    reports_df = _snapshot_dataframe_from_payload(snapshot.get("reports_df"))
+    reports_df, _ = _ensure_workbench_row_ids(_snapshot_dataframe_from_payload(snapshot.get("reports_df")))
+    excluded_reports_df, _ = _normalise_excluded_reports_df(
+        _snapshot_dataframe_from_payload(snapshot.get("excluded_reports_df"))
+    )
     theme_summary_df = _snapshot_dataframe_from_payload(snapshot.get("theme_summary_df"))
 
-    set_dataframe(session, "reports_df", reports_df)
-    set_dataframe(session, "reports_df_initial", reports_df)
+    _set_reports_df_with_row_ids(session, "reports_df", reports_df)
+    _set_reports_df_with_row_ids(session, "reports_df_initial", reports_df)
     clear_outputs_for_new_dataset(session)
+    _set_excluded_reports_df(session, excluded_reports_df)
 
     if theme_summary_df.empty:
         session["theme_summary_table"] = None
@@ -589,7 +754,8 @@ def _resolve_active_workbook(request: HttpRequest) -> tuple[Optional[Workbook], 
 def _build_context(request: HttpRequest) -> dict[str, Any]:
     session = request.session
 
-    reports_df_full = get_dataframe(session, "reports_df")
+    reports_df_full = _get_reports_df_with_row_ids(session)
+    excluded_reports_df = _get_excluded_reports_df(session)
     dashboard_filters = _get_explore_dashboard_filters(request)
     reports_df = _apply_explore_dashboard_filters(reports_df_full, dashboard_filters)
     theme_summary_df = get_dataframe(session, "theme_summary_table")
@@ -605,7 +771,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     ]
 
     if session.get("reports_df_initial") is None and not reports_df_full.empty:
-        set_dataframe(session, "reports_df_initial", reports_df_full)
+        _set_reports_df_with_row_ids(session, "reports_df_initial", reports_df_full)
 
     reports_count = len(reports_df)
     page_size = 100
@@ -620,6 +786,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     page_start = (page - 1) * page_size
     page_end = page_start + page_size
     reports_page_df = reports_df.iloc[page_start:page_end].copy()
+    reports_columns, reports_rows = _dataset_table_rows(reports_page_df, include_reason=False)
     earliest_display = "-"
     latest_display = "-"
     if not reports_df.empty and "date" in reports_df.columns:
@@ -674,10 +841,13 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         or session.get("preview_state")
     )
     has_existing_themes = _has_existing_theme_assignments(session, reports_df_full)
+    excluded_context = _build_excluded_reports_context(excluded_reports_df, allow_restore=True)
 
     return {
         "reports_df": reports_df,
-        "reports_html": _df_to_html(reports_page_df),
+        "reports_columns": reports_columns,
+        "reports_rows": reports_rows,
+        "dataset_editable": True,
         "theme_summary_df": theme_summary_sorted,
         "theme_summary_html": _df_to_html(theme_summary_sorted),
         "preview_state": preview_state,
@@ -730,6 +900,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "dashboard_filter_query": dashboard_filter_query,
         "dataset_panel_base": "/dataset-panel/",
         "dataset_browser_base": "?page=",
+        **excluded_context,
     }
 
 
@@ -782,8 +953,8 @@ def _handle_load_reports(request: HttpRequest) -> None:
         messages.error(request, "No reports were returned. Please adjust the date range.")
         return
 
-    set_dataframe(session, "reports_df", df)
-    set_dataframe(session, "reports_df_initial", df)
+    _set_reports_df_with_row_ids(session, "reports_df", df)
+    _set_reports_df_with_row_ids(session, "reports_df_initial", df)
     clear_outputs_for_new_dataset(session)
     session["history"] = []
     session["redo_history"] = []
@@ -834,8 +1005,8 @@ def _ensure_workspace_reports_loaded(request: HttpRequest) -> None:
         messages.error(request, "No reports were returned for the default date range.")
         return
 
-    set_dataframe(session, "reports_df", df)
-    set_dataframe(session, "reports_df_initial", df)
+    _set_reports_df_with_row_ids(session, "reports_df", df)
+    _set_reports_df_with_row_ids(session, "reports_df_initial", df)
     clear_outputs_for_new_dataset(session)
     session["history"] = []
     session["redo_history"] = []
@@ -920,7 +1091,7 @@ def _handle_filter_reports(request: HttpRequest) -> None:
         return
 
     set_dataframe(session, "screener_result", result_df)
-    set_dataframe(session, "reports_df", result_df)
+    _set_reports_df_with_row_ids(session, "reports_df", result_df)
     clear_outputs_for_modified_dataset(session)
     session["active_action"] = None
 
@@ -972,7 +1143,7 @@ def _handle_discover_themes(request: HttpRequest) -> None:
     if has_existing_themes:
         push_history_snapshot(session)
         cleaned_reports_df = all_reports_df.drop(columns=existing_theme_columns, errors="ignore").copy()
-        set_dataframe(session, "reports_df", cleaned_reports_df)
+        _set_reports_df_with_row_ids(session, "reports_df", cleaned_reports_df)
         clear_outputs_for_modified_dataset(session)
         reports_df = (
             _apply_explore_dashboard_filters(cleaned_reports_df, dashboard_filters)
@@ -1152,7 +1323,7 @@ def _handle_accept_themes(request: HttpRequest) -> None:
 
     theme_summary_df = preview_state.get("theme_summary")
     push_history_snapshot(session)
-    set_dataframe(session, "reports_df", preview_df)
+    _set_reports_df_with_row_ids(session, "reports_df", preview_df)
     session["reports_df_modified"] = True
     set_dataframe(session, "summary_result", preview_state.get("summary_df"))
     set_dataframe(session, "extractor_result", preview_df)
@@ -1266,7 +1437,7 @@ def _handle_extract_features(request: HttpRequest) -> None:
         return
 
     set_dataframe(session, "extractor_result", result_df)
-    set_dataframe(session, "reports_df", result_df)
+    _set_reports_df_with_row_ids(session, "reports_df", result_df)
     session["reports_df_modified"] = True
     clear_preview_state(session)
     session["active_action"] = None
@@ -1276,17 +1447,27 @@ def _handle_extract_features(request: HttpRequest) -> None:
 def _bundle_download_response(request: HttpRequest) -> HttpResponse:
     session = request.session
     reports_df = get_dataframe(session, "reports_df")
+    excluded_reports_df = _get_excluded_reports_df(session)
     theme_summary_df = get_dataframe(session, "theme_summary_table")
     feature_grid_df = _get_feature_grid_df(request, use_default=False)
 
     include_dataset = _bool_from_post(request, "download_include_dataset", default=True)
+    include_excluded = _bool_from_post(request, "download_include_excluded", default=False)
     include_theme = _bool_from_post(request, "download_include_theme", default=False)
     include_feature_grid = _bool_from_post(request, "download_include_feature_grid", default=False)
     include_script = _bool_from_post(request, "download_include_script", default=False)
 
     files: list[tuple[str, bytes]] = []
     if include_dataset and not reports_df.empty:
-        files.append(("pfd_reports.csv", reports_df.to_csv(index=False).encode("utf-8")))
+        files.append(
+            (
+                "pfd_reports.csv",
+                reports_df.drop(columns=[WORKBENCH_ROW_ID_COL], errors="ignore").to_csv(index=False).encode("utf-8"),
+            )
+        )
+    excluded_export_df = _excluded_reports_export_df(excluded_reports_df)
+    if include_excluded and not excluded_export_df.empty:
+        files.append(("pfd_excluded_reports.csv", excluded_export_df.to_csv(index=False).encode("utf-8")))
     if include_theme and not theme_summary_df.empty:
         files.append(("theme_summary.txt", theme_summary_df.to_csv(index=False, sep="\t").encode("utf-8")))
     if include_feature_grid and not feature_grid_df.empty:
@@ -1298,9 +1479,9 @@ def _bundle_download_response(request: HttpRequest) -> HttpResponse:
         raise ValueError("Select at least one resource above to enable the download.")
 
     # If only the dataset is selected, return CSV directly instead of a ZIP archive.
-    if len(files) == 1 and files[0][0] == "pfd_reports.csv":
+    if len(files) == 1 and files[0][0] in {"pfd_reports.csv", "pfd_excluded_reports.csv"}:
         response = HttpResponse(files[0][1], content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = 'attachment; filename="pfd_reports.csv"'
+        response["Content-Disposition"] = f'attachment; filename="{files[0][0]}"'
         return response
 
     zip_buffer = BytesIO()
@@ -1322,6 +1503,7 @@ def _build_shared_dataset_context(
     browser_base: str,
     prefix: str = "",
 ) -> dict[str, Any]:
+    reports_df, _ = _ensure_workbench_row_ids(reports_df)
     dashboard_filters = _get_explore_dashboard_filters(request)
     filtered_df = _apply_explore_dashboard_filters(reports_df, dashboard_filters)
 
@@ -1339,6 +1521,7 @@ def _build_shared_dataset_context(
     page_start = (page - 1) * page_size
     page_end = page_start + page_size
     reports_page_df = filtered_df.iloc[page_start:page_end].copy()
+    reports_columns, reports_rows = _dataset_table_rows(reports_page_df, include_reason=False)
 
     earliest_display = "-"
     latest_display = "-"
@@ -1364,7 +1547,9 @@ def _build_shared_dataset_context(
     return {
         f"{prefix}reports_df": filtered_df,
         f"{prefix}reports_count": reports_count,
-        f"{prefix}reports_html": _df_to_html(reports_page_df),
+        f"{prefix}reports_columns": reports_columns,
+        f"{prefix}reports_rows": reports_rows,
+        f"{prefix}dataset_editable": False,
         f"{prefix}reports_page": page,
         f"{prefix}reports_total_pages": total_pages,
         f"{prefix}reports_page_from": (page_start + 1) if reports_count else 0,
@@ -1386,22 +1571,34 @@ def _build_shared_dataset_context(
 def _bundle_download_from_workbook(workbook: Workbook, request: HttpRequest) -> HttpResponse:
     snapshot = workbook.snapshot if isinstance(workbook.snapshot, dict) else {}
     reports_df = _snapshot_dataframe_from_payload(snapshot.get("reports_df"))
+    excluded_reports_df, _ = _normalise_excluded_reports_df(
+        _snapshot_dataframe_from_payload(snapshot.get("excluded_reports_df"))
+    )
     theme_summary_df = _snapshot_dataframe_from_payload(snapshot.get("theme_summary_df"))
 
     include_dataset = _bool_from_post(request, "download_include_dataset", default=True)
+    include_excluded = _bool_from_post(request, "download_include_excluded", default=False)
     include_theme = _bool_from_post(request, "download_include_theme", default=False)
 
     files: list[tuple[str, bytes]] = []
     if include_dataset and not reports_df.empty:
-        files.append(("pfd_reports.csv", reports_df.to_csv(index=False).encode("utf-8")))
+        files.append(
+            (
+                "pfd_reports.csv",
+                reports_df.drop(columns=[WORKBENCH_ROW_ID_COL], errors="ignore").to_csv(index=False).encode("utf-8"),
+            )
+        )
+    excluded_export_df = _excluded_reports_export_df(excluded_reports_df)
+    if include_excluded and not excluded_export_df.empty:
+        files.append(("pfd_excluded_reports.csv", excluded_export_df.to_csv(index=False).encode("utf-8")))
     if include_theme and not theme_summary_df.empty:
         files.append(("theme_summary.txt", theme_summary_df.to_csv(index=False, sep="\t").encode("utf-8")))
     if not files:
         raise ValueError("Select at least one resource above to enable the download.")
 
-    if len(files) == 1 and files[0][0] == "pfd_reports.csv":
+    if len(files) == 1 and files[0][0] in {"pfd_reports.csv", "pfd_excluded_reports.csv"}:
         response = HttpResponse(files[0][1], content_type="text/csv; charset=utf-8")
-        response["Content-Disposition"] = 'attachment; filename="pfd_reports.csv"'
+        response["Content-Disposition"] = f'attachment; filename="{files[0][0]}"'
         return response
 
     zip_buffer = BytesIO()
@@ -1422,7 +1619,7 @@ def _handle_start_over(request: HttpRequest) -> None:
         return
 
     push_history_snapshot(session)
-    set_dataframe(session, "reports_df", initial_df)
+    _set_reports_df_with_row_ids(session, "reports_df", initial_df)
     clear_outputs_for_new_dataset(session)
     session["history"] = []
     session["redo_history"] = []
@@ -1436,9 +1633,84 @@ def _handle_revert_reports(request: HttpRequest) -> None:
         messages.info(request, "No baseline dataset is available to revert to.")
         return
 
-    set_dataframe(session, "reports_df", initial_df)
+    _set_reports_df_with_row_ids(session, "reports_df", initial_df)
     clear_outputs_for_new_dataset(session)
     messages.success(request, "Reverted to the initially loaded reports.")
+
+
+def _handle_exclude_report(request: HttpRequest) -> None:
+    session = request.session
+    row_id = _normalise_row_id(request.POST.get("report_row_id"))
+    if not row_id:
+        messages.error(request, "Select a report to exclude.")
+        return
+
+    reports_df = _get_reports_df_with_row_ids(session)
+    if reports_df.empty or WORKBENCH_ROW_ID_COL not in reports_df.columns:
+        messages.info(request, "No reports are available to exclude.")
+        return
+
+    row_mask = reports_df[WORKBENCH_ROW_ID_COL].astype(str) == row_id
+    if not bool(row_mask.any()):
+        messages.info(request, "That report is no longer available in the active dataset.")
+        return
+
+    exclusion_reason = (request.POST.get("exclusion_reason") or "").strip()
+
+    push_history_snapshot(session)
+    removed_rows = reports_df.loc[row_mask].copy()
+    removed_rows[EXCLUSION_REASON_COL] = exclusion_reason
+    remaining_reports = reports_df.loc[~row_mask].reset_index(drop=True)
+
+    excluded_df = _get_excluded_reports_df(session)
+    if not excluded_df.empty and WORKBENCH_ROW_ID_COL in excluded_df.columns:
+        excluded_df = excluded_df.loc[
+            excluded_df[WORKBENCH_ROW_ID_COL].astype(str) != row_id
+        ].copy()
+    updated_excluded = pd.concat([removed_rows, excluded_df], ignore_index=True, sort=False)
+
+    _set_reports_df_with_row_ids(session, "reports_df", remaining_reports)
+    _set_excluded_reports_df(session, updated_excluded)
+    clear_outputs_for_modified_dataset(session)
+    session["active_action"] = None
+    messages.success(request, "Report excluded from the working dataset.")
+
+
+def _handle_restore_excluded_report(request: HttpRequest) -> None:
+    session = request.session
+    row_id = _normalise_row_id(request.POST.get("report_row_id"))
+    if not row_id:
+        messages.error(request, "Select a report to restore.")
+        return
+
+    excluded_df = _get_excluded_reports_df(session)
+    if excluded_df.empty or WORKBENCH_ROW_ID_COL not in excluded_df.columns:
+        messages.info(request, "There are no excluded reports to restore.")
+        return
+
+    restore_mask = excluded_df[WORKBENCH_ROW_ID_COL].astype(str) == row_id
+    if not bool(restore_mask.any()):
+        messages.info(request, "That excluded report is no longer available.")
+        return
+
+    push_history_snapshot(session)
+
+    restored_rows = excluded_df.loc[restore_mask].drop(columns=[EXCLUSION_REASON_COL], errors="ignore").copy()
+    remaining_excluded = excluded_df.loc[~restore_mask].reset_index(drop=True)
+
+    reports_df = _get_reports_df_with_row_ids(session)
+    if WORKBENCH_ROW_ID_COL in reports_df.columns:
+        existing_ids = set(reports_df[WORKBENCH_ROW_ID_COL].astype(str))
+        restored_rows = restored_rows.loc[
+            ~restored_rows[WORKBENCH_ROW_ID_COL].astype(str).isin(existing_ids)
+        ].copy()
+
+    updated_reports = pd.concat([reports_df, restored_rows], ignore_index=True, sort=False)
+    _set_reports_df_with_row_ids(session, "reports_df", updated_reports)
+    _set_excluded_reports_df(session, remaining_excluded)
+    clear_outputs_for_modified_dataset(session)
+    session["active_action"] = None
+    messages.success(request, "Excluded report restored to the working dataset.")
 
 
 def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
@@ -1469,6 +1741,10 @@ def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
         _handle_start_over(request)
     elif action == "revert_reports":
         _handle_revert_reports(request)
+    elif action == "exclude_report":
+        _handle_exclude_report(request)
+    elif action == "restore_excluded_report":
+        _handle_restore_excluded_report(request)
     elif action == "download_bundle":
         try:
             return _bundle_download_response(request)
@@ -1594,9 +1870,11 @@ def workbook_public(request: HttpRequest, share_number: int, title_slug: str) ->
     if not isinstance(payload, dict):
         payload = {}
     reports_df = pd.DataFrame()
+    excluded_reports_df = pd.DataFrame()
     theme_summary_df = pd.DataFrame()
     if isinstance(workbook.snapshot, dict):
         reports_df = _snapshot_dataframe_from_payload(workbook.snapshot.get("reports_df"))
+        excluded_reports_df = _snapshot_dataframe_from_payload(workbook.snapshot.get("excluded_reports_df"))
         theme_summary_df = _snapshot_dataframe_from_payload(workbook.snapshot.get("theme_summary_df"))
     panel_base = f"/workbooks/{workbook.share_number}-{canonical_slug}/dataset-panel/"
     browser_base = f"/workbooks/{workbook.share_number}-{canonical_slug}/?page="
@@ -1620,9 +1898,15 @@ def workbook_public(request: HttpRequest, share_number: int, title_slug: str) ->
             "emoji": "*",
         }
 
+    excluded_context = _build_excluded_reports_context(
+        _normalise_excluded_reports_df(excluded_reports_df)[0],
+        allow_restore=False,
+    )
+
     context = {
         "current_page": "explore",
         **shared_context,
+        **excluded_context,
         "explore_dashboard_payload": payload,
         "workbook": workbook,
         "has_theme_summary": not theme_summary_sorted.empty,
@@ -1728,10 +2012,16 @@ def explore(request: HttpRequest) -> HttpResponse:
         response = _handle_post_action(request)
         if response is not None:
             return response
-        return redirect("workbench:explore")
+        query = request.GET.urlencode()
+        target = reverse("workbench:explore")
+        if query:
+            target = f"{target}?{query}"
+        return redirect(target)
 
     context = _build_context(request)
-    context["explore_dashboard_payload"] = _build_explore_dashboard_payload(get_dataframe(request.session, "reports_df"))
+    context["explore_dashboard_payload"] = _build_explore_dashboard_payload(
+        _get_reports_df_with_row_ids(request.session)
+    )
     context["explore_dashboard_payload"]["selected"] = {
         "coroner": context.get("dashboard_selected_coroners", []),
         "area": context.get("dashboard_selected_areas", []),

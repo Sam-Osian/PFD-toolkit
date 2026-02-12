@@ -2452,6 +2452,7 @@ body.sidebar-collapsed .sidebar-nav__item {
 }
 
 .explore-surface--dataset .section-card-header,
+.explore-surface--excluded .section-card-header,
 .explore-surface--theme .section-card-header,
 .explore-surface--workflow .section-card-header {
     margin-bottom: 0.72rem;
@@ -2465,6 +2466,7 @@ body.sidebar-collapsed .sidebar-nav__item {
 }
 
 .dataset-collapse-toggle,
+.excluded-collapse-toggle,
 .theme-collapse-toggle {
     min-height: 2.1rem;
     border-radius: 10px;
@@ -2477,12 +2479,17 @@ body.sidebar-collapsed .sidebar-nav__item {
 }
 
 .dataset-collapse-toggle__icon,
+.excluded-collapse-toggle__icon,
 .theme-collapse-toggle__icon {
     font-size: 0.94rem;
     transition: transform 0.22s ease;
 }
 
 .explore-surface--dataset.is-collapsed .dataset-collapse-toggle__icon {
+    transform: rotate(-90deg);
+}
+
+.explore-surface--excluded.is-collapsed .excluded-collapse-toggle__icon {
     transform: rotate(-90deg);
 }
 
@@ -2499,6 +2506,21 @@ body.sidebar-collapsed .sidebar-nav__item {
 }
 
 .explore-surface--dataset.is-collapsed .dataset-collapse-panel {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    pointer-events: none;
+}
+
+.excluded-collapse-panel {
+    margin-top: 0.12rem;
+    max-height: 120rem;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.2s ease;
+}
+
+.explore-surface--excluded.is-collapsed .excluded-collapse-panel {
     max-height: 0;
     opacity: 0;
     margin-top: 0;
@@ -2599,6 +2621,136 @@ body.sidebar-collapsed .sidebar-nav__item {
 
 .dataset-page-btn--goto i {
     font-size: 0.84rem;
+}
+
+.dataset-empty,
+.excluded-readonly-note {
+    margin: 0.15rem 0 0;
+    color: rgba(213, 223, 255, 0.74);
+    font-size: 0.82rem;
+}
+
+.data-card .data-table th.dataset-col-action,
+.data-card .data-table td.dataset-col-action,
+.data-card .data-table th.dataset-row-actions-head,
+.data-card .data-table td.dataset-row-actions-cell,
+.data-card .data-table td.dataset-row-restore-cell {
+    width: 4.8rem;
+    min-width: 4.8rem;
+    text-align: right;
+}
+
+.dataset-row-actions-cell {
+    position: relative;
+    z-index: 3;
+}
+
+.dataset-row-actions {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.dataset-row-delete-btn {
+    width: 1.95rem;
+    height: 1.95rem;
+    border-radius: 999px;
+    border: 1px solid rgba(248, 169, 182, 0.34);
+    background: rgba(128, 52, 73, 0.28);
+    color: rgba(255, 226, 232, 0.92);
+    padding: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(4px) scale(0.96);
+    transition: opacity 0.16s ease, transform 0.16s ease, background-color 0.16s ease;
+}
+
+.dataset-row-delete-btn i {
+    font-size: 0.95rem;
+}
+
+.data-table tbody tr:hover .dataset-row-delete-btn,
+.data-table tbody tr:focus-within .dataset-row-delete-btn,
+.dataset-row-actions.is-open .dataset-row-delete-btn {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0) scale(1);
+}
+
+.dataset-row-delete-btn:hover:not(:disabled) {
+    background: rgba(144, 56, 81, 0.38);
+}
+
+.dataset-row-delete-popover {
+    position: absolute;
+    top: 50%;
+    left: calc(100% + 0.46rem);
+    transform: translateY(-50%);
+    width: min(15rem, calc(100vw - 2rem));
+    border-radius: 10px;
+    border: 1px solid rgba(176, 190, 255, 0.34);
+    background: rgba(11, 17, 44, 0.98);
+    box-shadow: 0 15px 32px rgba(4, 8, 24, 0.52);
+    padding: 0.5rem 0.56rem;
+    display: grid;
+    gap: 0.42rem;
+    z-index: 40;
+}
+
+.dataset-row-delete-popover.hidden {
+    display: none;
+}
+
+.dataset-row-delete-popover label {
+    margin: 0;
+    font-size: 0.67rem;
+    letter-spacing: 0.03em;
+    color: rgba(220, 229, 255, 0.86);
+    text-transform: none;
+}
+
+.dataset-row-delete-popover textarea {
+    min-height: 2.6rem;
+    max-height: 6.2rem;
+    resize: vertical;
+    font-size: 0.75rem;
+    padding: 0.4rem 0.48rem;
+    border-radius: 8px;
+}
+
+.dataset-row-delete-popover__actions {
+    display: inline-flex;
+    justify-content: flex-end;
+    gap: 0.34rem;
+}
+
+.dataset-row-delete-popover__actions .button-secondary {
+    min-height: 1.62rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 0.29rem 0.52rem;
+}
+
+.dataset-row-delete-confirm {
+    border-color: rgba(248, 170, 184, 0.4);
+    background: rgba(137, 57, 79, 0.4);
+    color: rgba(255, 234, 238, 0.95);
+}
+
+.dataset-row-restore-cell {
+    text-align: right;
+}
+
+.dataset-restore-form {
+    margin: 0;
+    display: inline-flex;
+}
+
+.dataset-restore-btn {
+    min-height: 1.86rem;
+    font-size: 0.74rem;
+    padding: 0.36rem 0.58rem;
 }
 
 .data-table thead th {
@@ -3371,6 +3523,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     }
 
     .dataset-collapse-toggle,
+    .excluded-collapse-toggle,
     .theme-collapse-toggle {
         width: 100%;
         justify-content: center;
@@ -3397,6 +3550,12 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 
     .dataset-pagination__goto {
         margin-left: auto;
+    }
+
+    .dataset-row-delete-popover {
+        left: auto;
+        right: calc(100% + 0.46rem);
+        width: min(13rem, calc(100vw - 1.4rem));
     }
 
     .explore-dashboard {

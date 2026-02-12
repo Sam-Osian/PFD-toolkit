@@ -1,0 +1,61 @@
+<section
+    class="explore-surface explore-surface--excluded data-card reveal-up is-collapsed"
+    data-excluded-collapse-root
+    data-excluded-count="{{ excluded_reports_count }}"
+>
+    <div class="section-card-header">
+        <button
+            type="button"
+            class="button-secondary excluded-collapse-toggle"
+            data-excluded-collapse-toggle
+            aria-expanded="false"
+            aria-controls="excluded-collapse-body"
+            title="Show or hide excluded reports"
+        >
+            <i class="hgi hgi-stroke hgi-arrow-down-01 excluded-collapse-toggle__icon" aria-hidden="true"></i>
+            <span data-excluded-collapse-label>Show excluded reports ({{ excluded_reports_count }})</span>
+        </button>
+    </div>
+    <div class="excluded-collapse-panel" id="excluded-collapse-body" data-excluded-collapse-body>
+        {% if excluded_reports_available %}
+            {% if not excluded_reports_restore_enabled %}
+                <p class="excluded-readonly-note">Read-only view: exclusions and reasons are shown for transparency.</p>
+            {% endif %}
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {% for column in excluded_reports_columns %}
+                                <th>{{ column }}</th>
+                            {% endfor %}
+                            {% if excluded_reports_restore_enabled %}
+                                <th class="dataset-row-actions-head"><span class="sr-only">Restore</span></th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in excluded_reports_rows %}
+                            <tr>
+                                {% for cell in row.cells %}
+                                    <td>{{ cell }}</td>
+                                {% endfor %}
+                                {% if excluded_reports_restore_enabled %}
+                                    <td class="dataset-row-restore-cell">
+                                        <form method="post" class="dataset-restore-form" data-dataset-mutate>
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="restore_excluded_report">
+                                            <input type="hidden" name="report_row_id" value="{{ row.row_id }}">
+                                            <button type="submit" class="button-secondary dataset-restore-btn">Restore</button>
+                                        </form>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p class="dataset-empty">No reports have been excluded.</p>
+        {% endif %}
+    </div>
+</section>

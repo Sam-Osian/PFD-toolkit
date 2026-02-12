@@ -13,8 +13,62 @@
         </button>
     </div>
     <div class="dataset-collapse-panel" id="dataset-collapse-body" data-dataset-collapse-body>
-        {% if reports_html %}
-            <div class="table-wrap">{{ reports_html|safe }}</div>
+        {% if reports_rows %}
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {% for column in reports_columns %}
+                                <th>{{ column }}</th>
+                            {% endfor %}
+                            {% if dataset_editable %}
+                                <th class="dataset-row-actions-head"><span class="sr-only">Actions</span></th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in reports_rows %}
+                            <tr data-report-row-id="{{ row.row_id }}">
+                                {% for cell in row.cells %}
+                                    <td>{{ cell }}</td>
+                                {% endfor %}
+                                {% if dataset_editable %}
+                                    <td class="dataset-row-actions-cell">
+                                        <div class="dataset-row-actions" data-row-actions-root>
+                                            <button
+                                                type="button"
+                                                class="dataset-row-delete-btn"
+                                                data-row-delete-toggle
+                                                aria-label="Exclude report"
+                                                title="Exclude this report"
+                                            >
+                                                <i class="hgi hgi-stroke hgi-delete-02" aria-hidden="true"></i>
+                                            </button>
+                                            <form method="post" class="dataset-row-delete-popover hidden" data-row-delete-popover data-dataset-mutate>
+                                                {% csrf_token %}
+                                                <input type="hidden" name="action" value="exclude_report">
+                                                <input type="hidden" name="report_row_id" value="{{ row.row_id }}">
+                                                <label for="exclude-reason-{{ forloop.counter }}">Reason for exclusion (optional)</label>
+                                                <textarea
+                                                    id="exclude-reason-{{ forloop.counter }}"
+                                                    name="exclusion_reason"
+                                                    rows="2"
+                                                    maxlength="280"
+                                                    placeholder="e.g. Out of scope for this analysis."
+                                                ></textarea>
+                                                <div class="dataset-row-delete-popover__actions">
+                                                    <button type="button" class="button-secondary" data-row-delete-cancel>Cancel</button>
+                                                    <button type="submit" class="button-secondary dataset-row-delete-confirm">Remove</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             <div class="dataset-pagination">
                 <span class="dataset-pagination__meta">Showing {{ reports_page_from }}-{{ reports_page_to }} of {{ reports_count }}</span>
                 <div class="dataset-pagination__actions">
@@ -91,6 +145,8 @@
                     </form>
                 </div>
             </div>
+        {% elif reports_count == 0 %}
+            <p class="dataset-empty">No reports match the current dashboard filters.</p>
         {% endif %}
     </div>
 </section>

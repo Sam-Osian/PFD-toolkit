@@ -31,7 +31,7 @@
                     <i class="hgi hgi-stroke hgi-copy-01 action-rail-btn__share-mark" aria-hidden="true"></i>
                     <span>Make editable copy</span>
                 </button>
-                <button type="button" class="action-rail-btn action-rail-btn--download" data-download-open aria-label="Download reports" {% if not dataset_available %}disabled{% endif %}>
+                <button type="button" class="action-rail-btn action-rail-btn--download" data-download-open aria-label="Download reports" {% if not dataset_available and not excluded_reports_available %}disabled{% endif %}>
                     <i class="hgi hgi-stroke hgi-download-01 action-rail-btn__share-mark" aria-hidden="true"></i>
                     <span>Download reports</span>
                 </button>
@@ -39,6 +39,9 @@
                     <form method="post" action="{% url 'workbench:workbook_download' share_number=workbook.share_number title_slug=workbook.title|slugify %}" class="download-bundle-form">
                         {% csrf_token %}
                         <label class="checkbox"><input type="checkbox" name="download_include_dataset" checked> <span>Working dataset</span></label>
+                        {% if excluded_reports_available %}
+                            <label class="checkbox"><input type="checkbox" name="download_include_excluded" checked> <span>Excluded reports</span></label>
+                        {% endif %}
                         <label class="checkbox"><input type="checkbox" name="download_include_theme" {% if has_theme_summary %}checked{% endif %} {% if not has_theme_summary %}disabled{% endif %}> <span>Theme table</span></label>
                         <div class="download-popover__actions">
                             <button type="button" class="button-secondary" data-download-cancel>Cancel</button>
@@ -126,6 +129,10 @@
 
     {% if theme_summary_html %}
         {% include "workbench/_theme_summary_section.html" %}
+    {% endif %}
+
+    {% if excluded_reports_available %}
+        {% include "workbench/_excluded_reports_section.html" %}
     {% endif %}
 </div>
 

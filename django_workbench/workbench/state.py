@@ -24,6 +24,7 @@ FRAME_MEMORY_CACHE_MAX = 6
 SNAPSHOT_KEYS = [
     "reports_df",
     "reports_df_initial",
+    "excluded_reports_df",
     "reports_df_modified",
     "screener_result",
     "extractor_result",
@@ -64,6 +65,7 @@ def init_state(session: dict[str, Any]) -> None:
     defaults: Dict[str, Any] = {
         "reports_df": None,
         "reports_df_initial": None,
+        "excluded_reports_df": None,
         "history": [],
         "redo_history": [],
         "active_action": None,
@@ -259,6 +261,7 @@ def clear_preview_state(session: dict[str, Any]) -> None:
 
 def clear_outputs_for_new_dataset(session: dict[str, Any]) -> None:
     session["reports_df_modified"] = False
+    session["excluded_reports_df"] = None
     session["screener_result"] = None
     session["extractor_result"] = None
     session["summary_result"] = None
@@ -383,6 +386,7 @@ def workspace_has_activity(session: dict[str, Any]) -> bool:
         return True
 
     for key in (
+        "excluded_reports_df",
         "screener_result",
         "extractor_result",
         "summary_result",
