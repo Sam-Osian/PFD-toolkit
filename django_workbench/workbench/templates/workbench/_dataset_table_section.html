@@ -20,8 +20,8 @@
                 <div class="dataset-pagination__actions">
                     {% if reports_page > 1 %}
                         <a
-                            href="?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                            data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            href="{{ dataset_browser_base|default:'?page=' }}1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            data-dataset-panel-url="{{ dataset_panel_base|default:'/dataset-panel/' }}?page=1{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
                             class="button-secondary dataset-page-btn dataset-page-btn--first"
                         >
                             <i class="hgi hgi-stroke hgi-home-01" aria-hidden="true"></i>
@@ -36,8 +36,8 @@
 
                     {% if reports_prev_page %}
                         <a
-                            href="?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                            data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            href="{{ dataset_browser_base|default:'?page=' }}{{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            data-dataset-panel-url="{{ dataset_panel_base|default:'/dataset-panel/' }}?page={{ reports_prev_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
                             class="button-secondary dataset-page-btn dataset-page-btn--icon"
                             aria-label="Previous page"
                         >
@@ -53,8 +53,8 @@
                     <span class="dataset-pagination__page">Page {{ reports_page }} of {{ reports_total_pages }}</span>
                     {% if reports_next_page %}
                         <a
-                            href="?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
-                            data-dataset-panel-url="{% url 'workbench:dataset_panel' %}?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            href="{{ dataset_browser_base|default:'?page=' }}{{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
+                            data-dataset-panel-url="{{ dataset_panel_base|default:'/dataset-panel/' }}?page={{ reports_next_page }}{% if dashboard_filter_query %}&{{ dashboard_filter_query }}{% endif %}"
                             class="button-secondary dataset-page-btn dataset-page-btn--icon"
                             aria-label="Next page"
                         >
@@ -70,8 +70,8 @@
                     <form
                         class="dataset-pagination__goto"
                         data-dataset-goto
-                        data-dataset-panel-base="{% url 'workbench:dataset_panel' %}"
-                        data-dataset-browser-base="?page="
+                        data-dataset-panel-base="{{ dataset_panel_base|default:'/dataset-panel/' }}"
+                        data-dataset-browser-base="{{ dataset_browser_base|default:'?page=' }}"
                         data-dataset-shared-query="{{ dashboard_filter_query }}"
                     >
                         <label for="dataset-page-input" class="sr-only">Go to page</label>

@@ -11,6 +11,9 @@
         if (pathname.startsWith("/explore-pfds")) {
             return "explore";
         }
+        if (pathname.startsWith("/workbooks/")) {
+            return "explore";
+        }
         if (pathname.startsWith("/filter")) {
             return "explore";
         }
@@ -1613,8 +1616,10 @@
                 return;
             }
             const query = buildFilterQueryString();
-            const panelUrl = `/dataset-panel/?page=1${query ? `&${query}` : ""}`;
-            const targetUrl = `?page=1${query ? `&${query}` : ""}`;
+            const panelBase = root.dataset.dashboardPanelBase || "/dataset-panel/";
+            const browserBase = root.dataset.dashboardBrowserBase || "?page=";
+            const panelUrl = `${panelBase}?page=1${query ? `&${query}` : ""}`;
+            const targetUrl = `${browserBase}1${query ? `&${query}` : ""}`;
             window.WorkbenchDatasetPanel.fetchAndSwapDataset(panelUrl, targetUrl);
         }
 
@@ -1993,6 +1998,184 @@
         renderDashboard();
     }
 
+    function setupWorkbookControls() {
+        const root = byId("workbook-controls");
+        if (!root || root.dataset.bound === "1") {
+            return;
+        }
+        root.dataset.bound = "1";
+
+        const titleInput = byId("workbook-title-input");
+        const shareButton = root.querySelector("[data-workbook-share]");
+        const statusNode = byId("workbook-controls-status");
+        if (!titleInput || !shareButton) {
+            return;
+        }
+
+        function setStatus(text, isError) {
+            if (!statusNode) {
+                return;
+            }
+            statusNode.textContent = text || "";
+            statusNode.style.color = isError ? "rgba(255, 183, 183, 0.9)" : "rgba(205, 217, 255, 0.72)";
+        }
+
+        function getCsrfToken() {
+            const cookie = document.cookie || "";
+            const match = cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+            if (match && match[1]) {
+                return decodeURIComponent(match[1]);
+            }
+            const csrfInput = document.querySelector("input[name='csrfmiddlewaretoken']");
+            return csrfInput ? csrfInput.value : "";
+        }
+
+        function getFilters() {
+            if (
+                window.WorkbenchDashboardFilters &&
+                typeof window.WorkbenchDashboardFilters.getSelection === "function"
+            ) {
+                return window.WorkbenchDashboardFilters.getSelection();
+            }
+            return { coroner: [], area: [], receiver: [] };
+        }
+
+        function getWorkbookState() {
+            return {
+                workbookId: (root.dataset.workbookId || "").trim(),
+                editToken: (root.dataset.workbookEditToken || "").trim(),
+                createUrl: (root.dataset.workbookCreateUrl || "").trim(),
+                saveTemplate: (root.dataset.workbookSaveUrlTemplate || "").trim(),
+            };
+        }
+
+        function setWorkbookState(payload) {
+            if (!payload || typeof payload !== "object") {
+                return;
+            }
+            if (payload.workbook_id) {
+                root.dataset.workbookId = payload.workbook_id;
+            }
+            if (payload.edit_token) {
+                root.dataset.workbookEditToken = payload.edit_token;
+            }
+            const currentUrl = new URL(window.location.href);
+            if (payload.workbook_id) {
+                currentUrl.searchParams.set("workbook", payload.workbook_id);
+            }
+            if (root.dataset.workbookEditToken) {
+                currentUrl.searchParams.set("edit", root.dataset.workbookEditToken);
+            }
+            window.history.replaceState(window.history.state, "", currentUrl.toString());
+        }
+
+        function updateControlsEnabledState() {
+            const hasTitle = Boolean((titleInput.value || "").trim());
+            shareButton.disabled = !hasTitle;
+        }
+
+        function isValidWorksheetTitle(title) {
+            return /^[A-Za-z0-9 -]+$/.test(title);
+        }
+
+        async function saveWorkbook() {
+            const title = (titleInput.value || "").trim();
+            if (!title) {
+                setStatus("Name this workbook first.", true);
+                updateControlsEnabledState();
+                return null;
+            }
+            if (!isValidWorksheetTitle(title)) {
+                setStatus("Use letters, numbers, spaces, and hyphens only.", true);
+                updateControlsEnabledState();
+                return null;
+            }
+
+            const state = getWorkbookState();
+            if (!state.createUrl) {
+                setStatus("Workbook endpoints are not configured.", true);
+                return null;
+            }
+
+            const hasWorkbook = Boolean(state.workbookId && state.editToken);
+            const targetUrl = hasWorkbook
+                ? state.saveTemplate.replace(
+                    "00000000-0000-0000-0000-000000000000",
+                    state.workbookId
+                )
+                : state.createUrl;
+            const body = {
+                title,
+                filters: getFilters(),
+            };
+            if (hasWorkbook) {
+                body.edit_token = state.editToken;
+            }
+
+            setStatus("Saving...");
+            shareButton.disabled = true;
+
+            let response;
+            try {
+                response = await fetch(targetUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "X-CSRFToken": getCsrfToken(),
+                    },
+                    credentials: "same-origin",
+                    body: JSON.stringify(body),
+                });
+            } catch (error) {
+                setStatus("Save failed. Check your connection.", true);
+                updateControlsEnabledState();
+                return null;
+            }
+
+            let payload = {};
+            try {
+                payload = await response.json();
+            } catch (error) {
+                payload = {};
+            }
+
+            if (!response.ok || !payload.ok) {
+                setStatus(payload.error || "Save failed.", true);
+                updateControlsEnabledState();
+                return null;
+            }
+
+            setWorkbookState(payload);
+            updateControlsEnabledState();
+            setStatus("Worksheet saved.");
+            return payload;
+        }
+
+        async function shareWorkbook() {
+            const payload = await saveWorkbook();
+            if (!payload || !payload.share_url) {
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(payload.share_url);
+                setStatus("Share link copied.");
+            } catch (error) {
+                setStatus("Share link ready.");
+                window.prompt("Copy this share link:", payload.share_url);
+            }
+        }
+
+        titleInput.addEventListener("input", function () {
+            setStatus("");
+            updateControlsEnabledState();
+        });
+        shareButton.addEventListener("click", function () {
+            shareWorkbook();
+        });
+
+        updateControlsEnabledState();
+    }
+
     function setupConfigModalDismiss() {
         const modal = byId("config-modal");
         if (!modal) {
@@ -2140,6 +2323,7 @@
         setupAdvancedAIPopovers();
         setupDatasetPagination();
         setupExploreDashboard();
+        setupWorkbookControls();
         setupConfigModalDismiss();
 
         const provider = byId("provider_override");

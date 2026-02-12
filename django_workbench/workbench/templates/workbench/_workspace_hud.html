@@ -22,17 +22,15 @@
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="undo">
-                <button type="submit" class="action-rail-btn action-rail-btn--compact" {% if history_depth == 0 %}disabled{% endif %} aria-label="Undo" title="Undo{% if history_depth %} ({{ history_depth }}){% endif %}">
-                    <i class="hgi hgi-stroke hgi-undo action-rail-btn__icon"></i>
-                    <span>Undo</span>
+                <button type="submit" class="action-rail-btn action-rail-btn--icon" {% if history_depth == 0 %}disabled{% endif %} aria-label="Undo" title="Undo{% if history_depth %} ({{ history_depth }}){% endif %}">
+                    <i class="hgi hgi-stroke hgi-undo-03 action-rail-btn__icon"></i>
                 </button>
             </form>
             <form method="post">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="redo">
-                <button type="submit" class="action-rail-btn action-rail-btn--compact" {% if redo_depth == 0 %}disabled{% endif %} aria-label="Redo" title="Redo{% if redo_depth %} ({{ redo_depth }}){% endif %}">
-                    <i class="hgi hgi-stroke hgi-redo action-rail-btn__icon"></i>
-                    <span>Redo</span>
+                <button type="submit" class="action-rail-btn action-rail-btn--icon" {% if redo_depth == 0 %}disabled{% endif %} aria-label="Redo" title="Redo{% if redo_depth %} ({{ redo_depth }}){% endif %}">
+                    <i class="hgi hgi-stroke hgi-redo-03 action-rail-btn__icon"></i>
                 </button>
             </form>
             <button type="button" class="action-rail-btn action-rail-btn--icon action-rail-btn--danger" data-start-over-open {% if not workspace_active %}disabled{% endif %} aria-label="Start over" title="Start over">
@@ -43,10 +41,33 @@
                 <i class="hgi hgi-stroke hgi-download-01 action-rail-btn__share-mark" aria-hidden="true"></i>
                 <span>Download reports</span>
             </button>
-            <button type="button" class="action-rail-btn action-rail-btn--share" aria-label="Share">
-                <i class="hgi hgi-stroke hgi-user action-rail-btn__share-mark" aria-hidden="true"></i>
-                <span>Share</span>
-            </button>
+            <div
+                class="workbook-controls"
+                id="workbook-controls"
+                data-workbook-id="{{ active_workbook_id }}"
+                data-workbook-edit-token="{{ active_workbook_edit_token }}"
+                data-workbook-editable="{% if active_workbook_editable %}1{% else %}0{% endif %}"
+                data-workbook-create-url="{% url 'workbench:workbook_create' %}"
+                data-workbook-save-url-template="{% url 'workbench:workbook_save' public_id='00000000-0000-0000-0000-000000000000' %}"
+            >
+                <label for="workbook-title-input" class="sr-only">Workbook title</label>
+                <input
+                    id="workbook-title-input"
+                    class="workbook-controls__title"
+                    type="text"
+                    maxlength="120"
+                    pattern="[A-Za-z0-9 -]+"
+                    placeholder="Name this workbook..."
+                    title="Use letters, numbers, spaces, and hyphens only."
+                    value="{{ active_workbook.title|default:'' }}"
+                    autocomplete="off"
+                >
+                <button type="button" class="action-rail-btn action-rail-btn--share" data-workbook-share disabled>
+                    <i class="hgi hgi-stroke hgi-user action-rail-btn__share-mark" aria-hidden="true"></i>
+                    <span>Share link</span>
+                </button>
+                <span class="workbook-controls__status" id="workbook-controls-status" aria-live="polite"></span>
+            </div>
             <div class="download-popover hidden" id="download-popover" role="dialog" aria-label="Download reports options">
                 <form method="post" class="download-bundle-form">
                     {% csrf_token %}

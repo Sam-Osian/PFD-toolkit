@@ -2,18 +2,23 @@
 from __future__ import annotations
 
 import json
+import random
+import re
 import zipfile
 from datetime import date, datetime
-from io import BytesIO
+from io import BytesIO, StringIO
 from urllib.parse import urlencode
 from typing import Any, Optional
+from uuid import UUID
 
 import pandas as pd
 from django.contrib import messages
-from django.http import HttpRequest, HttpResponse
-from django.shortcuts import redirect, render
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
+from .models import Workbook
 from .services import (
     build_extractor,
     build_feature_model_from_rows,
@@ -299,6 +304,118 @@ def _resolve_reports_for_ai_action(request: HttpRequest) -> tuple[pd.DataFrame, 
     return _apply_explore_dashboard_filters(reports_df, post_filters), post_filters
 
 
+WORKBOOK_TITLE_MAX_LENGTH = 120
+WORKBOOK_SNAPSHOT_MAX_BYTES = 2_500_000
+WORKBOOK_TITLE_ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9 -]+$")
+
+
+def _normalise_workbook_id(raw_value: str) -> Optional[str]:
+    cleaned = (raw_value or "").strip()
+    if not cleaned:
+        return None
+    try:
+        parsed = UUID(cleaned)
+    except ValueError:
+        return None
+    return str(parsed)
+
+
+def _normalise_workbook_token(raw_value: str) -> Optional[str]:
+    cleaned = (raw_value or "").strip()
+    if not cleaned:
+        return None
+    try:
+        parsed = UUID(cleaned)
+    except ValueError:
+        return None
+    return str(parsed)
+
+
+def _normalise_workbook_title(raw_value: Any) -> str:
+    title = str(raw_value or "").strip()
+    if len(title) > WORKBOOK_TITLE_MAX_LENGTH:
+        title = title[:WORKBOOK_TITLE_MAX_LENGTH].rstrip()
+    return title
+
+
+def _workbook_title_error(title: str) -> Optional[str]:
+    if not title:
+        return "Worksheet name is required."
+    if not WORKBOOK_TITLE_ALLOWED_PATTERN.fullmatch(title):
+        return "Worksheet name can use letters, numbers, spaces, and hyphens only."
+    return None
+
+
+def _workbook_title_slug(title: str) -> str:
+    slug = slugify(title)
+    return slug or "worksheet"
+
+
+def _allocate_workbook_share_number() -> int:
+    for _ in range(30):
+        candidate = random.randint(100000, 999999)
+        if not Workbook.objects.filter(share_number=candidate).exists():
+            return candidate
+    raise RuntimeError("Could not allocate a unique worksheet share number.")
+
+
+def _normalise_workbook_filters(raw_filters: Any) -> dict[str, list[str]]:
+    if not isinstance(raw_filters, dict):
+        return {"coroner": [], "area": [], "receiver": []}
+    return {
+        "coroner": _parse_explore_filter_values(raw_filters.get("coroner", [])),
+        "area": _parse_explore_filter_values(raw_filters.get("area", [])),
+        "receiver": _parse_explore_filter_values(raw_filters.get("receiver", [])),
+    }
+
+
+def _snapshot_dataframe_to_payload(df: pd.DataFrame) -> str:
+    if df.empty:
+        return ""
+    return df.to_json(orient="split", date_format="iso")
+
+
+def _snapshot_dataframe_from_payload(payload: Any) -> pd.DataFrame:
+    if not payload or not isinstance(payload, str):
+        return pd.DataFrame()
+    try:
+        return pd.read_json(StringIO(payload), orient="split")
+    except ValueError:
+        return pd.DataFrame()
+
+
+def _build_workbook_snapshot(request: HttpRequest, selected_filters: dict[str, list[str]]) -> dict[str, Any]:
+    reports_df_full = get_dataframe(request.session, "reports_df")
+    reports_df_filtered = _apply_explore_dashboard_filters(reports_df_full, selected_filters)
+    theme_summary_df = get_dataframe(request.session, "theme_summary_table")
+
+    payload = _build_explore_dashboard_payload(reports_df_filtered)
+    payload["selected"] = selected_filters
+    return {
+        "dashboard_payload": payload,
+        "reports_df": _snapshot_dataframe_to_payload(reports_df_filtered),
+        "theme_summary_df": _snapshot_dataframe_to_payload(theme_summary_df),
+        "saved_from_path": request.path,
+    }
+
+
+def _build_workbook_public_url(request: HttpRequest, workbook: Workbook) -> str:
+    return request.build_absolute_uri(
+        f"/workbooks/{workbook.share_number}-{_workbook_title_slug(workbook.title)}/"
+    )
+
+
+def _build_workbook_edit_url(request: HttpRequest, workbook: Workbook) -> str:
+    return request.build_absolute_uri(
+        f"/explore-pfds/?workbook={workbook.public_id}&edit={workbook.edit_token}"
+    )
+
+
+def _workbook_payload_size_ok(snapshot: dict[str, Any]) -> bool:
+    encoded = json.dumps(snapshot, separators=(",", ":"), ensure_ascii=False)
+    return len(encoded.encode("utf-8")) <= WORKBOOK_SNAPSHOT_MAX_BYTES
+
+
 def _serialize_preview_state(preview_state: dict[str, Any]) -> dict[str, Any]:
     payload = dict(preview_state)
     for key in ("summary_df", "preview_df", "theme_summary"):
@@ -397,6 +514,18 @@ def _update_sidebar_state(request: HttpRequest) -> None:
                     session["report_limit"] = n_reports
             except ValueError:
                 pass
+
+
+def _resolve_active_workbook(request: HttpRequest) -> tuple[Optional[Workbook], bool]:
+    workbook_id = _normalise_workbook_id(request.GET.get("workbook", ""))
+    edit_token = _normalise_workbook_token(request.GET.get("edit", ""))
+    if not workbook_id:
+        return None, False
+    workbook = Workbook.objects.filter(public_id=workbook_id).first()
+    if workbook is None:
+        return None, False
+    is_editable = bool(edit_token and edit_token == str(workbook.edit_token))
+    return workbook, is_editable
 
 
 def _build_context(request: HttpRequest) -> dict[str, Any]:
@@ -546,6 +675,8 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "dashboard_selected_areas": dashboard_filters["area"],
         "dashboard_selected_receivers": dashboard_filters["receiver"],
         "dashboard_filter_query": dashboard_filter_query,
+        "dataset_panel_base": "/dataset-panel/",
+        "dataset_browser_base": "?page=",
     }
 
 
@@ -1103,6 +1234,107 @@ def _bundle_download_response(request: HttpRequest) -> HttpResponse:
     return response
 
 
+def _build_shared_dataset_context(
+    request: HttpRequest,
+    reports_df: pd.DataFrame,
+    *,
+    panel_base: str,
+    browser_base: str,
+    prefix: str = "",
+) -> dict[str, Any]:
+    dashboard_filters = _get_explore_dashboard_filters(request)
+    filtered_df = _apply_explore_dashboard_filters(reports_df, dashboard_filters)
+
+    reports_count = len(filtered_df)
+    page_size = 100
+    try:
+        page = int((request.GET.get("page") or "1").strip())
+    except ValueError:
+        page = 1
+    page = max(1, page)
+    total_pages = max(1, (reports_count + page_size - 1) // page_size)
+    if page > total_pages:
+        page = total_pages
+
+    page_start = (page - 1) * page_size
+    page_end = page_start + page_size
+    reports_page_df = filtered_df.iloc[page_start:page_end].copy()
+
+    earliest_display = "-"
+    latest_display = "-"
+    if not filtered_df.empty and "date" in filtered_df.columns:
+        date_series = pd.to_datetime(filtered_df["date"], errors="coerce")
+        if not date_series.empty:
+            earliest = date_series.min()
+            latest = date_series.max()
+            if pd.notna(earliest):
+                earliest_display = earliest.strftime("%d %b %Y")
+            if pd.notna(latest):
+                latest_display = latest.strftime("%d %b %Y")
+
+    dashboard_filter_query = urlencode(
+        [
+            *[("coroner", value) for value in dashboard_filters["coroner"]],
+            *[("area", value) for value in dashboard_filters["area"]],
+            *[("receiver", value) for value in dashboard_filters["receiver"]],
+        ],
+        doseq=True,
+    )
+
+    return {
+        f"{prefix}reports_df": filtered_df,
+        f"{prefix}reports_count": reports_count,
+        f"{prefix}reports_html": _df_to_html(reports_page_df),
+        f"{prefix}reports_page": page,
+        f"{prefix}reports_total_pages": total_pages,
+        f"{prefix}reports_page_from": (page_start + 1) if reports_count else 0,
+        f"{prefix}reports_page_to": min(page_end, reports_count),
+        f"{prefix}reports_prev_page": page - 1 if page > 1 else None,
+        f"{prefix}reports_next_page": page + 1 if page < total_pages else None,
+        f"{prefix}earliest_display": earliest_display,
+        f"{prefix}latest_display": latest_display,
+        f"{prefix}dashboard_selected_coroners": dashboard_filters["coroner"],
+        f"{prefix}dashboard_selected_areas": dashboard_filters["area"],
+        f"{prefix}dashboard_selected_receivers": dashboard_filters["receiver"],
+        f"{prefix}dashboard_filter_query": dashboard_filter_query,
+        f"{prefix}dataset_available": not filtered_df.empty,
+        f"{prefix}dataset_panel_base": panel_base,
+        f"{prefix}dataset_browser_base": browser_base,
+    }
+
+
+def _bundle_download_from_workbook(workbook: Workbook, request: HttpRequest) -> HttpResponse:
+    snapshot = workbook.snapshot if isinstance(workbook.snapshot, dict) else {}
+    reports_df = _snapshot_dataframe_from_payload(snapshot.get("reports_df"))
+    theme_summary_df = _snapshot_dataframe_from_payload(snapshot.get("theme_summary_df"))
+
+    include_dataset = _bool_from_post(request, "download_include_dataset", default=True)
+    include_theme = _bool_from_post(request, "download_include_theme", default=False)
+
+    files: list[tuple[str, bytes]] = []
+    if include_dataset and not reports_df.empty:
+        files.append(("pfd_reports.csv", reports_df.to_csv(index=False).encode("utf-8")))
+    if include_theme and not theme_summary_df.empty:
+        files.append(("theme_summary.txt", theme_summary_df.to_csv(index=False, sep="\t").encode("utf-8")))
+    if not files:
+        raise ValueError("Select at least one resource above to enable the download.")
+
+    if len(files) == 1 and files[0][0] == "pfd_reports.csv":
+        response = HttpResponse(files[0][1], content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="pfd_reports.csv"'
+        return response
+
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for filename, payload in files:
+            zip_file.writestr(filename, payload)
+    zip_buffer.seek(0)
+
+    response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
+    response["Content-Disposition"] = 'attachment; filename="pfd_research_bundle.zip"'
+    return response
+
+
 def _handle_start_over(request: HttpRequest) -> None:
     session = request.session
     initial_df = get_dataframe(session, "reports_df_initial")
@@ -1189,6 +1421,172 @@ def _set_explore_modal_flag(
     context["show_config_modal"] = not request.session.get("explore_onboarded", False)
 
 
+def _json_body(request: HttpRequest) -> dict[str, Any]:
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+@require_http_methods(["POST"])
+def workbook_create(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+
+    payload = _json_body(request)
+    title = _normalise_workbook_title(payload.get("title"))
+    title_error = _workbook_title_error(title)
+    if title_error:
+        return JsonResponse({"ok": False, "error": title_error}, status=400)
+
+    selected_filters = _normalise_workbook_filters(payload.get("filters"))
+    snapshot = _build_workbook_snapshot(request, selected_filters)
+    if not _workbook_payload_size_ok(snapshot):
+        return JsonResponse({"ok": False, "error": "Workbook snapshot is too large to save."}, status=413)
+
+    workbook = Workbook.objects.create(
+        share_number=_allocate_workbook_share_number(),
+        title=title,
+        snapshot=snapshot,
+    )
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "workbook_id": str(workbook.public_id),
+            "edit_token": str(workbook.edit_token),
+            "share_url": _build_workbook_public_url(request, workbook),
+            "edit_url": _build_workbook_edit_url(request, workbook),
+            "title": workbook.title,
+        }
+    )
+
+
+@require_http_methods(["POST"])
+def workbook_save(request: HttpRequest, public_id: UUID) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+
+    workbook = get_object_or_404(Workbook, public_id=public_id)
+    payload = _json_body(request)
+
+    provided_edit_token = _normalise_workbook_token(payload.get("edit_token"))
+    if not provided_edit_token or provided_edit_token != str(workbook.edit_token):
+        return JsonResponse({"ok": False, "error": "Edit token is invalid."}, status=403)
+
+    title = _normalise_workbook_title(payload.get("title"))
+    title_error = _workbook_title_error(title)
+    if title_error:
+        return JsonResponse({"ok": False, "error": title_error}, status=400)
+
+    selected_filters = _normalise_workbook_filters(payload.get("filters"))
+    snapshot = _build_workbook_snapshot(request, selected_filters)
+    if not _workbook_payload_size_ok(snapshot):
+        return JsonResponse({"ok": False, "error": "Workbook snapshot is too large to save."}, status=413)
+
+    workbook.title = title
+    workbook.snapshot = snapshot
+    workbook.save(update_fields=["title", "snapshot", "updated_at"])
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "workbook_id": str(workbook.public_id),
+            "share_url": _build_workbook_public_url(request, workbook),
+            "edit_url": _build_workbook_edit_url(request, workbook),
+            "title": workbook.title,
+        }
+    )
+
+
+@require_http_methods(["GET"])
+def workbook_public(request: HttpRequest, share_number: int, title_slug: str) -> HttpResponse:
+    workbook = get_object_or_404(Workbook, share_number=share_number)
+    canonical_slug = _workbook_title_slug(workbook.title)
+    if title_slug != canonical_slug:
+        return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
+    payload = {}
+    if isinstance(workbook.snapshot, dict):
+        payload = workbook.snapshot.get("dashboard_payload") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    reports_df = pd.DataFrame()
+    theme_summary_df = pd.DataFrame()
+    if isinstance(workbook.snapshot, dict):
+        reports_df = _snapshot_dataframe_from_payload(workbook.snapshot.get("reports_df"))
+        theme_summary_df = _snapshot_dataframe_from_payload(workbook.snapshot.get("theme_summary_df"))
+    panel_base = f"/workbooks/{workbook.share_number}-{canonical_slug}/dataset-panel/"
+    browser_base = f"/workbooks/{workbook.share_number}-{canonical_slug}/?page="
+    shared_context = _build_shared_dataset_context(
+        request,
+        reports_df,
+        panel_base=panel_base,
+        browser_base=browser_base,
+    )
+    theme_summary_sorted = theme_summary_df
+    if not theme_summary_sorted.empty and {"Count", "Theme"}.issubset(theme_summary_sorted.columns):
+        theme_summary_sorted = theme_summary_sorted.sort_values(by=["Count", "Theme"], ascending=[False, True])
+
+    top_theme = None
+    if not theme_summary_sorted.empty:
+        row = theme_summary_sorted.iloc[0]
+        top_theme = {
+            "name": str(row.get("Theme", "-")).strip() or "-",
+            "count": int(row.get("Count", 0)),
+            "pct": float(row.get("%", 0.0)),
+            "emoji": "*",
+        }
+
+    context = {
+        "current_page": "explore",
+        **shared_context,
+        "explore_dashboard_payload": payload,
+        "workbook": workbook,
+        "has_theme_summary": not theme_summary_sorted.empty,
+        "theme_summary_html": _df_to_html(theme_summary_sorted),
+        "top_theme": top_theme,
+        "workspace_label": "Shared worksheet dataset",
+    }
+    return render(request, "workbench/workbook_public.html", context)
+
+
+@require_http_methods(["POST"])
+def workbook_download(request: HttpRequest, share_number: int, title_slug: str) -> HttpResponse:
+    workbook = get_object_or_404(Workbook, share_number=share_number)
+    canonical_slug = _workbook_title_slug(workbook.title)
+    if title_slug != canonical_slug:
+        return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
+    try:
+        return _bundle_download_from_workbook(workbook, request)
+    except ValueError as exc:
+        messages.info(request, str(exc))
+        return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
+
+
+@require_http_methods(["GET"])
+def workbook_dataset_panel(request: HttpRequest, share_number: int, title_slug: str) -> HttpResponse:
+    workbook = get_object_or_404(Workbook, share_number=share_number)
+    canonical_slug = _workbook_title_slug(workbook.title)
+    if title_slug != canonical_slug:
+        return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
+    reports_df = pd.DataFrame()
+    if isinstance(workbook.snapshot, dict):
+        reports_df = _snapshot_dataframe_from_payload(workbook.snapshot.get("reports_df"))
+    panel_base = f"/workbooks/{workbook.share_number}-{canonical_slug}/dataset-panel/"
+    browser_base = f"/workbooks/{workbook.share_number}-{canonical_slug}/?page="
+    context = _build_shared_dataset_context(
+        request,
+        reports_df,
+        panel_base=panel_base,
+        browser_base=browser_base,
+    )
+    context["workspace_label"] = "Shared worksheet dataset"
+    return render(request, "workbench/_dataset_table_section.html", context)
+
+
 @require_http_methods(["GET"])
 def index(request: HttpRequest) -> HttpResponse:
     return home(request)
@@ -1221,6 +1619,13 @@ def explore(request: HttpRequest) -> HttpResponse:
         "area": context.get("dashboard_selected_areas", []),
         "receiver": context.get("dashboard_selected_receivers", []),
     }
+    active_workbook, workbook_editable = _resolve_active_workbook(request)
+    context["active_workbook"] = active_workbook
+    context["active_workbook_editable"] = workbook_editable
+    context["active_workbook_id"] = str(active_workbook.public_id) if active_workbook else ""
+    context["active_workbook_edit_token"] = (
+        str(active_workbook.edit_token) if active_workbook and workbook_editable else ""
+    )
     _set_explore_modal_flag(request, context, "explore")
     context["current_page"] = "explore"
     return render(request, "workbench/explore.html", context)
