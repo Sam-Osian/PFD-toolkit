@@ -231,6 +231,14 @@ def _get_explore_dashboard_filters(request: HttpRequest) -> dict[str, list[str]]
     }
 
 
+def _get_post_dashboard_filters(request: HttpRequest) -> dict[str, list[str]]:
+    return {
+        "coroner": _parse_explore_filter_values(request.POST.getlist("dashboard_coroner")),
+        "area": _parse_explore_filter_values(request.POST.getlist("dashboard_area")),
+        "receiver": _parse_explore_filter_values(request.POST.getlist("dashboard_receiver")),
+    }
+
+
 def _apply_explore_dashboard_filters(
     reports_df: pd.DataFrame, filters: dict[str, list[str]]
 ) -> pd.DataFrame:
@@ -279,6 +287,16 @@ def _apply_explore_dashboard_filters(
         filtered_df = filtered_df.loc[receiver_mask]
 
     return filtered_df.reset_index(drop=True)
+
+
+def _resolve_reports_for_ai_action(request: HttpRequest) -> tuple[pd.DataFrame, dict[str, list[str]]]:
+    session = request.session
+    reports_df = get_dataframe(session, "reports_df")
+    post_filters = _get_post_dashboard_filters(request)
+    has_post_filters = any(post_filters[field] for field in ("coroner", "area", "receiver"))
+    if not has_post_filters:
+        return reports_df, {"coroner": [], "area": [], "receiver": []}
+    return _apply_explore_dashboard_filters(reports_df, post_filters), post_filters
 
 
 def _serialize_preview_state(preview_state: dict[str, Any]) -> dict[str, Any]:
@@ -462,9 +480,9 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     )
     report_limit = session.get("report_limit")
     if isinstance(report_limit, int) and report_limit > 0:
-        report_limit_for_slider = min(5000, max(1, report_limit))
+        report_limit_for_slider = min(7000, max(1, report_limit))
     else:
-        report_limit_for_slider = min(5000, max(1, reports_count or 500))
+        report_limit_for_slider = min(7000, max(1, reports_count or 500))
 
     ai_features_used = bool(
         session.get("reports_df_modified")
@@ -661,9 +679,15 @@ def _handle_set_active_action(request: HttpRequest) -> None:
 
 def _handle_filter_reports(request: HttpRequest) -> None:
     session = request.session
-    reports_df = get_dataframe(session, "reports_df")
+    reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
     if reports_df.empty:
-        messages.info(request, "Load reports from the sidebar before screening.")
+        if any(dashboard_filters[field] for field in ("coroner", "area", "receiver")):
+            messages.error(
+                request,
+                "Your manual dashboard filters returned no reports. Adjust or discard them, then try again.",
+            )
+        else:
+            messages.info(request, "Load reports from the sidebar before screening.")
         return
 
     search_query = (request.POST.get("search_query") or "").strip()
@@ -734,9 +758,15 @@ def _handle_filter_reports(request: HttpRequest) -> None:
 
 def _handle_discover_themes(request: HttpRequest) -> None:
     session = request.session
-    reports_df = get_dataframe(session, "reports_df")
+    reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
     if reports_df.empty:
-        messages.info(request, "Load reports before discovering themes.")
+        if any(dashboard_filters[field] for field in ("coroner", "area", "receiver")):
+            messages.error(
+                request,
+                "Your manual dashboard filters returned no reports. Adjust or discard them, then try again.",
+            )
+        else:
+            messages.info(request, "Load reports before discovering themes.")
         return
 
     try:
@@ -956,9 +986,15 @@ def _parse_feature_rows_from_post(request: HttpRequest) -> pd.DataFrame:
 
 def _handle_extract_features(request: HttpRequest) -> None:
     session = request.session
-    reports_df = get_dataframe(session, "reports_df")
+    reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
     if reports_df.empty:
-        messages.info(request, "Load reports before extracting fields.")
+        if any(dashboard_filters[field] for field in ("coroner", "area", "receiver")):
+            messages.error(
+                request,
+                "Your manual dashboard filters returned no reports. Adjust or discard them, then try again.",
+            )
+        else:
+            messages.info(request, "Load reports before extracting fields.")
         return
 
     try:

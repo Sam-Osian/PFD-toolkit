@@ -630,13 +630,43 @@
             "date-range": byId("date-range-popover"),
             "llm-settings": byId("llm-settings-popover"),
         };
+        let active = null;
+
+        function positionPopover(popover, button) {
+            const panel = popover.querySelector(".topbar-popover");
+            if (!panel) {
+                return;
+            }
+
+            const margin = 10;
+            const buttonRect = button.getBoundingClientRect();
+            const panelRect = panel.getBoundingClientRect();
+
+            let left = buttonRect.left;
+            if (left + panelRect.width > window.innerWidth - margin) {
+                left = window.innerWidth - panelRect.width - margin;
+            }
+            left = Math.max(margin, left);
+
+            let top = buttonRect.bottom + 10;
+            if (top + panelRect.height > window.innerHeight - margin) {
+                top = buttonRect.top - panelRect.height - 10;
+            }
+            top = Math.max(margin, top);
+
+            popover.style.left = `${left}px`;
+            popover.style.top = `${top}px`;
+        }
 
         function closeAllPopovers(restoreFocusTarget) {
             popovers.forEach((popover) => {
                 if (popover) {
                     popover.classList.add("hidden");
+                    popover.style.left = "";
+                    popover.style.top = "";
                 }
             });
+            active = null;
             if (restoreFocusTarget) {
                 restoreFocusTarget.focus();
             }
@@ -649,8 +679,14 @@
                 if (!targetPopover) {
                     return;
                 }
+                if (active && active.popover === targetPopover && !targetPopover.classList.contains("hidden")) {
+                    closeAllPopovers(button);
+                    return;
+                }
                 closeAllPopovers();
                 targetPopover.classList.remove("hidden");
+                positionPopover(targetPopover, button);
+                active = { popover: targetPopover, button: button };
             });
         });
 
@@ -660,19 +696,34 @@
             });
         });
 
-        popovers.forEach((popover) => {
-            popover.addEventListener("click", function (event) {
-                if (event.target === popover) {
-                    closeAllPopovers();
-                }
-            });
-        });
+        document.addEventListener("pointerdown", function (event) {
+            if (!active || !active.popover || active.popover.classList.contains("hidden")) {
+                return;
+            }
+            if (active.popover.contains(event.target) || active.button.contains(event.target)) {
+                return;
+            }
+            closeAllPopovers();
+        }, true);
 
         document.addEventListener("keydown", function (event) {
             if (event.key === "Escape") {
-                closeAllPopovers();
+                const focusTarget = active ? active.button : null;
+                closeAllPopovers(focusTarget);
             }
         });
+
+        window.addEventListener("resize", function () {
+            if (active && active.popover && active.button && !active.popover.classList.contains("hidden")) {
+                positionPopover(active.popover, active.button);
+            }
+        });
+
+        window.addEventListener("scroll", function () {
+            if (active && active.popover && active.button && !active.popover.classList.contains("hidden")) {
+                positionPopover(active.popover, active.button);
+            }
+        }, { passive: true, capture: true });
     }
 
     function setupTopbarLimitControls() {
@@ -692,7 +743,7 @@
                 return Number(slider.min || 1);
             }
             const min = Number(slider.min || 1);
-            const max = Number(slider.max || 5000);
+            const max = Number(slider.max || 7000);
             return Math.max(min, Math.min(max, Math.round(parsed)));
         }
 
@@ -863,55 +914,248 @@
         });
     }
 
-    function setupAdvancedAIFilterPopover() {
-        const openButton = document.querySelector("[data-advanced-ai-filter-open]");
-        const cancelButton = document.querySelector("[data-advanced-ai-filter-cancel]");
-        const backdrop = byId("advanced-ai-popover-backdrop");
-        const form = document.querySelector("#advanced-ai-popover-backdrop form");
-        if (!openButton || !cancelButton || !backdrop || !form) {
-            return;
-        }
-        if (openButton.dataset.bound === "1") {
-            return;
-        }
-        openButton.dataset.bound = "1";
+    function setupAdvancedAIPopovers() {
+        const confirmBackdrop = byId("advanced-ai-manual-filter-confirm-popover");
+        const confirmList = byId("advanced-ai-manual-filter-list");
+        const confirmMessage = byId("advanced-ai-manual-filter-confirm-message");
+        const confirmCancel = document.querySelector("[data-advanced-ai-manual-filter-cancel]");
+        const confirmKeep = document.querySelector("[data-advanced-ai-manual-filter-keep]");
+        const confirmDiscard = document.querySelector("[data-advanced-ai-manual-filter-discard]");
+        let pendingManualFilterConfirm = null;
 
-        const queryInput = byId("advanced_ai_search_query");
-
-        function openPopover() {
-            backdrop.classList.remove("hidden");
-            if (queryInput) {
-                queryInput.focus();
+        function getDashboardManualFilters() {
+            if (
+                window.WorkbenchDashboardFilters &&
+                typeof window.WorkbenchDashboardFilters.getSelection === "function"
+            ) {
+                return window.WorkbenchDashboardFilters.getSelection();
             }
+            return { coroner: [], area: [], receiver: [] };
         }
 
-        function closePopover(restoreFocus) {
-            backdrop.classList.add("hidden");
-            if (restoreFocus) {
-                openButton.focus();
-            }
+        function hasDashboardManualFilters(filters) {
+            return Boolean(
+                (Array.isArray(filters.coroner) && filters.coroner.length) ||
+                (Array.isArray(filters.area) && filters.area.length) ||
+                (Array.isArray(filters.receiver) && filters.receiver.length)
+            );
         }
 
-        openButton.addEventListener("click", openPopover);
-        cancelButton.addEventListener("click", function () {
-            closePopover(true);
-        });
-        backdrop.addEventListener("click", function (event) {
-            if (event.target === backdrop) {
-                closePopover(false);
+        function clearManualFilterHiddenInputs(form) {
+            form.querySelectorAll("input[data-manual-filter-hidden='1']").forEach((input) => input.remove());
+        }
+
+        function setManualFilterHiddenInputs(form, filters) {
+            clearManualFilterHiddenInputs(form);
+            const mapping = [
+                ["dashboard_coroner", Array.isArray(filters.coroner) ? filters.coroner : []],
+                ["dashboard_area", Array.isArray(filters.area) ? filters.area : []],
+                ["dashboard_receiver", Array.isArray(filters.receiver) ? filters.receiver : []],
+            ];
+            mapping.forEach(([name, values]) => {
+                values.forEach((value) => {
+                    const input = document.createElement("input");
+                    input.type = "hidden";
+                    input.name = name;
+                    input.value = value;
+                    input.setAttribute("data-manual-filter-hidden", "1");
+                    form.appendChild(input);
+                });
+            });
+        }
+
+        function openManualFilterConfirm(config) {
+            if (!confirmBackdrop || !confirmList || !confirmMessage) {
+                return false;
             }
-        });
-        document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape" && !backdrop.classList.contains("hidden")) {
+            if (window.WorkbenchLoading && typeof window.WorkbenchLoading.hide === "function") {
+                window.WorkbenchLoading.hide();
+            }
+            pendingManualFilterConfirm = config;
+            confirmList.innerHTML = "";
+
+            const filters = config.filters || {};
+            const segments = [
+                ["Coroner", Array.isArray(filters.coroner) ? filters.coroner : []],
+                ["Area", Array.isArray(filters.area) ? filters.area : []],
+                ["Receiver", Array.isArray(filters.receiver) ? filters.receiver : []],
+            ];
+            segments.forEach(([label, values]) => {
+                if (!values.length) {
+                    return;
+                }
+                const item = document.createElement("li");
+                item.textContent = `${label}: ${values.join(", ")}`;
+                confirmList.appendChild(item);
+            });
+
+            confirmMessage.textContent = `You've applied manual filters to your reports. Do you want to ${config.actionLabel} for your current selection, or discard these manual filters first?`;
+            if (config.sourceBackdrop) {
+                config.sourceBackdrop.classList.add("hidden");
+            }
+            confirmBackdrop.classList.remove("hidden");
+            return true;
+        }
+
+        function closeManualFilterConfirm(restoreSource) {
+            if (confirmBackdrop) {
+                confirmBackdrop.classList.add("hidden");
+            }
+            if (
+                restoreSource &&
+                pendingManualFilterConfirm &&
+                pendingManualFilterConfirm.sourceBackdrop
+            ) {
+                pendingManualFilterConfirm.sourceBackdrop.classList.remove("hidden");
+            }
+            pendingManualFilterConfirm = null;
+        }
+
+        if (confirmCancel && !confirmCancel.dataset.bound) {
+            confirmCancel.dataset.bound = "1";
+            confirmCancel.addEventListener("click", function () {
+                closeManualFilterConfirm(true);
+            });
+        }
+        if (confirmBackdrop && !confirmBackdrop.dataset.bound) {
+            confirmBackdrop.dataset.bound = "1";
+            confirmBackdrop.addEventListener("click", function (event) {
+                if (event.target === confirmBackdrop) {
+                    closeManualFilterConfirm(true);
+                }
+            });
+        }
+        if (confirmKeep && !confirmKeep.dataset.bound) {
+            confirmKeep.dataset.bound = "1";
+            confirmKeep.addEventListener("click", function () {
+                if (!pendingManualFilterConfirm || !pendingManualFilterConfirm.form) {
+                    return;
+                }
+                const pending = pendingManualFilterConfirm;
+                pending.form.dataset.manualFilterDecision = "selection";
+                closeManualFilterConfirm(false);
+                pending.form.requestSubmit(pending.submitter || undefined);
+            });
+        }
+        if (confirmDiscard && !confirmDiscard.dataset.bound) {
+            confirmDiscard.dataset.bound = "1";
+            confirmDiscard.addEventListener("click", function () {
+                if (!pendingManualFilterConfirm || !pendingManualFilterConfirm.form) {
+                    return;
+                }
+                const pending = pendingManualFilterConfirm;
+                pending.form.dataset.manualFilterDecision = "discard";
+                closeManualFilterConfirm(false);
+                pending.form.requestSubmit(pending.submitter || undefined);
+            });
+        }
+
+        function bindPopover(config) {
+            const openButton = document.querySelector(config.openSelector);
+            const cancelButton = document.querySelector(config.cancelSelector);
+            const backdrop = byId(config.backdropId);
+            const form = document.querySelector(config.formSelector);
+            if (!openButton || !cancelButton || !backdrop || !form) {
+                return;
+            }
+
+            const initialFocus = config.initialFocusId ? byId(config.initialFocusId) : null;
+
+            function openPopover() {
+                backdrop.classList.remove("hidden");
+                if (initialFocus) {
+                    initialFocus.focus();
+                }
+            }
+
+            function closePopover(restoreFocus) {
+                backdrop.classList.add("hidden");
+                if (restoreFocus) {
+                    openButton.focus();
+                }
+            }
+
+            openButton.onclick = openPopover;
+            cancelButton.onclick = function () {
                 closePopover(true);
-            }
+            };
+            backdrop.onclick = function (event) {
+                if (event.target === backdrop) {
+                    closePopover(false);
+                }
+            };
+            form.onsubmit = function (event) {
+                const decision = form.dataset.manualFilterDecision || "";
+                const filters = getDashboardManualFilters();
+                const hasFilters = hasDashboardManualFilters(filters);
+
+                if (!decision && hasFilters) {
+                    event.preventDefault();
+                    const opened = openManualFilterConfirm({
+                        actionLabel: config.actionLabel,
+                        form: form,
+                        submitter: event.submitter || null,
+                        sourceBackdrop: backdrop,
+                        filters: filters,
+                    });
+                    if (opened) {
+                        return;
+                    }
+                }
+
+                if (decision === "selection") {
+                    setManualFilterHiddenInputs(form, filters);
+                } else {
+                    clearManualFilterHiddenInputs(form);
+                }
+                form.dataset.manualFilterDecision = "";
+            closePopover(false);
+        };
+        }
+
+        bindPopover({
+            openSelector: "[data-advanced-ai-filter-open]",
+            cancelSelector: "[data-advanced-ai-filter-cancel]",
+            backdropId: "advanced-ai-popover-backdrop",
+            formSelector: "#advanced-ai-popover-backdrop form",
+            initialFocusId: "advanced_ai_search_query",
+            loadingMessage: "Screening reports...",
+            actionLabel: "filter reports",
         });
 
-        form.addEventListener("submit", function () {
-            closePopover(false);
-            if (window.WorkbenchLoading && typeof window.WorkbenchLoading.show === "function") {
-                window.WorkbenchLoading.show("Screening reports...");
+        bindPopover({
+            openSelector: "[data-advanced-ai-discover-open]",
+            cancelSelector: "[data-advanced-ai-discover-cancel]",
+            backdropId: "advanced-ai-discover-popover",
+            formSelector: "#advanced-ai-discover-popover form",
+            initialFocusId: "extra_theme_instructions",
+            loadingMessage: "Discovering themes and building a preview...",
+            actionLabel: "discover themes",
+        });
+
+        bindPopover({
+            openSelector: "[data-advanced-ai-extract-open]",
+            cancelSelector: "[data-advanced-ai-extract-cancel]",
+            backdropId: "advanced-ai-extract-popover",
+            formSelector: "#advanced-ai-extract-popover form",
+            initialFocusId: "extract_extra_instructions",
+            loadingMessage: "Extracting structured fields...",
+            actionLabel: "extract data",
+        });
+
+        if (document.body.dataset.advancedAIEscapeBound === "1") {
+            return;
+        }
+        document.body.dataset.advancedAIEscapeBound = "1";
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key !== "Escape") {
+                return;
             }
+            const visibleBackdrops = document.querySelectorAll(
+                ".advanced-ai-popover-backdrop:not(.hidden):not(.advanced-ai-popover-backdrop--locked)"
+            );
+            visibleBackdrops.forEach((node) => node.classList.add("hidden"));
         });
     }
 
@@ -1217,6 +1461,14 @@
             receiver: filterReceiverField,
         };
         let openFilterName = "";
+
+        function snapshotSelectedFilters() {
+            return {
+                coroner: Array.from(selectedFilters.coroner).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+                area: Array.from(selectedFilters.area).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+                receiver: Array.from(selectedFilters.receiver).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),
+            };
+        }
 
         function setOpenFilter(fieldName) {
             openFilterName = fieldName || "";
@@ -1575,6 +1827,14 @@
             refreshDatasetTable();
         }
 
+        window.WorkbenchDashboardFilters = {
+            getSelection: snapshotSelectedFilters,
+            hasAny: function () {
+                return Boolean(selectedFilters.coroner.size || selectedFilters.area.size || selectedFilters.receiver.size);
+            },
+            reset: resetFilters,
+        };
+
         [
             { field: "coroner", options: coronerOptions, search: searchCoroner, list: optionsCoroner, badges: badgesCoroner },
             { field: "area", options: areaOptions, search: searchArea, list: optionsArea, badges: badgesArea },
@@ -1721,6 +1981,16 @@
                 return;
             }
 
+            if (
+                (action === "filter_reports" || action === "discover_themes" || action === "extract_features") &&
+                !form.dataset.manualFilterDecision &&
+                window.WorkbenchDashboardFilters &&
+                typeof window.WorkbenchDashboardFilters.hasAny === "function" &&
+                window.WorkbenchDashboardFilters.hasAny()
+            ) {
+                return;
+            }
+
             showLoader(ACTION_MESSAGES[action] || "Running your request...");
         }, true);
 
@@ -1755,7 +2025,7 @@
         setupTopbarLLMProviderToggle();
         setupTopbarAIResetConfirm();
         setupTopbarDateValidation();
-        setupAdvancedAIFilterPopover();
+        setupAdvancedAIPopovers();
         setupDatasetPagination();
         setupExploreDashboard();
         setupConfigModalDismiss();

@@ -80,7 +80,7 @@
             <div class="topbar-popover-field">
                 <label for="topbar_report_limit_number">Number of reports</label>
                 <div class="topbar-limit-inputs">
-                    <input id="topbar_report_limit_slider" type="range" min="1" max="5000" step="1" value="{{ report_limit_for_slider }}" data-topbar-limit-slider>
+                    <input id="topbar_report_limit_slider" type="range" min="1" max="7000" step="1" value="{{ report_limit_for_slider }}" data-topbar-limit-slider>
                     <input id="topbar_report_limit_number" name="n_reports" type="number" min="1" step="1" value="{{ report_limit|default:report_limit_for_slider }}" data-topbar-limit-number>
                 </div>
                 <small class="field-help">Use the slider for quick changes or enter an exact number.</small>
@@ -143,23 +143,15 @@
 
             <div class="topbar-provider-fields {% if provider == 'OpenRouter' %}hidden{% endif %}" id="topbar-openai-fields">
                 <div class="topbar-popover-field">
-                    <label for="topbar_openai_api_key">OpenAI API key</label>
+                    <label for="topbar_openai_api_key">OpenAI API</label>
                     <input id="topbar_openai_api_key" name="openai_api_key" type="password" value="{{ openai_api_key }}" autocomplete="off">
-                </div>
-                <div class="topbar-popover-field">
-                    <label for="topbar_openai_base_url">Custom OpenAI base URL (optional)</label>
-                    <input id="topbar_openai_base_url" name="openai_base_url" type="url" value="{{ openai_base_url }}" placeholder="https://api.openai.com/v1">
                 </div>
             </div>
 
             <div class="topbar-provider-fields {% if provider != 'OpenRouter' %}hidden{% endif %}" id="topbar-openrouter-fields">
                 <div class="topbar-popover-field">
-                    <label for="topbar_openrouter_api_key">OpenRouter API key</label>
+                    <label for="topbar_openrouter_api_key">OpenRouter API</label>
                     <input id="topbar_openrouter_api_key" name="openrouter_api_key" type="password" value="{{ openrouter_api_key }}" autocomplete="off">
-                </div>
-                <div class="topbar-popover-field">
-                    <label for="topbar_openrouter_base_url">OpenRouter base URL</label>
-                    <input id="topbar_openrouter_base_url" name="openrouter_base_url" type="url" value="{{ openrouter_base_url }}" placeholder="https://openrouter.ai/api/v1">
                 </div>
             </div>
 

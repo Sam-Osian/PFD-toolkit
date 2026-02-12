@@ -121,18 +121,44 @@
                 <span class="section-kicker">Advanced AI features</span>
                 <h3>AI workflows</h3>
             </div>
-            <article class="advanced-ai-feature-card">
-                <div class="advanced-ai-feature-card__head">
-                    <h4>Filter reports</h4>
-                    <p>Use AI screening to keep only reports relevant to your research query, with optional supporting spans.</p>
-                </div>
-                <div class="advanced-ai-feature-card__actions">
-                    <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-filter-open>
-                        <i class="hgi hgi-stroke hgi-filter-horizontal" aria-hidden="true"></i>
-                        <span>Filter reports</span>
-                    </button>
-                </div>
-            </article>
+            <div class="advanced-ai-feature-grid">
+                <article class="advanced-ai-feature-card">
+                    <div class="advanced-ai-feature-card__head">
+                        <h4>Filter reports</h4>
+                        <p>Use AI screening to keep only reports relevant to your research query, with optional supporting spans.</p>
+                    </div>
+                    <div class="advanced-ai-feature-card__actions">
+                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-filter-open>
+                            <i class="hgi hgi-stroke hgi-filter-horizontal" aria-hidden="true"></i>
+                            <span>Filter reports</span>
+                        </button>
+                    </div>
+                </article>
+                <article class="advanced-ai-feature-card">
+                    <div class="advanced-ai-feature-card__head">
+                        <h4>Discover themes</h4>
+                        <p>Generate candidate themes from the active workspace and preview assignments before applying.</p>
+                    </div>
+                    <div class="advanced-ai-feature-card__actions">
+                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-discover-open>
+                            <i class="hgi hgi-stroke hgi-bulb" aria-hidden="true"></i>
+                            <span>Discover themes</span>
+                        </button>
+                    </div>
+                </article>
+                <article class="advanced-ai-feature-card">
+                    <div class="advanced-ai-feature-card__head">
+                        <h4>Extract data</h4>
+                        <p>Define structured fields and enrich the same working dataset with extracted values.</p>
+                    </div>
+                    <div class="advanced-ai-feature-card__actions">
+                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-extract-open>
+                            <i class="hgi hgi-stroke hgi-database-export" aria-hidden="true"></i>
+                            <span>Extract data</span>
+                        </button>
+                    </div>
+                </article>
+            </div>
         </section>
     {% endif %}
     <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-popover-backdrop" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-popover-title">
@@ -170,5 +196,223 @@
             </form>
         </section>
     </div>
+
+    <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-discover-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-discover-title">
+        <section class="advanced-ai-popover advanced-ai-popover--wide">
+            <div class="advanced-ai-popover__head">
+                <span class="section-kicker">Advanced AI features</span>
+                <h3 id="advanced-ai-discover-title">Discover themes</h3>
+                <p>Generate candidate themes and review a preview before applying assignments.</p>
+            </div>
+
+            <form method="post" class="workflow-clean-form advanced-ai-popover__form" data-advanced-ai-discover-form>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="discover_themes">
+
+                <div class="workflow-clean-field">
+                    <label for="extra_theme_instructions">Extra guidance (optional)</label>
+                    <textarea id="extra_theme_instructions" name="extra_theme_instructions" placeholder="e.g. Prioritise systemic failures and communication risks."></textarea>
+                </div>
+
+                <details class="expander workflow-clean-expander">
+                    <summary>Advanced options</summary>
+                    <div class="expander-content">
+                        <div class="workflow-clean-stack">
+                            <div class="workflow-clean-field">
+                                <label for="trim_approach">How should reports be prepared?</label>
+                                <select id="trim_approach" name="trim_approach">
+                                    <option value="truncate">Truncate report text first (default)</option>
+                                    <option value="summarise">Summarise each report first</option>
+                                </select>
+                            </div>
+
+                            <div id="discover-truncation-block" class="workflow-clean-stack">
+                                <div class="workflow-clean-field">
+                                    <label for="truncation_limit_type">Truncation limit type</label>
+                                    <select id="truncation_limit_type" name="truncation_limit_type">
+                                        <option value="tokens">Tokens</option>
+                                        <option value="words">Words</option>
+                                    </select>
+                                </div>
+                                <div id="discover-tokens-block" class="workflow-clean-field">
+                                    <label for="max_tokens">Max tokens</label>
+                                    <input id="max_tokens" name="max_tokens" type="number" min="500" step="250" value="3000">
+                                </div>
+                                <div id="discover-words-block" class="workflow-clean-field hidden">
+                                    <label for="max_words">Max words</label>
+                                    <input id="max_words" name="max_words" type="number" min="100" step="100" value="1500">
+                                </div>
+                            </div>
+
+                            <div id="discover-summary-block" class="hidden workflow-clean-field">
+                                <label for="summarise_intensity">Summary intensity</label>
+                                <select id="summarise_intensity" name="summarise_intensity">
+                                    <option value="low">Detailed paragraph</option>
+                                    <option value="medium" selected>Concise summary</option>
+                                    <option value="high">Short summary</option>
+                                    <option value="very high">One or two sentences</option>
+                                </select>
+                            </div>
+
+                            <div class="workflow-clean-two-col">
+                                <div class="workflow-clean-field">
+                                    <label for="warning_threshold">Warn above token estimate</label>
+                                    <input id="warning_threshold" name="warning_threshold" type="number" min="1000" step="1000" value="100000">
+                                </div>
+                                <div class="workflow-clean-field">
+                                    <label for="error_threshold">Stop above token estimate</label>
+                                    <input id="error_threshold" name="error_threshold" type="number" min="1000" step="1000" value="500000">
+                                </div>
+                            </div>
+
+                            <div class="workflow-clean-two-col">
+                                <div class="workflow-clean-field">
+                                    <label for="min_themes">Minimum themes (optional)</label>
+                                    <input id="min_themes" name="min_themes" placeholder="e.g. 5">
+                                </div>
+                                <div class="workflow-clean-field">
+                                    <label for="max_themes">Maximum themes (optional)</label>
+                                    <input id="max_themes" name="max_themes" placeholder="e.g. 10">
+                                </div>
+                            </div>
+
+                            <div class="workflow-clean-field">
+                                <label for="seed_topics">Seed topics (optional)</label>
+                                <textarea id="seed_topics" name="seed_topics" placeholder='["Communication", "Medication safety"]'></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="advanced-ai-popover__actions">
+                    <button type="button" class="button-secondary" data-advanced-ai-discover-cancel>Cancel</button>
+                    <button type="submit" class="button-primary">Discover themes</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-extract-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-extract-title">
+        <section class="advanced-ai-popover advanced-ai-popover--wide">
+            <div class="advanced-ai-popover__head">
+                <span class="section-kicker">Advanced AI features</span>
+                <h3 id="advanced-ai-extract-title">Extract data</h3>
+                <p>Define fields to capture and enrich the active dataset with structured outputs.</p>
+            </div>
+
+            <form method="post" class="workflow-clean-form advanced-ai-popover__form" data-advanced-ai-extract-form>
+                {% csrf_token %}
+                <input type="hidden" name="action" value="extract_features">
+
+                <div class="workflow-clean-field">
+                    <label>Fields to extract</label>
+                    <div class="workflow-clean-table-wrap">
+                        <table class="feature-table workflow-clean-feature-table">
+                            <thead>
+                                <tr>
+                                    <th>Field name</th>
+                                    <th>Description</th>
+                                    <th>Type</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="feature-grid-body">
+                                {% for row in feature_rows %}
+                                <tr>
+                                    <td><input name="feature_name" value="{{ row.field_name|default:'' }}" placeholder="e.g. hazard_type"></td>
+                                    <td><input name="feature_description" value="{{ row.description|default:'' }}" placeholder="What should be extracted?"></td>
+                                    <td>
+                                        <select name="feature_type">
+                                            <option value="Free text" {% if row.type == 'Free text' %}selected{% endif %}>Free text</option>
+                                            <option value="Conditional (True/False)" {% if row.type == 'Conditional (True/False)' %}selected{% endif %}>Conditional (True/False)</option>
+                                            <option value="Whole number" {% if row.type == 'Whole number' %}selected{% endif %}>Whole number</option>
+                                            <option value="Decimal number" {% if row.type == 'Decimal number' %}selected{% endif %}>Decimal number</option>
+                                        </select>
+                                    </td>
+                                    <td><button type="button" class="button-secondary button-inline remove-feature-row">Remove</button></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="workflow-clean-actions">
+                    <button id="add-feature-row" type="button" class="button-secondary">Add field</button>
+                </div>
+
+                <details class="expander workflow-clean-expander">
+                    <summary>Advanced options</summary>
+                    <div class="expander-content">
+                        <div class="workflow-clean-options">
+                            <label class="checkbox"><input type="checkbox" name="extract_produce_spans"> <span>Include supporting quotes</span></label>
+                            <label class="checkbox"><input type="checkbox" name="extract_drop_spans"> <span>Drop quote columns in output</span></label>
+                            <label class="checkbox"><input type="checkbox" name="extract_force_assign"> <span>Always assign a value</span></label>
+                            <label class="checkbox"><input type="checkbox" name="extract_allow_multiple"> <span>Allow multi-value categories</span></label>
+                            <label class="checkbox"><input type="checkbox" name="extract_skip_if_present" checked> <span>Skip rows already populated</span></label>
+                        </div>
+
+                        <div class="workflow-clean-field">
+                            <label for="extract_extra_instructions">Extra guidance (optional)</label>
+                            <textarea id="extract_extra_instructions" name="extract_extra_instructions" placeholder="e.g. Prefer explicit evidence and avoid inferred values unless strongly justified."></textarea>
+                        </div>
+                    </div>
+                </details>
+
+                <div class="advanced-ai-popover__actions">
+                    <button type="button" class="button-secondary" data-advanced-ai-extract-cancel>Cancel</button>
+                    <button type="submit" class="button-primary">Extract data fields</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-manual-filter-confirm-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-manual-filter-confirm-title">
+        <section class="advanced-ai-popover">
+            <div class="advanced-ai-popover__head">
+                <span class="section-kicker">Manual filters detected</span>
+                <h3 id="advanced-ai-manual-filter-confirm-title">How should this run?</h3>
+                <p id="advanced-ai-manual-filter-confirm-message">
+                    You've applied manual filters to your reports.
+                </p>
+            </div>
+            <ul class="advanced-ai-manual-filter-list" id="advanced-ai-manual-filter-list"></ul>
+            <div class="advanced-ai-popover__actions">
+                <button type="button" class="button-secondary" data-advanced-ai-manual-filter-cancel>Cancel</button>
+                <button type="button" class="button-secondary" data-advanced-ai-manual-filter-discard>Discard manual filters</button>
+                <button type="button" class="button-primary" data-advanced-ai-manual-filter-keep>Run for current selection</button>
+            </div>
+        </section>
+    </div>
+
+    {% if preview_state and preview_state.type == 'discover' %}
+    <div class="advanced-ai-popover-backdrop advanced-ai-popover-backdrop--locked" id="advanced-ai-preview-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-preview-title">
+        <section class="advanced-ai-popover advanced-ai-popover--wide">
+            <div class="advanced-ai-popover__head">
+                <span class="section-kicker">Theme preview</span>
+                <h3 id="advanced-ai-preview-title">Apply discovered themes?</h3>
+                <p>Review the preview and decide whether to apply these assignments to the current workspace.</p>
+            </div>
+            {% if preview_theme_summary_html %}
+                <div class="table-wrap">{{ preview_theme_summary_html|safe }}</div>
+            {% else %}
+                <p class="help-text">No theme assignments were returned in the preview.</p>
+            {% endif %}
+            <div class="advanced-ai-popover__actions">
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="discard_themes">
+                    <button type="submit" class="button-secondary">Cancel</button>
+                </form>
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="accept_themes">
+                    <button type="submit" class="button-primary">Apply</button>
+                </form>
+            </div>
+        </section>
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}
