@@ -5,6 +5,7 @@ import json
 import random
 import re
 import zipfile
+import copy
 from datetime import date, datetime
 from io import BytesIO, StringIO
 from urllib.parse import urlencode
@@ -15,6 +16,7 @@ import pandas as pd
 from django.contrib import messages
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
@@ -411,6 +413,43 @@ def _build_workbook_edit_url(request: HttpRequest, workbook: Workbook) -> str:
     )
 
 
+def _workbook_filter_query(filters: dict[str, list[str]]) -> str:
+    return urlencode(
+        [
+            *[("coroner", value) for value in filters.get("coroner", [])],
+            *[("area", value) for value in filters.get("area", [])],
+            *[("receiver", value) for value in filters.get("receiver", [])],
+        ],
+        doseq=True,
+    )
+
+
+def _selected_filters_from_snapshot(snapshot: dict[str, Any]) -> dict[str, list[str]]:
+    dashboard_payload = snapshot.get("dashboard_payload")
+    if not isinstance(dashboard_payload, dict):
+        return {"coroner": [], "area": [], "receiver": []}
+    return _normalise_workbook_filters(dashboard_payload.get("selected"))
+
+
+def _restore_workspace_from_snapshot(request: HttpRequest, snapshot: dict[str, Any]) -> None:
+    session = request.session
+    reports_df = _snapshot_dataframe_from_payload(snapshot.get("reports_df"))
+    theme_summary_df = _snapshot_dataframe_from_payload(snapshot.get("theme_summary_df"))
+
+    set_dataframe(session, "reports_df", reports_df)
+    set_dataframe(session, "reports_df_initial", reports_df)
+    clear_outputs_for_new_dataset(session)
+
+    if theme_summary_df.empty:
+        session["theme_summary_table"] = None
+    else:
+        set_dataframe(session, "theme_summary_table", theme_summary_df)
+
+    session["history"] = []
+    session["redo_history"] = []
+    reset_repro_tracking(session)
+
+
 def _workbook_payload_size_ok(snapshot: dict[str, Any]) -> bool:
     encoded = json.dumps(snapshot, separators=(",", ":"), ensure_ascii=False)
     return len(encoded.encode("utf-8")) <= WORKBOOK_SNAPSHOT_MAX_BYTES
@@ -599,14 +638,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
 
     history_depth = len(session.get("history", []))
     redo_depth = len(session.get("redo_history", []))
-    dashboard_filter_query = urlencode(
-        [
-            *[("coroner", value) for value in dashboard_filters["coroner"]],
-            *[("area", value) for value in dashboard_filters["area"]],
-            *[("receiver", value) for value in dashboard_filters["receiver"]],
-        ],
-        doseq=True,
-    )
+    dashboard_filter_query = _workbook_filter_query(dashboard_filters)
     report_limit = session.get("report_limit")
     if isinstance(report_limit, int) and report_limit > 0:
         report_limit_for_slider = min(7000, max(1, report_limit))
@@ -1585,6 +1617,44 @@ def workbook_dataset_panel(request: HttpRequest, share_number: int, title_slug: 
     )
     context["workspace_label"] = "Shared worksheet dataset"
     return render(request, "workbench/_dataset_table_section.html", context)
+
+
+@require_http_methods(["POST"])
+def workbook_clone(request: HttpRequest, share_number: int, title_slug: str) -> HttpResponse:
+    init_state(request.session)
+
+    source_workbook = get_object_or_404(Workbook, share_number=share_number)
+    canonical_slug = _workbook_title_slug(source_workbook.title)
+    if title_slug != canonical_slug:
+        return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
+
+    source_snapshot = source_workbook.snapshot if isinstance(source_workbook.snapshot, dict) else {}
+    cloned_snapshot = copy.deepcopy(source_snapshot)
+    if not _workbook_payload_size_ok(cloned_snapshot):
+        messages.error(request, "This shared worksheet is too large to clone.")
+        return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
+
+    cloned_workbook = Workbook.objects.create(
+        share_number=_allocate_workbook_share_number(),
+        title="",
+        snapshot=cloned_snapshot,
+    )
+
+    _restore_workspace_from_snapshot(request, cloned_snapshot)
+    selected_filters = _selected_filters_from_snapshot(cloned_snapshot)
+    query_pairs = [
+        ("workbook", str(cloned_workbook.public_id)),
+        ("edit", str(cloned_workbook.edit_token)),
+    ]
+    query_pairs.extend(("coroner", value) for value in selected_filters["coroner"])
+    query_pairs.extend(("area", value) for value in selected_filters["area"])
+    query_pairs.extend(("receiver", value) for value in selected_filters["receiver"])
+    query_string = urlencode(query_pairs, doseq=True)
+    messages.success(
+        request,
+        f'Workbook "{source_workbook.title}" is now editable. Changes you make won\'t affect the shared URL.',
+    )
+    return redirect(f"{reverse('workbench:explore')}?{query_string}")
 
 
 @require_http_methods(["GET"])

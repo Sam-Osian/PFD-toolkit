@@ -30,6 +30,11 @@ urlpatterns = [
         views.workbook_dataset_panel,
         name="workbook_dataset_panel",
     ),
+    path(
+        "workbooks/<int:share_number>-<slug:title_slug>/clone/",
+        views.workbook_clone,
+        name="workbook_clone",
+    ),
     path("filter/", views.filter_page, name="filter"),
     path("analyse-themes/", views.themes_page, name="themes"),
     path("extract-data/", views.extract_page, name="extract"),

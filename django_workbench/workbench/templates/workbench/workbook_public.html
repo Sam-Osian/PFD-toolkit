@@ -27,6 +27,10 @@
                 </div>
             </div>
             <div class="explore-action-rail__controls">
+                <button type="button" class="action-rail-btn action-rail-btn--copy" data-readonly-clone-open>
+                    <i class="hgi hgi-stroke hgi-copy-01 action-rail-btn__share-mark" aria-hidden="true"></i>
+                    <span>Make editable copy</span>
+                </button>
                 <button type="button" class="action-rail-btn action-rail-btn--download" data-download-open aria-label="Download reports" {% if not dataset_available %}disabled{% endif %}>
                     <i class="hgi hgi-stroke hgi-download-01 action-rail-btn__share-mark" aria-hidden="true"></i>
                     <span>Download reports</span>
@@ -121,23 +125,21 @@
     {% include "workbench/_dataset_table_section.html" with workspace_label="Shared worksheet" %}
 
     {% if theme_summary_html %}
-        <section class="explore-surface explore-surface--theme theme-summary-card reveal-up">
-            <div class="section-card-header">
-                <span class="section-kicker">Theme discovery</span>
-                <h3>Thematic snapshot</h3>
-            </div>
-            {% if top_theme %}
-            <div class="theme-summary-highlight">
-                <div class="theme-summary-highlight__icon">{{ top_theme.emoji }}</div>
-                <div>
-                    <div class="theme-summary-highlight__label">Most prominent theme</div>
-                    <div class="theme-summary-highlight__value">{{ top_theme.name }}</div>
-                    <div class="theme-summary-highlight__meta">{{ top_theme.count }} reports · {{ top_theme.pct }}%</div>
-                </div>
-            </div>
-            {% endif %}
-            <div class="table-wrap">{{ theme_summary_html|safe }}</div>
-        </section>
+        {% include "workbench/_theme_summary_section.html" %}
     {% endif %}
+</div>
+
+<div class="confirm-modal-backdrop hidden" id="readonly-clone-confirm" aria-modal="true" role="dialog" aria-labelledby="readonly-clone-title">
+    <section class="confirm-modal">
+        <h3 id="readonly-clone-title">Create your own editable copy?</h3>
+        <p>You can edit and rename your copy, and share it as your own worksheet. The original shared worksheet will stay read-only and unchanged.</p>
+        <div class="confirm-modal__actions">
+            <button type="button" class="button-secondary" data-readonly-clone-cancel>Cancel</button>
+            <form method="post" action="{% url 'workbench:workbook_clone' share_number=workbook.share_number title_slug=workbook.title|slugify %}">
+                {% csrf_token %}
+                <button type="submit" class="button-primary">Create editable copy</button>
+            </form>
+        </div>
+    </section>
 </div>
 {% endblock %}

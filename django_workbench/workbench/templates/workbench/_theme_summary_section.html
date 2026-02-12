@@ -1,0 +1,32 @@
+<section class="explore-surface explore-surface--theme theme-summary-card reveal-up is-collapsed" data-theme-collapse-root>
+    <div class="section-card-header">
+        <button
+            type="button"
+            class="button-secondary theme-collapse-toggle"
+            data-theme-collapse-toggle
+            aria-expanded="false"
+            aria-controls="theme-collapse-body"
+            title="Show or hide thematic discovery"
+        >
+            <i class="hgi hgi-stroke hgi-arrow-down-01 theme-collapse-toggle__icon" aria-hidden="true"></i>
+            <span data-theme-collapse-label>Show thematic snapshot</span>
+        </button>
+    </div>
+    <div class="theme-collapse-panel" id="theme-collapse-body" data-theme-collapse-body>
+        <div class="section-card-header">
+            <span class="section-kicker">Theme discovery</span>
+            <h3>Thematic snapshot</h3>
+        </div>
+        {% if top_theme %}
+        <div class="theme-summary-highlight">
+            <div class="theme-summary-highlight__icon">{{ top_theme.emoji }}</div>
+            <div>
+                <div class="theme-summary-highlight__label">Most prominent theme</div>
+                <div class="theme-summary-highlight__value">{{ top_theme.name }}</div>
+                <div class="theme-summary-highlight__meta">{{ top_theme.count }} reports · {{ top_theme.pct }}%</div>
+            </div>
+        </div>
+        {% endif %}
+        <div class="table-wrap">{{ theme_summary_html|safe }}</div>
+    </div>
+</section>

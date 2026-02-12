@@ -97,23 +97,7 @@
         {% include "workbench/_dataset_table_section.html" with workspace_label="Workspace" %}
 
         {% if theme_summary_html %}
-            <section class="explore-surface explore-surface--theme theme-summary-card reveal-up">
-                <div class="section-card-header">
-                    <span class="section-kicker">Theme discovery</span>
-                    <h3>Thematic snapshot</h3>
-                </div>
-                {% if top_theme %}
-                <div class="theme-summary-highlight">
-                    <div class="theme-summary-highlight__icon">{{ top_theme.emoji }}</div>
-                    <div>
-                        <div class="theme-summary-highlight__label">Most prominent theme</div>
-                        <div class="theme-summary-highlight__value">{{ top_theme.name }}</div>
-                        <div class="theme-summary-highlight__meta">{{ top_theme.count }} reports · {{ top_theme.pct }}%</div>
-                    </div>
-                </div>
-                {% endif %}
-                <div class="table-wrap">{{ theme_summary_html|safe }}</div>
-            </section>
+            {% include "workbench/_theme_summary_section.html" %}
         {% endif %}
 
         <section class="explore-surface explore-surface--advanced-ai advanced-ai-features reveal-up">

@@ -1431,6 +1431,49 @@
         });
     }
 
+    function setupThemeSummaryCollapse() {
+        const root = document.querySelector(".explore-surface--theme[data-theme-collapse-root]");
+        if (!root) {
+            return;
+        }
+
+        const toggle = root.querySelector("[data-theme-collapse-toggle]");
+        const label = root.querySelector("[data-theme-collapse-label]");
+        if (!toggle || !label) {
+            return;
+        }
+        if (toggle.dataset.bound === "1") {
+            return;
+        }
+        toggle.dataset.bound = "1";
+
+        const storageKey = "workbench.themeSummaryExpanded";
+        let expanded = false;
+        try {
+            expanded = window.localStorage.getItem(storageKey) === "1";
+        } catch (error) {
+            expanded = false;
+        }
+
+        function paint(isExpanded) {
+            root.classList.toggle("is-collapsed", !isExpanded);
+            toggle.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+            label.textContent = isExpanded ? "Hide thematic snapshot" : "Show thematic snapshot";
+        }
+
+        paint(expanded);
+
+        toggle.addEventListener("click", function () {
+            expanded = !expanded;
+            paint(expanded);
+            try {
+                window.localStorage.setItem(storageKey, expanded ? "1" : "0");
+            } catch (error) {
+                // Ignore storage access issues.
+            }
+        });
+    }
+
     function setupExploreDashboard() {
         const root = byId("explore-dashboard");
         if (!root) {
@@ -2211,6 +2254,45 @@
         });
     }
 
+    function setupReadonlyCloneConfirm() {
+        const modal = byId("readonly-clone-confirm");
+        const openButton = document.querySelector("[data-readonly-clone-open]");
+        if (!modal || !openButton || modal.dataset.bound === "1") {
+            return;
+        }
+        modal.dataset.bound = "1";
+
+        const cancelButton = modal.querySelector("[data-readonly-clone-cancel]");
+
+        function openModal() {
+            modal.classList.remove("hidden");
+            document.body.classList.add("modal-open");
+        }
+
+        function closeModal() {
+            modal.classList.add("hidden");
+            document.body.classList.remove("modal-open");
+        }
+
+        openButton.addEventListener("click", openModal);
+
+        if (cancelButton) {
+            cancelButton.addEventListener("click", closeModal);
+        }
+
+        modal.addEventListener("click", function (event) {
+            if (event.target === modal) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !modal.classList.contains("hidden")) {
+                closeModal();
+            }
+        });
+    }
+
     function setupGlobalLoadingOverlay() {
         if (document.body.dataset.globalLoadingBound === "1") {
             return;
@@ -2310,6 +2392,7 @@
         toggleTruncationTypeFields();
         setupFeatureGrid();
         setupDatasetCollapse();
+        setupThemeSummaryCollapse();
         setupDatasetCellPreview();
         setupRevealAnimations();
         setupStartOverConfirm();
@@ -2325,6 +2408,7 @@
         setupExploreDashboard();
         setupWorkbookControls();
         setupConfigModalDismiss();
+        setupReadonlyCloneConfirm();
 
         const provider = byId("provider_override");
         if (provider && provider.dataset.bound !== "1") {

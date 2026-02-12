@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import Workbook
-from .state import dataframe_to_payload
+from .state import dataframe_from_payload, dataframe_to_payload
 
 
 class WorkbenchViewTests(TestCase):
@@ -125,6 +125,7 @@ class WorkbenchViewTests(TestCase):
         self.assertContains(public_response, "Read-only")
         self.assertContains(public_response, "Emergency Response Workbook v2")
         self.assertContains(public_response, "Download reports")
+        self.assertContains(public_response, "Make editable copy")
         self.assertContains(public_response, "Show individual reports")
         self.assertContains(public_response, "Earliest / latest report")
         self.assertContains(public_response, "Thematic snapshot")
@@ -169,3 +170,50 @@ class WorkbenchViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
+
+    def test_workbook_clone_creates_editable_personal_copy(self) -> None:
+        reports_df = pd.DataFrame(
+            [
+                {"date": "2024-01-10", "coroner": "A", "area": "B", "receiver": "C"},
+                {"date": "2024-01-11", "coroner": "X", "area": "Y", "receiver": "Z"},
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session["theme_summary_table"] = dataframe_to_payload(
+            pd.DataFrame([{"Theme": "Communication", "Count": 2, "%": 100.0}])
+        )
+        session.save()
+
+        create_response = self.client.post(
+            reverse("workbench:workbook_create"),
+            data={"title": "Shared Sheet", "filters": {"coroner": ["A"], "area": [], "receiver": []}},
+            content_type="application/json",
+        )
+        self.assertEqual(create_response.status_code, 200)
+        original_workbook = Workbook.objects.get(title="Shared Sheet")
+
+        clone_response = self.client.post(
+            reverse(
+                "workbench:workbook_clone",
+                kwargs={"share_number": original_workbook.share_number, "title_slug": "shared-sheet"},
+            ),
+        )
+        self.assertEqual(clone_response.status_code, 302)
+        self.assertEqual(Workbook.objects.count(), 2)
+
+        cloned_workbook = Workbook.objects.exclude(public_id=original_workbook.public_id).get()
+        self.assertEqual(cloned_workbook.title, "")
+        self.assertEqual(cloned_workbook.snapshot, original_workbook.snapshot)
+
+        location = clone_response["Location"]
+        self.assertIn("/explore-pfds/?", location)
+        self.assertIn(f"workbook={cloned_workbook.public_id}", location)
+        self.assertIn(f"edit={cloned_workbook.edit_token}", location)
+        self.assertIn("coroner=A", location)
+
+        cloned_session = self.client.session
+        cloned_reports_df = dataframe_from_payload(cloned_session["reports_df"])
+        self.assertEqual(len(cloned_reports_df), 1)
+        self.assertEqual(cloned_reports_df.iloc[0]["coroner"], "A")

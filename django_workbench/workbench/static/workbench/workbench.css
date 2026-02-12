@@ -2097,6 +2097,14 @@ body.sidebar-collapsed .sidebar-nav__item {
     background: rgba(138, 156, 238, 0.2);
 }
 
+.action-rail-btn--copy {
+    min-width: 9.6rem;
+    min-height: 2.2rem;
+    justify-content: center;
+    border: 1px solid rgba(181, 196, 255, 0.3);
+    background: rgba(132, 152, 233, 0.12);
+}
+
 .action-rail-btn--download {
     min-width: 8.2rem;
     min-height: 2.2rem;
@@ -2122,6 +2130,10 @@ body.sidebar-collapsed .sidebar-nav__item {
     box-shadow: 0 20px 44px rgba(2, 6, 18, 0.38);
     padding: 0.85rem 0.9rem;
     z-index: 1250;
+}
+
+.shared-workbook-view .download-popover {
+    right: 0;
 }
 
 .topbar-popover-backdrop {
@@ -2448,7 +2460,8 @@ body.sidebar-collapsed .sidebar-nav__item {
     background: rgba(9, 13, 33, 0.45);
 }
 
-.dataset-collapse-toggle {
+.dataset-collapse-toggle,
+.theme-collapse-toggle {
     min-height: 2.1rem;
     border-radius: 10px;
     border: 1px solid rgba(181, 196, 255, 0.34);
@@ -2459,12 +2472,17 @@ body.sidebar-collapsed .sidebar-nav__item {
     padding: 0.44rem 0.72rem;
 }
 
-.dataset-collapse-toggle__icon {
+.dataset-collapse-toggle__icon,
+.theme-collapse-toggle__icon {
     font-size: 0.94rem;
     transition: transform 0.22s ease;
 }
 
 .explore-surface--dataset.is-collapsed .dataset-collapse-toggle__icon {
+    transform: rotate(-90deg);
+}
+
+.explore-surface--theme.is-collapsed .theme-collapse-toggle__icon {
     transform: rotate(-90deg);
 }
 
@@ -2477,6 +2495,21 @@ body.sidebar-collapsed .sidebar-nav__item {
 }
 
 .explore-surface--dataset.is-collapsed .dataset-collapse-panel {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    pointer-events: none;
+}
+
+.theme-collapse-panel {
+    margin-top: 0.12rem;
+    max-height: 100rem;
+    opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.25s ease, opacity 0.2s ease, margin-top 0.2s ease;
+}
+
+.explore-surface--theme.is-collapsed .theme-collapse-panel {
     max-height: 0;
     opacity: 0;
     margin-top: 0;
@@ -3286,6 +3319,10 @@ body.page-extract .workflow-clean .workflow-clean-shell {
         min-width: 8rem;
     }
 
+    .action-rail-btn--copy {
+        min-width: 9rem;
+    }
+
     .action-rail-btn--download {
         min-width: 8.4rem;
     }
@@ -3329,7 +3366,8 @@ body.page-extract .workflow-clean .workflow-clean-shell {
         justify-content: center;
     }
 
-    .dataset-collapse-toggle {
+    .dataset-collapse-toggle,
+    .theme-collapse-toggle {
         width: 100%;
         justify-content: center;
     }
