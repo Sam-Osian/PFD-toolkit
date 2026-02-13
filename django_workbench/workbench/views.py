@@ -2,19 +2,27 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 import random
 import re
 import zipfile
 import copy
+import importlib
+import importlib.util
+import inspect
 from datetime import date, datetime
 from io import BytesIO, StringIO
-from urllib.parse import urlencode
+from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from typing import Any, Optional
 from uuid import UUID, uuid4
 
+import markdown
 import pandas as pd
+import yaml
+from bs4 import BeautifulSoup
 from django.contrib import messages
-from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.text import slugify
@@ -487,6 +495,426 @@ WORKBOOK_TITLE_ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9 -]+$")
 WORKBENCH_ROW_ID_COL = "_workbench_row_id"
 EXCLUSION_REASON_COL = "_exclusion_reason"
 EXCLUSION_REASON_LABEL = "Reason for exclusion"
+DOCS_SOURCE_ROOT = Path(__file__).resolve().parents[2] / "docs"
+DOCS_CONFIG_FILE = Path(__file__).resolve().parents[2] / "mkdocs.yml"
+DOCS_LINK_HOSTS = {"127.0.0.1", "localhost", "pfdtoolkit.org", "www.pfdtoolkit.org"}
+DOCS_SITE_FILE_PREFIXES = ("assets/", "stylesheets/", "search/")
+DOCS_REMOVED_PATHS = {"contact"}
+DOCS_MARKDOWN_EXTENSIONS = [
+    "admonition",
+    "attr_list",
+    "codehilite",
+    "fenced_code",
+    "tables",
+    "toc",
+    "abbr",
+    "md_in_html",
+    "pymdownx.highlight",
+    "pymdownx.inlinehilite",
+    "pymdownx.superfences",
+    "pymdownx.tabbed",
+    "pymdownx.details",
+]
+
+
+def _path_within_root(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _normalise_docs_path(raw_path: Optional[str]) -> str:
+    cleaned = str(raw_path or "").strip().strip("/")
+    if cleaned in {"", "index", "index.html"}:
+        return ""
+    if cleaned.endswith("/index"):
+        cleaned = cleaned[: -len("/index")]
+    if cleaned.endswith(".html"):
+        cleaned = cleaned[: -len(".html")]
+    return cleaned.strip("/")
+
+
+def _docs_markdown_file_path(doc_path: str) -> Path:
+    if not doc_path:
+        return DOCS_SOURCE_ROOT / "index.md"
+    return DOCS_SOURCE_ROOT / f"{doc_path}.md"
+
+
+def _mkdocs_path_to_doc_path(path_value: str) -> Optional[str]:
+    raw_path = str(path_value or "").strip()
+    if not raw_path:
+        return ""
+
+    if raw_path.startswith("/pfd-toolkit/"):
+        raw_path = raw_path[len("/pfd-toolkit/") :]
+
+    cleaned = raw_path.lstrip("/")
+    if not cleaned:
+        return ""
+    if cleaned.startswith(DOCS_SITE_FILE_PREFIXES):
+        return None
+    if cleaned in {
+        "CNAME",
+        "favicon.ico",
+        "googlef12640be708032bb.html",
+        "objects.inv",
+        "sitemap.xml",
+        "sitemap.xml.gz",
+    }:
+        return None
+    if cleaned.endswith(
+        (
+            ".json",
+            ".xml",
+            ".gz",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".svg",
+            ".ico",
+            ".css",
+            ".js",
+            ".woff",
+            ".woff2",
+            ".ttf",
+        )
+    ):
+        return None
+    if cleaned.endswith("/"):
+        cleaned = cleaned[:-1]
+    if cleaned.endswith("/index.html"):
+        cleaned = cleaned[: -len("/index.html")]
+    if cleaned.endswith("/index.md"):
+        cleaned = cleaned[: -len("/index.md")]
+    if cleaned in {"index.html", "index.md"}:
+        return ""
+    if cleaned.endswith("/index"):
+        cleaned = cleaned[: -len("/index")]
+    if cleaned.endswith(".html"):
+        cleaned = cleaned[: -len(".html")]
+    if cleaned.endswith(".md"):
+        cleaned = cleaned[: -len(".md")]
+    return cleaned.strip("/")
+
+
+def _docs_url_for_path(doc_path: str) -> str:
+    base = reverse("workbench:for_coders")
+    if not doc_path:
+        return base
+    return f"{base}?{urlencode({'doc': doc_path})}"
+
+
+def _docs_site_file_url(file_path: str) -> str:
+    cleaned = str(file_path or "").lstrip("/")
+    return reverse("workbench:for_coders_site_file", kwargs={"file_path": cleaned})
+
+
+def _append_query_fragment(url: str, parsed: Any) -> str:
+    result = url
+    if parsed.query:
+        separator = "&" if "?" in result else "?"
+        result = f"{result}{separator}{parsed.query}"
+    if parsed.fragment:
+        result = f"{result}#{parsed.fragment}"
+    return result
+
+
+def _rewrite_docs_url(raw_url: str, current_doc_path: str) -> str:
+    value = str(raw_url or "").strip()
+    if not value:
+        return value
+    lowered = value.lower()
+    if lowered.startswith(("mailto:", "tel:", "javascript:")) or value.startswith("#"):
+        return value
+
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https"}:
+        host = parsed.hostname or ""
+        if host.lower() not in DOCS_LINK_HOSTS:
+            return value
+        doc_path = _mkdocs_path_to_doc_path(parsed.path)
+        if doc_path is not None:
+            return _append_query_fragment(_docs_url_for_path(doc_path), parsed)
+        site_file = parsed.path.lstrip("/")
+        return _append_query_fragment(_docs_site_file_url(site_file), parsed)
+
+    base_markdown_path = f"/{current_doc_path}.md" if current_doc_path else "/index.md"
+    resolved = urlparse(urljoin(f"https://pfdtoolkit.org{base_markdown_path}", value))
+    doc_path = _mkdocs_path_to_doc_path(resolved.path)
+    if doc_path is not None:
+        return _append_query_fragment(_docs_url_for_path(doc_path), resolved)
+    return _append_query_fragment(_docs_site_file_url(resolved.path.lstrip("/")), resolved)
+
+
+def _normalise_title_text(value: str) -> str:
+    text = str(value or "").replace("¶", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _rewrite_docs_dom_links(container: BeautifulSoup, current_doc_path: str) -> None:
+    for tag_name, attr_name in (("a", "href"), ("img", "src"), ("source", "src")):
+        for tag in container.find_all(tag_name):
+            raw_value = tag.get(attr_name)
+            if not raw_value:
+                continue
+            tag[attr_name] = _rewrite_docs_url(str(raw_value), current_doc_path)
+
+
+def _extract_doc_path_from_docs_url(url: Optional[str]) -> str:
+    if not url:
+        return ""
+    parsed = urlparse(str(url))
+    doc_param = parse_qs(parsed.query).get("doc", [""])[0]
+    return _normalise_docs_path(doc_param)
+
+
+def _first_navigable_url(items: list[dict[str, Any]]) -> Optional[str]:
+    for item in items:
+        url = item.get("url")
+        if url:
+            return str(url)
+        nested = _first_navigable_url(item.get("children", []))
+        if nested:
+            return nested
+    return None
+
+
+def _enabled_markdown_extensions() -> list[str]:
+    enabled: list[str] = []
+    for extension_name in DOCS_MARKDOWN_EXTENSIONS:
+        if extension_name.startswith("pymdownx.") and importlib.util.find_spec(extension_name) is None:
+            continue
+        enabled.append(extension_name)
+    return enabled
+
+
+def _strip_markdown_front_matter(markdown_text: str) -> str:
+    text = str(markdown_text or "")
+    if not text.startswith("---"):
+        return text
+    match = re.match(r"^---\s*\n.*?\n---\s*\n", text, flags=re.DOTALL)
+    if not match:
+        return text
+    return text[match.end() :]
+
+
+def _resolve_object_from_import_path(import_path: str) -> Any:
+    cleaned = str(import_path or "").strip()
+    if not cleaned:
+        raise ImportError("Missing import path.")
+
+    parts = cleaned.split(".")
+    for index in range(len(parts), 0, -1):
+        module_name = ".".join(parts[:index])
+        try:
+            module = importlib.import_module(module_name)
+        except ImportError:
+            continue
+        value: Any = module
+        for attribute in parts[index:]:
+            value = getattr(value, attribute)
+        return value
+    raise ImportError(f"Could not import object: {cleaned}")
+
+
+def _render_mkdocstrings_stub(import_path: str) -> str:
+    cleaned = str(import_path or "").strip()
+    try:
+        value = _resolve_object_from_import_path(cleaned)
+    except Exception:
+        return (
+            f'!!! warning\n'
+            f'    API docs for `{cleaned}` could not be generated in the Django docs view.\n'
+            f'    Please check the import path and package installation.\n'
+        )
+
+    obj_name = getattr(value, "__name__", cleaned.split(".")[-1])
+    markdown_lines = [f"## `{obj_name}`", ""]
+    try:
+        signature = str(inspect.signature(value))
+        markdown_lines.extend(["```python", f"{obj_name}{signature}", "```", ""])
+    except (TypeError, ValueError):
+        pass
+
+    docstring = inspect.getdoc(value) or "No docstring available."
+    markdown_lines.extend([docstring, ""])
+    return "\n".join(markdown_lines)
+
+
+def _expand_mkdocstrings_directives(markdown_text: str) -> str:
+    pattern = re.compile(r"(?m)^:::\s*([A-Za-z_][\w\.]*)\s*$")
+
+    def _replace(match: re.Match[str]) -> str:
+        return _render_mkdocstrings_stub(match.group(1))
+
+    return pattern.sub(_replace, markdown_text)
+
+
+def _build_markdown_renderer() -> markdown.Markdown:
+    return markdown.Markdown(
+        extensions=_enabled_markdown_extensions(),
+        extension_configs={
+            "toc": {"permalink": True},
+            "codehilite": {"guess_lang": False, "use_pygments": True},
+            "pymdownx.highlight": {
+                "anchor_linenums": True,
+                "line_spans": "__span",
+                "pygments_lang_class": True,
+            },
+            "pymdownx.tabbed": {"alternate_style": True},
+        },
+        output_format="html5",
+    )
+
+
+def _extract_docs_toc_from_tokens(tokens: list[dict[str, Any]], level: int = 1) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for token in tokens:
+        title = _normalise_title_text(str(token.get("name") or ""))
+        anchor = str(token.get("id") or "").strip()
+        if title and anchor:
+            items.append({"title": title, "url": f"#{anchor}", "level": level})
+        children = token.get("children", [])
+        if isinstance(children, list):
+            items.extend(_extract_docs_toc_from_tokens(children, level + 1))
+    return items
+
+
+def _docs_url_from_nav_target(raw_target: str) -> Optional[str]:
+    target = str(raw_target or "").strip()
+    if not target:
+        return None
+    parsed = urlparse(target)
+    if parsed.scheme in {"http", "https"}:
+        host = (parsed.hostname or "").lower()
+        if host not in DOCS_LINK_HOSTS:
+            return target
+        doc_path = _mkdocs_path_to_doc_path(parsed.path)
+        if doc_path is not None:
+            return _append_query_fragment(_docs_url_for_path(doc_path), parsed)
+        return _append_query_fragment(_docs_site_file_url(parsed.path.lstrip("/")), parsed)
+    if parsed.scheme:
+        return target
+    doc_path = _mkdocs_path_to_doc_path(parsed.path or target)
+    if doc_path is not None:
+        return _append_query_fragment(_docs_url_for_path(doc_path), parsed)
+    path_value = (parsed.path or target).lstrip("/")
+    return _append_query_fragment(_docs_site_file_url(path_value), parsed)
+
+
+def _build_docs_nav_items(entries: list[Any], current_doc_path: str) -> list[dict[str, Any]]:
+    current_doc_url = _docs_url_for_path(current_doc_path).rstrip("/") or "/"
+    nav_items: list[dict[str, Any]] = []
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+
+        for raw_title, value in entry.items():
+            title = _normalise_title_text(str(raw_title or ""))
+            if not title:
+                continue
+
+            children: list[dict[str, Any]] = []
+            url: Optional[str] = None
+            if isinstance(value, list):
+                children = _build_docs_nav_items(value, current_doc_path)
+                url = _first_navigable_url(children)
+            elif isinstance(value, dict):
+                children = _build_docs_nav_items([value], current_doc_path)
+                url = _first_navigable_url(children)
+            else:
+                url = _docs_url_from_nav_target(str(value))
+
+            item_doc_path = _extract_doc_path_from_docs_url(url)
+            if item_doc_path in DOCS_REMOVED_PATHS:
+                continue
+
+            base_url = (str(url or "").split("#", 1)[0].rstrip("/") or "/") if url else ""
+            active = bool(base_url and base_url == current_doc_url) or any(child.get("active", False) for child in children)
+            nav_items.append(
+                {
+                    "title": title,
+                    "url": url,
+                    "active": active,
+                    "expanded": active,
+                    "children": children,
+                }
+            )
+    return nav_items
+
+
+def _load_docs_nav_from_config(current_doc_path: str) -> list[dict[str, Any]]:
+    if not DOCS_CONFIG_FILE.is_file():
+        return []
+    config_data = yaml.load(DOCS_CONFIG_FILE.read_text(encoding="utf-8"), Loader=yaml.UnsafeLoader) or {}
+    nav_entries = config_data.get("nav") or []
+    if not isinstance(nav_entries, list):
+        return []
+    return _build_docs_nav_items(nav_entries, current_doc_path)
+
+
+def _extract_docs_toc(article_tag: Any) -> list[dict[str, Any]]:
+    toc_items: list[dict[str, Any]] = []
+    heading_pattern = re.compile(r"^h[1-4]$")
+    for heading in article_tag.find_all(heading_pattern):
+        heading_id = heading.get("id")
+        if not heading_id:
+            continue
+        title = _normalise_title_text(heading.get_text(" ", strip=True))
+        if not title:
+            continue
+        level = int(str(heading.name)[1])
+        toc_items.append(
+            {
+                "title": title,
+                "url": f"#{heading_id}",
+                "level": level,
+            }
+        )
+    return toc_items
+
+
+def _load_docs_page_payload(doc_path: str) -> dict[str, Any]:
+    normalised_doc_path = _normalise_docs_path(doc_path)
+    markdown_path = _docs_markdown_file_path(normalised_doc_path)
+    if not markdown_path.is_file():
+        raise FileNotFoundError(f"Docs page not found: {normalised_doc_path or 'index'}")
+
+    markdown_text = markdown_path.read_text(encoding="utf-8")
+    markdown_text = _strip_markdown_front_matter(markdown_text)
+    markdown_text = _expand_mkdocstrings_directives(markdown_text)
+
+    renderer = _build_markdown_renderer()
+    rendered_html = renderer.convert(markdown_text)
+
+    wrapper = BeautifulSoup(f'<article class="md-content__inner">{rendered_html}</article>', "html.parser")
+    article = wrapper.select_one("article.md-content__inner")
+    if article is None:
+        raise ValueError(f"Docs page could not be rendered: {normalised_doc_path or 'index'}")
+    _rewrite_docs_dom_links(article, normalised_doc_path)
+
+    nav_items = _load_docs_nav_from_config(normalised_doc_path)
+    toc_items = _extract_docs_toc_from_tokens(getattr(renderer, "toc_tokens", []))
+    if not toc_items:
+        toc_items = _extract_docs_toc(article)
+
+    page_title = "For coders"
+    heading = article.find("h1")
+    if heading is not None:
+        resolved_title = _normalise_title_text(heading.get_text(" ", strip=True))
+        if resolved_title:
+            page_title = resolved_title
+
+    return {
+        "doc_path": normalised_doc_path,
+        "page_title": page_title,
+        "article_html": str(article),
+        "nav_items": nav_items,
+        "toc_items": toc_items,
+    }
 
 
 def _normalise_workbook_id(raw_value: str) -> Optional[str]:
@@ -2098,6 +2526,63 @@ def settings_page(request: HttpRequest) -> HttpResponse:
     context = _build_context(request)
     context["current_page"] = "settings"
     return render(request, "workbench/settings.html", context)
+
+
+def _render_for_coders_page(request: HttpRequest, doc_path: str) -> HttpResponse:
+    normalised_doc_path = _normalise_docs_path(doc_path)
+    if normalised_doc_path in DOCS_REMOVED_PATHS:
+        return redirect(_docs_url_for_path(""))
+    docs_error = ""
+    try:
+        payload = _load_docs_page_payload(normalised_doc_path)
+    except (FileNotFoundError, ValueError) as exc:
+        if normalised_doc_path:
+            try:
+                payload = _load_docs_page_payload("")
+                docs_error = (
+                    f'The page "{normalised_doc_path}" could not be loaded, so the documentation home page is shown.'
+                )
+            except (FileNotFoundError, ValueError):
+                raise Http404(str(exc)) from exc
+        else:
+            raise Http404(str(exc)) from exc
+
+    context = {
+        "current_page": "for_coders",
+        "docs_page_title": payload["page_title"],
+        "docs_page_path": payload["doc_path"],
+        "docs_article_html": payload["article_html"],
+        "docs_nav_items": payload["nav_items"],
+        "docs_toc_items": payload["toc_items"],
+        "docs_error": docs_error,
+    }
+    return render(request, "workbench/for_coders.html", context)
+
+
+@require_http_methods(["GET"])
+def for_coders(request: HttpRequest) -> HttpResponse:
+    requested_doc_path = _normalise_docs_path(request.GET.get("doc", ""))
+    return _render_for_coders_page(request, requested_doc_path)
+
+
+@require_http_methods(["GET"])
+def for_coders_page(request: HttpRequest, doc_path: str) -> HttpResponse:
+    return redirect(_docs_url_for_path(_normalise_docs_path(doc_path)))
+
+
+@require_http_methods(["GET"])
+def for_coders_site_file(request: HttpRequest, file_path: str) -> HttpResponse:
+    cleaned = str(file_path or "").lstrip("/")
+    if not cleaned:
+        raise Http404("Missing docs file path.")
+
+    docs_root = DOCS_SOURCE_ROOT.resolve()
+    candidate = (DOCS_SOURCE_ROOT / cleaned).resolve()
+    if not _path_within_root(candidate, docs_root) or not candidate.is_file():
+        raise Http404("Docs file was not found.")
+
+    content_type, _ = mimetypes.guess_type(candidate.name)
+    return FileResponse(candidate.open("rb"), content_type=content_type or "application/octet-stream")
 
 
 @require_http_methods(["GET"])

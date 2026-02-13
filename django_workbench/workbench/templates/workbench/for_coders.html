@@ -1,0 +1,131 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench coder-docs-workbench{% if not docs_page_path %} is-doc-home{% endif %}">
+    <section class="coder-docs-layout reveal-up">
+        <div class="coder-docs-content-card">
+            <header class="coder-docs-header">
+                <span class="section-kicker">For coders</span>
+            </header>
+            {% if docs_error %}
+                <div class="coder-docs-alert" role="status">
+                    {{ docs_error }}
+                </div>
+            {% endif %}
+            <div class="coder-docs-article">
+                {{ docs_article_html|safe }}
+            </div>
+        </div>
+
+        <aside class="coder-docs-rightbar" aria-label="Documentation navigation">
+            <section class="coder-docs-panel" data-coder-docs-nav>
+                <h2>For coders</h2>
+                {% include "workbench/_docs_nav_tree.html" with items=docs_nav_items %}
+            </section>
+        </aside>
+    </section>
+</div>
+<script>
+    (function () {
+        function fallbackCopyText(text) {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.setAttribute("readonly", "readonly");
+            textarea.style.position = "fixed";
+            textarea.style.left = "-9999px";
+            document.body.appendChild(textarea);
+            textarea.select();
+            let copied = false;
+            try {
+                copied = document.execCommand("copy");
+            } catch (error) {
+                copied = false;
+            }
+            document.body.removeChild(textarea);
+            return copied;
+        }
+
+        function setupCodeCopyButtons() {
+            const codeBlocks = document.querySelectorAll(".coder-docs-article pre");
+            codeBlocks.forEach(function (pre) {
+                if (pre.querySelector(".coder-code-copy-btn")) {
+                    return;
+                }
+
+                const code = pre.querySelector("code");
+                const copySource = code ? code.textContent : pre.textContent;
+                if (!copySource || !copySource.trim()) {
+                    return;
+                }
+
+                pre.dataset.copyText = copySource.replace(/\u00a0/g, " ");
+                pre.classList.add("coder-code-copy-enabled");
+
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = "coder-code-copy-btn";
+                button.textContent = "Copy";
+                button.setAttribute("aria-label", "Copy code block");
+
+                button.addEventListener("click", function () {
+                    const text = pre.dataset.copyText || "";
+                    if (!text) {
+                        return;
+                    }
+
+                    const onSuccess = function () {
+                        button.textContent = "Copied";
+                        button.classList.add("is-copied");
+                        window.setTimeout(function () {
+                            button.textContent = "Copy";
+                            button.classList.remove("is-copied");
+                        }, 1300);
+                    };
+
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(onSuccess).catch(function () {
+                            if (fallbackCopyText(text)) {
+                                onSuccess();
+                            }
+                        });
+                        return;
+                    }
+
+                    if (fallbackCopyText(text)) {
+                        onSuccess();
+                    }
+                });
+
+                pre.appendChild(button);
+            });
+        }
+
+        const navRoot = document.querySelector("[data-coder-docs-nav]");
+        if (navRoot) {
+            navRoot.addEventListener("click", function (event) {
+                const toggle = event.target.closest(".coder-docs-nav-toggle");
+                const passiveLabel = event.target.closest(".coder-docs-nav-label");
+                const item = (toggle || passiveLabel) ? (toggle || passiveLabel).closest(".coder-docs-nav-item.has-children") : null;
+                if (!item) return;
+                if (passiveLabel && item.querySelector(".coder-docs-nav-link")) return;
+
+                event.preventDefault();
+                event.stopPropagation();
+
+                const nextExpanded = !item.classList.contains("is-expanded");
+                item.classList.toggle("is-expanded", nextExpanded);
+                const control = item.querySelector(".coder-docs-nav-toggle");
+                if (control) {
+                    control.setAttribute("aria-expanded", nextExpanded ? "true" : "false");
+                }
+            });
+        }
+
+        setupCodeCopyButtons();
+    })();
+</script>
+{% endblock %}

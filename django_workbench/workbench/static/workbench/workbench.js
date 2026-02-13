@@ -1,7 +1,7 @@
 (function () {
     document.documentElement.classList.add("js-enabled");
     const PAGE_CLASS_PREFIX = "page-";
-    const KNOWN_PAGES = ["home", "explore", "themes", "extract", "settings"];
+    const KNOWN_PAGES = ["home", "explore", "themes", "extract", "for_coders", "settings"];
 
     function byId(id) {
         return document.getElementById(id);
@@ -22,6 +22,9 @@
         }
         if (pathname.startsWith("/extract-data")) {
             return "extract";
+        }
+        if (pathname.startsWith("/for-coders")) {
+            return "for_coders";
         }
         if (pathname.startsWith("/settings")) {
             return "settings";
@@ -688,6 +691,52 @@
                 setCollapsedState(false);
             }
         });
+    }
+
+    function setupForCodersLinkRouting() {
+        if (document.body.dataset.forCodersRoutingBound === "1") {
+            return;
+        }
+        document.body.dataset.forCodersRoutingBound = "1";
+
+        document.addEventListener("click", function (event) {
+            const link = event.target.closest(".coder-docs-article a, .coder-docs-nav-link, .coder-docs-toc-item a");
+            if (!link) {
+                return;
+            }
+            if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+                return;
+            }
+
+            const href = link.getAttribute("href");
+            if (!href || href.startsWith("#")) {
+                return;
+            }
+            if (link.hasAttribute("download")) {
+                return;
+            }
+
+            const targetAttr = (link.getAttribute("target") || "").toLowerCase();
+            if (targetAttr && targetAttr !== "_self") {
+                return;
+            }
+
+            let targetUrl = null;
+            try {
+                targetUrl = new URL(href, window.location.origin);
+            } catch (error) {
+                return;
+            }
+            if (!targetUrl || targetUrl.origin !== window.location.origin) {
+                return;
+            }
+            if (!targetUrl.pathname.startsWith("/for-coders")) {
+                return;
+            }
+
+            event.preventDefault();
+            window.location.assign(targetUrl.pathname + targetUrl.search + targetUrl.hash);
+        }, true);
     }
 
     function setupRevealAnimations() {
@@ -2952,6 +3001,10 @@
             return;
         }
 
+        function locationKeyFromWindow() {
+            return `${window.location.pathname}${window.location.search || ""}`;
+        }
+
         function getWorkspaceToken(rootNode) {
             if (!rootNode || !rootNode.dataset) {
                 return "";
@@ -2980,7 +3033,7 @@
         }
 
         const pageCache = new Map();
-        let activePath = window.location.pathname;
+        let activePath = locationKeyFromWindow();
         let activeWorkspaceToken = getWorkspaceToken(contentRoot);
         pageCache.set(activePath, {
             html: snapshotPageHtmlForCache(contentRoot),
@@ -3029,8 +3082,11 @@
                 return;
             }
 
-            const targetPath = targetUrl.pathname;
-            const currentPath = window.location.pathname;
+            const targetPath = `${targetUrl.pathname}${targetUrl.search || ""}`;
+            const currentPath = locationKeyFromWindow();
+            if (targetUrl.pathname.startsWith("/for-coders") || window.location.pathname.startsWith("/for-coders")) {
+                return;
+            }
             if (targetPath === currentPath) {
                 event.preventDefault();
                 return;
@@ -3090,8 +3146,8 @@
         });
 
         window.addEventListener("popstate", function () {
-            const path = window.location.pathname;
-            const page = getPageFromPath(path);
+            const path = locationKeyFromWindow();
+            const page = getPageFromPath(window.location.pathname);
             activeWorkspaceToken = getWorkspaceToken(contentRoot);
             pageCache.set(activePath, {
                 html: snapshotPageHtmlForCache(contentRoot),
@@ -3108,6 +3164,7 @@
 
     document.addEventListener("DOMContentLoaded", function () {
         setupSidebarCollapse();
+        setupForCodersLinkRouting();
         setupClientNavigation();
         initializePageFeatures();
     });

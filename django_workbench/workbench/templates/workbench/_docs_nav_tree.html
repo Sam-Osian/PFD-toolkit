@@ -1,0 +1,30 @@
+{% if items %}
+    <ul class="coder-docs-nav-list">
+        {% for item in items %}
+            <li class="coder-docs-nav-item{% if item.children %} has-children{% endif %}{% if item.active %} is-active is-expanded{% endif %}">
+                <div class="coder-docs-nav-row">
+                    {% if item.url %}
+                        <a href="{{ item.url }}" class="coder-docs-nav-link{% if item.active %} is-active{% endif %}">{{ item.title }}</a>
+                    {% else %}
+                        <span class="coder-docs-nav-label{% if item.active %} is-active{% endif %}">{{ item.title }}</span>
+                    {% endif %}
+                    {% if item.children %}
+                        <button
+                            type="button"
+                            class="coder-docs-nav-toggle"
+                            aria-label="Toggle {{ item.title }}"
+                            aria-expanded="{% if item.active %}true{% else %}false{% endif %}"
+                        >
+                            <span class="coder-docs-nav-toggle-icon" aria-hidden="true"></span>
+                        </button>
+                    {% endif %}
+                </div>
+                {% if item.children %}
+                    <div class="coder-docs-nav-children">
+                        {% include "workbench/_docs_nav_tree.html" with items=item.children %}
+                    </div>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% endif %}

@@ -38,6 +38,11 @@ urlpatterns = [
     path("filter/", views.filter_page, name="filter"),
     path("analyse-themes/", views.themes_page, name="themes"),
     path("extract-data/", views.extract_page, name="extract"),
+    path("for-coders", views.for_coders, name="for_coders_no_slash"),
+    path("for-coders/", views.for_coders, name="for_coders"),
+    path("for-coders/site/<path:file_path>", views.for_coders_site_file, name="for_coders_site_file"),
+    path("for-coders/<path:doc_path>", views.for_coders_page, name="for_coders_page_no_slash"),
+    path("for-coders/<path:doc_path>/", views.for_coders_page, name="for_coders_page"),
     path("settings/", views.settings_page, name="settings"),
     path("dataset-panel/", views.dataset_panel, name="dataset_panel"),
 ]

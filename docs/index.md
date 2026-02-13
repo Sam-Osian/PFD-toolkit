@@ -4,46 +4,19 @@ description: Analyse Prevention of Future Deaths reports with AI
 image: assets/header.png
 ---
 
-# Home
+# Start page
 
-![PFD Toolkit: Open-source software for Prevention of Future Deaths reports](assets/header.png)
+## Using the Python package
 
-**PFD Toolkit** is an open-source Python package that lets you automatically scrape, filter, and analyse Prevention of Future Deaths (PFD) reports using Artificial Intelligence.
+PFD Toolkit is **also available as a Python package** for using the toolkit programmatically, rather than through the interactive web app.
 
-PFD reports are vital public warnings, but until now, they’ve been a nightmare to analyse: inconsistent formats, missing metadata, no way to mass download report content into a neat, tabular dataset – among many other issues.
+This route gives coders direct control over the full analysis pipeline, including data loading, screening logic, LLM setup, extraction behaviour, and downstream outputs.
 
-PFD Toolkit solves this by using AI (including LLMs and Vision models) to read, clean, and standardise every report, whether typed or scanned.
-
-## Two ways to get started
-
-<div class="pfd-pathways">
-  <a class="pfd-pathway" href="https://workbench.pfdtoolkit.org" target="_blank" rel="noopener">
-    <p class="pfd-pathway__tag">For everyone</p>
-    <h3 class="pfd-pathway__title">Use the AI Workbench</h3>
-    <p class="pfd-pathway__body">Explore Prevention of Future Deaths reports in minutes with our hosted AI Workbench. Search, filter, and generate insight-ready summaries without installing anything.</p>
-    <span class="pfd-pathway__cta">Launch the AI Workbench →</span>
-  </a>
-  <a class="pfd-pathway" href="getting_started/basic_tutorial/" rel="noopener">
-    <p class="pfd-pathway__tag">For coders</p>
-    <h3 class="pfd-pathway__title">Build with the toolkit</h3>
-    <p class="pfd-pathway__body">Install the open-source package, follow the step-by-step tutorial, and plug powerful extraction, screening, and scraping tools into your own projects.</p>
-    <span class="pfd-pathway__cta">Read the tutorial →</span>
-  </a>
-</div>
-
-What does this mean in practice? Instead of weeks of manual coding, you get instant access to:
-
-- **Bulk-download structured datasets** of PFD reports
-- **Screen and filter** reports by any research question (e.g. “road safety”, “suicide”, or any other query)
-- **Generate concise summaries** and extract key variables, themes, or concerns
-- **Automatically spot patterns** and recurring issues across reports
-- **Output ready-to-use tables** for charts, analysis, or policy work
-
-
+Use this section to install the Python package, run workflows in your own environment, and integrate PFD analysis into reproducible scripts and projects.
 
 ---
 
-Here’s a sample of the PFD dataset you can load:
+Just like the web app, you can use the Python API to load a DataFrame of PFD Reports similar to the below:
 
 | url                        | date       | coroner    | area                        | receiver                | investigation           | circumstances                 | concerns                   |
 |----------------------------|------------|------------|-----------------------------|-------------------------|-------------------------|-------------------------------|----------------------------|
@@ -54,28 +27,19 @@ Here’s a sample of the PFD dataset you can load:
 | [...]            | 2025-04-25 | M. Hassell | Inner North Lo...          | The President Royal...  | On 23 August 2024, on...| They were a big baby and...    | With the benefit of a m... |
 
 
-Each row is an individual report, while each column reflects a section of the report. For more information on each of these columns, see [here](pfd_reports.md#what-do-pfd-reports-look-like).
-
----
-
-## Why does this matter? 
-
-Despite being public warnings, PFD reports are chronically underused. That’s because they’ve historically been a pain to work with: scattered formats, inconsistent categorisation, and a lack of easy access for researchers. As a result, it’s been almost impossible to spot trends or respond to risks quickly.
-
-**PFD Toolkit changes this.** By automating the messy admin typically involved in a PFD research project, it transforms unstructured coroners’ text into neat datasets — making it finally practical to do timely systematic research, policy analysis, or audit work on preventable deaths.
-
+Each row is an individual report, while each column reflects a section of the report. For more detail on these columns, see [About the data](pfd_reports.md#what-do-pfd-reports-look-like).
 
 ---
 
 ## Installation
 
-You can install PFD Toolkit using pip:
+You can install the Python package with pip:
 
 ```bash
 pip install pfd_toolkit
 ```
 
-To update, run:
+To update the package, run:
 
 ```bash
 pip install -U pfd_toolkit
@@ -86,28 +50,28 @@ pip install -U pfd_toolkit
 
 ## Licence
 
-This project is distributed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](https://github.com/Sam-Osian/PFD-toolkit?tab=AGPL-3.0-1-ov-file).
+The **PFD Toolkit Python package** is distributed under the [GNU Affero General Public License v3.0 (AGPL-3.0)](https://github.com/Sam-Osian/PFD-toolkit?tab=AGPL-3.0-1-ov-file).
 
 
 !!! note
-    * You are welcome to use, modify, and share this code under the terms of the AGPL-3.0.
-    * If you use this code to provide a networked service, you are required to make the complete source code available to users of that service.
-    * Some project dependencies may have their own licence terms, which could affect certain types of use (e.g. commercial use).
+    * You are welcome to use, modify, and share the Python package code under the terms of the AGPL-3.0.
+    * If you use the package to provide a networked service, you are required to make the complete source code available to users of that service.
+    * Some package dependencies may have their own licence terms, which could affect certain types of use (e.g. commercial use).
 
 ---
 
 ## Contribute
 
-PFD Toolkit is designed as a research-enabling tool, and we’re keen to work with the community to make sure it genuinely meets your needs. If you have feedback, ideas, or want to get involved, head to our [Feedback & contributions](contribute.md) page.
+The Python package is designed as a research-enabling tool, and we’re keen to work with the community to make sure it genuinely meets your needs. If you have feedback, ideas, or want to get involved, head to our [Feedback & contributions](contribute.md) page.
 
 
 ---
 
 ## How to cite
 
-If you use PFD Toolkit in your research, please cite the archived release:
+If you use the PFD Toolkit Python package in your research, please cite the archived release:
 
-> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.3.7) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
+> Osian, S., & Pytches, J. (2025). PFD Toolkit: Unlocking Prevention of Future Death Reports for Research (Version 0.4.0) [Software]. Zenodo. https://doi.org/10.5281/zenodo.15729717
 
 Or, in BibTeX:
 
@@ -116,7 +80,7 @@ Or, in BibTeX:
   author       = {Sam Osian and Jonathan Pytches},
   title        = {PFD Toolkit: Unlocking Prevention of Future Death Reports for Research},
   year         = {2025},
-  version      = {0.3.7},
+  version      = {0.4.0},
   doi          = {10.5281/zenodo.15729717},
   url          = {https://github.com/sam-osian/PFD-toolkit}
 }

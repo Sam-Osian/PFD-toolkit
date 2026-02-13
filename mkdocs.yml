@@ -115,7 +115,6 @@ nav:
           - Cleaning scraped data: loader/cleaner.md
   - Feedback & contributions: contribute.md
   - Changelog: changelog.md
-  - Contact: contact.md
   - API Reference:
         - Data loader: reference/loader.md
         - Screener: reference/screener.md
@@ -123,4 +122,3 @@ nav:
         - Scraper: reference/scraper.md
         - Cleaner: reference/cleaner.md
         - LLM: reference/llm.md
-
