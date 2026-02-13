@@ -108,6 +108,27 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
     },
 }
 
+UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
+    {
+        "id": "modern-ai",
+        "name": "Modern AI",
+        "description": "Current default visual style.",
+    },
+    {
+        "id": "retro-console",
+        "name": "Retro Console",
+        "description": "Dark terminal-inspired palette.",
+    },
+)
+UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
+
+
+def _normalise_ui_theme(raw_value: Any) -> str:
+    value = str(raw_value or "").strip().lower()
+    if value in UI_THEME_IDS:
+        return value
+    return "modern-ai"
+
 
 def _bool_from_post(request: HttpRequest, key: str, default: bool = False) -> bool:
     if key not in request.POST:
@@ -1214,6 +1235,9 @@ def _update_sidebar_state(request: HttpRequest) -> None:
             except ValueError:
                 pass
 
+    if "ui_theme" in request.POST:
+        session["ui_theme"] = _normalise_ui_theme(request.POST.get("ui_theme"))
+
 
 def _resolve_active_workbook(request: HttpRequest) -> tuple[Optional[Workbook], bool]:
     workbook_id = _normalise_workbook_id(request.GET.get("workbook", ""))
@@ -1229,6 +1253,8 @@ def _resolve_active_workbook(request: HttpRequest) -> tuple[Optional[Workbook], 
 
 def _build_context(request: HttpRequest) -> dict[str, Any]:
     session = request.session
+    ui_theme = _normalise_ui_theme(session.get("ui_theme"))
+    session["ui_theme"] = ui_theme
 
     reports_df_full = _get_reports_df_with_row_ids(session)
     excluded_reports_df = _get_excluded_reports_df(session)
@@ -1369,6 +1395,8 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "report_limit_for_slider": report_limit_for_slider,
         "ai_features_used": ai_features_used,
         "has_existing_themes": has_existing_themes,
+        "ui_theme": ui_theme,
+        "ui_theme_options": UI_THEME_CHOICES,
         "workspace_dataset_token": session.get("reports_df") or "",
         "dashboard_selected_coroners": dashboard_filters["coroner"],
         "dashboard_selected_areas": dashboard_filters["area"],
@@ -2714,6 +2742,10 @@ def settings_page(request: HttpRequest) -> HttpResponse:
 
 
 def _render_for_coders_page(request: HttpRequest, doc_path: str) -> HttpResponse:
+    init_state(request.session)
+    ui_theme = _normalise_ui_theme(request.session.get("ui_theme"))
+    request.session["ui_theme"] = ui_theme
+
     normalised_doc_path = _normalise_docs_path(doc_path)
     if normalised_doc_path in DOCS_REMOVED_PATHS:
         return redirect(_docs_url_for_path(""))
@@ -2734,6 +2766,7 @@ def _render_for_coders_page(request: HttpRequest, doc_path: str) -> HttpResponse
 
     context = {
         "current_page": "for_coders",
+        "ui_theme": ui_theme,
         "docs_page_title": payload["page_title"],
         "docs_page_path": payload["doc_path"],
         "docs_article_html": payload["article_html"],

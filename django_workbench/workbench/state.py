@@ -88,6 +88,7 @@ def init_state(session: dict[str, Any]) -> None:
         "report_start_date": date(2013, 1, 1).isoformat(),
         "report_end_date": date.today().isoformat(),
         "report_limit": None,
+        "ui_theme": "modern-ai",
         REPRO_SCRIPT_KEY: _initial_repro_script_lines(),
         REPRO_ACTION_COUNTS_KEY: {},
         LLM_SIGNATURE_KEY: None,

@@ -7,6 +7,12 @@
         return document.getElementById(id);
     }
 
+    function getCssVar(name, fallback) {
+        const value = window.getComputedStyle(document.body).getPropertyValue(name);
+        const trimmed = value ? value.trim() : "";
+        return trimmed || fallback;
+    }
+
     function getPageFromPath(pathname) {
         if (pathname.startsWith("/explore-pfds")) {
             return "explore";
@@ -2138,8 +2144,19 @@
 
         const TOP_N = 12;
         const UNKNOWN_LABEL = "Not specified";
-        const gridTextColor = "rgba(209, 220, 255, 0.7)";
-        const splitLineColor = "rgba(156, 173, 232, 0.18)";
+
+        function chartPalette() {
+            return {
+                gridTextColor: getCssVar("--chart-axis-text", "rgba(209, 220, 255, 0.7)"),
+                splitLineColor: getCssVar("--chart-axis-line", "rgba(156, 173, 232, 0.18)"),
+                monthlyLine: getCssVar("--chart-monthly-line", "#66d7ff"),
+                monthlyArea: getCssVar("--chart-monthly-area", "rgba(102, 215, 255, 0.18)"),
+                coronerBar: getCssVar("--chart-coroner-bar", "#5b9dff"),
+                areaBar: getCssVar("--chart-area-bar", "#7ac26b"),
+                receiverBar: getCssVar("--chart-receiver-bar", "#f2a85a"),
+                emptyTextColor: getCssVar("--chart-empty-text", "rgba(210, 220, 255, 0.7)"),
+            };
+        }
 
         function normaliseValue(value) {
             if (typeof value !== "string") {
@@ -2304,6 +2321,7 @@
         }
 
         function renderMonthlyChart(seriesRows) {
+            const palette = chartPalette();
             const months = seriesRows.map((row) => row.name);
             const counts = seriesRows.map((row) => row.value);
             charts.monthly.setOption(
@@ -2314,22 +2332,22 @@
                     xAxis: {
                         type: "category",
                         data: months,
-                        axisLabel: { color: gridTextColor, rotate: 30 },
-                        axisLine: { lineStyle: { color: splitLineColor } },
+                        axisLabel: { color: palette.gridTextColor, rotate: 30 },
+                        axisLine: { lineStyle: { color: palette.splitLineColor } },
                     },
                     yAxis: {
                         type: "value",
-                        axisLabel: { color: gridTextColor },
-                        splitLine: { lineStyle: { color: splitLineColor } },
+                        axisLabel: { color: palette.gridTextColor },
+                        splitLine: { lineStyle: { color: palette.splitLineColor } },
                     },
                     series: [
                         {
                             type: "line",
                             smooth: true,
                             showSymbol: false,
-                            lineStyle: { width: 2.2, color: "#66d7ff" },
-                            itemStyle: { color: "#66d7ff" },
-                            areaStyle: { color: "rgba(102, 215, 255, 0.18)" },
+                            lineStyle: { width: 2.2, color: palette.monthlyLine },
+                            itemStyle: { color: palette.monthlyLine },
+                            areaStyle: { color: palette.monthlyArea },
                             data: counts,
                         },
                     ],
@@ -2341,7 +2359,7 @@
                                 top: "middle",
                                 style: {
                                     text: "No dated reports for this filter.",
-                                    fill: "rgba(210, 220, 255, 0.7)",
+                                    fill: palette.emptyTextColor,
                                     fontSize: 13,
                                 },
                             },
@@ -2353,6 +2371,7 @@
         }
 
         function renderBarChart(chart, seriesRows, colorHex, emptyText) {
+            const palette = chartPalette();
             const labels = seriesRows.map((row) => row.name);
             const values = seriesRows.map((row) => row.value);
             chart.setOption(
@@ -2362,19 +2381,19 @@
                     grid: { left: 140, right: 16, top: 24, bottom: 24 },
                     xAxis: {
                         type: "value",
-                        axisLabel: { color: gridTextColor },
-                        splitLine: { lineStyle: { color: splitLineColor } },
+                        axisLabel: { color: palette.gridTextColor },
+                        splitLine: { lineStyle: { color: palette.splitLineColor } },
                     },
                     yAxis: {
                         type: "category",
                         inverse: true,
                         data: labels,
                         axisLabel: {
-                            color: gridTextColor,
+                            color: palette.gridTextColor,
                             overflow: "truncate",
                             width: 130,
                         },
-                        axisLine: { lineStyle: { color: splitLineColor } },
+                        axisLine: { lineStyle: { color: palette.splitLineColor } },
                     },
                     series: [
                         {
@@ -2395,7 +2414,7 @@
                                 top: "middle",
                                 style: {
                                     text: emptyText,
-                                    fill: "rgba(210, 220, 255, 0.7)",
+                                    fill: palette.emptyTextColor,
                                     fontSize: 13,
                                 },
                             },
@@ -2437,19 +2456,19 @@
             renderBarChart(
                 charts.coroner,
                 topCoroners,
-                "#5b9dff",
+                chartPalette().coronerBar,
                 "No coroner values for this filter."
             );
             renderBarChart(
                 charts.area,
                 topAreas,
-                "#7ac26b",
+                chartPalette().areaBar,
                 "No area values for this filter."
             );
             renderBarChart(
                 charts.receiver,
                 topReceivers,
-                "#f2a85a",
+                chartPalette().receiverBar,
                 "No receiver values for this filter."
             );
 
@@ -2622,7 +2641,9 @@
                 return;
             }
             statusNode.textContent = text || "";
-            statusNode.style.color = isError ? "rgba(255, 183, 183, 0.9)" : "rgba(205, 217, 255, 0.72)";
+            statusNode.style.color = isError
+                ? getCssVar("--status-error-text", "rgba(255, 183, 183, 0.9)")
+                : getCssVar("--status-muted-text", "rgba(205, 217, 255, 0.72)");
         }
 
         function getCsrfToken() {

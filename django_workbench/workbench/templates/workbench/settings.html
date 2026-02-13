@@ -94,6 +94,32 @@
                 </div>
             </details>
 
+            <details class="expander workflow-clean-expander settings-category" open>
+                <summary>
+                    <span class="settings-category__heading">Theme</span>
+                </summary>
+                <div class="expander-content">
+                    <p class="help-text settings-theme-help">Choose the visual style for backgrounds, surfaces, controls, and charts.</p>
+                    <div class="settings-theme-picker" role="radiogroup" aria-label="Theme selection">
+                        {% for theme in ui_theme_options %}
+                        <label class="settings-theme-option">
+                            <input
+                                type="radio"
+                                name="ui_theme"
+                                value="{{ theme.id }}"
+                                {% if ui_theme == theme.id %}checked{% endif %}
+                            >
+                            <span class="settings-theme-option__swatch settings-theme-option__swatch--{{ theme.id }}" aria-hidden="true"></span>
+                            <span class="settings-theme-option__text">
+                                <strong>{{ theme.name }}</strong>
+                                <small>{{ theme.description }}</small>
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+            </details>
+
             <div class="settings-actions">
                 <button type="submit" name="action" value="save_settings" class="button-secondary">Save settings</button>
             </div>
