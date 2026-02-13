@@ -8,6 +8,8 @@ app_name = "workbench"
 urlpatterns = [
     path("", views.index, name="index"),
     path("home/", views.home, name="home"),
+    path("robots.txt", views.robots_txt, name="robots_txt"),
+    path("sitemap.xml", views.sitemap_xml, name="sitemap_xml"),
     path("explore-pfds/", views.explore, name="explore"),
     path("workbooks/create/", views.workbook_create, name="workbook_create"),
     path(

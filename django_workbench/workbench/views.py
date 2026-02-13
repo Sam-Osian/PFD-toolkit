@@ -10,6 +10,7 @@ import copy
 import importlib
 import importlib.util
 import inspect
+from html import escape
 from datetime import date, datetime
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -59,6 +60,53 @@ from .state import (
     undo_last_change,
     workspace_has_activity,
 )
+
+SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
+    "home": {
+        "title": "PFD Toolkit - Analyse Prevention of Future Deaths Reports with AI",
+        "description": (
+            "Analyse Prevention of Future Deaths reports with AI. "
+            "Filter reports, discover themes, and extract structured evidence in one workflow."
+        ),
+        "robots": "index,follow",
+    },
+    "explore": {
+        "title": "Explore PFD Reports | PFD Toolkit",
+        "description": (
+            "Explore and filter Prevention of Future Deaths reports with interactive dashboards and AI-assisted screening."
+        ),
+        "robots": "index,follow",
+    },
+    "themes": {
+        "title": "Analyse Themes in PFD Reports | PFD Toolkit",
+        "description": (
+            "Discover recurring themes across Prevention of Future Deaths reports and preview assignments before applying."
+        ),
+        "robots": "index,follow",
+    },
+    "extract": {
+        "title": "Extract Structured Data from PFD Reports | PFD Toolkit",
+        "description": (
+            "Define custom fields and extract structured information from Prevention of Future Deaths reports using AI."
+        ),
+        "robots": "index,follow",
+    },
+    "settings": {
+        "title": "Workbench Settings | PFD Toolkit",
+        "description": "Configure model providers, API keys, and workspace defaults for PFD Toolkit.",
+        "robots": "noindex,nofollow",
+    },
+    "for_coders": {
+        "title": "For Coders | PFD Toolkit",
+        "description": "Technical documentation and implementation details for PFD Toolkit.",
+        "robots": "index,follow",
+    },
+    "workbook_public": {
+        "title": "Shared PFD Workbook | PFD Toolkit",
+        "description": "View a shared PFD Toolkit workbook with report-level filtering and summary outputs.",
+        "robots": "index,follow",
+    },
+}
 
 
 def _bool_from_post(request: HttpRequest, key: str, default: bool = False) -> bool:
@@ -1332,6 +1380,92 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     }
 
 
+def _build_seo_context(
+    request: HttpRequest,
+    page_key: str,
+    *,
+    canonical_path: str,
+    title_override: Optional[str] = None,
+    description_override: Optional[str] = None,
+    robots_override: Optional[str] = None,
+    og_type: str = "website",
+) -> dict[str, str]:
+    defaults = SEO_PAGE_METADATA.get(page_key, {})
+    title = title_override or defaults.get("title") or "PFD Toolkit AI Workbench · Beta"
+    description = (
+        description_override
+        or defaults.get("description")
+        or "Analyse Prevention of Future Deaths reports with AI workflows."
+    )
+    robots_value = robots_override or defaults.get("robots") or "index,follow"
+    canonical_url = request.build_absolute_uri(canonical_path)
+    return {
+        "seo_title": title,
+        "seo_description": description,
+        "seo_robots": robots_value,
+        "seo_canonical_url": canonical_url,
+        "seo_og_type": og_type,
+    }
+
+
+def _render_sitemap_xml(request: HttpRequest) -> HttpResponse:
+    entries: list[tuple[str, str, str, Optional[str]]] = []
+    entries.extend(
+        [
+            (reverse("workbench:index"), "daily", "1.0", None),
+            (reverse("workbench:explore"), "daily", "0.9", None),
+            (reverse("workbench:themes"), "weekly", "0.7", None),
+            (reverse("workbench:extract"), "weekly", "0.7", None),
+            (reverse("workbench:for_coders"), "weekly", "0.6", None),
+        ]
+    )
+
+    for workbook in Workbook.objects.only("share_number", "title", "updated_at").iterator():
+        path = reverse(
+            "workbench:workbook_public",
+            kwargs={
+                "share_number": workbook.share_number,
+                "title_slug": _workbook_title_slug(workbook.title),
+            },
+        )
+        lastmod = workbook.updated_at.date().isoformat() if workbook.updated_at else None
+        entries.append((path, "weekly", "0.5", lastmod))
+
+    lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ]
+    for path, changefreq, priority, lastmod in entries:
+        location = escape(request.build_absolute_uri(path))
+        lines.append("  <url>")
+        lines.append(f"    <loc>{location}</loc>")
+        if lastmod:
+            lines.append(f"    <lastmod>{escape(lastmod)}</lastmod>")
+        lines.append(f"    <changefreq>{escape(changefreq)}</changefreq>")
+        lines.append(f"    <priority>{escape(priority)}</priority>")
+        lines.append("  </url>")
+    lines.append("</urlset>")
+    return HttpResponse("\n".join(lines), content_type="application/xml; charset=utf-8")
+
+
+@require_http_methods(["GET"])
+def robots_txt(request: HttpRequest) -> HttpResponse:
+    sitemap_url = request.build_absolute_uri(reverse("workbench:sitemap_xml"))
+    body = "\n".join(
+        [
+            "User-agent: *",
+            "Allow: /",
+            f"Sitemap: {sitemap_url}",
+        ]
+    )
+    return HttpResponse(body, content_type="text/plain; charset=utf-8")
+
+
+@require_http_methods(["GET"])
+def sitemap_xml(request: HttpRequest) -> HttpResponse:
+    return _render_sitemap_xml(request)
+
+
 def _handle_load_reports(request: HttpRequest) -> None:
     session = request.session
 
@@ -2342,6 +2476,20 @@ def workbook_public(request: HttpRequest, share_number: int, title_slug: str) ->
         "top_theme": top_theme,
         "workspace_label": "Shared worksheet dataset",
     }
+    context.update(
+        _build_seo_context(
+            request,
+            "workbook_public",
+            canonical_path=reverse(
+                "workbench:workbook_public",
+                kwargs={"share_number": workbook.share_number, "title_slug": canonical_slug},
+            ),
+            title_override=f'{workbook.title} | Shared PFD Workbook',
+            description_override=(
+                f'Explore the shared workbook "{workbook.title}" with filtered Prevention of Future Deaths reports.'
+            ),
+        )
+    )
     return render(request, "workbench/workbook_public.html", context)
 
 
@@ -2376,7 +2524,9 @@ def workbook_dataset_panel(request: HttpRequest, share_number: int, title_slug: 
         browser_base=browser_base,
     )
     context["workspace_label"] = "Shared worksheet dataset"
-    return render(request, "workbench/_dataset_table_section.html", context)
+    response = render(request, "workbench/_dataset_table_section.html", context)
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
 
 
 @require_http_methods(["POST"])
@@ -2419,16 +2569,23 @@ def workbook_clone(request: HttpRequest, share_number: int, title_slug: str) -> 
 
 @require_http_methods(["GET"])
 def index(request: HttpRequest) -> HttpResponse:
-    return home(request)
-
-
-@require_http_methods(["GET"])
-def home(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
     _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
     context["current_page"] = "home"
+    context.update(
+        _build_seo_context(
+            request,
+            "home",
+            canonical_path=reverse("workbench:index"),
+        )
+    )
     return render(request, "workbench/home.html", context)
+
+
+@require_http_methods(["GET"])
+def home(request: HttpRequest) -> HttpResponse:
+    return redirect("workbench:index", permanent=True)
 
 
 @require_http_methods(["GET", "POST"])
@@ -2464,6 +2621,13 @@ def explore(request: HttpRequest) -> HttpResponse:
     )
     _set_explore_modal_flag(request, context, "explore")
     context["current_page"] = "explore"
+    context.update(
+        _build_seo_context(
+            request,
+            "explore",
+            canonical_path=reverse("workbench:explore"),
+        )
+    )
     return render(request, "workbench/explore.html", context)
 
 
@@ -2492,6 +2656,13 @@ def themes_page(request: HttpRequest) -> HttpResponse:
     context = _build_context(request)
     _set_explore_modal_flag(request, context, "themes")
     context["current_page"] = "themes"
+    context.update(
+        _build_seo_context(
+            request,
+            "themes",
+            canonical_path=reverse("workbench:themes"),
+        )
+    )
     return render(request, "workbench/themes.html", context)
 
 
@@ -2509,6 +2680,13 @@ def extract_page(request: HttpRequest) -> HttpResponse:
     context = _build_context(request)
     _set_explore_modal_flag(request, context, "extract")
     context["current_page"] = "extract"
+    context.update(
+        _build_seo_context(
+            request,
+            "extract",
+            canonical_path=reverse("workbench:extract"),
+        )
+    )
     return render(request, "workbench/extract.html", context)
 
 
@@ -2525,6 +2703,13 @@ def settings_page(request: HttpRequest) -> HttpResponse:
 
     context = _build_context(request)
     context["current_page"] = "settings"
+    context.update(
+        _build_seo_context(
+            request,
+            "settings",
+            canonical_path=reverse("workbench:settings"),
+        )
+    )
     return render(request, "workbench/settings.html", context)
 
 
@@ -2556,6 +2741,14 @@ def _render_for_coders_page(request: HttpRequest, doc_path: str) -> HttpResponse
         "docs_toc_items": payload["toc_items"],
         "docs_error": docs_error,
     }
+    context.update(
+        _build_seo_context(
+            request,
+            "for_coders",
+            canonical_path=_docs_url_for_path(payload["doc_path"]),
+            title_override=f'{payload["page_title"]} | For Coders | PFD Toolkit',
+        )
+    )
     return render(request, "workbench/for_coders.html", context)
 
 
@@ -2590,4 +2783,6 @@ def dataset_panel(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
     _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
-    return render(request, "workbench/_dataset_table_section.html", context)
+    response = render(request, "workbench/_dataset_table_section.html", context)
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
