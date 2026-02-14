@@ -2244,15 +2244,12 @@
             return;
         }
 
-        const rows = Array.isArray(payload.rows) ? payload.rows : [];
         const options = payload && typeof payload.options === "object" ? payload.options : {};
         const selected = payload && typeof payload.selected === "object" ? payload.selected : {};
+        let summary = payload && typeof payload.summary === "object" ? payload.summary : {};
         const coronerOptions = Array.isArray(options.coroners) ? options.coroners : [];
         const areaOptions = Array.isArray(options.areas) ? options.areas : [];
         const receiverOptions = Array.isArray(options.receivers) ? options.receivers : [];
-
-        const TOP_N = 12;
-        const UNKNOWN_LABEL = "Not specified";
 
         function chartPalette() {
             return {
@@ -2275,15 +2272,6 @@
                 return String(value).trim();
             }
             return value.trim();
-        }
-
-        function normaliseReceivers(rawReceivers) {
-            if (!Array.isArray(rawReceivers) || !rawReceivers.length) {
-                return [];
-            }
-            return rawReceivers
-                .map((value) => normaliseValue(value))
-                .filter((value) => Boolean(value));
         }
 
         const charts = {};
@@ -2352,81 +2340,6 @@
             const panelUrl = `${panelBase}?page=1${query ? `&${query}` : ""}`;
             const targetUrl = `${browserBase}1${query ? `&${query}` : ""}`;
             window.WorkbenchDatasetPanel.fetchAndSwapDataset(panelUrl, targetUrl);
-        }
-
-        function toSortedCountRows(counter) {
-            return Array.from(counter.entries())
-                .sort((left, right) => {
-                    if (right[1] !== left[1]) {
-                        return right[1] - left[1];
-                    }
-                    return left[0].localeCompare(right[0], undefined, { sensitivity: "base" });
-                })
-                .map(([name, value]) => ({ name, value }));
-        }
-
-        function filterRows(sourceRows) {
-            return sourceRows.filter((row) => {
-                const rowCoroner = normaliseValue(row.coroner);
-                const rowArea = normaliseValue(row.area);
-                const rowReceivers = normaliseReceivers(row.receivers);
-
-                if (selectedFilters.coroner.size && !selectedFilters.coroner.has(rowCoroner)) {
-                    return false;
-                }
-                if (selectedFilters.area.size && !selectedFilters.area.has(rowArea)) {
-                    return false;
-                }
-                if (selectedFilters.receiver.size) {
-                    const hasMatch = rowReceivers.some((value) => selectedFilters.receiver.has(value));
-                    if (!hasMatch) {
-                        return false;
-                    }
-                }
-                if (selectedFilters.receiver.size && !rowReceivers.length) {
-                    return false;
-                }
-                return true;
-            });
-        }
-
-        function computeMonthlySeries(sourceRows) {
-            const monthlyCounts = new Map();
-            sourceRows.forEach((row) => {
-                const month = normaliseValue(row.year_month);
-                if (!month) {
-                    return;
-                }
-                monthlyCounts.set(month, (monthlyCounts.get(month) || 0) + 1);
-            });
-
-            return Array.from(monthlyCounts.entries())
-                .sort(([left], [right]) => left.localeCompare(right))
-                .map(([name, value]) => ({ name, value }));
-        }
-
-        function computeTopValues(sourceRows, fieldName) {
-            const counts = new Map();
-            sourceRows.forEach((row) => {
-                const value = normaliseValue(row[fieldName]) || UNKNOWN_LABEL;
-                counts.set(value, (counts.get(value) || 0) + 1);
-            });
-            return toSortedCountRows(counts).slice(0, TOP_N);
-        }
-
-        function computeTopReceivers(sourceRows) {
-            const counts = new Map();
-            sourceRows.forEach((row) => {
-                const receiverList = normaliseReceivers(row.receivers);
-                if (!receiverList.length) {
-                    counts.set(UNKNOWN_LABEL, (counts.get(UNKNOWN_LABEL) || 0) + 1);
-                    return;
-                }
-                receiverList.forEach((receiverName) => {
-                    counts.set(receiverName, (counts.get(receiverName) || 0) + 1);
-                });
-            });
-            return toSortedCountRows(counts).slice(0, TOP_N);
         }
 
         function renderMonthlyChart(seriesRows) {
@@ -2534,33 +2447,19 @@
             );
         }
 
-        function updateStatCards(sourceRows) {
-            const uniqueCoroners = new Set();
-            let receiverLinks = 0;
+        function renderDashboard(currentSummary) {
+            const reportsShown = Number(currentSummary.reports_shown || 0);
+            const reportsTotal = Number(currentSummary.reports_total || 0);
+            const uniqueCoroners = Number(currentSummary.unique_coroners || 0);
+            const receiverLinks = Number(currentSummary.receiver_links || 0);
+            const monthlyRows = Array.isArray(currentSummary.monthly) ? currentSummary.monthly : [];
+            const topCoroners = Array.isArray(currentSummary.top_coroners) ? currentSummary.top_coroners : [];
+            const topAreas = Array.isArray(currentSummary.top_areas) ? currentSummary.top_areas : [];
+            const topReceivers = Array.isArray(currentSummary.top_receivers) ? currentSummary.top_receivers : [];
 
-            sourceRows.forEach((row) => {
-                const coroner = normaliseValue(row.coroner);
-                if (coroner) {
-                    uniqueCoroners.add(coroner);
-                }
-                const receiverList = normaliseReceivers(row.receivers);
-                receiverLinks += receiverList.length;
-            });
-
-            statReports.textContent = sourceRows.length.toLocaleString();
-            statCoroners.textContent = uniqueCoroners.size.toLocaleString();
+            statReports.textContent = reportsShown.toLocaleString();
+            statCoroners.textContent = uniqueCoroners.toLocaleString();
             statReceiverLinks.textContent = receiverLinks.toLocaleString();
-        }
-
-        function renderDashboard() {
-            const visibleRows = filterRows(rows);
-            updateStatCards(visibleRows);
-
-            const monthlyRows = computeMonthlySeries(visibleRows);
-            const topCoroners = computeTopValues(visibleRows, "coroner");
-            const topAreas = computeTopValues(visibleRows, "area");
-            const topReceivers = computeTopReceivers(visibleRows);
-
             renderMonthlyChart(monthlyRows);
             renderBarChart(
                 charts.coroner,
@@ -2581,7 +2480,56 @@
                 "No receiver values for this filter."
             );
 
-            setStatus(`Showing ${visibleRows.length.toLocaleString()} of ${rows.length.toLocaleString()} reports.`);
+            setStatus(`Showing ${reportsShown.toLocaleString()} of ${reportsTotal.toLocaleString()} reports.`);
+        }
+
+        let summaryRequestId = 0;
+        async function refreshDashboardSummary() {
+            const requestId = ++summaryRequestId;
+            const query = buildFilterQueryString();
+            const dashboardBase = root.dataset.dashboardDataBase || "/dashboard-data/";
+            const dashboardUrl = `${dashboardBase}${query ? `?${query}` : ""}`;
+            setStatus("Loading dashboard...");
+
+            let response;
+            try {
+                response = await fetch(dashboardUrl, {
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                });
+            } catch (error) {
+                if (requestId === summaryRequestId) {
+                    setStatus("Dashboard could not be updated. Please retry.");
+                }
+                return;
+            }
+            if (!response.ok) {
+                if (requestId === summaryRequestId) {
+                    setStatus("Dashboard could not be updated. Please retry.");
+                }
+                return;
+            }
+            let responsePayload = {};
+            try {
+                responsePayload = await response.json();
+            } catch (error) {
+                responsePayload = {};
+            }
+            if (requestId !== summaryRequestId) {
+                return;
+            }
+            summary = responsePayload && typeof responsePayload.summary === "object"
+                ? responsePayload.summary
+                : {};
+            renderDashboard(summary);
+        }
+
+        function applyFilterSelectionChange() {
+            syncBrowserUrl();
+            refreshDatasetTable();
+            refreshDashboardSummary();
         }
 
         function renderFilterControl(fieldName, allOptions, searchInput, optionsNode, badgesNode) {
@@ -2593,10 +2541,8 @@
                 badge.innerHTML = `<span>${value}</span><i aria-hidden="true">x</i>`;
                 badge.addEventListener("click", function () {
                     selectedFilters[fieldName].delete(value);
-                    renderDashboard();
                     renderFilterControl(fieldName, allOptions, searchInput, optionsNode, badgesNode);
-                    syncBrowserUrl();
-                    refreshDatasetTable();
+                    applyFilterSelectionChange();
                 });
                 return badge;
             }
@@ -2613,10 +2559,8 @@
                     } else {
                         selectedFilters[fieldName].add(value);
                     }
-                    renderDashboard();
                     renderFilterControl(fieldName, allOptions, searchInput, optionsNode, badgesNode);
-                    syncBrowserUrl();
-                    refreshDatasetTable();
+                    applyFilterSelectionChange();
                 });
                 return optionButton;
             }
@@ -2668,12 +2612,10 @@
             searchCoroner.value = "";
             searchArea.value = "";
             searchReceiver.value = "";
-            renderDashboard();
             renderFilterControl("coroner", coronerOptions, searchCoroner, optionsCoroner, badgesCoroner);
             renderFilterControl("area", areaOptions, searchArea, optionsArea, badgesArea);
             renderFilterControl("receiver", receiverOptions, searchReceiver, optionsReceiver, badgesReceiver);
-            syncBrowserUrl();
-            refreshDatasetTable();
+            applyFilterSelectionChange();
         }
 
         window.WorkbenchDashboardFilters = {
@@ -2728,7 +2670,7 @@
         renderFilterControl("coroner", coronerOptions, searchCoroner, optionsCoroner, badgesCoroner);
         renderFilterControl("area", areaOptions, searchArea, optionsArea, badgesArea);
         renderFilterControl("receiver", receiverOptions, searchReceiver, optionsReceiver, badgesReceiver);
-        renderDashboard();
+        renderDashboard(summary);
     }
 
     function setupWorkbookControls() {

@@ -47,4 +47,10 @@ urlpatterns = [
     path("for-coders/<path:doc_path>/", views.for_coders_page, name="for_coders_page"),
     path("settings/", views.settings_page, name="settings"),
     path("dataset-panel/", views.dataset_panel, name="dataset_panel"),
+    path("dashboard-data/", views.dashboard_data, name="dashboard_data"),
+    path(
+        "workbooks/<int:share_number>-<slug:title_slug>/dashboard-data/",
+        views.workbook_dashboard_data,
+        name="workbook_dashboard_data",
+    ),
 ]

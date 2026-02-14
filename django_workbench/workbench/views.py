@@ -126,6 +126,8 @@ UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
     },
 )
 UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
+DASHBOARD_TOP_N = 12
+DASHBOARD_UNKNOWN_LABEL = "Not specified"
 
 
 def _normalise_ui_theme(raw_value: Any) -> str:
@@ -388,44 +390,31 @@ def _split_dashboard_receivers(value: Any) -> list[str]:
     return receivers
 
 
-def _build_explore_dashboard_payload(reports_df: pd.DataFrame) -> dict[str, Any]:
+def _sorted_dashboard_count_rows(counter: dict[str, int], *, limit: Optional[int] = None) -> list[dict[str, Any]]:
+    rows = sorted(counter.items(), key=lambda item: (-item[1], item[0].casefold()))
+    if limit is not None:
+        rows = rows[:limit]
+    return [{"name": name, "value": int(value)} for name, value in rows]
+
+
+def _build_explore_dashboard_options(reports_df: pd.DataFrame) -> dict[str, list[str]]:
     if reports_df.empty:
-        return {
-            "rows": [],
-            "options": {
-                "coroners": [],
-                "areas": [],
-                "receivers": [],
-            },
-        }
+        return {"coroners": [], "areas": [], "receivers": []}
 
     row_count = len(reports_df)
     default_series = pd.Series([""] * row_count, index=reports_df.index, dtype=object)
-
-    if "date" in reports_df.columns:
-        date_series = pd.to_datetime(reports_df["date"], errors="coerce")
-    else:
-        date_series = pd.Series([pd.NaT] * row_count, index=reports_df.index, dtype="datetime64[ns]")
-
     coroner_series = reports_df["coroner"] if "coroner" in reports_df.columns else default_series
     area_series = reports_df["area"] if "area" in reports_df.columns else default_series
     receiver_series = reports_df["receiver"] if "receiver" in reports_df.columns else default_series
-
-    rows: list[dict[str, Any]] = []
     coroners: set[str] = set()
     areas: set[str] = set()
     receivers: set[str] = set()
 
-    for date_value, coroner_value, area_value, receiver_value in zip(
-        date_series,
+    for coroner_value, area_value, receiver_value in zip(
         coroner_series,
         area_series,
         receiver_series,
     ):
-        date_iso = ""
-        if pd.notna(date_value):
-            date_iso = date_value.strftime("%Y-%m-%d")
-
         coroner = _normalise_dashboard_value(coroner_value)
         area = _normalise_dashboard_value(area_value)
         receiver_parts = _split_dashboard_receivers(receiver_value)
@@ -437,25 +426,104 @@ def _build_explore_dashboard_payload(reports_df: pd.DataFrame) -> dict[str, Any]
         for receiver_name in receiver_parts:
             receivers.add(receiver_name)
 
-        rows.append(
-            {
-                "date": date_iso,
-                "year_month": date_iso[:7] if date_iso else "",
-                "coroner": coroner,
-                "area": area,
-                "receivers": receiver_parts,
-            }
-        )
-
     sort_key = lambda value: value.casefold()
     return {
-        "rows": rows,
-        "options": {
-            "coroners": sorted(coroners, key=sort_key),
-            "areas": sorted(areas, key=sort_key),
-            "receivers": sorted(receivers, key=sort_key),
-        },
+        "coroners": sorted(coroners, key=sort_key),
+        "areas": sorted(areas, key=sort_key),
+        "receivers": sorted(receivers, key=sort_key),
     }
+
+
+def _build_explore_dashboard_summary(filtered_df: pd.DataFrame, *, total_reports: int) -> dict[str, Any]:
+    if filtered_df.empty:
+        return {
+            "reports_shown": 0,
+            "reports_total": int(total_reports),
+            "unique_coroners": 0,
+            "receiver_links": 0,
+            "monthly": [],
+            "top_coroners": [],
+            "top_areas": [],
+            "top_receivers": [],
+        }
+
+    row_count = len(filtered_df)
+    default_series = pd.Series([""] * row_count, index=filtered_df.index, dtype=object)
+    coroner_series = (
+        filtered_df["coroner"].map(_normalise_dashboard_value)
+        if "coroner" in filtered_df.columns
+        else default_series
+    )
+    area_series = (
+        filtered_df["area"].map(_normalise_dashboard_value)
+        if "area" in filtered_df.columns
+        else default_series
+    )
+    receiver_series = filtered_df["receiver"] if "receiver" in filtered_df.columns else default_series
+
+    coroner_counts: dict[str, int] = {}
+    area_counts: dict[str, int] = {}
+    receiver_counts: dict[str, int] = {}
+    receiver_links = 0
+
+    for coroner in coroner_series:
+        key = coroner or DASHBOARD_UNKNOWN_LABEL
+        coroner_counts[key] = coroner_counts.get(key, 0) + 1
+
+    for area in area_series:
+        key = area or DASHBOARD_UNKNOWN_LABEL
+        area_counts[key] = area_counts.get(key, 0) + 1
+
+    for value in receiver_series:
+        receiver_values = _split_dashboard_receivers(value)
+        if not receiver_values:
+            receiver_counts[DASHBOARD_UNKNOWN_LABEL] = receiver_counts.get(DASHBOARD_UNKNOWN_LABEL, 0) + 1
+            continue
+        receiver_links += len(receiver_values)
+        for receiver_name in receiver_values:
+            receiver_counts[receiver_name] = receiver_counts.get(receiver_name, 0) + 1
+
+    monthly: list[dict[str, Any]] = []
+    if "date" in filtered_df.columns:
+        date_series = pd.to_datetime(filtered_df["date"], errors="coerce")
+        if not date_series.empty:
+            month_counts = date_series.dropna().dt.to_period("M").astype(str).value_counts().sort_index()
+            monthly = [{"name": month, "value": int(count)} for month, count in month_counts.items()]
+
+    unique_coroners = int(coroner_series[coroner_series != ""].nunique())
+
+    return {
+        "reports_shown": int(len(filtered_df)),
+        "reports_total": int(total_reports),
+        "unique_coroners": unique_coroners,
+        "receiver_links": int(receiver_links),
+        "monthly": monthly,
+        "top_coroners": _sorted_dashboard_count_rows(coroner_counts, limit=DASHBOARD_TOP_N),
+        "top_areas": _sorted_dashboard_count_rows(area_counts, limit=DASHBOARD_TOP_N),
+        "top_receivers": _sorted_dashboard_count_rows(receiver_counts, limit=DASHBOARD_TOP_N),
+    }
+
+
+def _build_explore_dashboard_payload(
+    reports_df: pd.DataFrame,
+    *,
+    selected_filters: Optional[dict[str, list[str]]] = None,
+    include_options: bool = True,
+) -> dict[str, Any]:
+    filters = selected_filters or {"coroner": [], "area": [], "receiver": []}
+    normalised_filters = {
+        "coroner": _parse_explore_filter_values(filters.get("coroner", [])),
+        "area": _parse_explore_filter_values(filters.get("area", [])),
+        "receiver": _parse_explore_filter_values(filters.get("receiver", [])),
+    }
+    filtered_df = _apply_explore_dashboard_filters(reports_df, normalised_filters)
+    payload = {
+        "selected": normalised_filters,
+        "summary": _build_explore_dashboard_summary(filtered_df, total_reports=len(reports_df)),
+    }
+    if include_options:
+        payload["options"] = _build_explore_dashboard_options(reports_df)
+    return payload
 
 
 def _parse_explore_filter_values(values: list[str]) -> list[str]:
@@ -1074,10 +1142,14 @@ def _build_workbook_snapshot(request: HttpRequest, selected_filters: dict[str, l
     theme_summary_df = get_dataframe(request.session, "theme_summary_table")
     excluded_reports_df = _get_excluded_reports_df(request.session)
 
-    payload = _build_explore_dashboard_payload(reports_df_filtered)
-    payload["selected"] = selected_filters
+    payload = _build_explore_dashboard_payload(
+        reports_df_filtered,
+        selected_filters=selected_filters,
+        include_options=True,
+    )
     return {
         "dashboard_payload": payload,
+        "selected_filters": _normalise_workbook_filters(selected_filters),
         "reports_df": _snapshot_dataframe_to_payload(reports_df_filtered),
         "excluded_reports_df": _snapshot_dataframe_to_payload(excluded_reports_df),
         "theme_summary_df": _snapshot_dataframe_to_payload(theme_summary_df),
@@ -1109,6 +1181,9 @@ def _workbook_filter_query(filters: dict[str, list[str]]) -> str:
 
 
 def _selected_filters_from_snapshot(snapshot: dict[str, Any]) -> dict[str, list[str]]:
+    selected_filters = snapshot.get("selected_filters")
+    if isinstance(selected_filters, dict):
+        return _normalise_workbook_filters(selected_filters)
     dashboard_payload = snapshot.get("dashboard_payload")
     if not isinstance(dashboard_payload, dict):
         return {"coroner": [], "area": [], "receiver": []}
@@ -2463,11 +2538,6 @@ def workbook_public(request: HttpRequest, share_number: int, title_slug: str) ->
     canonical_slug = _workbook_title_slug(workbook.title)
     if title_slug != canonical_slug:
         return redirect("workbench:workbook_public", share_number=share_number, title_slug=canonical_slug)
-    payload = {}
-    if isinstance(workbook.snapshot, dict):
-        payload = workbook.snapshot.get("dashboard_payload") or {}
-    if not isinstance(payload, dict):
-        payload = {}
     reports_df = pd.DataFrame()
     excluded_reports_df = pd.DataFrame()
     theme_summary_df = pd.DataFrame()
@@ -2482,6 +2552,16 @@ def workbook_public(request: HttpRequest, share_number: int, title_slug: str) ->
         reports_df,
         panel_base=panel_base,
         browser_base=browser_base,
+    )
+    selected_filters = {
+        "coroner": shared_context.get("dashboard_selected_coroners", []),
+        "area": shared_context.get("dashboard_selected_areas", []),
+        "receiver": shared_context.get("dashboard_selected_receivers", []),
+    }
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=True,
     )
     theme_summary_sorted = theme_summary_df
     if not theme_summary_sorted.empty and {"Count", "Theme"}.issubset(theme_summary_sorted.columns):
@@ -2507,6 +2587,10 @@ def workbook_public(request: HttpRequest, share_number: int, title_slug: str) ->
         **shared_context,
         **excluded_context,
         "explore_dashboard_payload": payload,
+        "dashboard_data_base": reverse(
+            "workbench:workbook_dashboard_data",
+            kwargs={"share_number": workbook.share_number, "title_slug": canonical_slug},
+        ),
         "workbook": workbook,
         "has_theme_summary": not theme_summary_sorted.empty,
         "theme_summary_html": _df_to_html(theme_summary_sorted),
@@ -2641,14 +2725,17 @@ def explore(request: HttpRequest) -> HttpResponse:
         return redirect(target)
 
     context = _build_context(request)
-    context["explore_dashboard_payload"] = _build_explore_dashboard_payload(
-        _get_reports_df_with_row_ids(request.session)
-    )
-    context["explore_dashboard_payload"]["selected"] = {
+    selected_filters = {
         "coroner": context.get("dashboard_selected_coroners", []),
         "area": context.get("dashboard_selected_areas", []),
         "receiver": context.get("dashboard_selected_receivers", []),
     }
+    context["explore_dashboard_payload"] = _build_explore_dashboard_payload(
+        _get_reports_df_with_row_ids(request.session),
+        selected_filters=selected_filters,
+        include_options=True,
+    )
+    context["dashboard_data_base"] = reverse("workbench:dashboard_data")
     active_workbook, workbook_editable = _resolve_active_workbook(request)
     context["active_workbook"] = active_workbook
     context["active_workbook_editable"] = workbook_editable
@@ -2828,3 +2915,35 @@ def dataset_panel(request: HttpRequest) -> HttpResponse:
     response = render(request, "workbench/_dataset_table_section.html", context)
     response["X-Robots-Tag"] = "noindex, nofollow"
     return response
+
+
+@require_http_methods(["GET"])
+def dashboard_data(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    reports_df = _get_reports_df_with_row_ids(request.session)
+    selected_filters = _get_explore_dashboard_filters(request)
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=False,
+    )
+    return JsonResponse(payload)
+
+
+@require_http_methods(["GET"])
+def workbook_dashboard_data(request: HttpRequest, share_number: int, title_slug: str) -> HttpResponse:
+    workbook = get_object_or_404(Workbook, share_number=share_number)
+    canonical_slug = _workbook_title_slug(workbook.title)
+    if title_slug != canonical_slug:
+        return JsonResponse({"detail": "Workbook URL slug is invalid."}, status=404)
+
+    snapshot = workbook.snapshot if isinstance(workbook.snapshot, dict) else {}
+    reports_df = _snapshot_dataframe_from_payload(snapshot.get("reports_df"))
+    selected_filters = _get_explore_dashboard_filters(request)
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=False,
+    )
+    return JsonResponse(payload)

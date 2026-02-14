@@ -2300,6 +2300,22 @@ body.sidebar-collapsed .sidebar-nav__item {
     z-index: 1270;
 }
 
+/* Keep the theme preview confirmation modal fully within the workspace area. */
+#advanced-ai-preview-popover {
+    left: calc(292px + 2.4rem);
+}
+
+body.sidebar-collapsed #advanced-ai-preview-popover {
+    left: calc(94px + 2.4rem);
+}
+
+@media (max-width: 980px) {
+    #advanced-ai-preview-popover,
+    body.sidebar-collapsed #advanced-ai-preview-popover {
+        left: 0;
+    }
+}
+
 .advanced-ai-popover {
     width: min(52rem, calc(100vw - 2.4rem));
     max-height: calc(100vh - 2.4rem);

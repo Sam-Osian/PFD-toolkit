@@ -9,7 +9,13 @@
     {% include "workbench/_workspace_hud.html" %}
 
     {% if dataset_available %}
-        <section class="explore-surface explore-surface--dashboard explore-dashboard reveal-up" id="explore-dashboard">
+        <section
+            class="explore-surface explore-surface--dashboard explore-dashboard reveal-up"
+            id="explore-dashboard"
+            data-dashboard-panel-base="{{ dataset_panel_base|default:'/dataset-panel/' }}"
+            data-dashboard-browser-base="{{ dataset_browser_base|default:'?page=' }}"
+            data-dashboard-data-base="{{ dashboard_data_base|default:'/dashboard-data/' }}"
+        >
             <div class="section-card-header section-card-header--inline">
                 <div>
                     <span class="section-kicker">Interactive dashboard</span>
@@ -187,7 +193,7 @@
     </div>
 
     <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-discover-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-discover-title">
-        <section class="advanced-ai-popover advanced-ai-popover--wide">
+        <section class="advanced-ai-popover">
             <div class="advanced-ai-popover__head">
                 <span class="section-kicker">Advanced AI features</span>
                 <h3 id="advanced-ai-discover-title">Discover themes</h3>
@@ -283,7 +289,7 @@
     </div>
 
     <div class="advanced-ai-popover-backdrop hidden" id="advanced-ai-extract-popover" aria-modal="true" role="dialog" aria-labelledby="advanced-ai-extract-title">
-        <section class="advanced-ai-popover advanced-ai-popover--wide">
+        <section class="advanced-ai-popover">
             <div class="advanced-ai-popover__head">
                 <span class="section-kicker">Advanced AI features</span>
                 <h3 id="advanced-ai-extract-title">Extract data</h3>
