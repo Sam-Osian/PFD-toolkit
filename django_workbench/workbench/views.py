@@ -115,8 +115,13 @@ UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
         "description": "Current default visual style.",
     },
     {
+        "id": "deep-current",
+        "name": "Deep Current",
+        "description": "Dark teal tactical palette.",
+    },
+    {
         "id": "command-centre",
-        "name": "Command centre",
+        "name": "Command Centre",
         "description": "Infrared Ops-inspired command palette.",
     },
 )

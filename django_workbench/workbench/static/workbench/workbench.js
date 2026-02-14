@@ -2057,6 +2057,12 @@
                     return;
                 }
 
+                try {
+                    window.localStorage.setItem("workbench.settingsThemeDetailsOpen", "1");
+                } catch (error) {
+                    // Ignore storage access issues.
+                }
+
                 // Apply immediately for instant feedback.
                 document.body.setAttribute("data-ui-theme", selectedTheme);
 
@@ -2065,23 +2071,65 @@
                     return;
                 }
 
-                const payload = new URLSearchParams();
-                payload.set("action", "set_ui_theme");
-                payload.set("ui_theme", selectedTheme);
+                if (picker.dataset.submitting === "1") {
+                    return;
+                }
+                picker.dataset.submitting = "1";
 
-                window.fetch(window.location.href, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-                        "X-CSRFToken": csrfToken,
-                        "X-Requested-With": "XMLHttpRequest",
-                    },
-                    credentials: "same-origin",
-                    body: payload.toString(),
-                }).catch(function () {
-                    // Ignore transient persistence errors; local theme remains applied.
-                });
+                // Deterministic persistence: submit a minimal POST immediately.
+                const submitForm = document.createElement("form");
+                submitForm.method = "post";
+                submitForm.action = window.location.href;
+                submitForm.className = "hidden";
+
+                const csrfInput = document.createElement("input");
+                csrfInput.type = "hidden";
+                csrfInput.name = "csrfmiddlewaretoken";
+                csrfInput.value = csrfToken;
+                submitForm.appendChild(csrfInput);
+
+                const actionInput = document.createElement("input");
+                actionInput.type = "hidden";
+                actionInput.name = "action";
+                actionInput.value = "set_ui_theme";
+                submitForm.appendChild(actionInput);
+
+                const themeInput = document.createElement("input");
+                themeInput.type = "hidden";
+                themeInput.name = "ui_theme";
+                themeInput.value = selectedTheme;
+                submitForm.appendChild(themeInput);
+
+                document.body.appendChild(submitForm);
+                submitForm.submit();
             });
+        });
+    }
+
+    function setupSettingsThemeDetailsPersistence() {
+        const details = document.querySelector("[data-settings-theme-details]");
+        if (!details || details.dataset.bound === "1") {
+            return;
+        }
+        details.dataset.bound = "1";
+
+        const storageKey = "workbench.settingsThemeDetailsOpen";
+        let isOpen = false;
+        try {
+            isOpen = window.localStorage.getItem(storageKey) === "1";
+        } catch (error) {
+            isOpen = false;
+        }
+        if (isOpen) {
+            details.open = true;
+        }
+
+        details.addEventListener("toggle", function () {
+            try {
+                window.localStorage.setItem(storageKey, details.open ? "1" : "0");
+            } catch (error) {
+                // Ignore storage access issues.
+            }
         });
     }
 
@@ -3038,6 +3086,7 @@
         setupDatasetCollapse();
         setupExcludedReportsCollapse();
         setupThemeSummaryCollapse();
+        setupSettingsThemeDetailsPersistence();
         setupThemePickerAutoSave();
         setupDatasetCellPreview();
         setupDatasetRowActions();

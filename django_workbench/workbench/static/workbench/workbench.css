@@ -4233,6 +4233,67 @@ body[data-ui-theme="modern-ai"] {
     color-scheme: dark;
 }
 
+body[data-ui-theme="deep-current"] {
+    color-scheme: dark;
+    --bg-0: #040b1b;
+    --bg-1: #07162b;
+    --bg-2: #0a2340;
+    --bg-3: #0f2f57;
+    --surface-0: rgba(7, 21, 28, 0.9);
+    --surface-1: rgba(9, 28, 37, 0.82);
+    --surface-2: rgba(10, 35, 45, 0.7);
+    --line: rgba(91, 168, 206, 0.38);
+    --line-soft: rgba(91, 168, 206, 0.26);
+    --text: #e4efff;
+    --text-soft: rgba(214, 228, 248, 0.86);
+    --text-muted: rgba(173, 209, 234, 0.74);
+    --accent: rgba(90, 188, 226, 0.74);
+    --accent-bright: rgba(129, 214, 245, 0.86);
+
+    --app-atmosphere:
+        radial-gradient(46vw 42vw at 12% 8%, rgba(66, 126, 238, 0.24), transparent 62%),
+        radial-gradient(40vw 40vw at 92% 6%, rgba(52, 98, 210, 0.22), transparent 58%),
+        radial-gradient(36vw 34vw at 78% 92%, rgba(108, 160, 255, 0.14), transparent 66%);
+    --app-noise-dot: rgba(166, 220, 255, 0.12);
+    --app-noise-opacity: 0.18;
+
+    --shell-bg: linear-gradient(170deg, rgba(5, 18, 25, 0.95), rgba(3, 13, 19, 0.88));
+    --panel-bg: rgba(7, 24, 31, 0.44);
+    --panel-alt-bg: rgba(8, 30, 39, 0.52);
+    --control-bg: rgba(3, 15, 21, 0.72);
+    --control-border: rgba(101, 170, 212, 0.3);
+    --control-focus-ring: rgba(126, 198, 239, 0.2);
+    --button-bg: rgba(9, 29, 34, 0.62);
+    --button-border: rgba(102, 171, 214, 0.36);
+    --button-hover-bg: rgba(13, 41, 48, 0.68);
+    --button-secondary-bg: rgba(35, 88, 137, 0.24);
+    --button-primary-bg: linear-gradient(138deg, rgba(124, 201, 245, 0.82), rgba(93, 165, 234, 0.76));
+    --button-primary-text: #032026;
+    --modal-bg: linear-gradient(158deg, rgba(7, 23, 30, 0.96), rgba(4, 14, 20, 0.94));
+    --modal-border: rgba(98, 170, 213, 0.38);
+    --modal-backdrop: rgba(2, 10, 14, 0.74);
+    --table-row-bg: rgba(7, 24, 31, 0.56);
+    --table-row-hover-bg: rgba(11, 38, 48, 0.64);
+    --table-row-border: rgba(82, 152, 195, 0.28);
+    --badge-bg: rgba(34, 84, 134, 0.24);
+    --badge-text: rgba(224, 236, 252, 0.92);
+    --badge-border: rgba(101, 170, 212, 0.34);
+    --topbar-bg: linear-gradient(180deg, rgba(4, 18, 24, 0.92), rgba(5, 18, 23, 0.84));
+    --popup-bg: linear-gradient(162deg, rgba(7, 23, 30, 0.97), rgba(4, 14, 20, 0.94));
+    --popup-border: rgba(102, 172, 214, 0.34);
+
+    --chart-axis-text: rgba(197, 222, 246, 0.84);
+    --chart-axis-line: rgba(74, 141, 186, 0.28);
+    --chart-monthly-line: #72c6ff;
+    --chart-monthly-area: rgba(114, 198, 255, 0.2);
+    --chart-coroner-bar: #5cadff;
+    --chart-area-bar: #4d95f0;
+    --chart-receiver-bar: #7bc7ff;
+    --chart-empty-text: rgba(193, 218, 244, 0.82);
+    --status-error-text: rgba(255, 173, 173, 0.92);
+    --status-muted-text: rgba(182, 214, 235, 0.76);
+}
+
 body[data-ui-theme="command-centre"] {
     color-scheme: dark;
     --bg-0: #09050a;
@@ -4722,6 +4783,363 @@ body[data-ui-theme="command-centre"] .coder-docs-article pre code .il {
     color: #f3c982;
 }
 
+body[data-ui-theme="deep-current"] {
+    background: var(--app-bg-gradient);
+}
+
+body[data-ui-theme="deep-current"]::before {
+    background: var(--app-atmosphere);
+}
+
+body[data-ui-theme="deep-current"]::after {
+    background-image: radial-gradient(var(--app-noise-dot) 0.7px, transparent 0.9px);
+    opacity: var(--app-noise-opacity);
+}
+
+body[data-ui-theme="deep-current"] .sidebar {
+    background: var(--shell-bg);
+}
+
+body[data-ui-theme="deep-current"] .shell-panel,
+body[data-ui-theme="deep-current"] .form-card,
+body[data-ui-theme="deep-current"] .workflow-trigger,
+body[data-ui-theme="deep-current"] .settings-workbench .form-card,
+body[data-ui-theme="deep-current"] .expander,
+body[data-ui-theme="deep-current"] .feature-table,
+body[data-ui-theme="deep-current"] .explore-surface,
+body[data-ui-theme="deep-current"] .workflow-clean-shell,
+body[data-ui-theme="deep-current"] .coder-docs-panel,
+body[data-ui-theme="deep-current"] .coder-docs-header,
+body[data-ui-theme="deep-current"] .coder-docs-alert,
+body[data-ui-theme="deep-current"] .coder-docs-article .md-content__inner {
+    background: var(--panel-bg);
+}
+
+body[data-ui-theme="deep-current"] .form-card,
+body[data-ui-theme="deep-current"] .workflow-trigger,
+body[data-ui-theme="deep-current"] .expander,
+body[data-ui-theme="deep-current"] .feature-table th,
+body[data-ui-theme="deep-current"] .feature-table td,
+body[data-ui-theme="deep-current"] .data-table th,
+body[data-ui-theme="deep-current"] .data-table td,
+body[data-ui-theme="deep-current"] .topbar-popover,
+body[data-ui-theme="deep-current"] .confirm-modal,
+body[data-ui-theme="deep-current"] .config-modal,
+body[data-ui-theme="deep-current"] .dataset-cell-popup,
+body[data-ui-theme="deep-current"] .dashboard-filter-options,
+body[data-ui-theme="deep-current"] .dashboard-filter-field,
+body[data-ui-theme="deep-current"] .dashboard-selection-badge,
+body[data-ui-theme="deep-current"] .dashboard-option-item {
+    border-color: var(--control-border);
+}
+
+body[data-ui-theme="deep-current"] .data-table tbody td {
+    background: var(--table-row-bg);
+    border-bottom-color: var(--table-row-border);
+}
+
+body[data-ui-theme="deep-current"] .data-table tbody tr:hover td {
+    background: var(--table-row-hover-bg);
+}
+
+body[data-ui-theme="deep-current"] input,
+body[data-ui-theme="deep-current"] textarea,
+body[data-ui-theme="deep-current"] select {
+    background: var(--control-bg);
+    border-color: var(--control-border);
+}
+
+body[data-ui-theme="deep-current"] input:focus,
+body[data-ui-theme="deep-current"] select:focus,
+body[data-ui-theme="deep-current"] textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--control-focus-ring);
+}
+
+body[data-ui-theme="deep-current"] button,
+body[data-ui-theme="deep-current"] .button {
+    background: var(--button-bg);
+    border-color: var(--button-border);
+}
+
+body[data-ui-theme="deep-current"] button:hover:not(:disabled),
+body[data-ui-theme="deep-current"] .button:hover {
+    background: var(--button-hover-bg);
+}
+
+body[data-ui-theme="deep-current"] .button-primary,
+body[data-ui-theme="deep-current"] .action-panel .field-group > button,
+body[data-ui-theme="deep-current"] .field-group--inline-actions > button {
+    background: var(--button-primary-bg);
+    color: var(--button-primary-text);
+}
+
+body[data-ui-theme="deep-current"] .button-secondary {
+    background: var(--button-secondary-bg);
+    color: var(--badge-text);
+}
+
+body[data-ui-theme="deep-current"] .dashboard-selection-badge,
+body[data-ui-theme="deep-current"] .topbar-badge,
+body[data-ui-theme="deep-current"] .theme-summary-highlight,
+body[data-ui-theme="deep-current"] .workbook-chip,
+body[data-ui-theme="deep-current"] .dashboard-option-item.is-selected {
+    background: var(--badge-bg);
+    color: var(--badge-text);
+    border-color: var(--badge-border);
+}
+
+body[data-ui-theme="deep-current"] .topbar-popover,
+body[data-ui-theme="deep-current"] .confirm-modal,
+body[data-ui-theme="deep-current"] .config-modal,
+body[data-ui-theme="deep-current"] .dataset-cell-popup {
+    background: var(--modal-bg);
+    border-color: var(--modal-border);
+}
+
+body[data-ui-theme="deep-current"] .confirm-modal-backdrop,
+body[data-ui-theme="deep-current"] .config-modal-backdrop,
+body[data-ui-theme="deep-current"] .topbar-popover-backdrop {
+    background: var(--modal-backdrop);
+}
+
+body[data-ui-theme="deep-current"] .explore-action-rail-wrap {
+    background: var(--topbar-bg);
+}
+
+body[data-ui-theme="deep-current"] .table-wrap {
+    background: rgba(8, 26, 33, 0.52);
+    border-color: rgba(90, 162, 213, 0.24);
+}
+
+body[data-ui-theme="deep-current"] .data-table thead th {
+    background: rgba(9, 31, 38, 0.88);
+    color: rgba(221, 234, 250, 0.9);
+    border-bottom-color: rgba(90, 162, 213, 0.3);
+}
+
+body[data-ui-theme="deep-current"] .dataset-collapse-toggle,
+body[data-ui-theme="deep-current"] .excluded-collapse-toggle,
+body[data-ui-theme="deep-current"] .theme-collapse-toggle {
+    border-color: rgba(103, 174, 217, 0.38);
+    background: rgba(27, 84, 134, 0.24);
+    color: rgba(229, 238, 252, 0.98);
+}
+
+body[data-ui-theme="deep-current"] .dataset-collapse-toggle:hover:not(:disabled),
+body[data-ui-theme="deep-current"] .excluded-collapse-toggle:hover:not(:disabled),
+body[data-ui-theme="deep-current"] .theme-collapse-toggle:hover:not(:disabled) {
+    background: rgba(41, 104, 162, 0.34);
+    border-color: rgba(129, 200, 236, 0.48);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-feature-card {
+    border-color: rgba(87, 177, 183, 0.3);
+    background: linear-gradient(165deg, rgba(8, 29, 36, 0.88), rgba(4, 18, 23, 0.84));
+    box-shadow: 0 14px 30px rgba(2, 10, 13, 0.36);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-feature-card__head h4 {
+    color: rgba(226, 238, 252, 0.98);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-feature-card__head p {
+    color: rgba(177, 204, 232, 0.86);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-feature-button {
+    border-color: rgba(103, 173, 216, 0.42);
+    background: rgba(28, 90, 141, 0.3);
+    color: rgba(228, 238, 252, 0.96);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-feature-button:hover:not(:disabled) {
+    background: rgba(43, 112, 171, 0.4);
+    border-color: rgba(137, 210, 243, 0.56);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-popover-backdrop {
+    background: rgba(4, 14, 18, 0.5);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-popover {
+    border-color: rgba(96, 191, 196, 0.36);
+    background: linear-gradient(162deg, rgba(7, 23, 30, 0.97), rgba(4, 14, 20, 0.94));
+    box-shadow: 0 22px 48px rgba(3, 10, 13, 0.5);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-popover__head p {
+    color: rgba(173, 201, 230, 0.84);
+}
+
+body[data-ui-theme="deep-current"] .advanced-ai-manual-filter-list li {
+    border-color: rgba(88, 176, 182, 0.3);
+    background: rgba(8, 29, 35, 0.74);
+    color: rgba(228, 236, 251, 0.94);
+}
+
+body[data-ui-theme="deep-current"] .download-popover {
+    border-color: rgba(97, 191, 197, 0.34);
+    background: linear-gradient(162deg, rgba(7, 23, 30, 0.97), rgba(4, 14, 20, 0.94));
+    box-shadow: 0 20px 44px rgba(3, 10, 13, 0.44);
+}
+
+body[data-ui-theme="deep-current"] .topbar-popover {
+    border-color: rgba(97, 191, 197, 0.34);
+    background: linear-gradient(162deg, rgba(7, 23, 30, 0.97), rgba(4, 14, 20, 0.94));
+    box-shadow: 0 22px 48px rgba(3, 10, 13, 0.5);
+}
+
+body[data-ui-theme="deep-current"] .topbar-popover__head p,
+body[data-ui-theme="deep-current"] .field-help,
+body[data-ui-theme="deep-current"] .dataset-pagination__meta,
+body[data-ui-theme="deep-current"] .dataset-empty,
+body[data-ui-theme="deep-current"] .excluded-readonly-note {
+    color: rgba(169, 198, 228, 0.82);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-content-card,
+body[data-ui-theme="deep-current"] .coder-docs-panel {
+    border-color: rgba(87, 176, 182, 0.3);
+    background: linear-gradient(168deg, rgba(7, 23, 30, 0.95), rgba(4, 14, 20, 0.9));
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-header {
+    border-bottom-color: rgba(86, 176, 182, 0.26);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-alert {
+    border-color: rgba(125, 186, 245, 0.4);
+    background: rgba(26, 74, 130, 0.34);
+    color: #dfeeff;
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .md-content__inner h1,
+body[data-ui-theme="deep-current"] .coder-docs-article .md-content__inner h2,
+body[data-ui-theme="deep-current"] .coder-docs-article .md-content__inner h3,
+body[data-ui-theme="deep-current"] .coder-docs-article .md-content__inner h4,
+body[data-ui-theme="deep-current"] .coder-docs-article .md-content__inner strong,
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway__title {
+    color: rgba(228, 238, 252, 0.98);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article a {
+    color: rgba(126, 206, 247, 0.98);
+    text-decoration-color: rgba(126, 206, 247, 0.5);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article a:hover {
+    color: rgba(207, 229, 249, 0.98);
+    text-decoration-color: rgba(207, 229, 249, 0.7);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article pre {
+    background: rgba(4, 17, 21, 0.92);
+    border-color: rgba(82, 166, 173, 0.3);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article code {
+    background: rgba(58, 154, 162, 0.16);
+    border-color: rgba(92, 183, 189, 0.28);
+    color: rgba(226, 238, 251, 0.96);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .coder-code-copy-btn {
+    border-color: rgba(86, 175, 181, 0.3);
+    background: rgba(8, 30, 37, 0.9);
+    color: rgba(227, 238, 252, 0.96);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .coder-code-copy-btn:hover {
+    background: rgba(35, 126, 134, 0.34);
+    border-color: rgba(126, 220, 213, 0.52);
+    color: #ffffff;
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .coder-code-copy-btn.is-copied {
+    background: rgba(44, 143, 145, 0.28);
+    border-color: rgba(137, 232, 219, 0.56);
+    color: rgba(233, 241, 253, 0.98);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article blockquote {
+    border-left-color: rgba(112, 181, 229, 0.7);
+    background: rgba(39, 104, 161, 0.2);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article hr {
+    border-top-color: rgba(86, 176, 182, 0.28);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article table {
+    border-color: rgba(86, 176, 182, 0.3);
+    background: rgba(8, 26, 33, 0.58);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article table th,
+body[data-ui-theme="deep-current"] .coder-docs-article table td {
+    border-bottom-color: rgba(86, 176, 182, 0.24);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article table thead th {
+    background: rgba(36, 94, 150, 0.34);
+    color: rgba(231, 240, 253, 0.98);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .admonition,
+body[data-ui-theme="deep-current"] .coder-docs-article details,
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway {
+    border-color: rgba(86, 177, 181, 0.28);
+    background: linear-gradient(160deg, rgba(9, 30, 36, 0.84), rgba(4, 18, 22, 0.78));
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .admonition-title,
+body[data-ui-theme="deep-current"] .coder-docs-article summary {
+    color: rgba(222, 236, 252, 0.96);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway:hover,
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway:focus {
+    border-color: rgba(125, 220, 213, 0.5);
+    background: linear-gradient(160deg, rgba(12, 38, 43, 0.92), rgba(5, 21, 26, 0.84));
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway__cta {
+    color: rgba(136, 232, 219, 0.95);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway:hover .pfd-pathway__cta,
+body[data-ui-theme="deep-current"] .coder-docs-article .pfd-pathway:focus .pfd-pathway__cta {
+    color: rgba(229, 240, 253, 0.98);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-nav-list .coder-docs-nav-list {
+    border-left-color: rgba(86, 176, 182, 0.22);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-nav-link:hover,
+body[data-ui-theme="deep-current"] .coder-docs-nav-label:hover,
+body[data-ui-theme="deep-current"] .coder-docs-toc-item a:hover {
+    color: rgba(227, 238, 252, 0.98);
+    background: rgba(40, 102, 159, 0.18);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-nav-link.is-active,
+body[data-ui-theme="deep-current"] .coder-docs-nav-label.is-active {
+    color: rgba(229, 240, 253, 0.98);
+    background: rgba(47, 113, 172, 0.28);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-nav-toggle {
+    border-color: rgba(86, 176, 182, 0.3);
+    background: rgba(8, 30, 36, 0.74);
+}
+
+body[data-ui-theme="deep-current"] .coder-docs-nav-toggle:hover {
+    background: rgba(41, 104, 162, 0.3);
+    border-color: rgba(134, 203, 237, 0.48);
+}
+
 .page-settings .settings-theme-picker {
     display: grid;
     gap: 0.72rem;
@@ -4753,6 +5171,10 @@ body[data-ui-theme="command-centre"] .settings-theme-option:hover {
     background: rgba(162, 70, 60, 0.16);
 }
 
+body[data-ui-theme="deep-current"] .settings-theme-option:hover {
+    background: rgba(42, 110, 171, 0.16);
+}
+
 .settings-theme-option input {
     position: absolute;
     width: 0;
@@ -4772,6 +5194,10 @@ body[data-ui-theme="command-centre"] .settings-theme-option:hover {
 
 .settings-theme-option__swatch--modern-ai {
     background: linear-gradient(145deg, #080d2f, #251460 66%, #381f73);
+}
+
+.settings-theme-option__swatch--deep-current {
+    background: linear-gradient(145deg, #071729, #0c2c4a 66%, #124e78);
 }
 
 .settings-theme-option__swatch--command-centre {
