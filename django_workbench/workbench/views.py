@@ -115,9 +115,9 @@ UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
         "description": "Current default visual style.",
     },
     {
-        "id": "retro-console",
-        "name": "Retro Console",
-        "description": "Dark terminal-inspired palette.",
+        "id": "command-centre",
+        "name": "Command centre",
+        "description": "Infrared Ops-inspired command palette.",
     },
 )
 UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
@@ -125,6 +125,8 @@ UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
 
 def _normalise_ui_theme(raw_value: Any) -> str:
     value = str(raw_value or "").strip().lower()
+    if value == "retro-console":
+        return "command-centre"
     if value in UI_THEME_IDS:
         return value
     return "modern-ai"
@@ -2340,6 +2342,8 @@ def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
             return _bundle_download_response(request)
         except Exception as exc:
             messages.info(request, str(exc))
+    elif action == "set_ui_theme":
+        pass
     elif action == "save_settings":
         request.session["explore_onboarded"] = True
         messages.success(request, "Settings updated.")

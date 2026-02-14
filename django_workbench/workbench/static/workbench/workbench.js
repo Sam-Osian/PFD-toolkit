@@ -13,6 +13,16 @@
         return trimmed || fallback;
     }
 
+    function getCsrfTokenFromPage() {
+        const cookie = document.cookie || "";
+        const match = cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+        if (match && match[1]) {
+            return decodeURIComponent(match[1]);
+        }
+        const csrfInput = document.querySelector("input[name='csrfmiddlewaretoken']");
+        return csrfInput ? csrfInput.value : "";
+    }
+
     function getPageFromPath(pathname) {
         if (pathname.startsWith("/explore-pfds")) {
             return "explore";
@@ -2024,6 +2034,57 @@
         });
     }
 
+    function setupThemePickerAutoSave() {
+        const picker = document.querySelector(".settings-theme-picker");
+        if (!picker || picker.dataset.bound === "1") {
+            return;
+        }
+        picker.dataset.bound = "1";
+
+        const radios = picker.querySelectorAll("input[name='ui_theme']");
+        if (!radios.length) {
+            return;
+        }
+
+        radios.forEach((radio) => {
+            radio.addEventListener("change", function () {
+                if (!radio.checked) {
+                    return;
+                }
+
+                const selectedTheme = String(radio.value || "").trim();
+                if (!selectedTheme) {
+                    return;
+                }
+
+                // Apply immediately for instant feedback.
+                document.body.setAttribute("data-ui-theme", selectedTheme);
+
+                const csrfToken = getCsrfTokenFromPage();
+                if (!csrfToken) {
+                    return;
+                }
+
+                const payload = new URLSearchParams();
+                payload.set("action", "set_ui_theme");
+                payload.set("ui_theme", selectedTheme);
+
+                window.fetch(window.location.href, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                        "X-CSRFToken": csrfToken,
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                    credentials: "same-origin",
+                    body: payload.toString(),
+                }).catch(function () {
+                    // Ignore transient persistence errors; local theme remains applied.
+                });
+            });
+        });
+    }
+
     function setupExploreDashboard() {
         const root = byId("explore-dashboard");
         if (!root) {
@@ -2977,6 +3038,7 @@
         setupDatasetCollapse();
         setupExcludedReportsCollapse();
         setupThemeSummaryCollapse();
+        setupThemePickerAutoSave();
         setupDatasetCellPreview();
         setupDatasetRowActions();
         setupDatasetMutations();

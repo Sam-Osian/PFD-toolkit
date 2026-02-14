@@ -94,12 +94,11 @@
                 </div>
             </details>
 
-            <details class="expander workflow-clean-expander settings-category" open>
+            <details class="expander workflow-clean-expander settings-category">
                 <summary>
                     <span class="settings-category__heading">Theme</span>
                 </summary>
                 <div class="expander-content">
-                    <p class="help-text settings-theme-help">Choose the visual style for backgrounds, surfaces, controls, and charts.</p>
                     <div class="settings-theme-picker" role="radiogroup" aria-label="Theme selection">
                         {% for theme in ui_theme_options %}
                         <label class="settings-theme-option">
@@ -112,7 +111,6 @@
                             <span class="settings-theme-option__swatch settings-theme-option__swatch--{{ theme.id }}" aria-hidden="true"></span>
                             <span class="settings-theme-option__text">
                                 <strong>{{ theme.name }}</strong>
-                                <small>{{ theme.description }}</small>
                             </span>
                         </label>
                         {% endfor %}
