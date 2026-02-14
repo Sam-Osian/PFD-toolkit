@@ -543,6 +543,15 @@ body.sidebar-collapsed .sidebar-nav__item-loader {
     display: none;
 }
 
+body.sidebar-collapsed .sidebar-nav__item.is-loading .sidebar-nav__icon {
+    display: none;
+}
+
+body.sidebar-collapsed .sidebar-nav__item.is-loading .sidebar-nav__item-loader {
+    display: inline-flex;
+    justify-self: center;
+}
+
 body.sidebar-collapsed .sidebar-nav__item:hover,
 body.sidebar-collapsed .sidebar-nav__item:focus-visible {
     border-color: rgba(166, 177, 255, 0.26);
