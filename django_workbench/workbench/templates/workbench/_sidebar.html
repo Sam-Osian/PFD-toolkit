@@ -28,6 +28,7 @@
                     <i class="hgi hgi-stroke hgi-chart-bar-line sidebar-nav__icon-glyph"></i>
                 </span>
                 <span class="sidebar-nav__label">Explore PFDs</span>
+                <span class="sidebar-nav__item-loader" aria-hidden="true"></span>
             </a>
             <a href="{% url 'workbench:for_coders' %}" class="sidebar-nav__item {% if current_page == 'for_coders' %}is-active{% endif %}" data-tooltip="For coders" data-page-link="for_coders" {% if current_page == 'for_coders' %}aria-current="page"{% endif %}>
                 <span class="sidebar-nav__icon" aria-hidden="true">

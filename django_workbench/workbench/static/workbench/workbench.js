@@ -3145,6 +3145,71 @@
         if (!contentRoot) {
             return;
         }
+        let loadingSidebarLink = null;
+        let sidebarLoadingShownAt = 0;
+        let sidebarLoadingClearTimer = null;
+        let sidebarLoadingPulseTimer = null;
+        const SIDEBAR_LOADING_MIN_VISIBLE_MS = 220;
+
+        function clearSidebarLoadingState(immediate) {
+            if (!loadingSidebarLink) {
+                return;
+            }
+            if (sidebarLoadingClearTimer) {
+                window.clearTimeout(sidebarLoadingClearTimer);
+                sidebarLoadingClearTimer = null;
+            }
+            if (sidebarLoadingPulseTimer) {
+                window.clearTimeout(sidebarLoadingPulseTimer);
+                sidebarLoadingPulseTimer = null;
+            }
+
+            const targetLink = loadingSidebarLink;
+            const finishClear = function () {
+                targetLink.classList.remove("is-loading");
+                targetLink.removeAttribute("aria-busy");
+                if (loadingSidebarLink === targetLink) {
+                    loadingSidebarLink = null;
+                    sidebarLoadingShownAt = 0;
+                }
+                sidebarLoadingClearTimer = null;
+            };
+
+            const elapsed = Date.now() - sidebarLoadingShownAt;
+            if (immediate || elapsed >= SIDEBAR_LOADING_MIN_VISIBLE_MS) {
+                finishClear();
+                return;
+            }
+
+            sidebarLoadingClearTimer = window.setTimeout(
+                finishClear,
+                SIDEBAR_LOADING_MIN_VISIBLE_MS - elapsed
+            );
+        }
+
+        function setSidebarLoadingState(link) {
+            clearSidebarLoadingState(true);
+            if (!link) {
+                return;
+            }
+            if (link.getAttribute("data-page-link") !== "explore") {
+                return;
+            }
+            loadingSidebarLink = link;
+            sidebarLoadingShownAt = Date.now();
+            loadingSidebarLink.classList.add("is-loading");
+            loadingSidebarLink.setAttribute("aria-busy", "true");
+        }
+
+        function pulseExploreSidebarLoading(link) {
+            if (!link || link.getAttribute("data-page-link") !== "explore") {
+                return;
+            }
+            setSidebarLoadingState(link);
+            sidebarLoadingPulseTimer = window.setTimeout(function () {
+                clearSidebarLoadingState();
+            }, SIDEBAR_LOADING_MIN_VISIBLE_MS);
+        }
 
         function locationKeyFromWindow() {
             return `${window.location.pathname}${window.location.search || ""}`;
@@ -3189,6 +3254,7 @@
             if (typeof html !== "string") {
                 return;
             }
+            clearSidebarLoadingState();
             contentRoot.innerHTML = html;
             contentRoot.dataset.page = page;
             contentRoot.dataset.workspaceToken = workspaceToken || "";
@@ -3213,27 +3279,64 @@
             window.scrollTo({ top: 0, left: 0, behavior: "auto" });
         }
 
+        document.addEventListener("pointerdown", function (event) {
+            const link = event.target.closest(".sidebar-nav a[data-page-link='explore']");
+            if (!link) {
+                return;
+            }
+            pulseExploreSidebarLoading(link);
+        }, true);
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key !== "Enter" && event.key !== " ") {
+                return;
+            }
+            const link = event.target.closest(".sidebar-nav a[data-page-link='explore']");
+            if (!link) {
+                return;
+            }
+            pulseExploreSidebarLoading(link);
+        }, true);
+
         document.addEventListener("click", function (event) {
             const link = event.target.closest(".sidebar-nav a[data-page-link]");
             if (!link) {
                 return;
             }
+            const isExploreLink = link.getAttribute("data-page-link") === "explore";
+            if (isExploreLink) {
+                setSidebarLoadingState(link);
+            } else {
+                clearSidebarLoadingState(true);
+            }
             if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+                if (isExploreLink) {
+                    clearSidebarLoadingState();
+                }
                 return;
             }
 
             const targetUrl = new URL(link.href, window.location.origin);
             if (targetUrl.origin !== window.location.origin) {
+                if (isExploreLink) {
+                    clearSidebarLoadingState();
+                }
                 return;
             }
 
             const targetPath = `${targetUrl.pathname}${targetUrl.search || ""}`;
             const currentPath = locationKeyFromWindow();
             if (targetUrl.pathname.startsWith("/for-coders") || window.location.pathname.startsWith("/for-coders")) {
+                if (isExploreLink) {
+                    clearSidebarLoadingState();
+                }
                 return;
             }
             if (targetPath === currentPath) {
                 event.preventDefault();
+                if (isExploreLink) {
+                    clearSidebarLoadingState();
+                }
                 return;
             }
 
@@ -3286,6 +3389,7 @@
                     swapTo(targetPath, page, incomingHtml, true, workspaceToken);
                 })
                 .catch(() => {
+                    clearSidebarLoadingState(true);
                     window.location.href = targetPath;
                 });
         });

@@ -21,7 +21,7 @@
     <meta name="twitter:description" content="{{ seo_description|default:'Analyse Prevention of Future Deaths reports with AI workflows for filtering, theme discovery, and structured extraction.' }}">
     <link rel="stylesheet" href="{% static 'workbench/vendor/overlayscrollbars.min.css' %}?v=20260211l">
     <link rel="stylesheet" href="https://cdn.hugeicons.com/font/hgi-stroke-rounded.css">
-    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260214f">
+    <link rel="stylesheet" href="{% static 'workbench/workbench.css' %}?v=20260214h">
 </head>
 <body class="page-{{ current_page|default:'home' }}" data-ui-theme="{{ ui_theme|default:'modern-ai' }}">
     <script>
@@ -71,7 +71,7 @@
     <script src="{% static 'workbench/vendor/overlayscrollbars.browser.es6.min.js' %}?v=20260211l"></script>
     <script src="{% static 'workbench/vendor/echarts.min.js' %}" defer></script>
     {% if current_page != "for_coders" %}
-        <script src="{% static 'workbench/workbench.js' %}?v=20260214f"></script>
+        <script src="{% static 'workbench/workbench.js' %}?v=20260214k"></script>
     {% else %}
         <script>
             (function () {
@@ -115,6 +115,38 @@
                         setCollapsedState(false);
                     }
                 });
+
+                function pulseExploreSidebarLoader() {
+                    const exploreLink = document.querySelector(".sidebar-nav a[data-page-link='explore']");
+                    if (!exploreLink) {
+                        return;
+                    }
+                    exploreLink.classList.add("is-loading");
+                    exploreLink.setAttribute("aria-busy", "true");
+                    window.setTimeout(function () {
+                        exploreLink.classList.remove("is-loading");
+                        exploreLink.removeAttribute("aria-busy");
+                    }, 260);
+                }
+
+                document.addEventListener("pointerdown", function (event) {
+                    const exploreLink = event.target.closest(".sidebar-nav a[data-page-link='explore']");
+                    if (!exploreLink) {
+                        return;
+                    }
+                    pulseExploreSidebarLoader();
+                }, true);
+
+                document.addEventListener("keydown", function (event) {
+                    if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                    }
+                    const exploreLink = event.target.closest(".sidebar-nav a[data-page-link='explore']");
+                    if (!exploreLink) {
+                        return;
+                    }
+                    pulseExploreSidebarLoader();
+                }, true);
             })();
         </script>
     {% endif %}

@@ -176,6 +176,15 @@ body.loading-active {
     }
 }
 
+@keyframes sidebar-nav-loader-spin {
+    from {
+        transform: rotate(0deg) scale(1);
+    }
+    to {
+        transform: rotate(360deg) scale(1);
+    }
+}
+
 .app-shell {
     display: grid;
     grid-template-columns: 292px minmax(0, 1fr);
@@ -315,7 +324,7 @@ body.sidebar-collapsed .sidebar-toggle__icon {
 .sidebar-nav__item {
     position: relative;
     display: grid;
-    grid-template-columns: 18px minmax(0, 1fr);
+    grid-template-columns: 18px minmax(0, 1fr) auto;
     align-items: center;
     gap: 0.68rem;
     border-radius: 10px;
@@ -407,6 +416,25 @@ body.sidebar-collapsed .sidebar-toggle__icon {
     gap: 0.52rem;
     width: 100%;
     min-width: 0;
+}
+
+.sidebar-nav__item-loader {
+    width: 12px;
+    height: 12px;
+    border-radius: 999px;
+    border: 1.5px solid rgba(201, 214, 255, 0.34);
+    border-top-color: rgba(141, 218, 255, 0.94);
+    opacity: 0;
+    transform: scale(0.84);
+    pointer-events: none;
+    justify-self: end;
+    transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.sidebar-nav__item.is-loading .sidebar-nav__item-loader {
+    animation: sidebar-nav-loader-spin 0.72s linear infinite;
+    opacity: 1;
+    transform: scale(1);
 }
 
 .sidebar-badge {
@@ -509,6 +537,10 @@ body.sidebar-collapsed .sidebar-nav__item {
     grid-template-columns: 1fr;
     justify-items: center;
     padding: 0.62rem 0.42rem;
+}
+
+body.sidebar-collapsed .sidebar-nav__item-loader {
+    display: none;
 }
 
 body.sidebar-collapsed .sidebar-nav__item:hover,
