@@ -9,11 +9,11 @@
                 <span class="explore-top-stat__label">Earliest / latest report</span>
                 <span class="explore-top-stat__value">{{ earliest_display }} - {{ latest_display }}</span>
             </button>
-            <button type="button" class="explore-top-stat explore-top-stat--status explore-top-stat--interactive" data-topbar-open="llm-settings" title="Edit LLM settings">
+            <button type="button" class="explore-top-stat explore-top-stat--status explore-top-stat--interactive" data-topbar-open="llm-settings" data-llm-status-quick-settings title="Edit LLM settings">
                 <span class="explore-top-stat__label">LLM status</span>
                 <span class="explore-top-stat__value explore-status-value">
                     <span class="explore-status-dot {% if llm_ready %}is-ready{% else %}is-not-ready{% endif %}" aria-hidden="true"></span>
-                    {% if llm_ready %}Initialised{% else %}Not initialised{% endif %}
+                    {% if llm_ready %}Initialised{% else %}Uninitialised{% endif %}
                 </span>
             </button>
         </div>
@@ -99,6 +99,7 @@
         <form method="post" class="topbar-popover-form js-ai-reset-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="load_reports">
+            <input type="hidden" name="quick_settings" value="1">
             <input type="hidden" name="report_start_date" value="{{ report_start_date }}">
             <input type="hidden" name="report_end_date" value="{{ report_end_date }}">
             <div class="topbar-popover-field">
@@ -127,6 +128,7 @@
         <form method="post" class="topbar-popover-form js-ai-reset-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="load_reports">
+            <input type="hidden" name="quick_settings" value="1">
             <input type="hidden" name="n_reports" value="{{ report_limit|default_if_none:'' }}">
             <div class="topbar-date-grid">
                 <div class="topbar-popover-field">
@@ -156,6 +158,7 @@
         <form method="post" class="topbar-popover-form" id="topbar-llm-form">
             {% csrf_token %}
             <input type="hidden" name="action" value="save_settings">
+            <input type="hidden" name="quick_settings" value="1">
 
             <div class="topbar-popover-field">
                 <label for="topbar_provider_override">Provider</label>

@@ -890,6 +890,25 @@
 
         let active = null;
 
+        function syncTopbarProviderSections() {
+            const provider = byId("topbar_provider_override");
+            const openaiFields = byId("topbar-openai-fields");
+            const openrouterFields = byId("topbar-openrouter-fields");
+            if (!provider || !openaiFields || !openrouterFields) {
+                return;
+            }
+            const isOpenRouter = String(provider.value || "").trim().toLowerCase() === "openrouter";
+            openaiFields.classList.toggle("hidden", isOpenRouter);
+            openaiFields.hidden = isOpenRouter;
+            openaiFields.style.display = isOpenRouter ? "none" : "grid";
+            openaiFields.setAttribute("aria-hidden", isOpenRouter ? "true" : "false");
+
+            openrouterFields.classList.toggle("hidden", !isOpenRouter);
+            openrouterFields.hidden = !isOpenRouter;
+            openrouterFields.style.display = !isOpenRouter ? "none" : "grid";
+            openrouterFields.setAttribute("aria-hidden", !isOpenRouter ? "true" : "false");
+        }
+
         function getPopoverByKey(key) {
             if (key === "report-limit") {
                 return byId("report-limit-popover");
@@ -970,6 +989,9 @@
                 closeAllPopovers();
                 targetPopover.classList.remove("hidden");
                 positionPopover(targetPopover, openButton);
+                if (key === "llm-settings") {
+                    syncTopbarProviderSections();
+                }
                 active = { popover: targetPopover, button: openButton };
                 return;
             }
@@ -1052,13 +1074,25 @@
         }
         provider.dataset.bound = "1";
 
+        function normalisedProviderValue() {
+            return String(provider.value || "").trim().toLowerCase();
+        }
+
+        function setProviderSectionVisibility(node, visible) {
+            node.classList.toggle("hidden", !visible);
+            node.hidden = !visible;
+            node.style.display = visible ? "grid" : "none";
+            node.setAttribute("aria-hidden", visible ? "false" : "true");
+        }
+
         function paintProviderFields() {
-            const isOpenRouter = provider.value === "OpenRouter";
-            openaiFields.classList.toggle("hidden", isOpenRouter);
-            openrouterFields.classList.toggle("hidden", !isOpenRouter);
+            const isOpenRouter = normalisedProviderValue() === "openrouter";
+            setProviderSectionVisibility(openaiFields, !isOpenRouter);
+            setProviderSectionVisibility(openrouterFields, isOpenRouter);
         }
 
         provider.addEventListener("change", paintProviderFields);
+        provider.addEventListener("input", paintProviderFields);
         paintProviderFields();
     }
 
@@ -1700,6 +1734,42 @@
                 ".advanced-ai-popover-backdrop:not(.hidden):not(.advanced-ai-popover-backdrop--locked)"
             );
             visibleBackdrops.forEach((node) => node.classList.add("hidden"));
+        });
+    }
+
+    function setupAdvancedAIDisabledHoverGlow() {
+        const statusButton = document.querySelector("[data-llm-status-quick-settings]");
+        const hoverTargets = document.querySelectorAll("[data-llm-disabled-hover-target]");
+        if (!statusButton || !hoverTargets.length) {
+            if (statusButton) {
+                statusButton.classList.remove("explore-top-stat--llm-glow");
+            }
+            return;
+        }
+
+        function setGlow(enabled) {
+            statusButton.classList.toggle("explore-top-stat--llm-glow", enabled);
+        }
+
+        hoverTargets.forEach((target) => {
+            if (target.dataset.llmGlowBound === "1") {
+                return;
+            }
+            target.dataset.llmGlowBound = "1";
+            target.addEventListener("mouseenter", function () {
+                setGlow(true);
+            });
+            target.addEventListener("mouseleave", function () {
+                setGlow(false);
+            });
+            target.addEventListener("focusin", function () {
+                setGlow(true);
+            });
+            target.addEventListener("focusout", function (event) {
+                if (!target.contains(event.relatedTarget)) {
+                    setGlow(false);
+                }
+            });
         });
     }
 
@@ -3043,6 +3113,7 @@
         setupTopbarDateValidation();
         setupSettingsLoadReportsConfirm();
         setupAdvancedAIPopovers();
+        setupAdvancedAIDisabledHoverGlow();
         setupThemeRerunConfirmModal();
         setupDatasetPagination();
         setupExploreDashboard();

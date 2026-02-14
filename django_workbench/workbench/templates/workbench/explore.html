@@ -106,7 +106,7 @@
             {% include "workbench/_theme_summary_section.html" %}
         {% endif %}
 
-        <section class="explore-surface explore-surface--advanced-ai advanced-ai-features reveal-up">
+        <section class="explore-surface explore-surface--advanced-ai advanced-ai-features {% if not llm_ready %}advanced-ai-features--llm-uninitialised{% endif %} reveal-up">
             <div class="section-card-header">
                 <span class="section-kicker">Advanced AI features</span>
                 <h3>AI workflows</h3>
@@ -117,8 +117,11 @@
                         <h4>Filter reports</h4>
                         <p>Use AI screening to keep only reports relevant to your research query, with optional supporting spans.</p>
                     </div>
-                    <div class="advanced-ai-feature-card__actions">
-                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-filter-open>
+                    <div
+                        class="advanced-ai-feature-card__actions {% if not llm_ready %}advanced-ai-feature-card__actions--disabled{% endif %}"
+                        {% if not llm_ready %}data-llm-disabled-hover-target data-disabled-message="Initialise your LLM to use AI workflows."{% endif %}
+                    >
+                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-filter-open {% if not llm_ready %}disabled{% endif %}>
                             <i class="hgi hgi-stroke hgi-filter-horizontal" aria-hidden="true"></i>
                             <span>Filter reports</span>
                         </button>
@@ -129,8 +132,11 @@
                         <h4>Discover themes</h4>
                         <p>Generate candidate themes from the active workspace and preview assignments before applying.</p>
                     </div>
-                    <div class="advanced-ai-feature-card__actions">
-                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-discover-open>
+                    <div
+                        class="advanced-ai-feature-card__actions {% if not llm_ready %}advanced-ai-feature-card__actions--disabled{% endif %}"
+                        {% if not llm_ready %}data-llm-disabled-hover-target data-disabled-message="Initialise your LLM to use AI workflows."{% endif %}
+                    >
+                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-discover-open {% if not llm_ready %}disabled{% endif %}>
                             <i class="hgi hgi-stroke hgi-bulb" aria-hidden="true"></i>
                             <span>Discover themes</span>
                         </button>
@@ -141,8 +147,11 @@
                         <h4>Extract data</h4>
                         <p>Define structured fields and enrich the same working dataset with extracted values.</p>
                     </div>
-                    <div class="advanced-ai-feature-card__actions">
-                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-extract-open>
+                    <div
+                        class="advanced-ai-feature-card__actions {% if not llm_ready %}advanced-ai-feature-card__actions--disabled{% endif %}"
+                        {% if not llm_ready %}data-llm-disabled-hover-target data-disabled-message="Initialise your LLM to use AI workflows."{% endif %}
+                    >
+                        <button type="button" class="button-secondary advanced-ai-feature-button" data-advanced-ai-extract-open {% if not llm_ready %}disabled{% endif %}>
                             <i class="hgi hgi-stroke hgi-database-export" aria-hidden="true"></i>
                             <span>Extract data</span>
                         </button>

@@ -2388,6 +2388,7 @@ def _handle_restore_excluded_report(request: HttpRequest) -> None:
 def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
     _update_sidebar_state(request)
     action = request.POST.get("action", "")
+    is_quick_settings = request.POST.get("quick_settings") == "1"
 
     if action == "load_reports":
         _handle_load_reports(request)
@@ -2426,7 +2427,8 @@ def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
         pass
     elif action == "save_settings":
         request.session["explore_onboarded"] = True
-        messages.success(request, "Settings updated.")
+        if not is_quick_settings:
+            messages.success(request, "Settings updated.")
 
     request.session.modified = True
     return None
