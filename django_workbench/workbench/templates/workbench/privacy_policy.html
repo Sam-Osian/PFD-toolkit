@@ -1,0 +1,148 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench legal-workbench">
+    <section class="shell-panel legal-panel reveal-up">
+        <header class="legal-header">
+            <span class="section-kicker">Legal</span>
+            <h1>Privacy Policy</h1>
+            <p>Last updated: {{ privacy_policy_last_updated }}</p>
+        </header>
+
+        <section class="legal-section">
+            <h2>1. Who We Are</h2>
+            <p>
+                This website is operated as <strong>PFD Toolkit</strong>. This policy explains how we process
+                personal data when you use the site.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>2. What Data We Process</h2>
+            <p>Depending on how you use the site, we may process:</p>
+            <ul>
+                <li>Technical request data such as IP address, browser details, and timestamps (for security and operations).</li>
+                <li>Session and anti-forgery identifiers used to keep the app working securely.</li>
+                <li>Workspace content you create in the app (for example workbook names and report selections).</li>
+                <li>Configuration values you enter in the app (for example model and provider settings).</li>
+            </ul>
+        </section>
+
+        <section class="legal-section" id="cookies">
+            <h2>3. Cookie Notice (Cookies And Similar Technologies)</h2>
+            <p>
+                We use cookies and browser storage to run the service securely and remember interface choices.
+                We currently do not use advertising cookies and do not currently load third-party analytics tags.
+            </p>
+            <div class="legal-table-wrap">
+                <table class="legal-table">
+                    <thead>
+                        <tr>
+                            <th>Technology</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>First/third party</th>
+                            <th>Purpose</th>
+                            <th>Typical duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Cookie</td>
+                            <td><code>csrftoken</code></td>
+                            <td>Strictly necessary</td>
+                            <td>First party</td>
+                            <td>Prevents cross-site request forgery attacks.</td>
+                            <td>About 1 year</td>
+                        </tr>
+                        <tr>
+                            <td>Cookie</td>
+                            <td><code>sessionid</code></td>
+                            <td>Strictly necessary</td>
+                            <td>First party</td>
+                            <td>Keeps your session state between requests.</td>
+                            <td>Until session expiry or browser close</td>
+                        </tr>
+                        <tr>
+                            <td>Local storage</td>
+                            <td><code>workbench.*</code> (for example <code>workbench.sidebarCollapsed</code>)</td>
+                            <td>Preferences</td>
+                            <td>First party</td>
+                            <td>Stores UI preferences such as sidebar and panel expansion state.</td>
+                            <td>Until you clear browser storage</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <p>
+                We do not currently set known non-essential third-party analytics or advertising cookies through this site.
+                If that changes, we will update this notice and implement consent controls where required.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>4. Managing Cookies And Storage</h2>
+            <p>
+                You can manage or delete cookies and local storage using your browser settings. Blocking strictly necessary
+                cookies may affect security or break parts of the service.
+            </p>
+            <p>
+                For questions about this cookie notice, contact
+                <a href="mailto:hello@pfdtoolkit.org">hello@pfdtoolkit.org</a>.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>5. Why We Use Data (Lawful Bases)</h2>
+            <ul>
+                <li>To provide the app service you request and maintain your workspace state.</li>
+                <li>To secure the service and prevent misuse.</li>
+                <li>To improve reliability and performance.</li>
+                <li>Where required by law, to comply with legal obligations.</li>
+            </ul>
+        </section>
+
+        <section class="legal-section">
+            <h2>6. Sharing</h2>
+            <p>
+                We use service providers for hosting and infrastructure operations. These providers may process personal
+                data on our behalf where necessary to deliver the service.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>7. Retention</h2>
+            <p>
+                We keep personal data only for as long as needed for the purposes above, including security, operational,
+                and legal requirements.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>8. Your UK/EU Rights</h2>
+            <p>
+                If UK GDPR or EU GDPR applies to you, you may have rights including access, rectification, erasure,
+                restriction, objection, and portability, subject to legal limits.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>9. Contact</h2>
+            <p>
+                For privacy questions, contact us at <a href="mailto:hello@pfdtoolkit.org">hello@pfdtoolkit.org</a>.
+            </p>
+        </section>
+
+        <section class="legal-section">
+            <h2>10. Changes</h2>
+            <p>
+                We may update this policy from time to time. The latest version will always be published on this page.
+            </p>
+        </section>
+    </section>
+</div>
+{% endblock %}

@@ -54,6 +54,9 @@
                 {% endif %}
                 {% block content %}{% endblock %}
             </div>
+            <footer class="site-legal-footer" aria-label="Site legal links">
+                <a href="{% url 'workbench:privacy_policy' %}">Privacy &amp; cookies</a>
+            </footer>
         </main>
     </div>
     <div class="global-loading-overlay" id="global-loading-overlay" role="status" aria-live="polite" aria-hidden="true">

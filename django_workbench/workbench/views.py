@@ -101,6 +101,14 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
         "description": "Technical documentation and implementation details for PFD Toolkit.",
         "robots": "index,follow",
     },
+    "privacy_policy": {
+        "title": "Privacy Policy | PFD Toolkit",
+        "description": (
+            "How PFD Toolkit processes personal data, uses cookies and similar technologies, "
+            "and handles website security and analytics."
+        ),
+        "robots": "index,follow",
+    },
     "workbook_public": {
         "title": "Shared PFD Workbook | PFD Toolkit",
         "description": "View a shared PFD Toolkit workbook with report-level filtering and summary outputs.",
@@ -1527,6 +1535,7 @@ def _render_sitemap_xml(request: HttpRequest) -> HttpResponse:
             (reverse("workbench:themes"), "weekly", "0.7", None),
             (reverse("workbench:extract"), "weekly", "0.7", None),
             (reverse("workbench:for_coders"), "weekly", "0.6", None),
+            (reverse("workbench:privacy_policy"), "monthly", "0.4", None),
         ]
     )
 
@@ -2709,6 +2718,23 @@ def index(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def home(request: HttpRequest) -> HttpResponse:
     return redirect("workbench:index", permanent=True)
+
+
+@require_http_methods(["GET"])
+def privacy_policy(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    context = _build_context(request)
+    context["current_page"] = "privacy_policy"
+    context["privacy_policy_last_updated"] = "17 February 2026"
+    context.update(
+        _build_seo_context(
+            request,
+            "privacy_policy",
+            canonical_path=reverse("workbench:privacy_policy"),
+        )
+    )
+    return render(request, "workbench/privacy_policy.html", context)
 
 
 @require_http_methods(["GET", "POST"])

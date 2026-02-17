@@ -652,6 +652,92 @@ p {
     margin: 0;
 }
 
+.site-legal-footer {
+    margin-top: 1.25rem;
+    padding: 0 0.15rem;
+    color: rgba(208, 219, 255, 0.78);
+    font-size: 0.84rem;
+}
+
+.site-legal-footer a {
+    color: rgba(214, 225, 255, 0.92);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.legal-workbench {
+    max-width: 1020px;
+}
+
+.legal-panel {
+    padding: 1.35rem 1.4rem;
+    display: grid;
+    gap: 1.15rem;
+}
+
+.legal-header {
+    display: grid;
+    gap: 0.45rem;
+}
+
+.legal-header h1 {
+    font-size: clamp(1.55rem, 2.8vw, 2rem);
+}
+
+.legal-header p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
+
+.legal-section {
+    display: grid;
+    gap: 0.46rem;
+}
+
+.legal-section h2 {
+    font-size: 1.03rem;
+}
+
+.legal-section p,
+.legal-section li {
+    color: var(--text-soft);
+    line-height: 1.58;
+    font-size: 0.92rem;
+}
+
+.legal-section ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.3rem;
+}
+
+.legal-table-wrap {
+    overflow-x: auto;
+}
+
+.legal-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+}
+
+.legal-table th,
+.legal-table td {
+    border: 1px solid rgba(166, 177, 255, 0.26);
+    padding: 0.5rem 0.58rem;
+    text-align: left;
+    vertical-align: top;
+    font-size: 0.85rem;
+    color: var(--text-soft);
+}
+
+.legal-table th {
+    font-weight: 700;
+    color: var(--text);
+    background: rgba(142, 160, 255, 0.12);
+}
+
 .section-kicker,
 .panel-tag,
 .beta-banner__pill,

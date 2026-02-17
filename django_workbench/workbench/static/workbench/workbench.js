@@ -1,7 +1,7 @@
 (function () {
     document.documentElement.classList.add("js-enabled");
     const PAGE_CLASS_PREFIX = "page-";
-    const KNOWN_PAGES = ["home", "explore", "themes", "extract", "for_coders", "settings"];
+    const KNOWN_PAGES = ["home", "explore", "themes", "extract", "for_coders", "settings", "privacy_policy"];
 
     function byId(id) {
         return document.getElementById(id);
@@ -44,6 +44,9 @@
         }
         if (pathname.startsWith("/settings")) {
             return "settings";
+        }
+        if (pathname.startsWith("/privacy")) {
+            return "privacy_policy";
         }
         return "home";
     }
