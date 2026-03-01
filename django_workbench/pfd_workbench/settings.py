@@ -58,6 +58,9 @@ CSRF_TRUSTED_ORIGINS = _env_csv(
     "http://127.0.0.1,http://localhost",
 )
 
+CANONICAL_HOST = os.getenv("DJANGO_CANONICAL_HOST", "").strip().lower()
+CANONICAL_HOST_REDIRECTS = _env_csv("DJANGO_CANONICAL_HOST_REDIRECTS", "")
+
 
 # Application definition
 
@@ -74,6 +77,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "pfd_workbench.middleware.CanonicalHostRedirectMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
