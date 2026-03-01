@@ -113,7 +113,7 @@ DATABASES = {
     "default": dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
         conn_max_age=600,
-        ssl_require=not DEBUG,
+        ssl_require=_env_flag("DJANGO_DB_SSL_REQUIRE", False),
     )
 }
 
