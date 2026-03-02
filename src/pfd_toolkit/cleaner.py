@@ -89,6 +89,25 @@ RECEIVER_ORG_CUES = (
     "cardinal healthcare",
 )
 
+RECEIVER_CANONICAL_MAP = {
+    "department of health": "Department of Health and Social Care",
+    "department of health and social care": "Department of Health and Social Care",
+    "nhs england and nhs improvement": "NHS England",
+    "highways agency": "National Highways",
+    "highways england": "National Highways",
+}
+
+RECEIVER_ROLE_PREFIX_TEXTS = (
+    "the chief executive officer of ",
+    "chief executive officer of ",
+    "the chief executive of ",
+    "chief executive of ",
+    "the chief executive officer ",
+    "chief executive officer ",
+    "the chief executive ",
+    "chief executive ",
+)
+
 
 def _normalise_receiver_match_key(text: str) -> str:
     """Return a permissive key used only for receiver cleanup rules."""
@@ -106,11 +125,44 @@ def _looks_like_receiver_organisation(text: str) -> bool:
     return any(cue in key for cue in RECEIVER_ORG_CUES) or text.isupper()
 
 
+def _normalise_receiver_formatting(text: str) -> str:
+    """Apply low-risk receiver formatting cleanup while preserving casing."""
+    cleaned = " ".join((text or "").split()).strip(" ,;:.")
+    if not cleaned:
+        return ""
+
+    cleaned = cleaned.replace("’", "'").replace("‘", "'")
+    cleaned = re.sub(r"^[\-\–\)\(:\s]+", "", cleaned)
+    cleaned = re.sub(r"^\s*The\s+", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bDept\.?\b", "Department", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s*&\s*", " and ", cleaned)
+    cleaned = re.sub(
+        r"^Secretary of State for (?:the )?Department(?: of)? ",
+        "Secretary of State for ",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s*\(([A-Za-z0-9&./' -]{2,15})\)\s*$", "", cleaned)
+    cleaned = re.sub(r'\s*\((?:"?the Trust"?|Highways Department|Local Government)\)\s*$', "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip(" ,;:.")
+
+
+def _canonicalise_receiver_segment(text: str) -> str:
+    """Apply explicit receiver canonical mappings while preserving formatting."""
+    key = _normalise_receiver_match_key(text)
+    return RECEIVER_CANONICAL_MAP.get(key, text)
+
+
 def _clean_receiver_segment(segment: str) -> str:
     """Normalise a single receiver segment while preserving useful casing."""
     text = " ".join((segment or "").replace("\n", " ").split()).strip(" ,;:.")
     if not text:
         return ""
+
+    text = re.sub(r"^\[REDACTED\][,:\- ]*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r'^[A-Z][^,;]{0,80}\bMP\b[,:\- ]*', "", text)
+    text = _normalise_receiver_formatting(text)
 
     if _normalise_receiver_match_key(text) in RECEIVER_DROP_VALUES:
         return ""
@@ -129,9 +181,28 @@ def _clean_receiver_segment(segment: str) -> str:
             text = parts[-1]
             parts = [text]
 
+    normalised_role_form = _normalise_receiver_formatting(text)
+    role_form_key = _normalise_receiver_match_key(normalised_role_form)
+    for prefix in RECEIVER_ROLE_PREFIX_TEXTS:
+        prefix_key = _normalise_receiver_match_key(prefix)
+        if role_form_key.startswith(prefix_key):
+            candidate = normalised_role_form[len(prefix):]
+            candidate = _normalise_receiver_formatting(candidate)
+            if candidate and _looks_like_receiver_organisation(candidate):
+                text = candidate
+                break
+
+    if ";" not in text and not _looks_like_receiver_organisation(text):
+        semicolon_parts = [part.strip(" ,;:.") for part in text.split(";") if part.strip(" ,;:.")]
+        if len(semicolon_parts) == 2 and _normalise_receiver_match_key(semicolon_parts[0]) in RECEIVER_ROLE_PREFIXES:
+            candidate = _normalise_receiver_formatting(semicolon_parts[1])
+            if _looks_like_receiver_organisation(candidate):
+                text = candidate
+
+    text = _normalise_receiver_formatting(text)
     if _normalise_receiver_match_key(text) in RECEIVER_DROP_VALUES:
         return ""
-    return text.strip(" ,;:.")
+    return _canonicalise_receiver_segment(text.strip(" ,;:."))
 
 
 def _normalise_receiver_output(receiver_text: str) -> str:
@@ -139,12 +210,26 @@ def _normalise_receiver_output(receiver_text: str) -> str:
     if not isinstance(receiver_text, str):
         return receiver_text
 
+    trust_variants: dict[str, str] = {}
     segments = []
     seen = set()
     for segment in receiver_text.split(";"):
         cleaned = _clean_receiver_segment(segment)
         if not cleaned:
             continue
+
+        trust_match = re.fullmatch(
+            r"(.+?)\s+NHS(?:\s+Foundation)?\s+Trust",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        if trust_match:
+            trust_stem = _normalise_receiver_match_key(trust_match.group(1))
+            cleaned = trust_variants.setdefault(
+                trust_stem,
+                f"{trust_match.group(1).strip()} NHS Foundation Trust",
+            )
+
         key = _normalise_receiver_match_key(cleaned)
         if not key or key in seen:
             continue
@@ -464,9 +549,17 @@ class Cleaner:
                 "Remove reference to family altogether. "
                 "Remove address(es) if given (i.e. just include the recipient organisation). "
                 "If a personal name or job title is given alongside an organisation, return the organisation only. "
+                "If the recipient is a named government office-holder or minister, return the relevant department rather than the person or office title. "
                 'For example, if the string is "CEO, Cardinal Healthcare", return "Cardinal Healthcare". '
                 'If the string is "Jane Smith, Chief Executive, NHS England", return "NHS England". '
-                'If the string is "John Smith MP, Secretary of State for Justice", return "Secretary of State for Justice". '
+                'If the string is "John Smith MP, Secretary of State for Justice", return "Ministry of Justice". '
+                'If the string is "Secretary of State for Health and Social Care", return "Department of Health and Social Care". '
+                'If the string is "Secretary of State for Transport", return "Department for Transport". '
+                'If the string is "Chief Executive of NHS England", return "NHS England". '
+                'If the string is "The Chief Executive of Aneurin Bevan University Health Board", return "Aneurin Bevan University Health Board". '
+                'If a redacted personal name appears before an office or organisation, remove the person and keep the office or organisation only. '
+                'For example, if the string is "[REDACTED], Secretary of State for Health and Social Care", return "Department of Health and Social Care". '
+                'If the string is "[REDACTED], Chief Executive NHS England", return "NHS England". '
                 'If "Chief Coroner" appears as a recipient, remove it altogether rather than returning it. '
             ),
         },

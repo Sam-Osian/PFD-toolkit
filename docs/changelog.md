@@ -13,6 +13,7 @@ Welcome to the project changelog. All notable changes to this project will be do
 * Area matching now uses exact matching with fuzzy fallback by default, reducing cases where small spelling or wording variations were previously classified as `"Other"`.
 * Updated coroner area canonicalisation to align more closely with the current official list, with legacy area names now recoded to current canonical areas.
 * Added `Scraper.rescrape_fields()` so individual columns such as `area` can be refreshed across an existing dataset without re-scraping the full archive.
+* Improved recipient cleaning so boilerplate recipients such as `Chief Coroner` are removed, role-led recipient strings are reduced to organisations or departments, and common formatting variants such as `NHS Trust`/`NHS Foundation Trust` and selected department/highway names are normalised more consistently.
 
 ### 0.4.0 - <small>2025-11-30</small>
 * `discover_themes()` now defaults to using untrimmed report text, with optional truncation controlled by `trim_approach="truncate"` and new `max_tokens`/`max_words` parameters. Switch to `trim_approach="summarise"` to re-enable LLM summarisation, which now uses `summarise_intensity` settings.

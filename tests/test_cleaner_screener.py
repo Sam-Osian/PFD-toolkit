@@ -314,6 +314,163 @@ def test_cleaner_receiver_strips_roles_but_preserves_capitalisation():
     assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == "Cardinal Healthcare; NHS England"
 
 
+def test_cleaner_receiver_normalises_articles_symbols_acronyms_and_departments():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    if text == "x":
+                        outputs.append(
+                            "The Department of Health & Social Care; "
+                            "National Institute for Health and Care Excellence (NICE); "
+                            "Chief Executive of NHS England; "
+                            "The Care Quality Commission"
+                        )
+                    else:
+                        outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, ReceiverLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == (
+        "Department of Health and Social Care; "
+        "National Institute for Health and Care Excellence; "
+        "NHS England; "
+        "Care Quality Commission"
+    )
+
+
+def test_cleaner_receiver_strips_low_risk_junk_and_qualifiers():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    if text == "x":
+                        outputs.append(
+                            "– Warwickshire County Council; "
+                            "Secretary of State for the Department of Health and Social Care; "
+                            "National Police Chiefs’ Council; "
+                            'Nottingham University Hospitals NHS Trust ("the Trust")'
+                        )
+                    else:
+                        outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, ReceiverLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == (
+        "Warwickshire County Council; "
+        "Secretary of State for Health and Social Care; "
+        "National Police Chiefs' Council; "
+        "Nottingham University Hospitals NHS Foundation Trust"
+    )
+
+
+def test_cleaner_receiver_merges_nhs_trust_and_foundation_trust_variants():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    if text == "x":
+                        outputs.append(
+                            "Barts Health NHS Trust; Barts Health NHS Foundation Trust"
+                        )
+                    else:
+                        outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, ReceiverLLM())
+    cleaned = cleaner.clean_reports()
+    assert (
+        cleaned[GeneralConfig.COL_RECEIVER].iloc[0]
+        == "Barts Health NHS Foundation Trust"
+    )
+
+
+def test_cleaner_receiver_applies_explicit_canonical_mappings():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    if text == "x":
+                        outputs.append(
+                            "Department of Health; NHS England and NHS Improvement; Highways Agency; Highways England"
+                        )
+                    else:
+                        outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, ReceiverLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == (
+        "Department of Health and Social Care; NHS England; National Highways"
+    )
+
+
 def test_area_model_normalises_formatting_but_returns_canonical_value():
     model = AreaModel(area="  east riding and hull  ")
     assert model.area == "East Riding and Hull"
