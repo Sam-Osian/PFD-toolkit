@@ -513,6 +513,93 @@ class Scraper:
         self.reports = updated_df.copy()
         return updated_df
 
+    def rescrape_fields(
+        self,
+        reports_df: pd.DataFrame | None = None,
+        *,
+        fields: list[str] | tuple[str, ...],
+        clean: bool = True,
+    ) -> pd.DataFrame:
+        """Re-scrape selected fields for an existing dataset of report URLs."""
+        source_df = reports_df if reports_df is not None else self.reports
+        if source_df is None:
+            raise ValueError(
+                "No reports available. Provide reports_df or run scrape_reports() first."
+            )
+        if self.COL_URL not in source_df.columns:
+            raise ValueError(
+                f"reports_df must contain a '{self.COL_URL}' column to re-scrape fields."
+            )
+
+        supported_fields = {
+            self.COL_ID: "include_id",
+            self.COL_DATE: "include_date",
+            self.COL_CORONER_NAME: "include_coroner",
+            self.COL_AREA: "include_area",
+            self.COL_RECEIVER: "include_receiver",
+            self.COL_INVESTIGATION: "include_investigation",
+            self.COL_CIRCUMSTANCES: "include_circumstances",
+            self.COL_CONCERNS: "include_concerns",
+        }
+        selected_fields = list(dict.fromkeys(fields))
+        if not selected_fields:
+            raise ValueError("At least one field must be provided in fields.")
+        invalid_fields = [field for field in selected_fields if field not in supported_fields]
+        if invalid_fields:
+            valid = ", ".join(supported_fields.keys())
+            raise ValueError(
+                f"Unsupported fields requested: {invalid_fields}. Valid options are: {valid}."
+            )
+
+        include_kwargs = {flag_name: False for flag_name in supported_fields.values()}
+        for field in selected_fields:
+            include_kwargs[supported_fields[field]] = True
+
+        field_scraper = Scraper(
+            llm=self.llm,
+            category=self.category,
+            start_date=self.start_date.strftime("%Y-%m-%d"),
+            end_date=self.end_date.strftime("%Y-%m-%d"),
+            max_workers=self.max_workers,
+            max_requests=self.max_requests,
+            delay_range=self.delay_range,
+            timeout=self.timeout,
+            scraping_strategy=list(self.scraping_strategy),
+            include_url=True,
+            include_time_stamp=False,
+            verbose=self.verbose,
+            **include_kwargs,
+        )
+
+        working_df = source_df.copy()
+        urls = working_df[self.COL_URL].dropna().astype(str).tolist()
+        refreshed_df = pd.DataFrame(field_scraper._scrape_report_details(urls))
+
+        if clean:
+            if not self.llm:
+                raise ValueError("LLM client (self.llm) required when clean=True.")
+            cleaner = Cleaner(
+                reports=refreshed_df,
+                llm=self.llm,
+                include_coroner=self.COL_CORONER_NAME in selected_fields,
+                include_receiver=self.COL_RECEIVER in selected_fields,
+                include_area=self.COL_AREA in selected_fields,
+                include_investigation=self.COL_INVESTIGATION in selected_fields,
+                include_circumstances=self.COL_CIRCUMSTANCES in selected_fields,
+                include_concerns=self.COL_CONCERNS in selected_fields,
+                verbose=self.verbose,
+            )
+            refreshed_df = cleaner.clean_reports()
+
+        merge_columns = [self.COL_URL, *selected_fields]
+        merged = working_df.drop(columns=selected_fields, errors="ignore").merge(
+            refreshed_df[merge_columns],
+            on=self.COL_URL,
+            how="left",
+        )
+        self.reports = merged.copy()
+        return merged
+
     def top_up(
         self,
         old_reports: pd.DataFrame | None = None,

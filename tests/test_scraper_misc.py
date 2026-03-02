@@ -1,3 +1,5 @@
+import pandas as pd
+
 from pfd_toolkit.scraper.scraper import Scraper
 
 
@@ -70,3 +72,46 @@ def test_parse_scraping_strategy_warns(monkeypatch):
 
     assert any("unexpected scraping_strategy" in w.lower() for w in warnings)
 
+
+def test_rescrape_fields_updates_selected_column_only(monkeypatch):
+    def fake_scrape_report_details(self, urls):
+        return [
+            {
+                self.COL_URL: url,
+                self.COL_AREA: "Essex and Thurrock",
+            }
+            for url in urls
+        ]
+
+    monkeypatch.setattr(Scraper, "_scrape_report_details", fake_scrape_report_details)
+
+    scraper = Scraper(
+        category="all",
+        start_date="2024-01-01",
+        end_date="2024-01-02",
+        max_workers=1,
+        max_requests=1,
+        delay_range=(0, 0),
+        scraping_strategy=[1, -1, -1],
+        include_receiver=False,
+        include_time_stamp=False,
+    )
+
+    reports_df = pd.DataFrame(
+        [
+            {
+                scraper.COL_URL: "http://example.com/report-1",
+                scraper.COL_AREA: "Essex",
+                scraper.COL_CORONER_NAME: "A. Example",
+            }
+        ]
+    )
+
+    refreshed = scraper.rescrape_fields(
+        reports_df=reports_df,
+        fields=[scraper.COL_AREA],
+        clean=False,
+    )
+
+    assert refreshed[scraper.COL_AREA].iloc[0] == "Essex and Thurrock"
+    assert refreshed[scraper.COL_CORONER_NAME].iloc[0] == "A. Example"

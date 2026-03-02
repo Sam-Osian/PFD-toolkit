@@ -12,6 +12,7 @@ Welcome to the project changelog. All notable changes to this project will be do
 ### 0.4.1 - <small>2026-03-02</small>
 * Area matching now uses exact matching with fuzzy fallback by default, reducing cases where small spelling or wording variations were previously classified as `"Other"`.
 * Updated coroner area canonicalisation to align more closely with the current official list, with legacy area names now recoded to current canonical areas.
+* Added `Scraper.rescrape_fields()` so individual columns such as `area` can be refreshed across an existing dataset without re-scraping the full archive.
 
 ### 0.4.0 - <small>2025-11-30</small>
 * `discover_themes()` now defaults to using untrimmed report text, with optional truncation controlled by `trim_approach="truncate"` and new `max_tokens`/`max_words` parameters. Switch to `trim_approach="summarise"` to re-enable LLM summarisation, which now uses `summarise_intensity` settings.
