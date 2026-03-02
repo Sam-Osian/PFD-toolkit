@@ -550,6 +550,7 @@ class Cleaner:
                 "Remove address(es) if given (i.e. just include the recipient organisation). "
                 "If a personal name or job title is given alongside an organisation, return the organisation only. "
                 "If the recipient is a named government office-holder or minister, return the relevant department rather than the person or office title. "
+                "Do not return acronyms as the main recipient label when the full organisation name is available; return the full expanded name instead. "
                 'For example, if the string is "CEO, Cardinal Healthcare", return "Cardinal Healthcare". '
                 'If the string is "Jane Smith, Chief Executive, NHS England", return "NHS England". '
                 'If the string is "John Smith MP, Secretary of State for Justice", return "Ministry of Justice". '
@@ -557,6 +558,7 @@ class Cleaner:
                 'If the string is "Secretary of State for Transport", return "Department for Transport". '
                 'If the string is "Chief Executive of NHS England", return "NHS England". '
                 'If the string is "The Chief Executive of Aneurin Bevan University Health Board", return "Aneurin Bevan University Health Board". '
+                'If the string is "NICE (National Institute for Health and Care Excellence)", return "National Institute for Health and Care Excellence". '
                 'If a redacted personal name appears before an office or organisation, remove the person and keep the office or organisation only. '
                 'For example, if the string is "[REDACTED], Secretary of State for Health and Social Care", return "Department of Health and Social Care". '
                 'If the string is "[REDACTED], Chief Executive NHS England", return "NHS England". '
