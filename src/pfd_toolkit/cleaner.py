@@ -38,6 +38,122 @@ def _normalise_area_for_matching(area: str) -> str:
     return " ".join(normalised.split())
 
 
+RECEIVER_DROP_VALUES = {
+    "chief coroner",
+    "the chief coroner",
+    "his majesty s chief coroner",
+    "her majesty s chief coroner",
+    "hm chief coroner",
+    "chief coroner of england and wales",
+}
+
+RECEIVER_ROLE_PREFIXES = {
+    "ceo",
+    "chief executive",
+    "chief executive officer",
+    "medical director",
+    "clinical director",
+    "managing director",
+    "director",
+    "minister",
+    "secretary of state",
+    "trust chair",
+    "chair",
+    "coroner",
+    "assistant coroner",
+    "senior coroner",
+}
+
+RECEIVER_ORG_CUES = (
+    "nhs",
+    "trust",
+    "foundation trust",
+    "hospital",
+    "council",
+    "department",
+    "ministry",
+    "agency",
+    "care",
+    "health",
+    "board",
+    "services",
+    "service",
+    "authority",
+    "office",
+    "group",
+    "limited",
+    "ltd",
+    "plc",
+    "university",
+    "college",
+    "cardinal healthcare",
+)
+
+
+def _normalise_receiver_match_key(text: str) -> str:
+    """Return a permissive key used only for receiver cleanup rules."""
+    normalised = text.strip().casefold()
+    normalised = normalised.replace("&", " and ")
+    normalised = re.sub(r"[^a-z0-9]+", " ", normalised)
+    return " ".join(normalised.split())
+
+
+def _looks_like_receiver_organisation(text: str) -> bool:
+    """Heuristic for detecting organisation-like recipient segments."""
+    key = _normalise_receiver_match_key(text)
+    if not key:
+        return False
+    return any(cue in key for cue in RECEIVER_ORG_CUES) or text.isupper()
+
+
+def _clean_receiver_segment(segment: str) -> str:
+    """Normalise a single receiver segment while preserving useful casing."""
+    text = " ".join((segment or "").replace("\n", " ").split()).strip(" ,;:.")
+    if not text:
+        return ""
+
+    if _normalise_receiver_match_key(text) in RECEIVER_DROP_VALUES:
+        return ""
+
+    parts = [part.strip(" ,;:.") for part in text.split(",") if part.strip(" ,;:.")]
+    if parts:
+        if _normalise_receiver_match_key(parts[0]) in RECEIVER_DROP_VALUES:
+            return ""
+        if len(parts) >= 2 and _normalise_receiver_match_key(parts[0]) in RECEIVER_ROLE_PREFIXES:
+            text = ", ".join(parts[1:])
+            parts = [part.strip(" ,;:.") for part in text.split(",") if part.strip(" ,;:.")]
+        elif len(parts) >= 3 and _looks_like_receiver_organisation(parts[-1]):
+            text = parts[-1]
+            parts = [text]
+        elif len(parts) >= 2 and _looks_like_receiver_organisation(parts[-1]) and not _looks_like_receiver_organisation(parts[0]):
+            text = parts[-1]
+            parts = [text]
+
+    if _normalise_receiver_match_key(text) in RECEIVER_DROP_VALUES:
+        return ""
+    return text.strip(" ,;:.")
+
+
+def _normalise_receiver_output(receiver_text: str) -> str:
+    """Clean receiver output while preserving semicolon-separated formatting."""
+    if not isinstance(receiver_text, str):
+        return receiver_text
+
+    segments = []
+    seen = set()
+    for segment in receiver_text.split(";"):
+        cleaned = _clean_receiver_segment(segment)
+        if not cleaned:
+            continue
+        key = _normalise_receiver_match_key(cleaned)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        segments.append(cleaned)
+
+    return "; ".join(segments)
+
+
 DEFAULT_AREA_MATCH_STRATEGY = "exact_then_fuzzy"
 AREA_MATCH_STRATEGIES = ("exact_only", "exact_then_fuzzy", "fuzzy_only")
 AREA_FUZZY_MIN_SCORE = 0.88
@@ -341,12 +457,17 @@ class Cleaner:
         },
         "Receiver": {
             "field_description": "the name(s)/organisation(s) of the receiver(s) of the report",
-            "field_contents_and_rules": "only the name(s)/organisation(s) and, if given, their job title(s) -- nothing else",
+            "field_contents_and_rules": "only the recipient organisation name(s) -- nothing else",
             "extra_instructions": (
                 "Separate multiple recipients with semicolons (;). "
                 "Do not use a numbered list. "
                 "Remove reference to family altogether. "
-                "Remove address(es) if given (i.e. just include the recipient). "
+                "Remove address(es) if given (i.e. just include the recipient organisation). "
+                "If a personal name or job title is given alongside an organisation, return the organisation only. "
+                'For example, if the string is "CEO, Cardinal Healthcare", return "Cardinal Healthcare". '
+                'If the string is "Jane Smith, Chief Executive, NHS England", return "NHS England". '
+                'If the string is "John Smith MP, Secretary of State for Justice", return "Secretary of State for Justice". '
+                'If "Chief Coroner" appears as a recipient, remove it altogether rather than returning it. '
             ),
         },
         "InvestigationAndInquest": {
@@ -700,6 +821,8 @@ class Cleaner:
                                 f"Reverting to original for column '{column_name}', index {df_index}. LLM output: '{cleaned_text_output}'"
                             )
                         final_text_to_write = original_text
+                    elif config_key == "Receiver":
+                        final_text_to_write = _normalise_receiver_output(cleaned_text_output)
                     elif cleaned_text_output != original_text:
                         modifications_count += 1
                 elif cleaned_text_output is None and original_text is not None:

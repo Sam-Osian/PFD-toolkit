@@ -250,6 +250,70 @@ def test_cleaner_area_synonyms():
     assert cleaned[GeneralConfig.COL_AREA].iloc[0] == "London West"
 
 
+def test_cleaner_receiver_removes_chief_coroner_and_keeps_semicolon_formatting():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    if text == "x":
+                        outputs.append("Chief Coroner; NHS England; Chief Coroner")
+                    else:
+                        outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, ReceiverLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == "NHS England"
+
+
+def test_cleaner_receiver_strips_roles_but_preserves_capitalisation():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for p in prompts:
+                text = p.split("\n")[-1]
+                if response_format is None:
+                    if text == "x":
+                        outputs.append("CEO, Cardinal Healthcare; Jane Smith, Chief Executive, NHS England")
+                    else:
+                        outputs.append(text.upper())
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(response_format(**{field_name: text.upper()}))
+            return outputs
+
+    cleaner = Cleaner(df, ReceiverLLM())
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == "Cardinal Healthcare; NHS England"
+
+
 def test_area_model_normalises_formatting_but_returns_canonical_value():
     model = AreaModel(area="  east riding and hull  ")
     assert model.area == "East Riding and Hull"
