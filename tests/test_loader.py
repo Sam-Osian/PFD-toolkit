@@ -9,6 +9,7 @@ from pfd_toolkit import loader
 def use_local_dataset(tmp_path, monkeypatch):
     """Provide a tiny CSV dataset to avoid network calls during tests."""
 
+    loader._reset_dataframe_cache()
     cache_file = tmp_path / "all_reports.csv"
 
     # Small dataset covering a range of dates
@@ -34,6 +35,7 @@ def use_local_dataset(tmp_path, monkeypatch):
 
     monkeypatch.setattr(loader, "_ensure_dataset", fake_ensure_dataset)
     yield cache_file
+    loader._reset_dataframe_cache()
 
 
 def test_load_reports_date_range():
@@ -62,3 +64,22 @@ def test_load_reports_clear_cache(use_local_dataset):
     assert not df.empty
     assert fake_cache.exists()
     assert fake_cache.stat().st_size > len("dummy")
+
+
+def test_load_reports_reuses_process_cache(monkeypatch):
+    loader._reset_dataframe_cache()
+    original_read_csv = loader.pd.read_csv
+    call_count = {"value": 0}
+
+    def counting_read_csv(*args, **kwargs):
+        call_count["value"] += 1
+        return original_read_csv(*args, **kwargs)
+
+    monkeypatch.setattr(loader.pd, "read_csv", counting_read_csv)
+
+    first = loader.load_reports(n_reports=2, refresh=False)
+    second = loader.load_reports(n_reports=3, refresh=False)
+
+    assert len(first) == 2
+    assert len(second) == 3
+    assert call_count["value"] == 1

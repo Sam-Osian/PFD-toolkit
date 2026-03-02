@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Final
 
 from pathlib import Path
+from threading import Lock
 import requests
 
 import pandas as pd
@@ -20,6 +21,9 @@ _DATA_URL: Final[str] = (
 # Cache path for the downloaded dataset
 _CACHE_DIR: Final[Path] = Path.home() / ".cache" / "pfd_toolkit"
 _CACHE_FILE: Final[Path] = _CACHE_DIR / _DATA_FILE
+_DATAFRAME_CACHE_LOCK: Final[Lock] = Lock()
+_DATAFRAME_CACHE_SIGNATURE: tuple[str, int, int] | None = None
+_DATAFRAME_CACHE_FRAME: pd.DataFrame | None = None
 
 
 def _ensure_dataset(force_download: bool = False) -> Path:
@@ -45,6 +49,38 @@ def _ensure_dataset(force_download: bool = False) -> Path:
                 "Failed to download dataset from GitHub release"
             ) from exc
     return _CACHE_FILE
+
+
+def _reset_dataframe_cache() -> None:
+    global _DATAFRAME_CACHE_SIGNATURE, _DATAFRAME_CACHE_FRAME
+    with _DATAFRAME_CACHE_LOCK:
+        _DATAFRAME_CACHE_SIGNATURE = None
+        _DATAFRAME_CACHE_FRAME = None
+
+
+def _load_base_reports(force_download: bool = False) -> pd.DataFrame:
+    global _DATAFRAME_CACHE_SIGNATURE, _DATAFRAME_CACHE_FRAME
+
+    csv_path = _ensure_dataset(force_download=force_download)
+    stat = csv_path.stat()
+    signature = (str(csv_path.resolve()), stat.st_mtime_ns, stat.st_size)
+
+    with _DATAFRAME_CACHE_LOCK:
+        if _DATAFRAME_CACHE_SIGNATURE != signature or _DATAFRAME_CACHE_FRAME is None:
+            reports = pd.read_csv(csv_path)
+            reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
+            reports["date"] = pd.to_datetime(
+                reports["date"], format="%Y-%m-%d", errors="coerce"
+            )
+            reports = (
+                reports.dropna(subset=["date"])
+                .sort_values("date", ascending=False)
+                .reset_index(drop=True)
+            )
+            _DATAFRAME_CACHE_SIGNATURE = signature
+            _DATAFRAME_CACHE_FRAME = reports
+
+        return _DATAFRAME_CACHE_FRAME
 
 
 def load_reports(
@@ -96,24 +132,11 @@ def load_reports(
     if date_from > date_to:
         raise ValueError("start_date must be earlier than or equal to end_date")
 
-    # Read CSV from the cached release asset
-    csv_path = _ensure_dataset(force_download=refresh)
-    reports = pd.read_csv(csv_path)
-
-    # Drop any Unnamed columns
-    reports = reports.loc[:, ~reports.columns.str.startswith("Unnamed")]
-
-    # Cleaning
-    # ...Parse the Date column, drop rows with invalid dates, and filter window
-    reports["date"] = pd.to_datetime(
-        reports["date"], format="%Y-%m-%d", errors="coerce"
-    )
-    reports = (
-        reports.dropna(subset=["date"])
-        .loc[lambda df: (df["date"] >= date_from) & (df["date"] <= date_to)]
-        .sort_values("date", ascending=False)
-        .reset_index(drop=True)
-    )
+    reports = _load_base_reports(force_download=refresh)
+    reports = reports.loc[
+        (reports["date"] >= date_from) & (reports["date"] <= date_to)
+    ].copy()
+    reports.reset_index(drop=True, inplace=True)
 
     # Limit to n_reports
     if n_reports is not None:

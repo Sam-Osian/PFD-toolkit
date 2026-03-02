@@ -61,6 +61,14 @@ ThemeEmojiModel = create_model(
 )
 
 
+def normalise_parallel_workers(raw_value: Any) -> int:
+    try:
+        requested = int(raw_value or 8)
+    except (TypeError, ValueError):
+        requested = 8
+    return min(32, max(1, requested))
+
+
 def get_llm_config(session: dict[str, Any]) -> tuple[Optional[dict[str, Any]], Optional[str]]:
     provider = session.get("provider_override", "OpenAI")
     model_name = (session.get("model_name") or "gpt-4.1-mini").strip() or "gpt-4.1-mini"
@@ -79,7 +87,7 @@ def get_llm_config(session: dict[str, Any]) -> tuple[Optional[dict[str, Any]], O
     llm_kwargs: dict[str, Any] = {
         "api_key": api_key,
         "model": model_name,
-        "max_workers": int(session.get("max_parallel_workers", 8) or 8),
+        "max_workers": normalise_parallel_workers(session.get("max_parallel_workers")),
         "temperature": 0.0,
         "validation_attempts": 2,
         "seed": 123,

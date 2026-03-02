@@ -1,6 +1,8 @@
 """Views for the standalone Django Workbench."""
 from __future__ import annotations
 
+from collections import OrderedDict
+import logging
 import json
 import mimetypes
 import random
@@ -14,6 +16,7 @@ from html import escape
 from datetime import date, datetime
 from io import BytesIO, StringIO
 from pathlib import Path
+from time import perf_counter
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 from typing import Any, Optional
 from uuid import UUID, uuid4
@@ -37,6 +40,7 @@ from .services import (
     build_llm,
     build_screener,
     load_reports_dataframe,
+    normalise_parallel_workers,
     parse_seed_topics,
     resolve_theme_emoji,
 )
@@ -61,6 +65,8 @@ from .state import (
     undo_last_change,
     workspace_has_activity,
 )
+
+logger = logging.getLogger(__name__)
 
 SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
     "home": {
@@ -134,6 +140,8 @@ UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
         "description": "Infrared Ops-inspired command palette.",
     },
 )
+DASHBOARD_PAYLOAD_CACHE: "OrderedDict[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...], bool], dict[str, Any]]" = OrderedDict()
+DASHBOARD_PAYLOAD_CACHE_MAX = 64
 
 
 def favicon(request: HttpRequest) -> HttpResponse:
@@ -143,6 +151,76 @@ def favicon(request: HttpRequest) -> HttpResponse:
 UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
 DASHBOARD_TOP_N = 12
 DASHBOARD_UNKNOWN_LABEL = "Not specified"
+
+
+def _normalise_report_limit(raw_value: Any) -> Optional[int]:
+    if raw_value in {None, ""}:
+        return None
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        return None
+    if parsed <= 0:
+        return None
+    return parsed
+
+
+def _dashboard_payload_cache_key(
+    dataset_token: str,
+    selected_filters: dict[str, list[str]],
+    include_options: bool,
+) -> tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...], bool]:
+    return (
+        dataset_token,
+        tuple(selected_filters.get("coroner", [])),
+        tuple(selected_filters.get("area", [])),
+        tuple(selected_filters.get("receiver", [])),
+        include_options,
+    )
+
+
+def _get_cached_dashboard_payload(
+    dataset_token: str,
+    reports_df: pd.DataFrame,
+    *,
+    selected_filters: dict[str, list[str]],
+    include_options: bool,
+) -> dict[str, Any]:
+    if dataset_token:
+        cache_key = _dashboard_payload_cache_key(dataset_token, selected_filters, include_options)
+        cached_payload = DASHBOARD_PAYLOAD_CACHE.get(cache_key)
+        if isinstance(cached_payload, dict):
+            DASHBOARD_PAYLOAD_CACHE.move_to_end(cache_key)
+            return copy.deepcopy(cached_payload)
+
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=include_options,
+    )
+    if dataset_token:
+        DASHBOARD_PAYLOAD_CACHE[cache_key] = copy.deepcopy(payload)
+        DASHBOARD_PAYLOAD_CACHE.move_to_end(cache_key)
+        while len(DASHBOARD_PAYLOAD_CACHE) > DASHBOARD_PAYLOAD_CACHE_MAX:
+            DASHBOARD_PAYLOAD_CACHE.popitem(last=False)
+    return payload
+
+
+def _log_timed_event(event: str, started_at: float, *, force_info: bool = False, **fields: Any) -> None:
+    elapsed_ms = (perf_counter() - started_at) * 1000
+    threshold_ms = 750
+    if not force_info and elapsed_ms < threshold_ms:
+        return
+
+    details = " ".join(f"{key}={value!r}" for key, value in sorted(fields.items()))
+    message = f"workbench_event={event} elapsed_ms={elapsed_ms:.1f}"
+    if details:
+        message = f"{message} {details}"
+
+    if force_info:
+        logger.info(message)
+    else:
+        logger.warning(message)
 
 
 def _normalise_ui_theme(raw_value: Any) -> str:
@@ -1310,7 +1388,7 @@ def _update_sidebar_state(request: HttpRequest) -> None:
     if "max_parallel_workers" in request.POST:
         try:
             workers = int(request.POST.get("max_parallel_workers", "8"))
-            session["max_parallel_workers"] = min(32, max(1, workers))
+            session["max_parallel_workers"] = normalise_parallel_workers(workers)
         except ValueError:
             pass
 
@@ -1348,7 +1426,7 @@ def _resolve_active_workbook(request: HttpRequest) -> tuple[Optional[Workbook], 
     return workbook, is_editable
 
 
-def _build_context(request: HttpRequest) -> dict[str, Any]:
+def _build_context(request: HttpRequest, *, include_dashboard_payload: bool = False) -> dict[str, Any]:
     session = request.session
     ui_theme = _normalise_ui_theme(session.get("ui_theme"))
     session["ui_theme"] = ui_theme
@@ -1358,8 +1436,8 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     dashboard_filters = _get_explore_dashboard_filters(request)
     reports_df = _apply_explore_dashboard_filters(reports_df_full, dashboard_filters)
     theme_summary_df = get_dataframe(session, "theme_summary_table")
-    feature_grid_df = _get_feature_grid_df(request, use_default=True)
     feature_grid_raw = _get_feature_grid_df(request, use_default=False)
+    feature_grid_df = feature_grid_raw if not feature_grid_raw.empty else _get_feature_grid_df(request, use_default=True)
     feature_rows_ui = [
         {
             "field_name": str(row.get("Field name", "")).strip(),
@@ -1424,7 +1502,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     history_depth = len(session.get("history", []))
     redo_depth = len(session.get("redo_history", []))
     dashboard_filter_query = _workbook_filter_query(dashboard_filters)
-    report_limit = session.get("report_limit")
+    report_limit = _normalise_report_limit(session.get("report_limit"))
     if isinstance(report_limit, int) and report_limit > 0:
         report_limit_for_slider = min(7000, max(1, report_limit))
     else:
@@ -1441,9 +1519,9 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
     )
     has_existing_themes = _has_existing_theme_assignments(session, reports_df_full)
     excluded_context = _build_excluded_reports_context(excluded_reports_df, allow_restore=True)
+    workspace_dataset_token = str(session.get("reports_df") or "")
 
-    return {
-        "reports_df": reports_df,
+    context = {
         "reports_columns": reports_columns,
         "reports_rows": reports_rows,
         "dataset_editable": True,
@@ -1477,7 +1555,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "openai_base_url": session.get("openai_base_url", ""),
         "openrouter_base_url": session.get("openrouter_base_url", "https://openrouter.ai/api/v1"),
         "model_name": session.get("model_name", "gpt-4.1-mini"),
-        "max_parallel_workers": int(session.get("max_parallel_workers", 8) or 8),
+        "max_parallel_workers": normalise_parallel_workers(session.get("max_parallel_workers")),
         "report_start_date": session.get("report_start_date", date(2013, 1, 1).isoformat()),
         "report_end_date": session.get("report_end_date", date.today().isoformat()),
         "report_start_date_display": _format_date_ddmmyyyy(
@@ -1494,7 +1572,7 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "has_existing_themes": has_existing_themes,
         "ui_theme": ui_theme,
         "ui_theme_options": UI_THEME_CHOICES,
-        "workspace_dataset_token": session.get("reports_df") or "",
+        "workspace_dataset_token": workspace_dataset_token,
         "dashboard_selected_coroners": dashboard_filters["coroner"],
         "dashboard_selected_areas": dashboard_filters["area"],
         "dashboard_selected_receivers": dashboard_filters["receiver"],
@@ -1503,6 +1581,14 @@ def _build_context(request: HttpRequest) -> dict[str, Any]:
         "dataset_browser_base": "?page=",
         **excluded_context,
     }
+    if include_dashboard_payload:
+        context["explore_dashboard_payload"] = _get_cached_dashboard_payload(
+            workspace_dataset_token,
+            reports_df_full,
+            selected_filters=dashboard_filters,
+            include_options=True,
+        )
+    return context
 
 
 def _build_seo_context(
@@ -1594,6 +1680,7 @@ def sitemap_xml(request: HttpRequest) -> HttpResponse:
 
 def _handle_load_reports(request: HttpRequest) -> None:
     session = request.session
+    started_at = perf_counter()
 
     start_raw = request.POST.get("report_start_date", "")
     end_raw = request.POST.get("report_end_date", "")
@@ -1623,7 +1710,8 @@ def _handle_load_reports(request: HttpRequest) -> None:
             return
         session["report_limit"] = n_reports
     else:
-        n_reports = session.get("report_limit")
+        n_reports = _normalise_report_limit(session.get("report_limit"))
+        session["report_limit"] = n_reports
 
     refresh = _bool_from_post(request, "refresh", default=False)
 
@@ -1663,6 +1751,14 @@ def _handle_load_reports(request: HttpRequest) -> None:
     )
 
     messages.success(request, f"Loaded {len(df):,} reports into the workspace.")
+    _log_timed_event(
+        "load_reports",
+        started_at,
+        force_info=True,
+        report_count=len(df),
+        refresh=refresh,
+        report_limit=n_reports,
+    )
 
 
 def _ensure_workspace_reports_loaded(request: HttpRequest) -> None:
@@ -1683,7 +1779,7 @@ def _ensure_workspace_reports_loaded(request: HttpRequest) -> None:
         df = load_reports_dataframe(
             start_date=start_date,
             end_date=end_date,
-            n_reports=session.get("report_limit"),
+            n_reports=_normalise_report_limit(session.get("report_limit")),
             refresh=False,
         )
     except Exception as exc:
@@ -1722,6 +1818,7 @@ def _handle_set_active_action(request: HttpRequest) -> None:
 
 def _handle_filter_reports(request: HttpRequest) -> None:
     session = request.session
+    started_at = perf_counter()
     reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
     if reports_df.empty:
         if any(dashboard_filters[field] for field in ("coroner", "area", "receiver")):
@@ -1732,7 +1829,6 @@ def _handle_filter_reports(request: HttpRequest) -> None:
         else:
             messages.info(request, "Load reports from the sidebar before screening.")
         return
-
     search_query = (request.POST.get("search_query") or "").strip()
     if not search_query:
         messages.error(request, "Describe what the Screener should look for.")
@@ -1797,10 +1893,19 @@ def _handle_filter_reports(request: HttpRequest) -> None:
             f"{matched_report_count:,} matched your search query."
         ),
     )
+    _log_timed_event(
+        "screen_reports",
+        started_at,
+        force_info=True,
+        initial_reports=initial_report_count,
+        matched_reports=matched_report_count,
+        filter_df=filter_df,
+    )
 
 
 def _handle_discover_themes(request: HttpRequest) -> None:
     session = request.session
+    started_at = perf_counter()
     reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
     if reports_df.empty:
         if any(dashboard_filters[field] for field in ("coroner", "area", "receiver")):
@@ -1811,7 +1916,6 @@ def _handle_discover_themes(request: HttpRequest) -> None:
         else:
             messages.info(request, "Load reports before discovering themes.")
         return
-
     all_reports_df = get_dataframe(session, "reports_df")
     existing_theme_schema = session.get("theme_model_schema")
     existing_theme_columns = [
@@ -1992,6 +2096,13 @@ def _handle_discover_themes(request: HttpRequest) -> None:
         }
         session["preview_state"] = _serialize_preview_state(preview_state)
         messages.success(request, "Preview ready. Review the results below and apply them when happy.")
+        _log_timed_event(
+            "discover_themes",
+            started_at,
+            force_info=True,
+            report_count=len(reports_df),
+            discovered_themes=len(theme_summary_df),
+        )
     except Exception as exc:
         clear_preview_state(session)
         messages.error(request, f"Theme discovery failed: {exc}")
@@ -2056,6 +2167,7 @@ def _parse_feature_rows_from_post(request: HttpRequest) -> pd.DataFrame:
 
 def _handle_extract_features(request: HttpRequest) -> None:
     session = request.session
+    started_at = perf_counter()
     reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
     if reports_df.empty:
         if any(dashboard_filters[field] for field in ("coroner", "area", "receiver")):
@@ -2066,7 +2178,6 @@ def _handle_extract_features(request: HttpRequest) -> None:
         else:
             messages.info(request, "Load reports before extracting fields.")
         return
-
     try:
         llm_client = build_llm(session)
     except Exception as exc:
@@ -2130,6 +2241,13 @@ def _handle_extract_features(request: HttpRequest) -> None:
     clear_preview_state(session)
     session["active_action"] = None
     messages.success(request, "Tagging complete. The working dataset has been updated.")
+    _log_timed_event(
+        "extract_features",
+        started_at,
+        force_info=True,
+        report_count=len(reports_df),
+        result_columns=len(result_df.columns),
+    )
 
 
 def _bundle_download_response(request: HttpRequest) -> HttpResponse:
@@ -2746,6 +2864,7 @@ def privacy_policy(request: HttpRequest) -> HttpResponse:
 
 @require_http_methods(["GET", "POST"])
 def explore(request: HttpRequest) -> HttpResponse:
+    started_at = perf_counter()
     init_state(request.session)
     _ensure_workspace_reports_loaded(request)
 
@@ -2759,17 +2878,7 @@ def explore(request: HttpRequest) -> HttpResponse:
             target = f"{target}?{query}"
         return redirect(target)
 
-    context = _build_context(request)
-    selected_filters = {
-        "coroner": context.get("dashboard_selected_coroners", []),
-        "area": context.get("dashboard_selected_areas", []),
-        "receiver": context.get("dashboard_selected_receivers", []),
-    }
-    context["explore_dashboard_payload"] = _build_explore_dashboard_payload(
-        _get_reports_df_with_row_ids(request.session),
-        selected_filters=selected_filters,
-        include_options=True,
-    )
+    context = _build_context(request, include_dashboard_payload=True)
     context["dashboard_data_base"] = reverse("workbench:dashboard_data")
     active_workbook, workbook_editable = _resolve_active_workbook(request)
     context["active_workbook"] = active_workbook
@@ -2786,6 +2895,12 @@ def explore(request: HttpRequest) -> HttpResponse:
             "explore",
             canonical_path=reverse("workbench:explore"),
         )
+    )
+    _log_timed_event(
+        "explore_page",
+        started_at,
+        report_count=context.get("reports_count", 0),
+        page=context.get("reports_page", 1),
     )
     return render(request, "workbench/explore.html", context)
 
@@ -2944,24 +3059,39 @@ def for_coders_site_file(request: HttpRequest, file_path: str) -> HttpResponse:
 
 @require_http_methods(["GET"])
 def dataset_panel(request: HttpRequest) -> HttpResponse:
+    started_at = perf_counter()
     init_state(request.session)
     _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
     response = render(request, "workbench/_dataset_table_section.html", context)
     response["X-Robots-Tag"] = "noindex, nofollow"
+    _log_timed_event(
+        "dataset_panel",
+        started_at,
+        report_count=context.get("reports_count", 0),
+        page=context.get("reports_page", 1),
+    )
     return response
 
 
 @require_http_methods(["GET"])
 def dashboard_data(request: HttpRequest) -> HttpResponse:
+    started_at = perf_counter()
     init_state(request.session)
     _ensure_workspace_reports_loaded(request)
     reports_df = _get_reports_df_with_row_ids(request.session)
     selected_filters = _get_explore_dashboard_filters(request)
-    payload = _build_explore_dashboard_payload(
+    payload = _get_cached_dashboard_payload(
+        str(request.session.get("reports_df") or ""),
         reports_df,
         selected_filters=selected_filters,
         include_options=False,
+    )
+    _log_timed_event(
+        "dashboard_data",
+        started_at,
+        report_count=payload.get("summary", {}).get("reports_shown", 0),
+        selected_filters=sum(len(values) for values in selected_filters.values()),
     )
     return JsonResponse(payload)
 
