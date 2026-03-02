@@ -1,4 +1,8 @@
 import logging
+from dataclasses import dataclass
+from difflib import SequenceMatcher
+from functools import lru_cache
+import re
 import warnings
 
 import pandas as pd
@@ -23,32 +27,206 @@ logging.getLogger("openai").setLevel(logging.WARNING)
 warnings.filterwarnings("ignore", category=TqdmWarning)
 
 
+def _normalise_area_for_matching(area: str) -> str:
+    """Return a simplified representation used only for area matching."""
+    if not isinstance(area, str):
+        return ""
+
+    normalised = area.strip().casefold()
+    normalised = normalised.replace("&", " and ")
+    normalised = re.sub(r"[^a-z0-9]+", " ", normalised)
+    return " ".join(normalised.split())
+
+
+DEFAULT_AREA_MATCH_STRATEGY = "exact_then_fuzzy"
+AREA_MATCH_STRATEGIES = ("exact_only", "exact_then_fuzzy", "fuzzy_only")
+AREA_FUZZY_MIN_SCORE = 0.88
+AREA_FUZZY_MIN_MARGIN = 0.03
+
+
+@dataclass(frozen=True)
+class AreaMatchResult:
+    canonical_area: str | None
+    match_method: str
+    score: float | None = None
+    matched_value: str | None = None
+
+
+@lru_cache(maxsize=1)
+def _build_area_match_lookups() -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+    """Build cached normalized lookups for canonical areas and synonyms."""
+    allowed_lookup = {
+        _normalise_area_for_matching(candidate): candidate
+        for candidate in GeneralConfig.ALLOWED_AREAS
+    }
+    synonym_lookup = {
+        _normalise_area_for_matching(alias): canonical
+        for alias, canonical in GeneralConfig.AREA_SYNONYMS.items()
+        if canonical in GeneralConfig.ALLOWED_AREAS
+    }
+    legacy_lookup = {
+        _normalise_area_for_matching(alias): canonical
+        for alias, canonical in GeneralConfig.LEGACY_AREA_SYNONYMS.items()
+        if canonical in GeneralConfig.ALLOWED_AREAS
+    }
+    return allowed_lookup, synonym_lookup, legacy_lookup
+
+
+def _exact_area_match(area: str) -> AreaMatchResult:
+    """Resolve exact and normalized matches against canonical areas."""
+    if not isinstance(area, str):
+        return AreaMatchResult(None, "invalid_input")
+
+    stripped = area.strip()
+    if not stripped:
+        return AreaMatchResult(None, "empty")
+
+    direct_synonym = GeneralConfig.AREA_SYNONYMS.get(stripped)
+    if direct_synonym in GeneralConfig.ALLOWED_AREAS:
+        return AreaMatchResult(direct_synonym, "exact_synonym", 1.0, stripped)
+
+    direct_legacy = GeneralConfig.LEGACY_AREA_SYNONYMS.get(stripped)
+    if direct_legacy in GeneralConfig.ALLOWED_AREAS:
+        return AreaMatchResult(direct_legacy, "legacy_synonym", 1.0, stripped)
+
+    if stripped in GeneralConfig.ALLOWED_AREAS:
+        return AreaMatchResult(stripped, "exact_allowed", 1.0, stripped)
+
+    allowed_lookup, synonym_lookup, legacy_lookup = _build_area_match_lookups()
+    match_key = _normalise_area_for_matching(stripped)
+    if not match_key:
+        return AreaMatchResult(None, "empty")
+
+    if match_key in synonym_lookup:
+        return AreaMatchResult(
+            synonym_lookup[match_key],
+            "normalised_synonym",
+            1.0,
+            match_key,
+        )
+    if match_key in legacy_lookup:
+        return AreaMatchResult(
+            legacy_lookup[match_key],
+            "legacy_synonym",
+            1.0,
+            match_key,
+        )
+    if match_key in allowed_lookup:
+        return AreaMatchResult(
+            allowed_lookup[match_key],
+            "normalised_allowed",
+            1.0,
+            match_key,
+        )
+    return AreaMatchResult(None, "unmatched")
+
+
+def _fuzzy_area_match(area: str) -> AreaMatchResult:
+    """Resolve approximate matches against canonical areas and synonyms."""
+    if not isinstance(area, str):
+        return AreaMatchResult(None, "invalid_input")
+
+    stripped = area.strip()
+    match_key = _normalise_area_for_matching(stripped)
+    if not match_key:
+        return AreaMatchResult(None, "empty")
+
+    allowed_lookup, synonym_lookup, legacy_lookup = _build_area_match_lookups()
+    candidates = []
+    for candidate_key, canonical in allowed_lookup.items():
+        candidates.append((candidate_key, canonical, "fuzzy_allowed"))
+    for candidate_key, canonical in synonym_lookup.items():
+        candidates.append((candidate_key, canonical, "fuzzy_synonym"))
+    for candidate_key, canonical in legacy_lookup.items():
+        candidates.append((candidate_key, canonical, "fuzzy_legacy_synonym"))
+
+    if not candidates:
+        return AreaMatchResult(None, "unmatched")
+
+    scored = []
+    for candidate_key, canonical, method in candidates:
+        score = SequenceMatcher(None, match_key, candidate_key).ratio()
+        scored.append((score, canonical, method, candidate_key))
+
+    scored.sort(key=lambda item: item[0], reverse=True)
+    best_score, best_canonical, best_method, best_value = scored[0]
+    next_score = scored[1][0] if len(scored) > 1 else 0.0
+    if (
+        best_score >= AREA_FUZZY_MIN_SCORE
+        and (best_score - next_score) >= AREA_FUZZY_MIN_MARGIN
+    ):
+        return AreaMatchResult(best_canonical, best_method, best_score, best_value)
+    return AreaMatchResult(None, "unmatched")
+
+
+def match_area(area: str, strategy: str = "exact_only") -> AreaMatchResult:
+    """Resolve a raw area string into a canonical area using the given strategy."""
+    if strategy not in AREA_MATCH_STRATEGIES:
+        raise ValueError(
+            f"Unknown area_match_strategy '{strategy}'. Valid options are: {', '.join(AREA_MATCH_STRATEGIES)}."
+        )
+
+    if strategy == "fuzzy_only":
+        return _fuzzy_area_match(area)
+
+    exact_result = _exact_area_match(area)
+    if exact_result.canonical_area is not None:
+        return exact_result
+
+    if strategy == "exact_then_fuzzy":
+        return _fuzzy_area_match(area)
+
+    return exact_result
+
+
+def _canonicalise_area(
+    area: str, strategy: str = DEFAULT_AREA_MATCH_STRATEGY
+) -> str:
+    """Map a raw area string to a canonical allowed area where possible."""
+    match = match_area(area, strategy=strategy)
+    return match.canonical_area or "Other"
+
+
 # ---------------------------------------------------------------------------
 # Area validation model
 # ---------------------------------------------------------------------------
 
 
-class AreaModel(BaseModel):
-    """Pydantic model restricting the area field."""
+def create_area_model(
+    area_match_strategy: str = DEFAULT_AREA_MATCH_STRATEGY,
+) -> type[BaseModel]:
+    """Return a Pydantic model that canonicalises areas with the given strategy."""
+    if area_match_strategy not in AREA_MATCH_STRATEGIES:
+        raise ValueError(
+            f"Unknown area_match_strategy '{area_match_strategy}'. Valid options are: {', '.join(AREA_MATCH_STRATEGIES)}."
+        )
 
-    area: str = Field(..., description="Name of the coroner area")
+    class AreaModel(BaseModel):
+        """Pydantic model restricting the area field."""
 
-    model_config = ConfigDict(extra="forbid")
+        area: str = Field(..., description="Name of the coroner area")
 
-    @field_validator("area", mode="before")
-    @classmethod
-    def apply_synonyms(cls, v: str) -> str:
-        """Normalise location names using :class:`Cleaner` synonyms."""
-        return Cleaner.map_area_synonym(v)
+        model_config = ConfigDict(extra="forbid")
 
-    @field_validator("area")
-    @classmethod
-    def validate_area(cls, v: str) -> str:
-        """Ensure the area is one of the allowed values."""
-        if v not in GeneralConfig.ALLOWED_AREAS:
-            # If the provided area is not recognised, default to "Other"
-            return "Other"
-        return v
+        @field_validator("area", mode="before")
+        @classmethod
+        def apply_synonyms(cls, v: str) -> str:
+            """Map raw area text to a canonical allowed area where possible."""
+            return _canonicalise_area(v, strategy=area_match_strategy)
+
+        @field_validator("area")
+        @classmethod
+        def validate_area(cls, v: str) -> str:
+            """Ensure the area is one of the allowed values."""
+            if v not in GeneralConfig.ALLOWED_AREAS:
+                return "Other"
+            return v
+
+    AreaModel.__name__ = f"AreaModel_{area_match_strategy}"
+    return AreaModel
+
+
+AreaModel = create_area_model()
 
 
 class Cleaner:
@@ -119,7 +297,12 @@ class Cleaner:
     @classmethod
     def map_area_synonym(cls, area: str) -> str:
         """Return canonical name for an area synonym."""
-        return GeneralConfig.AREA_SYNONYMS.get(area, area)
+        return _canonicalise_area(area)
+
+    @classmethod
+    def match_area(cls, area: str, strategy: str = "exact_only") -> AreaMatchResult:
+        """Return detailed area matching output for debugging and comparison."""
+        return match_area(area, strategy=strategy)
 
     # Base prompt template used for all cleaning operations
     CLEANER_BASE_PROMPT = (

@@ -74,7 +74,7 @@ DEFAULT_HTML_FIELDS: List[HtmlFieldConfig] = [
         sec_keys=None,
         rem_strs=["Coroners Area:", "Coroner Area:", "Coroner's Area:"],
         min_len=4,
-        max_len=40,
+        max_len=80,
         is_date=False,
     ),
     HtmlFieldConfig(

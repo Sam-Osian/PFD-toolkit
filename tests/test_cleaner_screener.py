@@ -250,6 +250,48 @@ def test_cleaner_area_synonyms():
     assert cleaned[GeneralConfig.COL_AREA].iloc[0] == "London West"
 
 
+def test_area_model_normalises_formatting_but_returns_canonical_value():
+    model = AreaModel(area="  east riding and hull  ")
+    assert model.area == "East Riding and Hull"
+
+
+def test_area_model_normalises_synonym_formatting_but_returns_canonical_value():
+    model = AreaModel(area="cardiff & vale of glamorgan")
+    assert model.area == "South Wales Central"
+
+
+def test_area_model_recodes_legacy_area_to_current_canonical_value():
+    model = AreaModel(area="Powys, Bridgend and Glamorgan")
+    assert model.area == "South Wales Central"
+
+
+@pytest.mark.parametrize(
+    ("legacy_area", "current_area"),
+    [
+        ("Essex", "Essex and Thurrock"),
+        ("Kent North West", "Kent and Medway"),
+        ("Greater Manchester West", "Manchester West"),
+        ("Nottinghamshire", "Nottinghamshire and Nottingham"),
+        ("Newcastle and North Tyneside", "Newcastle Upon Tyne and North Tyneside"),
+    ],
+)
+def test_area_model_recodes_additional_legacy_areas(legacy_area, current_area):
+    model = AreaModel(area=legacy_area)
+    assert model.area == current_area
+
+
+def test_area_match_exact_then_fuzzy_recovers_typo():
+    result = Cleaner.match_area("Londn West", strategy="exact_then_fuzzy")
+    assert result.canonical_area == "London West"
+    assert result.match_method == "fuzzy_allowed"
+
+
+def test_area_match_fuzzy_only_recovers_typo():
+    result = Cleaner.match_area("Londn West", strategy="fuzzy_only")
+    assert result.canonical_area == "London West"
+    assert result.match_method == "fuzzy_allowed"
+
+
 def test_cleaner_summarise():
     df = pd.DataFrame(
         {

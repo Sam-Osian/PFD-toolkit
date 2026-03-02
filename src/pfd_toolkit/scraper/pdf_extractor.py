@@ -50,7 +50,7 @@ DEFAULT_PDF_SECTIONS: List[PdfSectionConfig] = [
         end_keys=["LEGAL POWERS", "LEGAL POWER", "paragraph 7"],
         rem_strs=["area of", "CORONER'S", "CORONER", "CORONERS", "paragraph 7"],
         min_len=4,
-        max_len=40,
+        max_len=80,
     ),
     PdfSectionConfig(
         "receiver",

@@ -9,6 +9,10 @@ description: |
 Welcome to the project changelog. All notable changes to this project will be documented below.
 
 
+### 0.4.1 - <small>2026-03-02</small>
+* Area matching now uses exact matching with fuzzy fallback by default, reducing cases where small spelling or wording variations were previously classified as `"Other"`.
+* Updated coroner area canonicalisation to align more closely with the current official list, with legacy area names now recoded to current canonical areas.
+
 ### 0.4.0 - <small>2025-11-30</small>
 * `discover_themes()` now defaults to using untrimmed report text, with optional truncation controlled by `trim_approach="truncate"` and new `max_tokens`/`max_words` parameters. Switch to `trim_approach="summarise"` to re-enable LLM summarisation, which now uses `summarise_intensity` settings.
 * Users have reported that running `extract_features()` on a list of themes from `discover_themes()` seems to assign reports too liberally. We have made some changes to make the model a bit more conservative, only assigning a report with a theme if there is sufficient evidence that it is well represented in the underlying report. We'll continue monitoring this behaviour to make sure we've got the balance right.
