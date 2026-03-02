@@ -51,9 +51,17 @@ class WorkbenchViewTests(TestCase):
         self.assertContains(response, "Interactive dashboard")
 
         payload = response.context["explore_dashboard_payload"]
-        self.assertEqual(payload["rows"][0]["receivers"], ["NHS England", "Department of Health"])
         self.assertIn("NHS England", payload["options"]["receivers"])
         self.assertIn("Department of Health", payload["options"]["receivers"])
+        self.assertEqual(payload["summary"]["reports_shown"], 2)
+        self.assertEqual(payload["summary"]["receiver_links"], 2)
+        self.assertEqual(
+            payload["summary"]["top_receivers"][:2],
+            [
+                {"name": "Department of Health", "value": 1},
+                {"name": "NHS England", "value": 1},
+            ],
+        )
 
     def test_exclude_and_restore_report_updates_working_dataset(self) -> None:
         reports_df = pd.DataFrame(
