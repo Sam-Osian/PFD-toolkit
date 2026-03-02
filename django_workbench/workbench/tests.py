@@ -13,6 +13,12 @@ class WorkbenchViewTests(TestCase):
         response = self.client.get(reverse("workbench:index"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "PFD Toolkit Workbench")
+        self.assertContains(response, 'rel="icon"')
+
+    def test_favicon_redirects_to_static_asset(self) -> None:
+        response = self.client.get(reverse("workbench:favicon"))
+        self.assertEqual(response.status_code, 301)
+        self.assertIn("/static/workbench/badge-circle.png", response["Location"])
 
     def test_explore_dashboard_payload_splits_receivers(self) -> None:
         reports_df = pd.DataFrame(

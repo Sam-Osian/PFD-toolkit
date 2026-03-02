@@ -8,6 +8,7 @@ app_name = "workbench"
 urlpatterns = [
     path("", views.index, name="index"),
     path("home/", views.home, name="home"),
+    path("favicon.ico", views.favicon, name="favicon"),
     path("privacy/", views.privacy_policy, name="privacy_policy"),
     path("robots.txt", views.robots_txt, name="robots_txt"),
     path("sitemap.xml", views.sitemap_xml, name="sitemap_xml"),

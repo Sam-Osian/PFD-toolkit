@@ -23,6 +23,7 @@ import pandas as pd
 import yaml
 from bs4 import BeautifulSoup
 from django.contrib import messages
+from django.contrib.staticfiles.storage import staticfiles_storage
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -133,6 +134,12 @@ UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
         "description": "Infrared Ops-inspired command palette.",
     },
 )
+
+
+def favicon(request: HttpRequest) -> HttpResponse:
+    return redirect(staticfiles_storage.url("workbench/badge-circle.png"), permanent=True)
+
+
 UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
 DASHBOARD_TOP_N = 12
 DASHBOARD_UNKNOWN_LABEL = "Not specified"
