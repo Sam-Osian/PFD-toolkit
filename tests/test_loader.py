@@ -25,6 +25,11 @@ def use_local_dataset(tmp_path, monkeypatch):
             ],
             "theme_patient_safety": [True, False, True, False],
             "theme_mental_health": [False, True, True, False],
+            "theme_sent_to_nhs_bodies": [True, False, True, False],
+            "theme_sent_to_government_departments": [False, True, False, False],
+            "theme_sent_to_prisons": [False, False, True, False],
+            "theme_sent_to_health_regulators": [False, False, True, False],
+            "theme_sent_to_local_government": [False, True, False, True],
         }
     )
 
@@ -103,3 +108,24 @@ def test_load_reports_filters_multiple_themes_with_or_semantics():
 def test_load_reports_invalid_theme_raises():
     with pytest.raises(ValueError, match="Unknown theme"):
         loader.load_reports(theme="not_a_real_theme", refresh=False)
+
+
+def test_load_reports_filters_single_collection():
+    df = loader.load_reports(collection="nhs", refresh=False)
+    assert set(df["url"]) == {"u1", "u3"}
+    assert "theme_sent_to_nhs_bodies" not in df.columns
+
+
+def test_load_reports_filters_multiple_collections_with_or_semantics():
+    df = loader.load_reports(
+        collection=["gov_department", "local_gov"],
+        refresh=False,
+    )
+    assert set(df["url"]) == {"u2", "u4"}
+    assert "theme_sent_to_government_departments" in df.columns
+    assert "theme_sent_to_local_government" in df.columns
+
+
+def test_load_reports_invalid_collection_raises():
+    with pytest.raises(ValueError, match="Unknown collection"):
+        loader.load_reports(collection="not_a_real_collection", refresh=False)

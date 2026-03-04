@@ -25,6 +25,13 @@ _DATAFRAME_CACHE_LOCK: Final[Lock] = Lock()
 _DATAFRAME_CACHE_SIGNATURE: tuple[str, int, int] | None = None
 _DATAFRAME_CACHE_FRAME: pd.DataFrame | None = None
 _THEME_PREFIX: Final[str] = "theme_"
+_COLLECTION_COLUMNS: Final[dict[str, str]] = {
+    "nhs": "theme_sent_to_nhs_bodies",
+    "gov_department": "theme_sent_to_government_departments",
+    "prisons": "theme_sent_to_prisons",
+    "health_reg": "theme_sent_to_health_regulators",
+    "local_gov": "theme_sent_to_local_government",
+}
 
 
 def _ensure_dataset(force_download: bool = False) -> Path:
@@ -106,6 +113,7 @@ def load_reports(
     n_reports: int | None = None,
     refresh: bool = True,
     theme: str | list[str] | None = None,
+    collection: str | list[str] | None = None,
 ) -> pd.DataFrame:
     """Load Prevention of Future Death reports as a DataFrame.
 
@@ -130,6 +138,15 @@ def load_reports(
         is fixed. Pass a single theme name or a list of theme names. When
         multiple themes are supplied, rows matching **any** requested theme are
         returned.
+    collection : str | list[str] | None, optional
+        Filter rows using packaged receiver-based collections. Supported
+        collection names are ``"nhs"``, ``"gov_department"``, ``"prisons"``,
+        ``"health_reg"``, and ``"local_gov"``. Pass a single collection name
+        or a list of collection names. When multiple collections are supplied,
+        rows matching **any** requested collection are returned. When a single
+        collection is supplied, its boolean helper column is dropped from the
+        returned DataFrame. When two or more collections are supplied, the
+        requested boolean columns are retained for comparison.
 
     Returns
     -------
@@ -145,6 +162,8 @@ def load_reports(
         If the dataset cannot be downloaded.
     ValueError
         If a requested theme is not present in the packaged dataset.
+    ValueError
+        If a requested collection is not present in the packaged dataset.
 
     Examples
     --------
@@ -184,6 +203,43 @@ def load_reports(
         # users can pull broad themed subsets from the packaged dataset.
         theme_mask = reports[theme_columns].fillna(False).astype(bool).any(axis=1)
         reports = reports.loc[theme_mask].reset_index(drop=True)
+
+    if collection is not None:
+        requested_collections = (
+            [collection] if isinstance(collection, str) else list(collection)
+        )
+        requested_collections = [
+            item.strip() for item in requested_collections if item and item.strip()
+        ]
+        if not requested_collections:
+            raise ValueError(
+                "collection must contain at least one non-empty collection name."
+            )
+
+        missing_collections = [
+            item for item in requested_collections if item not in _COLLECTION_COLUMNS
+        ]
+        if missing_collections:
+            available = ", ".join(sorted(_COLLECTION_COLUMNS)) or "none"
+            raise ValueError(
+                f"Unknown collection(s): {missing_collections}. Available collections are: {available}."
+            )
+
+        collection_columns = [_COLLECTION_COLUMNS[item] for item in requested_collections]
+        missing_columns = [
+            column for column in collection_columns if column not in reports.columns
+        ]
+        if missing_columns:
+            raise ValueError(
+                f"Requested collection column(s) are not present in the packaged dataset: {missing_columns}."
+            )
+
+        collection_mask = (
+            reports[collection_columns].fillna(False).astype(bool).any(axis=1)
+        )
+        reports = reports.loc[collection_mask].reset_index(drop=True)
+        if len(requested_collections) == 1:
+            reports = reports.drop(columns=collection_columns, errors="ignore")
 
     # Limit to n_reports
     if n_reports is not None:
