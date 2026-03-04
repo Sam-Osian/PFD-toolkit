@@ -3753,6 +3753,28 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     letter-spacing: 0.02em;
 }
 
+.browse-note {
+    padding: 0.25rem 0 0;
+}
+
+.browse-note__inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.95rem 1.05rem;
+    border: 1px solid rgba(165, 179, 255, 0.12);
+    border-radius: 14px;
+    background: rgba(10, 14, 36, 0.5);
+    box-shadow: 0 10px 22px rgba(4, 8, 22, 0.1);
+}
+
+.browse-note__inner p {
+    margin: 0;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: rgba(219, 227, 255, 0.72);
+}
+
 .dashboard-chart-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

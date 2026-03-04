@@ -3038,7 +3038,6 @@ def browse_page(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpResponse:
     init_state(request.session)
-
     collection = _browse_collection_meta(collection_slug)
     reports_df_full = _load_browse_reports_df()
     reports_df = _reports_for_browse_collection(reports_df_full, collection_slug)
