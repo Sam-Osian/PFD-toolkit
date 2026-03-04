@@ -23,6 +23,8 @@ def use_local_dataset(tmp_path, monkeypatch):
                 "2024-12-30",
                 "2025-01-01",
             ],
+            "theme_patient_safety": [True, False, True, False],
+            "theme_mental_health": [False, True, True, False],
         }
     )
 
@@ -83,3 +85,21 @@ def test_load_reports_reuses_process_cache(monkeypatch):
     assert len(first) == 2
     assert len(second) == 3
     assert call_count["value"] == 1
+
+
+def test_load_reports_filters_single_theme():
+    df = loader.load_reports(theme="patient_safety", refresh=False)
+    assert set(df["url"]) == {"u1", "u3"}
+
+
+def test_load_reports_filters_multiple_themes_with_or_semantics():
+    df = loader.load_reports(
+        theme=["patient_safety", "mental_health"],
+        refresh=False,
+    )
+    assert set(df["url"]) == {"u1", "u2", "u3"}
+
+
+def test_load_reports_invalid_theme_raises():
+    with pytest.raises(ValueError, match="Unknown theme"):
+        loader.load_reports(theme="not_a_real_theme", refresh=False)

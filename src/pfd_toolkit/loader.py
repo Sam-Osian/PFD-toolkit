@@ -24,6 +24,7 @@ _CACHE_FILE: Final[Path] = _CACHE_DIR / _DATA_FILE
 _DATAFRAME_CACHE_LOCK: Final[Lock] = Lock()
 _DATAFRAME_CACHE_SIGNATURE: tuple[str, int, int] | None = None
 _DATAFRAME_CACHE_FRAME: pd.DataFrame | None = None
+_THEME_PREFIX: Final[str] = "theme_"
 
 
 def _ensure_dataset(force_download: bool = False) -> Path:
@@ -83,11 +84,28 @@ def _load_base_reports(force_download: bool = False) -> pd.DataFrame:
         return _DATAFRAME_CACHE_FRAME
 
 
+def _get_theme_columns(reports: pd.DataFrame) -> dict[str, str]:
+    """Return available packaged theme filters keyed by theme name.
+
+    This is intentionally lightweight for now. The long-term packaged theme
+    inventory has not been finalised yet, so the loader currently treats any
+    boolean-style column prefixed with ``theme_`` as an available theme filter.
+    """
+    theme_columns: dict[str, str] = {}
+    for column in reports.columns:
+        if column.startswith(_THEME_PREFIX):
+            theme_name = column[len(_THEME_PREFIX):]
+            if theme_name:
+                theme_columns[theme_name] = column
+    return theme_columns
+
+
 def load_reports(
     start_date: str = "2000-01-01",
     end_date: str = "2050-01-01",
     n_reports: int | None = None,
     refresh: bool = True,
+    theme: str | list[str] | None = None,
 ) -> pd.DataFrame:
     """Load Prevention of Future Death reports as a DataFrame.
 
@@ -105,6 +123,13 @@ def load_reports(
     refresh : bool, optional
         If ``True`` (the default), force a fresh download of the dataset. Set to
         ``False`` to reuse the previously cached copy.
+    theme : str | list[str] | None, optional
+        Filter rows using packaged boolean theme columns named with the
+        provisional ``theme_*`` convention, e.g. ``theme_medication_safety``.
+        This scaffold is intentionally simple until the final packaged theme set
+        is fixed. Pass a single theme name or a list of theme names. When
+        multiple themes are supplied, rows matching **any** requested theme are
+        returned.
 
     Returns
     -------
@@ -118,6 +143,8 @@ def load_reports(
         If *start_date* is after *end_date*.
     FileNotFoundError
         If the dataset cannot be downloaded.
+    ValueError
+        If a requested theme is not present in the packaged dataset.
 
     Examples
     --------
@@ -137,6 +164,26 @@ def load_reports(
         (reports["date"] >= date_from) & (reports["date"] <= date_to)
     ].copy()
     reports.reset_index(drop=True, inplace=True)
+
+    if theme is not None:
+        requested_themes = [theme] if isinstance(theme, str) else list(theme)
+        requested_themes = [item.strip() for item in requested_themes if item and item.strip()]
+        if not requested_themes:
+            raise ValueError("theme must contain at least one non-empty theme name.")
+
+        available_themes = _get_theme_columns(reports)
+        missing_themes = [item for item in requested_themes if item not in available_themes]
+        if missing_themes:
+            available = ", ".join(sorted(available_themes)) or "none"
+            raise ValueError(
+                f"Unknown theme(s): {missing_themes}. Available packaged themes are: {available}."
+            )
+
+        theme_columns = [available_themes[item] for item in requested_themes]
+        # Provisional scaffold: multiple requested themes use OR semantics so
+        # users can pull broad themed subsets from the packaged dataset.
+        theme_mask = reports[theme_columns].fillna(False).astype(bool).any(axis=1)
+        reports = reports.loc[theme_mask].reset_index(drop=True)
 
     # Limit to n_reports
     if n_reports is not None:

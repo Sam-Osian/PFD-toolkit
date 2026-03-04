@@ -281,7 +281,11 @@ class Scraper:
                 self.include_area,
                 self.COL_AREA,
                 self.LLM_KEY_AREA,
-                f"[Area/location of the Coroner. Provide the location itself only. Return {GeneralConfig.NOT_FOUND_TEXT} if not found]",
+                (
+                    "[Area/location of the Coroner. Provide the coroner area label itself only. "
+                    "Return the closest matching area stated in the report, even if the wording is slightly different from the canonical list. "
+                    f"Only return {GeneralConfig.NOT_FOUND_TEXT} if no coroner area can be identified at all]"
+                ),
             ),
             (
                 self.include_receiver,

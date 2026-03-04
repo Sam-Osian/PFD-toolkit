@@ -37,6 +37,22 @@ class DummyLLM:
         return outputs
 
 
+class EchoAreaLLM(DummyLLM):
+    def generate(self, prompts, response_format=None, **kwargs):
+        outputs = []
+        for p in prompts:
+            text = p.split("\n")[-1]
+            if response_format is None:
+                outputs.append(text.upper())
+            else:
+                field_name = next(iter(response_format.model_fields))
+                if field_name == "area":
+                    outputs.append(response_format(area=text))
+                else:
+                    outputs.append(response_format(**{field_name: text.upper()}))
+        return outputs
+
+
 def test_cleaner_basic():
     df = pd.DataFrame(
         {
@@ -218,11 +234,11 @@ def test_cleaner_unrecognised_area_defaults_to_other():
     assert cleaned[GeneralConfig.COL_AREA].iloc[0] == "Other"
 
 
-def test_cleaner_area_synonyms():
+def test_cleaner_area_prompt_includes_allowed_area_guidance():
     df = pd.DataFrame(
         {
             GeneralConfig.COL_CORONER_NAME: ["john"],
-            GeneralConfig.COL_AREA: ["area"],
+            GeneralConfig.COL_AREA: ["County Durham and Darlington"],
             GeneralConfig.COL_RECEIVER: ["x"],
             GeneralConfig.COL_INVESTIGATION: ["inv"],
             GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
@@ -230,22 +246,58 @@ def test_cleaner_area_synonyms():
         }
     )
 
-    class SynonymLLM(DummyLLM):
-        def generate(self, prompts, response_format=None, **kwargs):
-            outputs = []
-            for p in prompts:
-                text = p.split("\n")[-1]
-                if response_format is None:
-                    outputs.append(text.upper())
-                else:
-                    field_name = next(iter(response_format.model_fields))
-                    if field_name == "area":
-                        outputs.append(response_format(area="West London"))
-                    else:
-                        outputs.append(response_format(**{field_name: text.upper()}))
-            return outputs
+    cleaner = Cleaner(df, DummyLLM())
+    prompt = cleaner.area_prompt_template
 
-    cleaner = Cleaner(df, SynonymLLM())
+    assert "Allowed area labels:" in prompt
+    assert "County Durham and Darlington" in prompt
+    assert "London West" in prompt
+    assert "Return exactly one label from this list." in prompt
+    assert "If no logical match exists, return exactly: <NA>." in prompt
+
+
+@pytest.mark.parametrize(
+    ("raw_area", "expected"),
+    [
+        ("West Yorkshire (E)", "Yorkshire West Eastern"),
+        ("South Yorkshire (West)", "Yorkshire South West"),
+        (
+            "City of Kingston Upon Hull and the County of the East Riding of Yorkshire",
+            "East Riding and Hull",
+        ),
+    ],
+)
+def test_cleaner_area_uses_deterministic_matching_for_near_matches(raw_area, expected):
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: [raw_area],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    cleaner = Cleaner(df, EchoAreaLLM())
+    cleaned = cleaner.clean_reports()
+
+    assert cleaned[GeneralConfig.COL_AREA].iloc[0] == expected
+
+
+def test_cleaner_area_synonyms():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_CORONER_NAME: ["john"],
+            GeneralConfig.COL_AREA: ["West London"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+            GeneralConfig.COL_INVESTIGATION: ["inv"],
+            GeneralConfig.COL_CIRCUMSTANCES: ["circ"],
+            GeneralConfig.COL_CONCERNS: ["conc"],
+        }
+    )
+
+    cleaner = Cleaner(df, EchoAreaLLM())
     cleaned = cleaner.clean_reports()
     assert cleaned[GeneralConfig.COL_AREA].iloc[0] == "London West"
 
@@ -490,10 +542,18 @@ def test_area_model_recodes_legacy_area_to_current_canonical_value():
     ("legacy_area", "current_area"),
     [
         ("Essex", "Essex and Thurrock"),
+        ("Exeter & Greater Devon", "County of Devon, Plymouth and Torbay"),
+        ("Lincolnshire", "Greater Lincolnshire"),
+        ("North Lincolnshire & Grimsby", "Greater Lincolnshire"),
+        ("North Northumberland", "Northumberland"),
+        ("North Staffordshire and Stoke on Trent", "Staffordshire and Stoke-on-Trent"),
         ("Kent North West", "Kent and Medway"),
         ("Greater Manchester West", "Manchester West"),
         ("Nottinghamshire", "Nottinghamshire and Nottingham"),
         ("Newcastle and North Tyneside", "Newcastle Upon Tyne and North Tyneside"),
+        ("Plymouth, Torbay & South Devon", "County of Devon, Plymouth and Torbay"),
+        ("South Northumberland", "Northumberland"),
+        ("South Staffordshire", "Staffordshire and Stoke-on-Trent"),
     ],
 )
 def test_area_model_recodes_additional_legacy_areas(legacy_area, current_area):

@@ -138,12 +138,20 @@ class GeneralConfig:
         "Inner West London": "London Inner West",
         "Inner North London": "London Inner North",
         "Inner South London": "London Inner South",
+        "South Yorkshire (East)": "Yorkshire South East",
+        "South Yorkshire (West)": "Yorkshire South West",
+        "West Yorkshire (Eastern)": "Yorkshire West Eastern",
+        "West Yorkshire (Western)": "Yorkshire West Western",
+        "West Yorkshire (E)": "Yorkshire West Eastern",
+        "West Yorkshire (W)": "Yorkshire West Western",
         "Cardiff and the Vale of Glamorgan": "South Wales Central",
         "Cardiff and Vale of Glamorgan": "South Wales Central",
+        "City of Kingston Upon Hull and the County of the East Riding of Yorkshire": "East Riding and Hull",
     }
 
     # Legacy coroner areas that should be recoded to current canonical areas
     LEGACY_AREA_SYNONYMS: Dict[str, str] = {
+        "Exeter & Greater Devon": "County of Devon, Plymouth and Torbay",
         "The Black Country Jurisdiction": "Black Country",
         "East Riding of Yorkshire and Kingston-upon-Hull": "East Riding and Hull",
         "Essex": "Essex and Thurrock",
@@ -156,9 +164,16 @@ class GeneralConfig:
         "Kent North West": "Kent and Medway",
         "Lancashire and Blackburn with Darwen": "Lancashire with Blackburn and Darwen",
         "Leicester City and South Leicestershire": "Leicester and South Leicestershire",
+        "Lincolnshire": "Greater Lincolnshire",
         "Newcastle and North Tyneside": "Newcastle Upon Tyne and North Tyneside",
+        "North Lincolnshire & Grimsby": "Greater Lincolnshire",
+        "North Northumberland": "Northumberland",
+        "North Staffordshire and Stoke on Trent": "Staffordshire and Stoke-on-Trent",
         "Nottinghamshire": "Nottinghamshire and Nottingham",
+        "Plymouth, Torbay & South Devon": "County of Devon, Plymouth and Torbay",
         "Powys, Bridgend and Glamorgan": "South Wales Central",
+        "South Northumberland": "Northumberland",
+        "South Staffordshire": "Staffordshire and Stoke-on-Trent",
     }
 
 # --------------------------------------------------------------------------- #

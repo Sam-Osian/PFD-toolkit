@@ -535,8 +535,11 @@ class Cleaner:
         },
         "Area": {
             "field_description": "the area where the coroner's inquest took place",
-            "field_contents_and_rules": "only the name of the coroner's area -- nothing else",
+            "field_contents_and_rules": "exactly one coroner area chosen from the allowed list below",
             "extra_instructions": (
+                "Choose the best logical match from the allowed area list below. "
+                "The input text does not need to exactly match an allowed label. "
+                f"If no reasonable coroner area can be identified, return exactly: {GeneralConfig.NOT_FOUND_TEXT}. "
                 'For example, if the string is "Area: West London", return "London West". '
             ),
         },
@@ -634,7 +637,7 @@ class Cleaner:
         self.coroner_prompt_template = coroner_prompt or self._get_prompt_for_field(
             "Coroner"
         )
-        self.area_prompt_template = area_prompt or self._get_prompt_for_field("Area")
+        self.area_prompt_template = area_prompt or self._build_area_prompt_template()
         self.receiver_prompt_template = receiver_prompt or self._get_prompt_for_field(
             "Receiver"
         )
@@ -695,6 +698,18 @@ class Cleaner:
             field_contents_and_rules=config["field_contents_and_rules"],
             extra_instructions=config["extra_instructions"],
         )
+
+    def _build_area_prompt_template(self) -> str:
+        """Return the area prompt with the current allowed list embedded."""
+        base_prompt = self._get_prompt_for_field("Area")
+        allowed_areas = ", ".join(
+            area for area in GeneralConfig.ALLOWED_AREAS if area != "Other"
+        )
+        insertion = (
+            f"Allowed area labels:\n{allowed_areas}\n\n"
+            f"Return exactly one label from this list. If no logical match exists, return exactly: {GeneralConfig.NOT_FOUND_TEXT}."
+        )
+        return base_prompt.replace("\n\nInput Text:\n", f"\n\n{insertion}\n\nInput Text:\n")
 
     def generate_prompt_template(self) -> dict[str, str]:
         """Return the prompt templates used for each field.
@@ -837,14 +852,14 @@ class Cleaner:
                 cleaned_df[column_name].notna()
             ].astype(str)
 
+            original_indices = texts_to_clean_series.index
+            original_texts_list = texts_to_clean_series.tolist()
+
             if texts_to_clean_series.empty:
                 logger.info(
                     f"No actual text data to clean in column '{column_name}' after filtering NaNs. Skipping."
                 )
                 continue
-
-            original_indices = texts_to_clean_series.index
-            original_texts_list = texts_to_clean_series.tolist()
 
             # Construct prompts for the batch
             # Each prompt consists of the field-specific template followed by the actual text
