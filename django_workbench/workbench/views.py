@@ -2420,16 +2420,38 @@ def _bundle_download_from_workbook(workbook: Workbook, request: HttpRequest) -> 
 
 def _handle_start_over(request: HttpRequest) -> None:
     session = request.session
-    initial_df = get_dataframe(session, "reports_df_initial")
-    if initial_df.empty:
+    start_date = _parse_date(session.get("report_start_date", ""), date(2013, 1, 1))
+    end_date = _parse_date(session.get("report_end_date", ""), date.today())
+    if end_date < start_date:
+        end_date = date.today()
+        start_date = date(2013, 1, 1)
+        session["report_start_date"] = start_date.isoformat()
+        session["report_end_date"] = end_date.isoformat()
+
+    n_reports = _normalise_report_limit(session.get("report_limit"))
+
+    try:
+        df = load_reports_dataframe(
+            start_date=start_date,
+            end_date=end_date,
+            n_reports=n_reports,
+            refresh=True,
+        )
+    except Exception as exc:
+        messages.error(request, f"Could not reload reports: {exc}")
+        return
+    if df.empty:
+        messages.error(request, "No reports were returned for the current date range.")
         return
 
     push_history_snapshot(session)
-    _set_reports_df_with_row_ids(session, "reports_df", initial_df)
+    _set_reports_df_with_row_ids(session, "reports_df", df)
+    _set_reports_df_with_row_ids(session, "reports_df_initial", df)
     clear_outputs_for_new_dataset(session)
     session["history"] = []
     session["redo_history"] = []
-    messages.success(request, "Workspace restored to the post-load dataset.")
+    reset_repro_tracking(session)
+    messages.success(request, "Workspace reset and latest reports loaded.")
 
 
 def _handle_revert_reports(request: HttpRequest) -> None:
