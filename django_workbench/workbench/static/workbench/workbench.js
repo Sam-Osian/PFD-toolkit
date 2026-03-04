@@ -1,7 +1,7 @@
 (function () {
     document.documentElement.classList.add("js-enabled");
     const PAGE_CLASS_PREFIX = "page-";
-    const KNOWN_PAGES = ["home", "explore", "themes", "extract", "for_coders", "settings", "privacy_policy"];
+    const KNOWN_PAGES = ["home", "browse", "explore", "themes", "extract", "for_coders", "settings", "privacy_policy"];
 
     function byId(id) {
         return document.getElementById(id);
@@ -26,6 +26,9 @@
     function getPageFromPath(pathname) {
         if (pathname.startsWith("/explore-pfds")) {
             return "explore";
+        }
+        if (pathname.startsWith("/browse")) {
+            return "browse";
         }
         if (pathname.startsWith("/workbooks/")) {
             return "explore";
@@ -156,6 +159,64 @@
         };
 
         bindRemoveButtons();
+    }
+
+    function setupBrowseCollections() {
+        const grid = document.querySelector("[data-browse-grid]");
+        if (!grid || grid.dataset.bound === "1") {
+            return;
+        }
+        grid.dataset.bound = "1";
+
+        const searchInput = document.querySelector("[data-browse-search]");
+        const cards = Array.from(grid.querySelectorAll("[data-browse-card]"));
+
+        function applySearchFilter() {
+            if (!searchInput) {
+                return;
+            }
+            const query = (searchInput.value || "").trim().toLowerCase();
+            cards.forEach((card) => {
+                const haystack = (card.dataset.browseFilter || "").toLowerCase();
+                const matches = !query || haystack.includes(query);
+                card.classList.toggle("is-hidden", !matches);
+            });
+        }
+
+        if (searchInput && searchInput.dataset.bound !== "1") {
+            searchInput.dataset.bound = "1";
+            searchInput.addEventListener("input", applySearchFilter);
+        }
+
+        cards.forEach((card, index) => {
+            card.style.setProperty("--browse-card-delay", `${index * 55}ms`);
+            if (card.dataset.motionBound === "1") {
+                return;
+            }
+            card.dataset.motionBound = "1";
+
+            card.addEventListener("pointermove", function (event) {
+                if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+                    return;
+                }
+                const rect = card.getBoundingClientRect();
+                const px = (event.clientX - rect.left) / rect.width;
+                const py = (event.clientY - rect.top) / rect.height;
+                const rotateX = (0.5 - py) * 8;
+                const rotateY = (px - 0.5) * 10;
+                card.style.setProperty("--browse-rotate-x", `${rotateX.toFixed(2)}deg`);
+                card.style.setProperty("--browse-rotate-y", `${rotateY.toFixed(2)}deg`);
+                card.style.setProperty("--browse-glow-x", `${(px * 100).toFixed(2)}%`);
+                card.style.setProperty("--browse-glow-y", `${(py * 100).toFixed(2)}%`);
+            });
+
+            card.addEventListener("pointerleave", function () {
+                card.style.removeProperty("--browse-rotate-x");
+                card.style.removeProperty("--browse-rotate-y");
+                card.style.removeProperty("--browse-glow-x");
+                card.style.removeProperty("--browse-glow-y");
+            });
+        });
     }
 
     function setupTableScrollbars() {
@@ -3107,6 +3168,7 @@
         setupDatasetRowActions();
         setupDatasetMutations();
         setupRevealAnimations();
+        setupBrowseCollections();
         setupStartOverConfirm();
         setupDownloadBundleModal();
         setupTopbarQuickSettings();

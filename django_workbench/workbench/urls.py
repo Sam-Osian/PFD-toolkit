@@ -12,6 +12,7 @@ urlpatterns = [
     path("privacy/", views.privacy_policy, name="privacy_policy"),
     path("robots.txt", views.robots_txt, name="robots_txt"),
     path("sitemap.xml", views.sitemap_xml, name="sitemap_xml"),
+    path("browse/", views.browse_page, name="browse"),
     path("explore-pfds/", views.explore, name="explore"),
     path("workbooks/create/", views.workbook_create, name="workbook_create"),
     path(

@@ -77,6 +77,13 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
         ),
         "robots": "index,follow",
     },
+    "browse": {
+        "title": "Browse PFD Collections | PFD Toolkit",
+        "description": (
+            "Browse curated collections of Prevention of Future Deaths reports without needing to build a workflow from scratch."
+        ),
+        "robots": "index,follow",
+    },
     "explore": {
         "title": "Explore PFD Reports | PFD Toolkit",
         "description": (
@@ -122,6 +129,64 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
         "robots": "index,follow",
     },
 }
+
+BROWSE_COLLECTIONS: tuple[dict[str, str], ...] = (
+    {
+        "slug": "nhs",
+        "title": "NHS Bodies",
+        "description": (
+            "Reports sent to NHS organisations including trusts, foundation trusts, "
+            "integrated care boards, and health boards."
+        ),
+        "badge": "Receiver collection",
+        "icon": "hgi-dashboard-square-01",
+        "accent": "sky",
+    },
+    {
+        "slug": "gov_department",
+        "title": "Government Departments",
+        "description": (
+            "Reports addressed to UK government departments and central offices such as "
+            "the Home Office, Cabinet Office, and ministerial departments."
+        ),
+        "badge": "Receiver collection",
+        "icon": "hgi-chart-bar-line",
+        "accent": "amber",
+    },
+    {
+        "slug": "prisons",
+        "title": "Prisons",
+        "description": (
+            "Reports sent directly to prisons, prison institutions, young offender "
+            "settings, or HM Prison and Probation Service."
+        ),
+        "badge": "Receiver collection",
+        "icon": "hgi-filter-horizontal",
+        "accent": "rose",
+    },
+    {
+        "slug": "health_reg",
+        "title": "Health Regulators",
+        "description": (
+            "Reports sent to national health regulators and oversight bodies including "
+            "the Care Quality Commission, NICE, MHRA, GMC, and related regulators."
+        ),
+        "badge": "Receiver collection",
+        "icon": "hgi-bulb",
+        "accent": "violet",
+    },
+    {
+        "slug": "local_gov",
+        "title": "Local Government",
+        "description": (
+            "Reports addressed to councils and local authorities, covering county, "
+            "borough, district, city, and unitary local government bodies."
+        ),
+        "badge": "Receiver collection",
+        "icon": "hgi-user",
+        "accent": "mint",
+    },
+)
 
 UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
     {
@@ -1624,6 +1689,7 @@ def _render_sitemap_xml(request: HttpRequest) -> HttpResponse:
     entries.extend(
         [
             (reverse("workbench:index"), "daily", "1.0", None),
+            (reverse("workbench:browse"), "daily", "0.9", None),
             (reverse("workbench:explore"), "daily", "0.9", None),
             (reverse("workbench:themes"), "weekly", "0.7", None),
             (reverse("workbench:extract"), "weekly", "0.7", None),
@@ -2882,6 +2948,23 @@ def privacy_policy(request: HttpRequest) -> HttpResponse:
         )
     )
     return render(request, "workbench/privacy_policy.html", context)
+
+
+@require_http_methods(["GET"])
+def browse_page(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    context = _build_context(request)
+    context["current_page"] = "browse"
+    context["browse_collections"] = BROWSE_COLLECTIONS
+    context.update(
+        _build_seo_context(
+            request,
+            "browse",
+            canonical_path=reverse("workbench:browse"),
+        )
+    )
+    return render(request, "workbench/browse.html", context)
 
 
 @require_http_methods(["GET", "POST"])

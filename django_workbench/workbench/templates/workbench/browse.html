@@ -1,0 +1,51 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench browse-workbench">
+    <section class="browse-stage reveal-up">
+        <div class="browse-stage__copy">
+            <span class="section-kicker">Curated collections</span>
+            <h1>Browse collections</h1>
+            <p>
+                Open curated receiver-based collections designed to help users move quickly through
+                the report archive without building a workflow from scratch.
+            </p>
+        </div>
+        <div class="browse-stage__search">
+            <label class="browse-search" for="browse-collection-search">
+                <i class="hgi hgi-stroke hgi-search-02" aria-hidden="true"></i>
+                <input
+                    id="browse-collection-search"
+                    type="search"
+                    placeholder="Search collections"
+                    autocomplete="off"
+                    data-browse-search
+                >
+            </label>
+        </div>
+    </section>
+
+    <section class="browse-grid" aria-label="Collection cards" data-browse-grid>
+        {% for collection in browse_collections %}
+            <button
+                type="button"
+                class="browse-card reveal-up"
+                data-browse-card
+                data-browse-filter="{{ collection.title|lower }} {{ collection.description|lower }}"
+            >
+                <div class="browse-card__body">
+                    <h2>{{ collection.title }}</h2>
+                    <p>{{ collection.description }}</p>
+                </div>
+                <div class="browse-card__footer">
+                    <span class="browse-card__count">x reports</span>
+                </div>
+            </button>
+        {% endfor %}
+    </section>
+</div>
+{% endblock %}
