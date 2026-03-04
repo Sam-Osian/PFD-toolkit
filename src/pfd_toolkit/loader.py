@@ -8,6 +8,7 @@ import requests
 
 import pandas as pd
 from dateutil import parser as _date_parser
+from pfd_toolkit.collections import COLLECTION_COLUMNS as _COLLECTION_COLUMNS
 
 # Path within the package used for tests
 _DATA_FILE: Final[str] = "all_reports.csv"
@@ -25,14 +26,6 @@ _DATAFRAME_CACHE_LOCK: Final[Lock] = Lock()
 _DATAFRAME_CACHE_SIGNATURE: tuple[str, int, int] | None = None
 _DATAFRAME_CACHE_FRAME: pd.DataFrame | None = None
 _THEME_PREFIX: Final[str] = "theme_"
-_COLLECTION_COLUMNS: Final[dict[str, str]] = {
-    "nhs": "theme_sent_to_nhs_bodies",
-    "gov_department": "theme_sent_to_government_departments",
-    "prisons": "theme_sent_to_prisons",
-    "health_reg": "theme_sent_to_health_regulators",
-    "local_gov": "theme_sent_to_local_government",
-}
-
 
 def _ensure_dataset(force_download: bool = False) -> Path:
     """Download the dataset if not already cached and return its path.
