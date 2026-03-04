@@ -13,6 +13,22 @@ urlpatterns = [
     path("robots.txt", views.robots_txt, name="robots_txt"),
     path("sitemap.xml", views.sitemap_xml, name="sitemap_xml"),
     path("browse/", views.browse_page, name="browse"),
+    path("browse/<slug:collection_slug>/", views.browse_collection_page, name="browse_collection"),
+    path(
+        "browse/<slug:collection_slug>/dataset-panel/",
+        views.browse_collection_dataset_panel,
+        name="browse_collection_dataset_panel",
+    ),
+    path(
+        "browse/<slug:collection_slug>/dashboard-data/",
+        views.browse_collection_dashboard_data,
+        name="browse_collection_dashboard_data",
+    ),
+    path(
+        "browse/<slug:collection_slug>/clone/",
+        views.browse_collection_clone,
+        name="browse_collection_clone",
+    ),
     path("explore-pfds/", views.explore, name="explore"),
     path("workbooks/create/", views.workbook_create, name="workbook_create"),
     path(

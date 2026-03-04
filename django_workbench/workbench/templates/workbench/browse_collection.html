@@ -1,0 +1,136 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench explore-workbench shared-workbook-view">
+    <section class="explore-action-rail-wrap reveal-up">
+        <div class="explore-action-rail" role="toolbar" aria-label="Browse collection controls">
+            <div class="explore-action-rail__stats">
+                <div class="explore-top-stat">
+                    <span class="explore-top-stat__label">Collection</span>
+                    <span class="explore-top-stat__value">{{ collection.title }}</span>
+                </div>
+                <div class="explore-top-stat">
+                    <span class="explore-top-stat__label">Reports in view</span>
+                    <span class="explore-top-stat__value">{{ reports_count }}</span>
+                </div>
+                <div class="explore-top-stat">
+                    <span class="explore-top-stat__label">Earliest / latest report</span>
+                    <span class="explore-top-stat__value">{{ earliest_display }} - {{ latest_display }}</span>
+                </div>
+                <div class="explore-top-stat">
+                    <span class="explore-top-stat__label">Mode</span>
+                    <span class="explore-top-stat__value">Read-only</span>
+                </div>
+            </div>
+            <div class="explore-action-rail__controls">
+                <button type="button" class="action-rail-btn action-rail-btn--copy" data-readonly-clone-open>
+                    <i class="hgi hgi-stroke hgi-copy-01 action-rail-btn__share-mark" aria-hidden="true"></i>
+                    <span>Make editable copy</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <section
+        class="explore-surface explore-surface--dashboard explore-dashboard reveal-up"
+        id="explore-dashboard"
+        data-dashboard-panel-base="{{ dataset_panel_base }}"
+        data-dashboard-browser-base="{{ dataset_browser_base }}"
+        data-dashboard-data-base="{{ dashboard_data_base }}"
+    >
+        <div class="section-card-header section-card-header--inline">
+            <div>
+                <span class="section-kicker">Browse collection</span>
+                <h3>{{ collection.title }}</h3>
+                <p id="dashboard-status">{{ collection.description }}</p>
+            </div>
+            <button type="button" class="button-secondary" id="dashboard-filter-reset">Reset filters</button>
+        </div>
+
+        <div class="dashboard-filter-row">
+            <section class="dashboard-filter-field" data-dashboard-filter="coroner">
+                <span>Coroner</span>
+                <div class="dashboard-filter-badges" id="dashboard-badges-coroner"></div>
+                <input id="dashboard-filter-coroner-search" class="dashboard-filter-search" type="search" placeholder="Search coroners..." autocomplete="off">
+                <div class="dashboard-filter-options" id="dashboard-options-coroner"></div>
+            </section>
+            <section class="dashboard-filter-field" data-dashboard-filter="area">
+                <span>Area</span>
+                <div class="dashboard-filter-badges" id="dashboard-badges-area"></div>
+                <input id="dashboard-filter-area-search" class="dashboard-filter-search" type="search" placeholder="Search areas..." autocomplete="off">
+                <div class="dashboard-filter-options" id="dashboard-options-area"></div>
+            </section>
+            <section class="dashboard-filter-field" data-dashboard-filter="receiver">
+                <span>Receiver</span>
+                <div class="dashboard-filter-badges" id="dashboard-badges-receiver"></div>
+                <input id="dashboard-filter-receiver-search" class="dashboard-filter-search" type="search" placeholder="Search receivers..." autocomplete="off">
+                <div class="dashboard-filter-options" id="dashboard-options-receiver"></div>
+            </section>
+        </div>
+
+        <div class="dashboard-stat-grid">
+            <article class="dashboard-stat-tile">
+                <span class="dashboard-stat-tile__label">Reports shown</span>
+                <strong class="dashboard-stat-tile__value" id="dashboard-stat-reports">0</strong>
+            </article>
+            <article class="dashboard-stat-tile">
+                <span class="dashboard-stat-tile__label">Unique coroners</span>
+                <strong class="dashboard-stat-tile__value" id="dashboard-stat-coroners">0</strong>
+            </article>
+            <article class="dashboard-stat-tile">
+                <span class="dashboard-stat-tile__label">Receiver links</span>
+                <strong class="dashboard-stat-tile__value" id="dashboard-stat-receiver-links">0</strong>
+            </article>
+        </div>
+
+        <div class="dashboard-chart-grid">
+            <article class="dashboard-chart-card">
+                <h4>Reports by month</h4>
+                <div class="dashboard-chart" id="dashboard-chart-monthly"></div>
+            </article>
+            <article class="dashboard-chart-card">
+                <h4>Most common coroners</h4>
+                <div class="dashboard-chart" id="dashboard-chart-coroner"></div>
+            </article>
+            <article class="dashboard-chart-card">
+                <h4>Most common areas</h4>
+                <div class="dashboard-chart" id="dashboard-chart-area"></div>
+            </article>
+            <article class="dashboard-chart-card">
+                <h4>Most common receivers</h4>
+                <div class="dashboard-chart" id="dashboard-chart-receiver"></div>
+            </article>
+        </div>
+    </section>
+    {{ explore_dashboard_payload|json_script:"explore-dashboard-data" }}
+
+    {% include "workbench/_dataset_table_section.html" with workspace_label="Browse collection" %}
+</div>
+
+<div class="confirm-modal-backdrop hidden" id="readonly-clone-confirm" aria-modal="true" role="dialog" aria-labelledby="readonly-clone-title">
+    <section class="confirm-modal">
+        <h3 id="readonly-clone-title">Create your own editable copy?</h3>
+        <p>You can move this collection into Explore and continue working on it as an editable workspace.</p>
+        <div class="confirm-modal__actions">
+            <button type="button" class="button-secondary" data-readonly-clone-cancel>Cancel</button>
+            <form method="post" action="{{ clone_url }}">
+                {% csrf_token %}
+                {% for value in dashboard_selected_coroners %}
+                    <input type="hidden" name="coroner" value="{{ value }}">
+                {% endfor %}
+                {% for value in dashboard_selected_areas %}
+                    <input type="hidden" name="area" value="{{ value }}">
+                {% endfor %}
+                {% for value in dashboard_selected_receivers %}
+                    <input type="hidden" name="receiver" value="{{ value }}">
+                {% endfor %}
+                <button type="submit" class="button-primary">Create editable copy</button>
+            </form>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -44,6 +44,8 @@ from .services import (
     parse_seed_topics,
     resolve_theme_emoji,
 )
+from pfd_toolkit.loader import load_reports
+from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
 from .state import (
     build_theme_summary_table,
     clear_outputs_for_modified_dataset,
@@ -187,6 +189,41 @@ BROWSE_COLLECTIONS: tuple[dict[str, str], ...] = (
         "accent": "mint",
     },
 )
+
+
+def _browse_collection_meta(collection_slug: str) -> dict[str, str]:
+    for collection in BROWSE_COLLECTIONS:
+        if collection["slug"] == collection_slug:
+            return collection
+    raise Http404("Collection not found.")
+
+
+def _ensure_collection_columns_in_reports(reports_df: pd.DataFrame) -> pd.DataFrame:
+    missing_columns = [column for column in COLLECTION_COLUMNS.values() if column not in reports_df.columns]
+    if not missing_columns or reports_df.empty:
+        return reports_df
+    reports_with_collections = reports_df.copy()
+    apply_collection_columns(reports_with_collections)
+    return reports_with_collections
+
+
+def _load_browse_reports_df() -> pd.DataFrame:
+    reports_df = load_reports(refresh=False)
+    reports_df, _ = _ensure_workbench_row_ids(reports_df)
+    return _ensure_collection_columns_in_reports(reports_df)
+
+
+def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: str) -> pd.DataFrame:
+    reports_with_collections = _ensure_collection_columns_in_reports(reports_df)
+    collection_column = COLLECTION_COLUMNS.get(collection_slug)
+    if not collection_column or collection_column not in reports_with_collections.columns:
+        return reports_with_collections.iloc[0:0].copy()
+    collection_mask = reports_with_collections[collection_column].fillna(False).astype(bool)
+    filtered_reports = reports_with_collections.loc[collection_mask].reset_index(drop=True)
+    visible_columns = [
+        column for column in filtered_reports.columns if not str(column).startswith("theme_")
+    ]
+    return filtered_reports.loc[:, visible_columns].copy()
 
 UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
     {
@@ -2953,10 +2990,23 @@ def privacy_policy(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def browse_page(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
-    _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
+    reports_df = _load_browse_reports_df()
+    browse_collections: list[dict[str, str | int]] = []
+    for collection in BROWSE_COLLECTIONS:
+        collection_column = COLLECTION_COLUMNS.get(collection["slug"], "")
+        collection_count = 0
+        if collection_column and collection_column in reports_df.columns:
+            collection_count = int(reports_df[collection_column].fillna(False).astype(bool).sum())
+        browse_collections.append(
+            {
+                **collection,
+                "count": collection_count,
+                "url": reverse("workbench:browse_collection", kwargs={"collection_slug": collection["slug"]}),
+            }
+        )
     context["current_page"] = "browse"
-    context["browse_collections"] = BROWSE_COLLECTIONS
+    context["browse_collections"] = browse_collections
     context.update(
         _build_seo_context(
             request,
@@ -2965,6 +3015,159 @@ def browse_page(request: HttpRequest) -> HttpResponse:
         )
     )
     return render(request, "workbench/browse.html", context)
+
+
+@require_http_methods(["GET"])
+def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpResponse:
+    init_state(request.session)
+
+    collection = _browse_collection_meta(collection_slug)
+    reports_df_full = _load_browse_reports_df()
+    reports_df = _reports_for_browse_collection(reports_df_full, collection_slug)
+    panel_base = reverse("workbench:browse_collection_dataset_panel", kwargs={"collection_slug": collection_slug})
+    browser_base = f"{reverse('workbench:browse_collection', kwargs={'collection_slug': collection_slug})}?page="
+    shared_context = _build_shared_dataset_context(
+        request,
+        reports_df,
+        panel_base=panel_base,
+        browser_base=browser_base,
+    )
+    selected_filters = {
+        "coroner": shared_context.get("dashboard_selected_coroners", []),
+        "area": shared_context.get("dashboard_selected_areas", []),
+        "receiver": shared_context.get("dashboard_selected_receivers", []),
+    }
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=True,
+    )
+
+    context = {
+        "current_page": "browse",
+        **shared_context,
+        "collection": collection,
+        "explore_dashboard_payload": payload,
+        "dashboard_data_base": reverse(
+            "workbench:browse_collection_dashboard_data",
+            kwargs={"collection_slug": collection_slug},
+        ),
+        "clone_url": reverse(
+            "workbench:browse_collection_clone",
+            kwargs={"collection_slug": collection_slug},
+        ),
+        "workspace_label": "Browse collection",
+    }
+    context.update(
+        _build_seo_context(
+            request,
+            "browse",
+            canonical_path=reverse(
+                "workbench:browse_collection",
+                kwargs={"collection_slug": collection_slug},
+            ),
+            title_override=f'{collection["title"]} | Browse PFD Collections',
+            description_override=collection["description"],
+        )
+    )
+    return render(request, "workbench/browse_collection.html", context)
+
+
+@require_http_methods(["GET"])
+def browse_collection_dataset_panel(request: HttpRequest, collection_slug: str) -> HttpResponse:
+    init_state(request.session)
+    _browse_collection_meta(collection_slug)
+
+    reports_df = _reports_for_browse_collection(
+        _load_browse_reports_df(),
+        collection_slug,
+    )
+    panel_base = reverse("workbench:browse_collection_dataset_panel", kwargs={"collection_slug": collection_slug})
+    browser_base = f"{reverse('workbench:browse_collection', kwargs={'collection_slug': collection_slug})}?page="
+    context = _build_shared_dataset_context(
+        request,
+        reports_df,
+        panel_base=panel_base,
+        browser_base=browser_base,
+    )
+    context["workspace_label"] = "Browse collection"
+    response = render(request, "workbench/_dataset_table_section.html", context)
+    response["X-Robots-Tag"] = "noindex, nofollow"
+    return response
+
+
+@require_http_methods(["GET"])
+def browse_collection_dashboard_data(request: HttpRequest, collection_slug: str) -> HttpResponse:
+    init_state(request.session)
+    _browse_collection_meta(collection_slug)
+
+    reports_df = _reports_for_browse_collection(
+        _load_browse_reports_df(),
+        collection_slug,
+    )
+    selected_filters = _get_explore_dashboard_filters(request)
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=False,
+    )
+    return JsonResponse(payload)
+
+
+@require_http_methods(["POST"])
+def browse_collection_clone(request: HttpRequest, collection_slug: str) -> HttpResponse:
+    init_state(request.session)
+    collection = _browse_collection_meta(collection_slug)
+
+    reports_df = _reports_for_browse_collection(
+        _load_browse_reports_df(),
+        collection_slug,
+    )
+    selected_filters = _get_post_dashboard_filters(request)
+    if any(selected_filters[field] for field in ("coroner", "area", "receiver")):
+        reports_df = _apply_explore_dashboard_filters(reports_df, selected_filters)
+    if reports_df.empty:
+        messages.error(request, f'No reports are currently available for "{collection["title"]}".')
+        return redirect("workbench:browse_collection", collection_slug=collection_slug)
+
+    payload = _build_explore_dashboard_payload(
+        reports_df,
+        selected_filters=selected_filters,
+        include_options=True,
+    )
+    snapshot = {
+        "dashboard_payload": payload,
+        "selected_filters": _normalise_workbook_filters(selected_filters),
+        "reports_df": _snapshot_dataframe_to_payload(reports_df),
+        "excluded_reports_df": _snapshot_dataframe_to_payload(pd.DataFrame()),
+        "theme_summary_df": _snapshot_dataframe_to_payload(pd.DataFrame()),
+        "saved_from_path": request.path,
+    }
+    if not _workbook_payload_size_ok(snapshot):
+        messages.error(request, "This collection is too large to copy into an editable workspace.")
+        return redirect("workbench:browse_collection", collection_slug=collection_slug)
+
+    cloned_workbook = Workbook.objects.create(
+        share_number=_allocate_workbook_share_number(),
+        title=collection["title"],
+        snapshot=copy.deepcopy(snapshot),
+    )
+
+    _restore_workspace_from_snapshot(request, snapshot)
+    query_pairs = [
+        ("workbook", str(cloned_workbook.public_id)),
+        ("edit", str(cloned_workbook.edit_token)),
+    ]
+    query_pairs.extend(("coroner", value) for value in selected_filters["coroner"])
+    query_pairs.extend(("area", value) for value in selected_filters["area"])
+    query_pairs.extend(("receiver", value) for value in selected_filters["receiver"])
+    query_string = urlencode(query_pairs, doseq=True)
+
+    messages.success(
+        request,
+        f'"{collection["title"]}" is now loaded into your editable workspace.',
+    )
+    return redirect(f"{reverse('workbench:explore')}?{query_string}")
 
 
 @require_http_methods(["GET", "POST"])

@@ -31,8 +31,8 @@
 
     <section class="browse-grid" aria-label="Collection cards" data-browse-grid>
         {% for collection in browse_collections %}
-            <button
-                type="button"
+            <a
+                href="{{ collection.url }}"
                 class="browse-card reveal-up"
                 data-browse-card
                 data-browse-filter="{{ collection.title|lower }} {{ collection.description|lower }}"
@@ -84,9 +84,9 @@
                     <p>{{ collection.description }}</p>
                 </div>
                 <div class="browse-card__footer">
-                    <span class="browse-card__count">x reports</span>
+                    <span class="browse-card__count">{{ collection.count }} reports</span>
                 </div>
-            </button>
+            </a>
         {% endfor %}
     </section>
 </div>
