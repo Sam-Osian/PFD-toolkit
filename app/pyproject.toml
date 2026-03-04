@@ -8,7 +8,7 @@ version = "0.1.2"
 requires-python = ">=3.10"
 description = "Streamlit workbench for PFD Toolkit."
 dependencies = [
-  "pfd_toolkit==0.4.0",
+  "pfd_toolkit==0.4.1",
   "streamlit==1.41.1"
 ]
 
