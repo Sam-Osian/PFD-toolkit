@@ -37,6 +37,48 @@
                 data-browse-card
                 data-browse-filter="{{ collection.title|lower }} {{ collection.description|lower }}"
             >
+                <span class="browse-card__motif {% if collection.slug == 'local_gov' %}browse-card__motif--large{% endif %}" aria-hidden="true">
+                    {% if collection.slug == "nhs" %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="8" y="8" width="18" height="18" rx="4"></rect>
+                            <rect x="46" y="8" width="18" height="18" rx="4"></rect>
+                            <rect x="8" y="46" width="18" height="18" rx="4"></rect>
+                            <rect x="46" y="46" width="18" height="18" rx="4"></rect>
+                            <path d="M26 17H46"></path>
+                            <path d="M17 26V46"></path>
+                            <path d="M55 26V46"></path>
+                            <path d="M26 55H46"></path>
+                        </svg>
+                    {% elif collection.slug == "gov_department" %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 28L36 14L60 28"></path>
+                            <path d="M16 58H56"></path>
+                            <path d="M20 31V55"></path>
+                            <path d="M31 31V55"></path>
+                            <path d="M41 31V55"></path>
+                            <path d="M52 31V55"></path>
+                            <path d="M14 28H58"></path>
+                        </svg>
+                    {% elif collection.slug == "prisons" %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="12" y="12" width="48" height="48" rx="8"></rect>
+                            <path d="M24 12V60"></path>
+                            <path d="M36 12V60"></path>
+                            <path d="M48 12V60"></path>
+                            <path d="M12 24H60"></path>
+                        </svg>
+                    {% elif collection.slug == "health_reg" %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M36 12L55 19V34C55 46 47.5 55 36 60C24.5 55 17 46 17 34V19L36 12Z"></path>
+                            <path d="M27 35L33 41L45 29"></path>
+                        </svg>
+                    {% elif collection.slug == "local_gov" %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M49 30C49 39.1 36 49 36 49C36 49 23 39.1 23 30C23 22.8 28.8 17 36 17C43.2 17 49 22.8 49 30Z"></path>
+                            <circle cx="36" cy="30" r="4"></circle>
+                        </svg>
+                    {% endif %}
+                </span>
                 <div class="browse-card__body">
                     <h2>{{ collection.title }}</h2>
                     <p>{{ collection.description }}</p>
