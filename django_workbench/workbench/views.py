@@ -1780,7 +1780,7 @@ def _ensure_workspace_reports_loaded(request: HttpRequest) -> None:
             start_date=start_date,
             end_date=end_date,
             n_reports=_normalise_report_limit(session.get("report_limit")),
-            refresh=False,
+            refresh=True,
         )
     except Exception as exc:
         messages.error(request, f"Could not load default reports: {exc}")
@@ -1800,7 +1800,7 @@ def _ensure_workspace_reports_loaded(request: HttpRequest) -> None:
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "n_reports": session.get("report_limit"),
-        "refresh": False,
+        "refresh": True,
     }
     record_repro_action(
         session,
