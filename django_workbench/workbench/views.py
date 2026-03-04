@@ -134,6 +134,17 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
 
 BROWSE_COLLECTIONS: tuple[dict[str, str], ...] = (
     {
+        "slug": "custom",
+        "title": "Custom Collection",
+        "description": (
+            "Open the full report archive as a starting point for building your own "
+            "editable collection and dashboard workflow."
+        ),
+        "badge": "Browse starter",
+        "icon": "hgi-search-01",
+        "accent": "slate",
+    },
+    {
         "slug": "nhs",
         "title": "NHS Bodies",
         "description": (
@@ -215,6 +226,11 @@ def _load_browse_reports_df() -> pd.DataFrame:
 
 def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: str) -> pd.DataFrame:
     reports_with_collections = _ensure_collection_columns_in_reports(reports_df)
+    if collection_slug == "custom":
+        visible_columns = [
+            column for column in reports_with_collections.columns if not str(column).startswith("theme_")
+        ]
+        return reports_with_collections.loc[:, visible_columns].reset_index(drop=True).copy()
     collection_column = COLLECTION_COLUMNS.get(collection_slug)
     if not collection_column or collection_column not in reports_with_collections.columns:
         return reports_with_collections.iloc[0:0].copy()
@@ -2996,7 +3012,9 @@ def browse_page(request: HttpRequest) -> HttpResponse:
     for collection in BROWSE_COLLECTIONS:
         collection_column = COLLECTION_COLUMNS.get(collection["slug"], "")
         collection_count = 0
-        if collection_column and collection_column in reports_df.columns:
+        if collection["slug"] == "custom":
+            collection_count = len(reports_df)
+        elif collection_column and collection_column in reports_df.columns:
             collection_count = int(reports_df[collection_column].fillna(False).astype(bool).sum())
         browse_collections.append(
             {
@@ -3056,6 +3074,7 @@ def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpRe
             "workbench:browse_collection_clone",
             kwargs={"collection_slug": collection_slug},
         ),
+        "browse_back_url": reverse("workbench:browse"),
         "workspace_label": "Browse collection",
     }
     context.update(

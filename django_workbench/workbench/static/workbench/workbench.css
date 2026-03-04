@@ -1217,6 +1217,7 @@ button:disabled {
 .button-secondary {
     background: rgba(143, 158, 238, 0.18);
     color: var(--text-soft);
+    text-decoration: none;
 }
 
 .button-inline {
@@ -2160,6 +2161,26 @@ body.sidebar-collapsed .sidebar-nav__item {
 
 .shared-workbook-view .explore-action-rail {
     gap: 1rem;
+}
+
+.browse-back-bar {
+    display: flex;
+    justify-content: flex-start;
+    margin: 0 0 0.9rem;
+}
+
+.browse-back-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    padding: 0;
+    border-radius: 999px;
+}
+
+.browse-back-button i {
+    font-size: 1.08rem;
 }
 
 .shared-workbook-view .explore-action-rail__stats {
@@ -3460,12 +3481,29 @@ body.page-extract .workflow-clean .workflow-clean-shell {
         opacity 0.18s ease;
 }
 
+.browse-card--custom {
+    background: rgba(6, 10, 28, 0.9);
+    border-color: rgba(176, 190, 255, 0.12);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.025),
+        0 12px 26px rgba(2, 5, 16, 0.2);
+}
+
 .browse-card:hover,
 .browse-card:focus-visible {
     border-color: rgba(198, 211, 255, 0.28);
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.05),
         0 16px 28px rgba(5, 9, 23, 0.16);
+}
+
+.browse-card--custom:hover,
+.browse-card--custom:focus-visible {
+    background: rgba(8, 13, 34, 0.94);
+    border-color: rgba(198, 211, 255, 0.22);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.04),
+        0 18px 30px rgba(2, 6, 18, 0.26);
 }
 
 .browse-card:focus-visible {
@@ -3797,6 +3835,12 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     .browse-stage {
         grid-template-columns: 1fr;
         padding: 1.1rem;
+    }
+
+    .browse-back-bar {
+        margin-bottom: 0.7rem;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
     }
 
     .browse-stage__search {

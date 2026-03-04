@@ -9,9 +9,9 @@ import pandas as pd
 from pfd_toolkit.collections import apply_collection_columns
 
 
-INPUT_CSV = Path("scripts/data/all_reports.csv")
-OUTPUT_CSV = Path("scripts/data/all_reports_with_collections.csv")
-OVERWRITE_INPUT = False
+INPUT_CSV = Path("all_reports.csv")
+OUTPUT_CSV = Path("all_reports.csv")
+OVERWRITE_INPUT = True
 
 
 def main() -> None:
@@ -25,7 +25,7 @@ def main() -> None:
 
     theme_columns = [column for column in reports.columns if column.startswith("theme_")]
     print(f"Rows processed: {len(reports)}")
-    print(f"Wrote themed dataset to: {output_path}")
+    print(f"Wrote collection dataset to: {output_path}")
     for column in theme_columns:
         print(f"{column}: {int(reports[column].fillna(False).sum())}")
 

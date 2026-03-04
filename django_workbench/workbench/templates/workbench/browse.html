@@ -33,12 +33,21 @@
         {% for collection in browse_collections %}
             <a
                 href="{{ collection.url }}"
-                class="browse-card reveal-up"
+                class="browse-card reveal-up{% if collection.slug == 'custom' %} browse-card--custom{% endif %}"
                 data-browse-card
                 data-browse-filter="{{ collection.title|lower }} {{ collection.description|lower }}"
             >
                 <span class="browse-card__motif {% if collection.slug == 'local_gov' %}browse-card__motif--large{% endif %}" aria-hidden="true">
-                    {% if collection.slug == "nhs" %}
+                    {% if collection.slug == "custom" %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16 18H46"></path>
+                            <path d="M16 30H56"></path>
+                            <path d="M16 42H50"></path>
+                            <path d="M16 54H38"></path>
+                            <circle cx="54" cy="54" r="10"></circle>
+                            <path d="M61 61L66 66"></path>
+                        </svg>
+                    {% elif collection.slug == "nhs" %}
                         <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <rect x="8" y="8" width="18" height="18" rx="4"></rect>
                             <rect x="46" y="8" width="18" height="18" rx="4"></rect>

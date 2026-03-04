@@ -150,6 +150,8 @@ def _normalise_receiver_formatting(text: str) -> str:
 
 def _canonicalise_receiver_segment(text: str) -> str:
     """Apply explicit receiver canonical mappings while preserving formatting."""
+    if text.startswith("Department of ") and text != "Department of Health and Social Care":
+        return text.replace("Department of ", "Department for ", 1)
     key = _normalise_receiver_match_key(text)
     return RECEIVER_CANONICAL_MAP.get(key, text)
 

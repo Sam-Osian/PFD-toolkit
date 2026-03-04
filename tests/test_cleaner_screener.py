@@ -519,7 +519,55 @@ def test_cleaner_receiver_applies_explicit_canonical_mappings():
     cleaner = Cleaner(df, ReceiverLLM())
     cleaned = cleaner.clean_reports()
     assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == (
-        "Department of Health and Social Care; NHS England; National Highways"
+        "Department for Health; NHS England; National Highways"
+    )
+
+
+def test_cleaner_receiver_normalises_department_of_to_for_except_health():
+    df = pd.DataFrame(
+        {
+            GeneralConfig.COL_URL: ["u1"],
+            GeneralConfig.COL_DATE: ["2024-01-01"],
+            GeneralConfig.COL_RECEIVER: ["x"],
+        }
+    )
+
+    class ReceiverLLM(DummyLLM):
+        def generate(self, prompts, response_format=None, **kwargs):
+            outputs = []
+            for _ in prompts:
+                if response_format is None:
+                    outputs.append(
+                        "Department of Transport; Department of Education; "
+                        "Department of Health and Social Care"
+                    )
+                else:
+                    field_name = next(iter(response_format.model_fields))
+                    outputs.append(
+                        response_format(
+                            **{
+                                field_name: (
+                                    "Department of Transport; Department of Education; "
+                                    "Department of Health and Social Care"
+                                )
+                            }
+                        )
+                    )
+            return outputs
+
+    cleaner = Cleaner(
+        df,
+        ReceiverLLM(),
+        include_coroner=False,
+        include_area=False,
+        include_investigation=False,
+        include_circumstances=False,
+        include_concerns=False,
+    )
+    cleaned = cleaner.clean_reports()
+    assert cleaned[GeneralConfig.COL_RECEIVER].iloc[0] == (
+        "Department for Transport; Department for Education; "
+        "Department of Health and Social Care"
     )
 
 

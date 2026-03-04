@@ -1,6 +1,5 @@
 # Receiver Themes
 
-Temporary utility for generating rule-based receiver collections as `theme_*` boolean columns.
 
 Themes included:
 
@@ -19,8 +18,3 @@ Themes included:
 - `theme_sent_to_local_government`
   Matches local-government bodies such as `County Council`, `City Council`, `Borough Council`, `District Council`, `County Borough Council`, `Metropolitan Borough Council`, `London Borough of ...`, `Unitary Authority`, `Local Authority`, and council names that end in `Council` unless they match known non-local authority exclusions such as `General Medical Council` or `National Police Chiefs Council`.
 
-Notes:
-
-- Matching is applied per semicolon-separated receiver segment.
-- Rules run on normalized receiver text only; they do not use the report body.
-- Collections are intentionally broad enough for browse dashboards, not individual-recipient filtering.
