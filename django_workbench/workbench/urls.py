@@ -30,6 +30,8 @@ urlpatterns = [
         name="browse_collection_clone",
     ),
     path("explore-pfds/", views.explore, name="explore"),
+    path("network/", views.network_page, name="network"),
+    path("network-data/", views.network_data, name="network_data"),
     path("workbooks/create/", views.workbook_create, name="workbook_create"),
     path(
         "workbooks/<uuid:public_id>/save/",

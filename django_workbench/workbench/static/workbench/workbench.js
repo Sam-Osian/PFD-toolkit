@@ -1,7 +1,7 @@
 (function () {
     document.documentElement.classList.add("js-enabled");
     const PAGE_CLASS_PREFIX = "page-";
-    const KNOWN_PAGES = ["home", "browse", "explore", "themes", "extract", "for_coders", "settings", "privacy_policy"];
+    const KNOWN_PAGES = ["home", "browse", "explore", "network", "themes", "extract", "for_coders", "settings", "privacy_policy"];
 
     function byId(id) {
         return document.getElementById(id);
@@ -26,6 +26,9 @@
     function getPageFromPath(pathname) {
         if (pathname.startsWith("/explore-pfds")) {
             return "explore";
+        }
+        if (pathname.startsWith("/network")) {
+            return "network";
         }
         if (pathname.startsWith("/browse")) {
             return "browse";
@@ -2807,6 +2810,1103 @@
         renderDashboard(summary);
     }
 
+    function setupNetworkGraph() {
+        const root = byId("network-analysis");
+        if (!root || root.dataset.bound === "1") {
+            return;
+        }
+        root.dataset.bound = "1";
+
+        const dataNode = byId("network-graph-data");
+        const graphRoot = byId("network-graph-canvas");
+        const statusNode = byId("network-status");
+        const searchQueryInput = byId("network-search-query");
+        const searchDropdown = byId("network-search-dropdown");
+        const searchSelection = byId("network-search-selection");
+        const searchClearButton = byId("network-search-clear");
+        const layoutSelect = byId("network-layout");
+        const nodeLimitInput = byId("network-node-limit");
+        const nodeLimitValue = byId("network-node-limit-value");
+        const minEdgeInput = byId("network-min-edge");
+        const minEdgeValue = byId("network-min-edge-value");
+        const typeInputs = Array.from(root.querySelectorAll("[data-network-type]"));
+        const refreshButton = byId("network-refresh-data");
+        const resetButton = byId("network-reset-controls");
+        const fitButton = byId("network-fit-graph");
+        const statReports = byId("network-stat-reports");
+        const statNodes = byId("network-stat-nodes");
+        const statEdges = byId("network-stat-edges");
+        const statTopTheme = byId("network-stat-top-theme");
+        const statDegreeLabel = byId("network-stat-degree-label");
+        const statBridgeLabel = byId("network-stat-bridge-label");
+        const statDegreeNode = byId("network-stat-degree-node");
+        const statDegreeScore = byId("network-stat-degree-score");
+        const statBridgeNode = byId("network-stat-bridge-node");
+        const statBridgeScore = byId("network-stat-bridge-score");
+        const focusEmpty = byId("network-focus-empty");
+        const focusBody = byId("network-focus-body");
+        const focusTitle = byId("network-focus-title");
+        const focusMeta = byId("network-focus-meta");
+        const focusLinks = byId("network-focus-links");
+        const focusTargets = byId("network-focus-targets");
+
+        if (
+            !dataNode ||
+            !graphRoot ||
+            !statusNode ||
+            !searchQueryInput ||
+            !searchDropdown ||
+            !searchSelection ||
+            !searchClearButton ||
+            !layoutSelect ||
+            !nodeLimitInput ||
+            !nodeLimitValue ||
+            !minEdgeInput ||
+            !minEdgeValue ||
+            !typeInputs.length ||
+            !refreshButton ||
+            !resetButton ||
+            !fitButton ||
+            !statReports ||
+            !statNodes ||
+            !statEdges ||
+            !statTopTheme ||
+            !statDegreeLabel ||
+            !statBridgeLabel ||
+            !statDegreeNode ||
+            !statDegreeScore ||
+            !statBridgeNode ||
+            !statBridgeScore ||
+            !focusEmpty ||
+            !focusBody ||
+            !focusTitle ||
+            !focusMeta ||
+            !focusLinks ||
+            !focusTargets
+        ) {
+            return;
+        }
+
+        function setStatus(text) {
+            statusNode.textContent = text;
+        }
+
+        function escapeHtml(value) {
+            return String(value || "")
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/\"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
+
+        if (!window.echarts || typeof window.echarts.init !== "function") {
+            setStatus("ECharts is not available. Reload the page and try again.");
+            return;
+        }
+
+        let payload = {};
+        try {
+            payload = JSON.parse(dataNode.textContent || "{}");
+        } catch (error) {
+            setStatus("Network data could not be parsed.");
+            return;
+        }
+
+        const existingChart = window.echarts.getInstanceByDom(graphRoot);
+        if (existingChart) {
+            existingChart.dispose();
+        }
+        const chart = window.echarts.init(graphRoot, null, { renderer: "canvas" });
+
+        let sourceNodes = [];
+        let sourceEdges = [];
+        let sourceNodesById = new Map();
+        let currentNodesById = new Map();
+        let currentEdges = [];
+        let searchDropdownIntentOpen = false;
+        let currentCentrality = {
+            degree: new Map(),
+            betweenness: new Map(),
+        };
+
+        const categoryOrder = ["theme", "receiver", "coroner", "area"];
+        const categoryLabels = {
+            theme: "Theme",
+            receiver: "Receiver",
+            coroner: "Coroner",
+            area: "Area",
+        };
+        const initialParams = new URLSearchParams(window.location.search);
+        let selectedSearchNodeId = (initialParams.get("network_focus") || "").trim();
+
+        function typePalette() {
+            return {
+                theme: getCssVar("--network-theme-color", "#88b3ff"),
+                receiver: getCssVar("--network-receiver-color", "#79d2b0"),
+                coroner: getCssVar("--network-coroner-color", "#ffb27e"),
+                area: getCssVar("--network-area-color", "#b8a2ff"),
+            };
+        }
+
+        function edgePalette() {
+            return {
+                theme_receiver: getCssVar("--network-edge-theme-receiver", "rgba(121, 210, 176, 0.58)"),
+                theme_coroner: getCssVar("--network-edge-theme-coroner", "rgba(255, 178, 126, 0.56)"),
+                theme_area: getCssVar("--network-edge-theme-area", "rgba(184, 162, 255, 0.58)"),
+                fallback: getCssVar("--network-edge-fallback", "rgba(164, 185, 255, 0.48)"),
+            };
+        }
+
+        function normalisePayloadNode(node) {
+            if (!node || typeof node !== "object") {
+                return null;
+            }
+            const id = typeof node.id === "string" ? node.id : "";
+            const name = typeof node.name === "string" ? node.name : "";
+            const nodeType = typeof node.type === "string" ? node.type : "";
+            const rawKey = typeof node.raw_key === "string" ? node.raw_key : "";
+            const value = Number(node.value || 0);
+            const size = Number(node.size || 14);
+            if (!id || !name || !nodeType) {
+                return null;
+            }
+            return {
+                id: id,
+                name: name,
+                type: nodeType,
+                rawKey: rawKey,
+                value: Number.isFinite(value) ? value : 0,
+                size: Number.isFinite(size) ? size : 14,
+            };
+        }
+
+        function normalisePayloadEdge(edge) {
+            if (!edge || typeof edge !== "object") {
+                return null;
+            }
+            const source = typeof edge.source === "string" ? edge.source : "";
+            const target = typeof edge.target === "string" ? edge.target : "";
+            const value = Number(edge.value || 0);
+            const kind = typeof edge.kind === "string" ? edge.kind : "";
+            if (!source || !target || !Number.isFinite(value) || value <= 0) {
+                return null;
+            }
+            return { source: source, target: target, value: value, kind: kind };
+        }
+
+        function applyPayload(newPayload, preserveValues) {
+            payload = newPayload && typeof newPayload === "object" ? newPayload : {};
+            const graph = payload.graph && typeof payload.graph === "object" ? payload.graph : {};
+            const summary = payload.summary && typeof payload.summary === "object" ? payload.summary : {};
+            const options = payload.options && typeof payload.options === "object" ? payload.options : {};
+
+            sourceNodes = (Array.isArray(graph.nodes) ? graph.nodes : [])
+                .map(normalisePayloadNode)
+                .filter(Boolean);
+            sourceEdges = (Array.isArray(graph.edges) ? graph.edges : [])
+                .map(normalisePayloadEdge)
+                .filter(Boolean);
+            sourceNodesById = new Map(sourceNodes.map((node) => [node.id, node]));
+
+            if (selectedSearchNodeId && !sourceNodesById.has(selectedSearchNodeId)) {
+                selectedSearchNodeId = "";
+            }
+            if (selectedSearchNodeId && sourceNodesById.has(selectedSearchNodeId)) {
+                searchQueryInput.value = sourceNodesById.get(selectedSearchNodeId).name;
+            }
+
+            const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
+            const defaultMinEdgeWeight = Math.max(
+                1,
+                Math.min(maxEdgeWeight, Number(options.default_min_edge_weight || 1))
+            );
+            const maxNodeLimit = Math.max(24, Number(options.max_node_limit || sourceNodes.length || 120));
+            const defaultNodeLimit = Math.max(
+                24,
+                Math.min(maxNodeLimit, Number(options.default_node_limit || maxNodeLimit))
+            );
+
+            minEdgeInput.min = "1";
+            minEdgeInput.max = String(maxEdgeWeight);
+            minEdgeInput.step = "1";
+            nodeLimitInput.min = "24";
+            nodeLimitInput.max = String(maxNodeLimit);
+            nodeLimitInput.step = "1";
+
+            if (!preserveValues) {
+                minEdgeInput.value = String(defaultMinEdgeWeight);
+                nodeLimitInput.value = String(defaultNodeLimit);
+            } else {
+                const clampedMinEdge = Math.min(maxEdgeWeight, Math.max(1, Number(minEdgeInput.value || 1)));
+                const clampedNodeLimit = Math.min(maxNodeLimit, Math.max(24, Number(nodeLimitInput.value || defaultNodeLimit)));
+                minEdgeInput.value = String(clampedMinEdge);
+                nodeLimitInput.value = String(clampedNodeLimit);
+            }
+
+            statReports.textContent = Number(summary.reports_shown || 0).toLocaleString();
+            const topTheme = summary.top_theme && typeof summary.top_theme === "object" ? summary.top_theme : {};
+            const topThemeName = typeof topTheme.name === "string" && topTheme.name
+                ? topTheme.name
+                : "-";
+            statTopTheme.textContent = topThemeName;
+            renderSearchSelection();
+            renderSearchDropdown();
+            syncSearchDropdownVisibility(true);
+        }
+
+        function forceAtLeastOneType(targetInput) {
+            const selectedCount = typeInputs.filter((input) => input.checked).length;
+            if (selectedCount === 0 && targetInput) {
+                targetInput.checked = true;
+                return;
+            }
+        }
+
+        function getSelectedTypes() {
+            const selected = new Set();
+            typeInputs.forEach((input) => {
+                if (input.checked) {
+                    selected.add(input.value);
+                }
+            });
+            return selected;
+        }
+
+        function getLabelThreshold(values) {
+            if (!values.length) {
+                return 0;
+            }
+            const sorted = values.slice().sort((a, b) => b - a);
+            const index = Math.max(0, Math.floor(sorted.length * 0.2) - 1);
+            return sorted[index] || 0;
+        }
+
+        function edgeWidthForValue(weight) {
+            return Math.min(6.5, 0.85 + (Math.log(weight + 1) * 1.35));
+        }
+
+        function formatCentralityScore(value) {
+            if (!Number.isFinite(value)) {
+                return "0.000";
+            }
+            return value.toFixed(3);
+        }
+
+        function buildCentralitySnapshot(nodes, edges, options) {
+            const settings = options && typeof options === "object" ? options : {};
+            const excludedNodeId = String(settings.excludeNodeId || "").trim();
+            const nodeIds = nodes.map((node) => String(node.id || "").trim()).filter(Boolean);
+            const degreeMap = new Map();
+            const betweennessMap = new Map();
+            const adjacency = new Map();
+            const weightedStrength = new Map();
+
+            nodeIds.forEach((id) => {
+                adjacency.set(id, new Set());
+                degreeMap.set(id, 0);
+                betweennessMap.set(id, 0);
+                weightedStrength.set(id, 0);
+            });
+
+            edges.forEach((edge) => {
+                const source = String(edge.source || "").trim();
+                const target = String(edge.target || "").trim();
+                const weight = Number(edge.value || 0);
+                if (!adjacency.has(source) || !adjacency.has(target) || !source || !target) {
+                    return;
+                }
+                adjacency.get(source).add(target);
+                adjacency.get(target).add(source);
+                if (Number.isFinite(weight) && weight > 0) {
+                    weightedStrength.set(source, (weightedStrength.get(source) || 0) + weight);
+                    weightedStrength.set(target, (weightedStrength.get(target) || 0) + weight);
+                }
+            });
+
+            const n = nodeIds.length;
+            const degreeDenom = Math.max(1, n - 1);
+            nodeIds.forEach((id) => {
+                degreeMap.set(id, (adjacency.get(id) || new Set()).size / degreeDenom);
+            });
+
+            // Brandes algorithm for betweenness centrality (unweighted, undirected).
+            nodeIds.forEach((source) => {
+                const stack = [];
+                const predecessors = new Map();
+                const sigma = new Map();
+                const distance = new Map();
+                const delta = new Map();
+
+                nodeIds.forEach((id) => {
+                    predecessors.set(id, []);
+                    sigma.set(id, 0);
+                    distance.set(id, -1);
+                    delta.set(id, 0);
+                });
+                sigma.set(source, 1);
+                distance.set(source, 0);
+
+                const queue = [source];
+                let queueIndex = 0;
+                while (queueIndex < queue.length) {
+                    const vertex = queue[queueIndex];
+                    queueIndex += 1;
+                    stack.push(vertex);
+
+                    (adjacency.get(vertex) || new Set()).forEach((neighbor) => {
+                        if ((distance.get(neighbor) || -1) < 0) {
+                            queue.push(neighbor);
+                            distance.set(neighbor, (distance.get(vertex) || 0) + 1);
+                        }
+                        if ((distance.get(neighbor) || -1) === (distance.get(vertex) || 0) + 1) {
+                            sigma.set(neighbor, (sigma.get(neighbor) || 0) + (sigma.get(vertex) || 0));
+                            predecessors.get(neighbor).push(vertex);
+                        }
+                    });
+                }
+
+                while (stack.length) {
+                    const w = stack.pop();
+                    (predecessors.get(w) || []).forEach((v) => {
+                        const sigmaW = sigma.get(w) || 0;
+                        if (sigmaW <= 0) {
+                            return;
+                        }
+                        const contribution = ((sigma.get(v) || 0) / sigmaW) * (1 + (delta.get(w) || 0));
+                        delta.set(v, (delta.get(v) || 0) + contribution);
+                    });
+                    if (w !== source) {
+                        betweennessMap.set(w, (betweennessMap.get(w) || 0) + (delta.get(w) || 0));
+                    }
+                }
+            });
+
+            const betweennessDenom = n > 2 ? ((n - 1) * (n - 2)) / 2 : 1;
+            nodeIds.forEach((id) => {
+                const raw = (betweennessMap.get(id) || 0) / 2;
+                betweennessMap.set(id, raw / betweennessDenom);
+            });
+
+            function topByScore(scoreMap) {
+                const rows = nodes
+                    .map((node) => ({
+                        id: node.id,
+                        name: node.displayName || node.name || "-",
+                        type: node.type || "theme",
+                        score: Number(scoreMap.get(node.id) || 0),
+                        strength: Number(weightedStrength.get(node.id) || 0),
+                    }))
+                    .filter((row) => !excludedNodeId || row.id !== excludedNodeId)
+                    .sort((a, b) => b.score - a.score || b.strength - a.strength || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+                return rows[0] || null;
+            }
+
+            return {
+                degreeMap: degreeMap,
+                betweennessMap: betweennessMap,
+                topDegree: topByScore(degreeMap),
+                topBetweenness: topByScore(betweennessMap),
+            };
+        }
+
+        function buildTypeBadge(nodeType) {
+            const badge = document.createElement("span");
+            const type = String(nodeType || "").trim().toLowerCase();
+            badge.className = `network-node-badge network-node-badge--${type || "theme"}`;
+            badge.textContent = categoryLabels[type] || "Node";
+            return badge;
+        }
+
+        function updateFocusPanel(nodeId) {
+            if (!nodeId || !currentNodesById.has(nodeId)) {
+                focusBody.classList.add("hidden");
+                focusEmpty.classList.remove("hidden");
+                focusLinks.innerHTML = "";
+                focusTargets.innerHTML = "";
+                return;
+            }
+
+            const node = currentNodesById.get(nodeId);
+            const linkedRows = [];
+            currentEdges.forEach((edge) => {
+                if (edge.source !== nodeId && edge.target !== nodeId) {
+                    return;
+                }
+                const otherId = edge.source === nodeId ? edge.target : edge.source;
+                const otherNode = currentNodesById.get(otherId);
+                if (!otherNode) {
+                    return;
+                }
+                linkedRows.push({
+                    name: otherNode.displayName || otherNode.name,
+                    type: otherNode.type,
+                    value: edge.value,
+                });
+            });
+            linkedRows.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+
+            focusTitle.textContent = node.displayName || node.name;
+            focusMeta.innerHTML = "";
+            focusMeta.appendChild(buildTypeBadge(node.type));
+            focusMeta.appendChild(
+                document.createTextNode(` ${Number(node.value || 0).toLocaleString()} linked reports`)
+            );
+            const degreeScore = Number(currentCentrality.degree.get(nodeId) || 0);
+            const betweennessScore = Number(currentCentrality.betweenness.get(nodeId) || 0);
+            focusMeta.appendChild(
+                document.createTextNode(
+                    ` · degree ${formatCentralityScore(degreeScore)} · betweenness ${formatCentralityScore(betweennessScore)}`
+                )
+            );
+            focusLinks.innerHTML = "";
+            if (!linkedRows.length) {
+                const emptyRow = document.createElement("li");
+                emptyRow.textContent = "No links available for this node under the current controls.";
+                focusLinks.appendChild(emptyRow);
+            } else {
+                linkedRows.slice(0, 10).forEach((row) => {
+                    const li = document.createElement("li");
+                    const leftWrap = document.createElement("div");
+                    leftWrap.className = "network-focus-link-main";
+                    leftWrap.appendChild(buildTypeBadge(row.type));
+                    const nameNode = document.createElement("span");
+                    nameNode.className = "network-focus-link-name";
+                    nameNode.textContent = row.name;
+                    leftWrap.appendChild(nameNode);
+                    const valueNode = document.createElement("strong");
+                    valueNode.textContent = Number(row.value).toLocaleString();
+                    li.appendChild(leftWrap);
+                    li.appendChild(valueNode);
+                    focusLinks.appendChild(li);
+                });
+            }
+
+            focusTargets.innerHTML = "";
+            const targetGroups = [
+                { type: "receiver", title: "Top receivers" },
+                { type: "area", title: "Top areas" },
+                { type: "coroner", title: "Top coroners" },
+            ];
+            targetGroups.forEach((group) => {
+                const rows = linkedRows
+                    .filter((row) => row.type === group.type)
+                    .slice(0, 5);
+                if (!rows.length) {
+                    return;
+                }
+                const block = document.createElement("section");
+                block.className = "network-focus-target-group";
+                const heading = document.createElement("h6");
+                heading.textContent = group.title;
+                const list = document.createElement("ul");
+                list.className = "network-focus-target-list";
+                rows.forEach((row) => {
+                    const item = document.createElement("li");
+                    const label = document.createElement("span");
+                    label.textContent = row.name;
+                    const value = document.createElement("strong");
+                    value.textContent = Number(row.value).toLocaleString();
+                    item.appendChild(label);
+                    item.appendChild(value);
+                    list.appendChild(item);
+                });
+                block.appendChild(heading);
+                block.appendChild(list);
+                focusTargets.appendChild(block);
+            });
+
+            focusEmpty.classList.add("hidden");
+            focusBody.classList.remove("hidden");
+        }
+
+        function getSearchCandidateNodes() {
+            const selectedTypes = getSelectedTypes();
+            const searchTerm = (searchQueryInput.value || "").trim().toLowerCase();
+            const rows = sourceNodes
+                .filter((node) => selectedTypes.has(node.type))
+                .filter((node) => {
+                    if (!searchTerm) {
+                        return true;
+                    }
+                    const nameMatch = node.name.toLowerCase().includes(searchTerm);
+                    const keyMatch = node.rawKey && node.rawKey.toLowerCase().includes(searchTerm);
+                    const typeMatch = (categoryLabels[node.type] || "").toLowerCase().includes(searchTerm);
+                    return Boolean(nameMatch || keyMatch || typeMatch);
+                })
+                .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+            return rows.slice(0, 80);
+        }
+
+        function renderSearchSelection() {
+            searchSelection.innerHTML = "";
+            if (!selectedSearchNodeId || !sourceNodesById.has(selectedSearchNodeId)) {
+                searchSelection.textContent = "No node selected.";
+                return;
+            }
+            const node = sourceNodesById.get(selectedSearchNodeId);
+            const pill = document.createElement("span");
+            pill.className = "network-search-selection-pill";
+            pill.appendChild(buildTypeBadge(node.type));
+            const label = document.createElement("span");
+            label.className = "network-search-selection-pill__label";
+            label.textContent = node.name;
+            pill.appendChild(label);
+            searchSelection.appendChild(pill);
+        }
+
+        function renderSearchDropdown() {
+            const options = getSearchCandidateNodes();
+            searchDropdown.innerHTML = "";
+            if (!options.length) {
+                const emptyNode = document.createElement("div");
+                emptyNode.className = "network-search-option-empty";
+                emptyNode.textContent = "No matches found.";
+                searchDropdown.appendChild(emptyNode);
+                return;
+            }
+
+            options.forEach((node) => {
+                const optionButton = document.createElement("button");
+                optionButton.type = "button";
+                optionButton.className = `network-search-option network-search-option--${node.type}`;
+                optionButton.setAttribute("role", "option");
+                optionButton.setAttribute("data-node-id", node.id);
+                optionButton.setAttribute(
+                    "aria-selected",
+                    selectedSearchNodeId && selectedSearchNodeId === node.id ? "true" : "false"
+                );
+
+                const leftWrap = document.createElement("div");
+                leftWrap.className = "network-search-option__main";
+                leftWrap.appendChild(buildTypeBadge(node.type));
+                const labelNode = document.createElement("span");
+                labelNode.className = "network-search-option__label";
+                labelNode.textContent = node.name;
+                leftWrap.appendChild(labelNode);
+
+                const valueNode = document.createElement("strong");
+                valueNode.className = "network-search-option__value";
+                valueNode.textContent = Number(node.value || 0).toLocaleString();
+
+                optionButton.appendChild(leftWrap);
+                optionButton.appendChild(valueNode);
+                optionButton.addEventListener("click", function () {
+                    selectedSearchNodeId = node.id;
+                    searchQueryInput.value = node.name;
+                    syncSearchDropdownVisibility(true);
+                    renderSearchSelection();
+                    renderGraph();
+                });
+                searchDropdown.appendChild(optionButton);
+            });
+        }
+
+        function syncSearchDropdownVisibility(forceClose) {
+            if (forceClose) {
+                searchDropdownIntentOpen = false;
+                searchDropdown.classList.add("hidden");
+                return;
+            }
+            const hasTypedQuery = Boolean((searchQueryInput.value || "").trim());
+            const shouldOpen = Boolean(searchDropdownIntentOpen && hasTypedQuery);
+            searchDropdown.classList.toggle("hidden", !shouldOpen);
+        }
+
+        function buildNetworkScopeQueryString() {
+            const params = new URLSearchParams();
+            if (
+                window.WorkbenchDashboardFilters &&
+                typeof window.WorkbenchDashboardFilters.getSelection === "function"
+            ) {
+                const selection = window.WorkbenchDashboardFilters.getSelection();
+                ["coroner", "area", "receiver"].forEach((field) => {
+                    const values = Array.isArray(selection[field]) ? selection[field] : [];
+                    values.forEach((value) => {
+                        const cleaned = String(value || "").trim();
+                        if (cleaned) {
+                            params.append(field, cleaned);
+                        }
+                    });
+                });
+            } else {
+                const currentParams = new URLSearchParams(window.location.search);
+                ["coroner", "area", "receiver"].forEach((field) => {
+                    currentParams.getAll(field).forEach((value) => {
+                        const cleaned = String(value || "").trim();
+                        if (cleaned) {
+                            params.append(field, cleaned);
+                        }
+                    });
+                });
+            }
+
+            if (selectedSearchNodeId) {
+                params.set("network_focus", selectedSearchNodeId);
+            } else {
+                params.delete("network_focus");
+            }
+            params.set("network_min_edge", String(Math.max(1, Number(minEdgeInput.value || 1))));
+            params.set("network_node_limit", String(Math.max(24, Number(nodeLimitInput.value || 120))));
+            params.delete("network_type");
+            typeInputs.forEach((input) => {
+                if (input.checked) {
+                    params.append("network_type", String(input.value || "").trim());
+                }
+            });
+            return params.toString();
+        }
+
+        let datasetRefreshTimer = null;
+        let lastDatasetScopeQuery = "";
+
+        function scheduleDatasetScopeRefresh() {
+            const query = buildNetworkScopeQueryString();
+            if (query === lastDatasetScopeQuery) {
+                return;
+            }
+
+            if (datasetRefreshTimer) {
+                window.clearTimeout(datasetRefreshTimer);
+            }
+
+            datasetRefreshTimer = window.setTimeout(function () {
+                if (
+                    !window.WorkbenchDatasetPanel ||
+                    typeof window.WorkbenchDatasetPanel.fetchAndSwapDataset !== "function"
+                ) {
+                    return;
+                }
+                if (query === lastDatasetScopeQuery) {
+                    return;
+                }
+                lastDatasetScopeQuery = query;
+                const panelUrl = `/dataset-panel/?page=1${query ? `&${query}` : ""}`;
+                const targetUrl = `${window.location.pathname}?page=1${query ? `&${query}` : ""}`;
+                window.WorkbenchDatasetPanel.fetchAndSwapDataset(panelUrl, targetUrl);
+            }, 220);
+        }
+
+        function renderGraph() {
+            const selectedTypes = getSelectedTypes();
+            const minEdgeWeight = Math.max(1, Number(minEdgeInput.value || 1));
+            const maxNodes = Math.max(24, Number(nodeLimitInput.value || 120));
+            const layout = layoutSelect.value === "circular" ? "circular" : "force";
+
+            minEdgeValue.textContent = `${minEdgeWeight}`;
+            nodeLimitValue.textContent = `${maxNodes}`;
+
+            let candidateNodes = sourceNodes.filter((node) => selectedTypes.has(node.type));
+            candidateNodes.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+            candidateNodes = candidateNodes.slice(0, maxNodes);
+
+            const nodeIdSet = new Set(candidateNodes.map((node) => node.id));
+            let candidateEdges = sourceEdges.filter((edge) =>
+                edge.value >= minEdgeWeight && nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target)
+            );
+
+            const connectedIds = new Set();
+            candidateEdges.forEach((edge) => {
+                connectedIds.add(edge.source);
+                connectedIds.add(edge.target);
+            });
+            candidateNodes = candidateNodes.filter((node) => connectedIds.has(node.id) || !candidateEdges.length);
+
+            let activeSearchNodeId = selectedSearchNodeId;
+            if (activeSearchNodeId && !nodeIdSet.has(activeSearchNodeId)) {
+                activeSearchNodeId = "";
+                selectedSearchNodeId = "";
+                renderSearchSelection();
+            }
+
+            let focusedSearchNodeIds = new Set();
+            if (activeSearchNodeId) {
+                focusedSearchNodeIds = new Set([activeSearchNodeId]);
+                candidateEdges.forEach((edge) => {
+                    if (edge.source === activeSearchNodeId || edge.target === activeSearchNodeId) {
+                        focusedSearchNodeIds.add(edge.source);
+                        focusedSearchNodeIds.add(edge.target);
+                    }
+                });
+                candidateNodes = candidateNodes.filter((node) => focusedSearchNodeIds.has(node.id));
+                const keepIds = new Set(candidateNodes.map((node) => node.id));
+                candidateEdges = candidateEdges.filter((edge) => keepIds.has(edge.source) && keepIds.has(edge.target));
+            }
+
+            if (!candidateNodes.length) {
+                currentNodesById = new Map();
+                currentEdges = [];
+                currentCentrality = { degree: new Map(), betweenness: new Map() };
+                chart.clear();
+                statNodes.textContent = "0";
+                statEdges.textContent = "0";
+                statDegreeLabel.textContent = activeSearchNodeId ? "Highest degree around focus" : "Highest degree";
+                statBridgeLabel.textContent = activeSearchNodeId ? "Highest betweenness around focus" : "Highest betweenness";
+                statDegreeNode.textContent = "-";
+                statDegreeScore.textContent = "-";
+                statBridgeNode.textContent = "-";
+                statBridgeScore.textContent = "-";
+                setStatus("No graph results match the current controls.");
+                updateFocusPanel("");
+                scheduleDatasetScopeRefresh();
+                return;
+            }
+
+            const paletteByType = typePalette();
+            const edgeColors = edgePalette();
+            const categoryIndexByType = {};
+            categoryOrder.forEach((type, index) => {
+                categoryIndexByType[type] = index;
+            });
+
+            const valueThreshold = getLabelThreshold(candidateNodes.map((node) => Number(node.value || 0)));
+
+            const chartNodes = candidateNodes.map((node) => {
+                const isFocusedSearchNode = Boolean(activeSearchNodeId && node.id === activeSearchNodeId);
+                const isSearchNeighbour = Boolean(
+                    activeSearchNodeId && focusedSearchNodeIds.has(node.id) && node.id !== activeSearchNodeId
+                );
+                const showLabel = Number(node.value || 0) >= valueThreshold || isFocusedSearchNode || isSearchNeighbour;
+                return {
+                    id: node.id,
+                    name: node.id,
+                    displayName: node.name,
+                    value: Number(node.value || 0),
+                    type: node.type,
+                    symbolSize: Number(node.size || 14),
+                    category: categoryIndexByType[node.type] || 0,
+                    itemStyle: {
+                        color: paletteByType[node.type] || paletteByType.theme,
+                        borderColor: "rgba(9, 15, 41, 0.88)",
+                        borderWidth: isFocusedSearchNode ? 2.3 : (isSearchNeighbour ? 1.8 : 1.2),
+                        opacity: 0.96,
+                    },
+                    label: {
+                        show: Boolean(showLabel),
+                        color: getCssVar("--network-label-color", "rgba(237, 243, 255, 0.88)"),
+                        fontSize: 11,
+                        overflow: "truncate",
+                        width: 170,
+                    },
+                };
+            });
+
+            const filteredNodeIds = new Set(chartNodes.map((node) => node.id));
+            const chartEdges = candidateEdges
+                .filter((edge) => filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target))
+                .map((edge) => {
+                    const lineColor = edgeColors[edge.kind] || edgeColors.fallback;
+                    const edgeWeight = Number(edge.value || 0);
+                    return {
+                        source: edge.source,
+                        target: edge.target,
+                        value: edgeWeight,
+                        kind: edge.kind,
+                        lineStyle: {
+                            color: lineColor,
+                            opacity: 0.44,
+                            width: edgeWidthForValue(edgeWeight),
+                            curveness: 0.13,
+                        },
+                        emphasis: {
+                            lineStyle: {
+                                opacity: 0.86,
+                                width: edgeWidthForValue(edgeWeight) + 0.8,
+                            },
+                        },
+                    };
+                });
+
+            const displayCentrality = buildCentralitySnapshot(chartNodes, chartEdges, {});
+            currentCentrality = {
+                degree: displayCentrality.degreeMap,
+                betweenness: displayCentrality.betweennessMap,
+            };
+
+            let rankingNodes = chartNodes;
+            let rankingEdges = chartEdges;
+            if (activeSearchNodeId && focusedSearchNodeIds.size) {
+                rankingNodes = chartNodes.filter((node) => focusedSearchNodeIds.has(node.id));
+                const rankingNodeIds = new Set(rankingNodes.map((node) => node.id));
+                rankingEdges = chartEdges.filter(
+                    (edge) => rankingNodeIds.has(edge.source) && rankingNodeIds.has(edge.target)
+                );
+            }
+            const rankingCentrality = buildCentralitySnapshot(rankingNodes, rankingEdges, {
+                excludeNodeId: activeSearchNodeId || "",
+            });
+
+            statDegreeLabel.textContent = activeSearchNodeId ? "Highest degree around focus" : "Highest degree";
+            statBridgeLabel.textContent = activeSearchNodeId ? "Highest betweenness around focus" : "Highest betweenness";
+
+            if (rankingCentrality.topDegree) {
+                statDegreeNode.textContent = rankingCentrality.topDegree.name;
+                statDegreeScore.textContent = `score ${formatCentralityScore(rankingCentrality.topDegree.score)}`;
+            } else {
+                statDegreeNode.textContent = "-";
+                statDegreeScore.textContent = "-";
+            }
+            if (rankingCentrality.topBetweenness) {
+                statBridgeNode.textContent = rankingCentrality.topBetweenness.name;
+                statBridgeScore.textContent = `score ${formatCentralityScore(rankingCentrality.topBetweenness.score)}`;
+            } else {
+                statBridgeNode.textContent = "-";
+                statBridgeScore.textContent = "-";
+            }
+
+            const typedCounts = { theme: 0, receiver: 0, coroner: 0, area: 0 };
+            chartNodes.forEach((node) => {
+                if (Object.prototype.hasOwnProperty.call(typedCounts, node.type)) {
+                    typedCounts[node.type] += 1;
+                }
+            });
+
+            currentNodesById = new Map(chartNodes.map((node) => [node.id, node]));
+            currentEdges = chartEdges;
+            statNodes.textContent = Number(chartNodes.length).toLocaleString();
+            statEdges.textContent = Number(chartEdges.length).toLocaleString();
+            const reportsInScope = Number(statReports.textContent.replace(/,/g, "") || 0);
+            const typeSummary = [
+                `themes ${typedCounts.theme}`,
+                `receivers ${typedCounts.receiver}`,
+                `coroners ${typedCounts.coroner}`,
+                `areas ${typedCounts.area}`,
+            ].join(" | ");
+            const focusedNodeName = activeSearchNodeId && sourceNodesById.has(activeSearchNodeId)
+                ? sourceNodesById.get(activeSearchNodeId).name
+                : "";
+            const focusSuffix = focusedNodeName ? ` Focused on ${focusedNodeName}.` : "";
+            setStatus(
+                `Showing ${Number(chartNodes.length).toLocaleString()} nodes and ${Number(chartEdges.length).toLocaleString()} links from ${reportsInScope.toLocaleString()} reports (${typeSummary}).${focusSuffix}`
+            );
+            updateFocusPanel("");
+
+            try {
+                chart.setOption(
+                    {
+                    animationDuration: 260,
+                    animationDurationUpdate: 280,
+                    tooltip: {
+                        trigger: "item",
+                        formatter: function (params) {
+                            if (params.dataType === "edge") {
+                                const edgeValue = Number(params.data.value || 0);
+                                return `Link strength: ${edgeValue.toLocaleString()}`;
+                            }
+                            const nodeType = categoryLabels[params.data.type] || "Node";
+                            const nodeValue = Number(params.data.value || 0);
+                            const label = params.data.displayName || params.data.name || "";
+                            return `${escapeHtml(label)}<br>${escapeHtml(nodeType)} · ${nodeValue.toLocaleString()} linked reports`;
+                        },
+                    },
+                    legend: [
+                        {
+                            top: 8,
+                            left: 6,
+                            icon: "circle",
+                            textStyle: {
+                                color: getCssVar("--network-legend-color", "rgba(218, 229, 255, 0.82)"),
+                                fontSize: 11,
+                            },
+                            itemWidth: 10,
+                            itemHeight: 10,
+                            data: categoryOrder.map((type) => categoryLabels[type]),
+                        },
+                    ],
+                    series: [
+                        {
+                            type: "graph",
+                            layout: layout,
+                            roam: true,
+                            draggable: true,
+                            data: chartNodes,
+                            links: chartEdges,
+                            categories: categoryOrder.map((type) => ({
+                                name: categoryLabels[type],
+                                itemStyle: { color: paletteByType[type] || paletteByType.theme },
+                            })),
+                            edgeSymbol: ["none", "none"],
+                            edgeSymbolSize: 8,
+                            lineStyle: { opacity: 0.44, color: "source", curveness: 0.13 },
+                            label: {
+                                position: "right",
+                                formatter: function (params) {
+                                    return params.data.displayName || params.data.name || "";
+                                },
+                            },
+                            emphasis: {
+                                focus: "adjacency",
+                                label: { show: true },
+                            },
+                            force: layout === "force"
+                                ? {
+                                    repulsion: Math.max(210, 920 - (chartNodes.length * 2.7)),
+                                    edgeLength: [72, 188],
+                                    gravity: 0.07,
+                                    friction: 0.2,
+                                }
+                                : undefined,
+                            circular: layout === "circular"
+                                ? {
+                                    rotateLabel: true,
+                                }
+                                : undefined,
+                        },
+                    ],
+                },
+                true
+                );
+            } catch (error) {
+                setStatus("Graph render failed. Please click Refresh data.");
+            }
+
+            scheduleDatasetScopeRefresh();
+        }
+
+        async function refreshFromServer() {
+            const base = root.dataset.networkDataBase || "/network-data/";
+            const params = new URLSearchParams(window.location.search);
+            params.delete("page");
+            const targetUrl = `${base}${params.toString() ? `?${params.toString()}` : ""}`;
+
+            refreshButton.disabled = true;
+            setStatus("Refreshing network data...");
+            let response;
+            try {
+                response = await fetch(targetUrl, {
+                    credentials: "same-origin",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest",
+                    },
+                });
+            } catch (error) {
+                setStatus("Network data refresh failed. Please retry.");
+                refreshButton.disabled = false;
+                return;
+            }
+
+            if (!response.ok) {
+                setStatus("Network data refresh failed. Please retry.");
+                refreshButton.disabled = false;
+                return;
+            }
+
+            let freshPayload = {};
+            try {
+                freshPayload = await response.json();
+            } catch (error) {
+                freshPayload = {};
+            }
+            applyPayload(freshPayload, true);
+            renderGraph();
+            refreshButton.disabled = false;
+        }
+
+        applyPayload(payload, false);
+        renderGraph();
+
+        chart.on("click", function (params) {
+            if (params.dataType === "node" && params.data && params.data.id) {
+                updateFocusPanel(String(params.data.id));
+                return;
+            }
+            updateFocusPanel("");
+        });
+
+        fitButton.addEventListener("click", function () {
+            renderGraph();
+            chart.resize();
+        });
+
+        refreshButton.addEventListener("click", function () {
+            refreshFromServer();
+        });
+
+        resetButton.addEventListener("click", function () {
+            selectedSearchNodeId = "";
+            searchQueryInput.value = "";
+            syncSearchDropdownVisibility(true);
+            renderSearchSelection();
+            layoutSelect.value = "force";
+            typeInputs.forEach((input) => {
+                input.checked = true;
+            });
+
+            const options = payload.options && typeof payload.options === "object" ? payload.options : {};
+            const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
+            const defaultMinEdgeWeight = Math.max(
+                1,
+                Math.min(maxEdgeWeight, Number(options.default_min_edge_weight || 1))
+            );
+            const maxNodeLimit = Math.max(24, Number(options.max_node_limit || sourceNodes.length || 120));
+            const defaultNodeLimit = Math.max(
+                24,
+                Math.min(maxNodeLimit, Number(options.default_node_limit || maxNodeLimit))
+            );
+            minEdgeInput.value = String(defaultMinEdgeWeight);
+            nodeLimitInput.value = String(defaultNodeLimit);
+            renderSearchDropdown();
+            renderGraph();
+        });
+
+        typeInputs.forEach((input) => {
+            input.addEventListener("change", function () {
+                forceAtLeastOneType(input);
+                renderSearchDropdown();
+                syncSearchDropdownVisibility(false);
+                renderGraph();
+            });
+        });
+
+        minEdgeInput.addEventListener("input", renderGraph);
+        nodeLimitInput.addEventListener("input", renderGraph);
+        layoutSelect.addEventListener("change", renderGraph);
+        searchQueryInput.addEventListener("input", function () {
+            searchDropdownIntentOpen = true;
+            renderSearchDropdown();
+            syncSearchDropdownVisibility(false);
+        });
+        searchQueryInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                const firstOption = searchDropdown.querySelector("button[data-node-id]");
+                if (firstOption) {
+                    event.preventDefault();
+                    firstOption.click();
+                }
+            } else if (event.key === "Escape") {
+                syncSearchDropdownVisibility(true);
+            }
+        });
+
+        searchClearButton.addEventListener("click", function () {
+            if (!selectedSearchNodeId && !searchQueryInput.value) {
+                return;
+            }
+            selectedSearchNodeId = "";
+            searchQueryInput.value = "";
+            renderSearchSelection();
+            renderSearchDropdown();
+            syncSearchDropdownVisibility(true);
+            renderGraph();
+        });
+
+        document.addEventListener("click", function (event) {
+            if (
+                !searchDropdown.contains(event.target) &&
+                event.target !== searchQueryInput &&
+                event.target !== searchClearButton
+            ) {
+                syncSearchDropdownVisibility(true);
+            }
+        });
+
+        syncSearchDropdownVisibility(true);
+
+        window.addEventListener("resize", function () {
+            chart.resize();
+        });
+    }
+
     function setupWorkbookControls() {
         const root = byId("workbook-controls");
         if (!root || root.dataset.bound === "1") {
@@ -3172,6 +4272,7 @@
         setupThemeRerunConfirmModal();
         setupDatasetPagination();
         setupExploreDashboard();
+        setupNetworkGraph();
         setupWorkbookControls();
         setupConfigModalDismiss();
         setupReadonlyCloneConfirm();

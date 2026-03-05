@@ -1,7 +1,7 @@
 """Views for the standalone Django Workbench."""
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 import logging
 import json
 import mimetypes
@@ -18,7 +18,7 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from time import perf_counter
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from uuid import UUID, uuid4
 
 import markdown
@@ -90,6 +90,13 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
         "title": "Explore PFD Reports | PFD Toolkit",
         "description": (
             "Explore and filter Prevention of Future Deaths reports with interactive dashboards and AI-assisted screening."
+        ),
+        "robots": "index,follow",
+    },
+    "network": {
+        "title": "Network Analysis for PFD Reports | PFD Toolkit",
+        "description": (
+            "Map relationships between report themes, receivers, coroners, and areas with an interactive network graph."
         ),
         "robots": "index,follow",
     },
@@ -318,6 +325,18 @@ def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, di
     return collections
 
 
+def _display_dataset_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Return dataset columns intended for table display (hide internal theme flags)."""
+    if df.empty:
+        return df.copy()
+    visible_columns = [
+        column
+        for column in df.columns
+        if not str(column).startswith("theme_") and not str(column).startswith("collection_")
+    ]
+    return df.loc[:, visible_columns].copy()
+
+
 def _all_browse_collections(reports_df: pd.DataFrame) -> list[dict[str, str]]:
     combined = [dict(collection) for collection in BROWSE_COLLECTIONS]
     combined.extend(_theme_collection_map_from_reports(reports_df).values())
@@ -359,10 +378,7 @@ def _load_browse_reports_df() -> pd.DataFrame:
 def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: str) -> pd.DataFrame:
     reports_with_collections = _ensure_collection_columns_in_reports(reports_df)
     if collection_slug == "custom":
-        visible_columns = [
-            column for column in reports_with_collections.columns if not str(column).startswith("theme_")
-        ]
-        return reports_with_collections.loc[:, visible_columns].reset_index(drop=True).copy()
+        return reports_with_collections.reset_index(drop=True).copy()
 
     if collection_slug in COLLECTION_COLUMNS:
         filtered_reports = load_reports(refresh=False, collection=collection_slug)
@@ -377,10 +393,7 @@ def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: st
 
     filtered_reports, _ = _ensure_workbench_row_ids(filtered_reports)
     filtered_reports = _ensure_collection_columns_in_reports(filtered_reports)
-    visible_columns = [
-        column for column in filtered_reports.columns if not str(column).startswith("theme_")
-    ]
-    return filtered_reports.loc[:, visible_columns].copy()
+    return filtered_reports.copy()
 
 UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
     {
@@ -410,6 +423,25 @@ def favicon(request: HttpRequest) -> HttpResponse:
 UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
 DASHBOARD_TOP_N = 12
 DASHBOARD_UNKNOWN_LABEL = "Not specified"
+NETWORK_THEME_TOP_N = 36
+NETWORK_RECEIVER_TOP_N = 72
+NETWORK_CORONER_TOP_N = 44
+NETWORK_AREA_TOP_N = 36
+NETWORK_EDGE_MAX = 2600
+NETWORK_SCOPE_QUERY_KEYS: tuple[str, ...] = (
+    "network_search",
+    "network_focus",
+    "network_min_edge",
+    "network_node_limit",
+    "network_type",
+)
+NETWORK_NODE_TYPES: tuple[str, ...] = ("theme", "receiver", "coroner", "area")
+NETWORK_TYPE_LABELS: dict[str, str] = {
+    "theme": "theme",
+    "receiver": "receiver",
+    "coroner": "coroner",
+    "area": "area",
+}
 
 
 def _normalise_report_limit(raw_value: Any) -> Optional[int]:
@@ -878,6 +910,568 @@ def _build_explore_dashboard_payload(
     return payload
 
 
+def _network_truthy(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        try:
+            if pd.isna(value):
+                return False
+        except TypeError:
+            pass
+        return value != 0
+    cleaned = str(value).strip().lower()
+    return cleaned in {"1", "true", "t", "yes", "y"}
+
+
+def _network_top_items(counter: Counter[str], *, limit: int, min_value: int) -> list[str]:
+    rows = [
+        (name, count)
+        for name, count in counter.items()
+        if int(count) >= int(min_value)
+    ]
+    rows.sort(key=lambda item: (-int(item[1]), item[0].casefold()))
+    return [name for name, _ in rows[:limit]]
+
+
+def _network_node_id(node_type: str, value: str) -> str:
+    return f"{node_type}::{value}"
+
+
+def _network_theme_columns(reports_df: pd.DataFrame) -> list[str]:
+    receiver_collection_columns = set(COLLECTION_COLUMNS.values())
+    thematic_columns: list[str] = []
+    for column in reports_df.columns:
+        column_name = str(column)
+        if column_name in receiver_collection_columns:
+            continue
+        if column_name.startswith("theme_") or column_name.startswith("collection_"):
+            thematic_columns.append(column_name)
+    return sorted(thematic_columns)
+
+
+def _network_theme_label(theme_key: str) -> str:
+    return _theme_collection_title(theme_key)
+
+
+def _network_scale_node_size(
+    value: int, minimum: int, maximum: int, size_floor: float, size_ceiling: float
+) -> float:
+    if maximum <= minimum:
+        return round((size_floor + size_ceiling) / 2, 2)
+    ratio = (float(value) - float(minimum)) / (float(maximum) - float(minimum))
+    eased_ratio = pow(max(0.0, min(1.0, ratio)), 0.62)
+    return round(size_floor + ((size_ceiling - size_floor) * eased_ratio), 2)
+
+
+def _build_network_graph_payload(
+    reports_df: pd.DataFrame,
+    *,
+    selected_filters: Optional[dict[str, list[str]]] = None,
+) -> dict[str, Any]:
+    filters = selected_filters or {"coroner": [], "area": [], "receiver": []}
+    normalised_filters = {
+        "coroner": _parse_explore_filter_values(filters.get("coroner", [])),
+        "area": _parse_explore_filter_values(filters.get("area", [])),
+        "receiver": _parse_explore_filter_values(filters.get("receiver", [])),
+    }
+    filtered_df = _apply_explore_dashboard_filters(reports_df, normalised_filters)
+    reports_total = int(len(reports_df))
+    reports_shown = int(len(filtered_df))
+
+    theme_columns = _network_theme_columns(filtered_df)
+    if filtered_df.empty:
+        return {
+            "selected": normalised_filters,
+            "summary": {
+                "reports_shown": reports_shown,
+                "reports_total": reports_total,
+                "reports_with_theme": 0,
+                "theme_assignments": 0,
+                "nodes": 0,
+                "edges": 0,
+                "top_theme": {"name": "-", "count": 0},
+            },
+            "graph": {"nodes": [], "edges": []},
+            "options": {
+                "max_edge_weight": 1,
+                "default_min_edge_weight": 1,
+                "max_node_limit": 120,
+                "default_node_limit": 120,
+                "available_types": ["theme", "receiver", "coroner", "area"],
+            },
+        }
+
+    def _build_non_theme_payload() -> dict[str, Any]:
+        receiver_counter: Counter[str] = Counter()
+        coroner_counter: Counter[str] = Counter()
+        area_counter: Counter[str] = Counter()
+        edge_receiver_coroner: Counter[tuple[str, str]] = Counter()
+        edge_receiver_area: Counter[tuple[str, str]] = Counter()
+        edge_coroner_area: Counter[tuple[str, str]] = Counter()
+
+        for _, row in filtered_df.iterrows():
+            receivers = _split_dashboard_receivers(row.get("receiver"))
+            coroner = _normalise_dashboard_value(row.get("coroner"))
+            area = _normalise_dashboard_value(row.get("area"))
+
+            for receiver_name in receivers:
+                receiver_counter[receiver_name] += 1
+            if coroner:
+                coroner_counter[coroner] += 1
+            if area:
+                area_counter[area] += 1
+
+            for receiver_name in receivers:
+                if coroner:
+                    edge_receiver_coroner[(receiver_name, coroner)] += 1
+                if area:
+                    edge_receiver_area[(receiver_name, area)] += 1
+            if coroner and area:
+                edge_coroner_area[(coroner, area)] += 1
+
+        min_count_for_node = 1 if reports_shown <= 250 else 2
+        min_count_for_edge = 1 if reports_shown <= 200 else 2
+
+        top_receivers = _network_top_items(
+            receiver_counter,
+            limit=NETWORK_RECEIVER_TOP_N,
+            min_value=min_count_for_node,
+        )
+        top_coroners = _network_top_items(
+            coroner_counter,
+            limit=NETWORK_CORONER_TOP_N,
+            min_value=min_count_for_node,
+        )
+        top_areas = _network_top_items(
+            area_counter,
+            limit=NETWORK_AREA_TOP_N,
+            min_value=min_count_for_node,
+        )
+
+        selected_receivers = set(top_receivers)
+        selected_coroners = set(top_coroners)
+        selected_areas = set(top_areas)
+
+        edges: list[dict[str, Any]] = []
+        for (receiver_name, coroner_name), count in edge_receiver_coroner.items():
+            if count < min_count_for_edge:
+                continue
+            if receiver_name not in selected_receivers or coroner_name not in selected_coroners:
+                continue
+            edges.append(
+                {
+                    "source": _network_node_id("receiver", receiver_name),
+                    "target": _network_node_id("coroner", coroner_name),
+                    "value": int(count),
+                    "kind": "receiver_coroner",
+                }
+            )
+        for (receiver_name, area_name), count in edge_receiver_area.items():
+            if count < min_count_for_edge:
+                continue
+            if receiver_name not in selected_receivers or area_name not in selected_areas:
+                continue
+            edges.append(
+                {
+                    "source": _network_node_id("receiver", receiver_name),
+                    "target": _network_node_id("area", area_name),
+                    "value": int(count),
+                    "kind": "receiver_area",
+                }
+            )
+        for (coroner_name, area_name), count in edge_coroner_area.items():
+            if count < min_count_for_edge:
+                continue
+            if coroner_name not in selected_coroners or area_name not in selected_areas:
+                continue
+            edges.append(
+                {
+                    "source": _network_node_id("coroner", coroner_name),
+                    "target": _network_node_id("area", area_name),
+                    "value": int(count),
+                    "kind": "coroner_area",
+                }
+            )
+
+        edges.sort(key=lambda item: (-int(item["value"]), str(item["source"]), str(item["target"])))
+        if len(edges) > NETWORK_EDGE_MAX:
+            edges = edges[:NETWORK_EDGE_MAX]
+
+        connected_node_ids: set[str] = set()
+        for edge in edges:
+            connected_node_ids.add(str(edge["source"]))
+            connected_node_ids.add(str(edge["target"]))
+
+        node_rows: list[dict[str, Any]] = []
+
+        def add_nodes(
+            node_type: str,
+            values: list[str],
+            *,
+            counter: Counter[str],
+        ) -> None:
+            for value in values:
+                node_id = _network_node_id(node_type, value)
+                if connected_node_ids and node_id not in connected_node_ids:
+                    continue
+                node_rows.append(
+                    {
+                        "id": node_id,
+                        "name": str(value),
+                        "type": node_type,
+                        "value": int(counter.get(value, 0)),
+                        "raw_key": str(value),
+                    }
+                )
+
+        add_nodes("receiver", top_receivers, counter=receiver_counter)
+        add_nodes("coroner", top_coroners, counter=coroner_counter)
+        add_nodes("area", top_areas, counter=area_counter)
+
+        if not node_rows:
+            node_rows = []
+            for value in top_receivers[: min(40, len(top_receivers))]:
+                node_rows.append(
+                    {
+                        "id": _network_node_id("receiver", value),
+                        "name": str(value),
+                        "type": "receiver",
+                        "value": int(receiver_counter.get(value, 0)),
+                        "raw_key": str(value),
+                    }
+                )
+
+        type_ranges = {
+            "receiver": (14.0, 30.0),
+            "coroner": (13.0, 28.0),
+            "area": (12.0, 26.0),
+        }
+        values_by_type: dict[str, list[int]] = {"receiver": [], "coroner": [], "area": []}
+        for row in node_rows:
+            values_by_type[str(row["type"])].append(int(row["value"]))
+        extrema: dict[str, tuple[int, int]] = {}
+        for node_type, values in values_by_type.items():
+            if not values:
+                extrema[node_type] = (0, 0)
+                continue
+            extrema[node_type] = (min(values), max(values))
+
+        nodes: list[dict[str, Any]] = []
+        for row in node_rows:
+            node_type = str(row["type"])
+            minimum, maximum = extrema.get(node_type, (0, 0))
+            size_floor, size_ceiling = type_ranges.get(node_type, (12.0, 28.0))
+            nodes.append(
+                {
+                    "id": str(row["id"]),
+                    "name": str(row["name"]),
+                    "type": node_type,
+                    "raw_key": str(row["raw_key"]),
+                    "value": int(row["value"]),
+                    "size": _network_scale_node_size(
+                        int(row["value"]),
+                        minimum,
+                        maximum,
+                        size_floor,
+                        size_ceiling,
+                    ),
+                }
+            )
+
+        node_ids = {row["id"] for row in nodes}
+        edges_filtered = [
+            edge
+            for edge in edges
+            if str(edge["source"]) in node_ids and str(edge["target"]) in node_ids
+        ]
+        max_edge_weight = max((int(edge["value"]) for edge in edges_filtered), default=1)
+        default_node_limit = min(180, max(24, len(nodes)))
+        max_node_limit = max(default_node_limit, min(420, max(80, len(nodes))))
+
+        return {
+            "selected": normalised_filters,
+            "summary": {
+                "reports_shown": reports_shown,
+                "reports_total": reports_total,
+                "reports_with_theme": 0,
+                "theme_assignments": 0,
+                "nodes": int(len(nodes)),
+                "edges": int(len(edges_filtered)),
+                "top_theme": {"name": "-", "count": 0},
+            },
+            "graph": {
+                "nodes": nodes,
+                "edges": edges_filtered,
+            },
+            "options": {
+                "max_edge_weight": int(max_edge_weight),
+                "default_min_edge_weight": int(min_count_for_edge),
+                "max_node_limit": int(max_node_limit),
+                "default_node_limit": int(default_node_limit),
+                "available_types": ["receiver", "coroner", "area"],
+            },
+        }
+
+    if not theme_columns:
+        return _build_non_theme_payload()
+
+    theme_counter: Counter[str] = Counter()
+    receiver_counter: Counter[str] = Counter()
+    coroner_counter: Counter[str] = Counter()
+    area_counter: Counter[str] = Counter()
+    edge_theme_receiver: Counter[tuple[str, str]] = Counter()
+    edge_theme_coroner: Counter[tuple[str, str]] = Counter()
+    edge_theme_area: Counter[tuple[str, str]] = Counter()
+
+    reports_with_theme = 0
+    theme_assignments = 0
+
+    for _, row in filtered_df.iterrows():
+        active_themes: list[str] = []
+        for column in theme_columns:
+            if not _network_truthy(row.get(column)):
+                continue
+            if column.startswith("theme_"):
+                theme_key = column[len("theme_") :]
+            elif column.startswith("collection_"):
+                theme_key = column[len("collection_") :]
+            else:
+                theme_key = column
+            active_themes.append(theme_key)
+            theme_counter[theme_key] += 1
+
+        if not active_themes:
+            continue
+        reports_with_theme += 1
+        theme_assignments += len(active_themes)
+
+        receivers = _split_dashboard_receivers(row.get("receiver"))
+        coroner = _normalise_dashboard_value(row.get("coroner"))
+        area = _normalise_dashboard_value(row.get("area"))
+
+        for receiver_name in receivers:
+            receiver_counter[receiver_name] += 1
+        if coroner:
+            coroner_counter[coroner] += 1
+        if area:
+            area_counter[area] += 1
+
+        for theme_key in active_themes:
+            for receiver_name in receivers:
+                edge_theme_receiver[(theme_key, receiver_name)] += 1
+            if coroner:
+                edge_theme_coroner[(theme_key, coroner)] += 1
+            if area:
+                edge_theme_area[(theme_key, area)] += 1
+
+    if reports_with_theme == 0:
+        return _build_non_theme_payload()
+
+    min_count_for_node = 1 if reports_shown <= 250 else 2
+    min_count_for_edge = 1 if reports_shown <= 200 else 2
+
+    top_themes = _network_top_items(
+        theme_counter,
+        limit=NETWORK_THEME_TOP_N,
+        min_value=min_count_for_node,
+    )
+    top_receivers = _network_top_items(
+        receiver_counter,
+        limit=NETWORK_RECEIVER_TOP_N,
+        min_value=min_count_for_node,
+    )
+    top_coroners = _network_top_items(
+        coroner_counter,
+        limit=NETWORK_CORONER_TOP_N,
+        min_value=min_count_for_node,
+    )
+    top_areas = _network_top_items(
+        area_counter,
+        limit=NETWORK_AREA_TOP_N,
+        min_value=min_count_for_node,
+    )
+
+    selected_themes = set(top_themes)
+    selected_receivers = set(top_receivers)
+    selected_coroners = set(top_coroners)
+    selected_areas = set(top_areas)
+
+    edges: list[dict[str, Any]] = []
+    for (theme_key, receiver_name), count in edge_theme_receiver.items():
+        if count < min_count_for_edge:
+            continue
+        if theme_key not in selected_themes or receiver_name not in selected_receivers:
+            continue
+        edges.append(
+            {
+                "source": _network_node_id("theme", theme_key),
+                "target": _network_node_id("receiver", receiver_name),
+                "value": int(count),
+                "kind": "theme_receiver",
+            }
+        )
+
+    for (theme_key, coroner_name), count in edge_theme_coroner.items():
+        if count < min_count_for_edge:
+            continue
+        if theme_key not in selected_themes or coroner_name not in selected_coroners:
+            continue
+        edges.append(
+            {
+                "source": _network_node_id("theme", theme_key),
+                "target": _network_node_id("coroner", coroner_name),
+                "value": int(count),
+                "kind": "theme_coroner",
+            }
+        )
+
+    for (theme_key, area_name), count in edge_theme_area.items():
+        if count < min_count_for_edge:
+            continue
+        if theme_key not in selected_themes or area_name not in selected_areas:
+            continue
+        edges.append(
+            {
+                "source": _network_node_id("theme", theme_key),
+                "target": _network_node_id("area", area_name),
+                "value": int(count),
+                "kind": "theme_area",
+            }
+        )
+
+    edges.sort(key=lambda item: (-int(item["value"]), str(item["source"]), str(item["target"])))
+    if len(edges) > NETWORK_EDGE_MAX:
+        edges = edges[:NETWORK_EDGE_MAX]
+
+    connected_node_ids: set[str] = set()
+    for edge in edges:
+        connected_node_ids.add(str(edge["source"]))
+        connected_node_ids.add(str(edge["target"]))
+
+    node_rows: list[dict[str, Any]] = []
+
+    def add_nodes(
+        node_type: str,
+        values: list[str],
+        *,
+        counter: Counter[str],
+        label_fn: Optional[Callable[[str], str]] = None,
+    ) -> None:
+        labels = label_fn or (lambda value: value)
+        for value in values:
+            node_id = _network_node_id(node_type, value)
+            if connected_node_ids and node_id not in connected_node_ids:
+                continue
+            node_rows.append(
+                {
+                    "id": node_id,
+                    "name": str(labels(value)),
+                    "type": node_type,
+                    "value": int(counter.get(value, 0)),
+                    "raw_key": str(value),
+                }
+            )
+
+    add_nodes("theme", top_themes, counter=theme_counter, label_fn=_network_theme_label)
+    add_nodes("receiver", top_receivers, counter=receiver_counter)
+    add_nodes("coroner", top_coroners, counter=coroner_counter)
+    add_nodes("area", top_areas, counter=area_counter)
+
+    if not node_rows:
+        fallback_themes = top_themes[: min(24, len(top_themes))]
+        for theme_key in fallback_themes:
+            node_rows.append(
+                {
+                    "id": _network_node_id("theme", theme_key),
+                    "name": _network_theme_label(theme_key),
+                    "type": "theme",
+                    "value": int(theme_counter.get(theme_key, 0)),
+                    "raw_key": str(theme_key),
+                }
+            )
+        edges = []
+
+    type_ranges = {
+        "theme": (18.0, 44.0),
+        "receiver": (14.0, 30.0),
+        "coroner": (13.0, 28.0),
+        "area": (12.0, 26.0),
+    }
+    values_by_type: dict[str, list[int]] = {"theme": [], "receiver": [], "coroner": [], "area": []}
+    for row in node_rows:
+        values_by_type[str(row["type"])].append(int(row["value"]))
+    extrema: dict[str, tuple[int, int]] = {}
+    for node_type, values in values_by_type.items():
+        if not values:
+            extrema[node_type] = (0, 0)
+            continue
+        extrema[node_type] = (min(values), max(values))
+
+    nodes: list[dict[str, Any]] = []
+    for row in node_rows:
+        node_type = str(row["type"])
+        minimum, maximum = extrema.get(node_type, (0, 0))
+        size_floor, size_ceiling = type_ranges.get(node_type, (12.0, 28.0))
+        nodes.append(
+            {
+                "id": str(row["id"]),
+                "name": str(row["name"]),
+                "type": node_type,
+                "raw_key": str(row["raw_key"]),
+                "value": int(row["value"]),
+                "size": _network_scale_node_size(
+                    int(row["value"]),
+                    minimum,
+                    maximum,
+                    size_floor,
+                    size_ceiling,
+                ),
+            }
+        )
+
+    node_ids = {row["id"] for row in nodes}
+    edges = [
+        edge
+        for edge in edges
+        if str(edge["source"]) in node_ids and str(edge["target"]) in node_ids
+    ]
+
+    max_edge_weight = max((int(edge["value"]) for edge in edges), default=1)
+    default_node_limit = min(180, max(24, len(nodes)))
+    max_node_limit = max(default_node_limit, min(420, max(80, len(nodes))))
+    top_theme_key = top_themes[0] if top_themes else ""
+
+    return {
+        "selected": normalised_filters,
+        "summary": {
+            "reports_shown": reports_shown,
+            "reports_total": reports_total,
+            "reports_with_theme": int(reports_with_theme),
+            "theme_assignments": int(theme_assignments),
+            "nodes": int(len(nodes)),
+            "edges": int(len(edges)),
+            "top_theme": {
+                "name": _network_theme_label(top_theme_key) if top_theme_key else "-",
+                "count": int(theme_counter.get(top_theme_key, 0)),
+            },
+        },
+        "graph": {
+            "nodes": nodes,
+            "edges": edges,
+        },
+        "options": {
+            "max_edge_weight": int(max_edge_weight),
+            "default_min_edge_weight": int(min_count_for_edge),
+            "max_node_limit": int(max_node_limit),
+            "default_node_limit": int(default_node_limit),
+            "available_types": ["theme", "receiver", "coroner", "area"],
+        },
+    }
+
+
 def _parse_explore_filter_values(values: list[str]) -> list[str]:
     unique: dict[str, str] = {}
     for value in values:
@@ -953,6 +1547,259 @@ def _apply_explore_dashboard_filters(
         )
         filtered_df = filtered_df.loc[receiver_mask]
 
+    return filtered_df.reset_index(drop=True)
+
+
+def _request_has_network_scope_query(request: HttpRequest) -> bool:
+    return any(key in request.GET for key in NETWORK_SCOPE_QUERY_KEYS)
+
+
+def _parse_network_scope_controls(request: HttpRequest) -> dict[str, Any]:
+    search = str(request.GET.get("network_search") or "").strip()
+    focus_node = str(request.GET.get("network_focus") or "").strip()
+
+    min_edge: Optional[int] = None
+    min_edge_raw = str(request.GET.get("network_min_edge") or "").strip()
+    if min_edge_raw:
+        try:
+            parsed = int(min_edge_raw)
+            if parsed > 0:
+                min_edge = parsed
+        except ValueError:
+            min_edge = None
+
+    node_limit: Optional[int] = None
+    node_limit_raw = str(request.GET.get("network_node_limit") or "").strip()
+    if node_limit_raw:
+        try:
+            parsed = int(node_limit_raw)
+            if parsed > 0:
+                node_limit = parsed
+        except ValueError:
+            node_limit = None
+
+    types: list[str] = []
+    seen: set[str] = set()
+    for raw_value in request.GET.getlist("network_type"):
+        cleaned = str(raw_value or "").strip().lower()
+        if not cleaned or cleaned in seen or cleaned not in NETWORK_NODE_TYPES:
+            continue
+        seen.add(cleaned)
+        types.append(cleaned)
+
+    return {
+        "search": search,
+        "focus_node": focus_node,
+        "min_edge": min_edge,
+        "node_limit": node_limit,
+        "types": types,
+    }
+
+
+def _network_scope_query_string(controls: dict[str, Any]) -> str:
+    pairs: list[tuple[str, str]] = []
+    search = str(controls.get("search") or "").strip()
+    if search:
+        pairs.append(("network_search", search))
+
+    focus_node = str(controls.get("focus_node") or "").strip()
+    if focus_node:
+        pairs.append(("network_focus", focus_node))
+
+    min_edge = controls.get("min_edge")
+    if isinstance(min_edge, int) and min_edge > 0:
+        pairs.append(("network_min_edge", str(min_edge)))
+
+    node_limit = controls.get("node_limit")
+    if isinstance(node_limit, int) and node_limit > 0:
+        pairs.append(("network_node_limit", str(node_limit)))
+
+    for value in controls.get("types", []):
+        cleaned = str(value or "").strip().lower()
+        if cleaned in NETWORK_NODE_TYPES:
+            pairs.append(("network_type", cleaned))
+
+    return urlencode(pairs, doseq=True)
+
+
+def _join_query_strings(*parts: str) -> str:
+    cleaned_parts = [str(part or "").strip("&") for part in parts if str(part or "").strip("&")]
+    return "&".join(cleaned_parts)
+
+
+def _network_visible_node_ids(payload: dict[str, Any], controls: dict[str, Any]) -> set[str]:
+    graph = payload.get("graph") if isinstance(payload, dict) else {}
+    if not isinstance(graph, dict):
+        return set()
+
+    raw_nodes = graph.get("nodes")
+    raw_edges = graph.get("edges")
+    nodes = raw_nodes if isinstance(raw_nodes, list) else []
+    edges = raw_edges if isinstance(raw_edges, list) else []
+    if not nodes:
+        return set()
+
+    normalised_nodes: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        node_id = str(node.get("id") or "").strip()
+        node_type = str(node.get("type") or "").strip().lower()
+        if not node_id or node_type not in NETWORK_NODE_TYPES:
+            continue
+        normalised_nodes.append(
+            {
+                "id": node_id,
+                "name": str(node.get("name") or "").strip(),
+                "type": node_type,
+                "raw_key": str(node.get("raw_key") or "").strip(),
+                "value": int(node.get("value") or 0),
+            }
+        )
+    if not normalised_nodes:
+        return set()
+
+    normalised_edges: list[dict[str, Any]] = []
+    for edge in edges:
+        if not isinstance(edge, dict):
+            continue
+        source = str(edge.get("source") or "").strip()
+        target = str(edge.get("target") or "").strip()
+        if not source or not target:
+            continue
+        try:
+            value = int(edge.get("value") or 0)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:
+            continue
+        normalised_edges.append({"source": source, "target": target, "value": value})
+
+    selected_types = {
+        str(value or "").strip().lower()
+        for value in controls.get("types", [])
+        if str(value or "").strip().lower() in NETWORK_NODE_TYPES
+    }
+    if not selected_types:
+        selected_types = set(NETWORK_NODE_TYPES)
+
+    max_nodes = controls.get("node_limit")
+    if isinstance(max_nodes, int) and max_nodes > 0:
+        node_limit = max(24, max_nodes)
+    else:
+        node_limit = max(24, len(normalised_nodes))
+
+    min_edge = controls.get("min_edge")
+    if isinstance(min_edge, int) and min_edge > 0:
+        min_edge_weight = max(1, min_edge)
+    else:
+        min_edge_weight = 1
+
+    focus_node = str(controls.get("focus_node") or "").strip()
+    search_term = str(controls.get("search") or "").strip().casefold()
+
+    candidate_nodes = [node for node in normalised_nodes if node["type"] in selected_types]
+    candidate_nodes.sort(key=lambda row: (-int(row["value"]), str(row["name"]).casefold()))
+    candidate_nodes = candidate_nodes[:node_limit]
+
+    node_ids = {node["id"] for node in candidate_nodes}
+    candidate_edges = [
+        edge
+        for edge in normalised_edges
+        if edge["value"] >= min_edge_weight
+        and edge["source"] in node_ids
+        and edge["target"] in node_ids
+    ]
+
+    connected_ids: set[str] = set()
+    for edge in candidate_edges:
+        connected_ids.add(edge["source"])
+        connected_ids.add(edge["target"])
+    if candidate_edges:
+        candidate_nodes = [node for node in candidate_nodes if node["id"] in connected_ids]
+
+    if focus_node and any(node["id"] == focus_node for node in candidate_nodes):
+        expanded_focus_ids = {focus_node}
+        for edge in candidate_edges:
+            if edge["source"] == focus_node or edge["target"] == focus_node:
+                expanded_focus_ids.add(edge["source"])
+                expanded_focus_ids.add(edge["target"])
+        candidate_nodes = [node for node in candidate_nodes if node["id"] in expanded_focus_ids]
+        keep_ids = {node["id"] for node in candidate_nodes}
+        candidate_edges = [
+            edge
+            for edge in candidate_edges
+            if edge["source"] in keep_ids and edge["target"] in keep_ids
+        ]
+
+    if search_term:
+        directly_matched_ids = {
+            node["id"]
+            for node in candidate_nodes
+            if search_term in node["name"].casefold()
+            or search_term in node["raw_key"].casefold()
+            or search_term in NETWORK_TYPE_LABELS.get(node["type"], "").casefold()
+        }
+        expanded_match_ids = set(directly_matched_ids)
+        for edge in candidate_edges:
+            if edge["source"] in directly_matched_ids or edge["target"] in directly_matched_ids:
+                expanded_match_ids.add(edge["source"])
+                expanded_match_ids.add(edge["target"])
+        candidate_nodes = [node for node in candidate_nodes if node["id"] in expanded_match_ids]
+
+    return {node["id"] for node in candidate_nodes}
+
+
+def _network_row_node_ids(row: pd.Series, theme_columns: list[str]) -> set[str]:
+    node_ids: set[str] = set()
+
+    for column in theme_columns:
+        if not _network_truthy(row.get(column)):
+            continue
+        if column.startswith("theme_"):
+            theme_key = column[len("theme_") :]
+        elif column.startswith("collection_"):
+            theme_key = column[len("collection_") :]
+        else:
+            theme_key = column
+        node_ids.add(_network_node_id("theme", theme_key))
+
+    for receiver_name in _split_dashboard_receivers(row.get("receiver")):
+        node_ids.add(_network_node_id("receiver", receiver_name))
+
+    coroner = _normalise_dashboard_value(row.get("coroner"))
+    if coroner:
+        node_ids.add(_network_node_id("coroner", coroner))
+
+    area = _normalise_dashboard_value(row.get("area"))
+    if area:
+        node_ids.add(_network_node_id("area", area))
+
+    return node_ids
+
+
+def _apply_network_scope_filters_to_reports(
+    reports_df: pd.DataFrame,
+    controls: dict[str, Any],
+) -> pd.DataFrame:
+    if reports_df.empty:
+        return reports_df
+
+    payload = _build_network_graph_payload(
+        reports_df,
+        selected_filters={"coroner": [], "area": [], "receiver": []},
+    )
+    visible_node_ids = _network_visible_node_ids(payload, controls)
+    if not visible_node_ids:
+        return reports_df.iloc[0:0].copy().reset_index(drop=True)
+
+    theme_columns = _network_theme_columns(reports_df)
+    mask: list[bool] = []
+    for _, row in reports_df.iterrows():
+        row_node_ids = _network_row_node_ids(row, theme_columns)
+        mask.append(bool(row_node_ids.intersection(visible_node_ids)))
+
+    filtered_df = reports_df.loc[pd.Series(mask, index=reports_df.index)]
     return filtered_df.reset_index(drop=True)
 
 
@@ -1694,6 +2541,10 @@ def _build_context(request: HttpRequest, *, include_dashboard_payload: bool = Fa
     excluded_reports_df = _get_excluded_reports_df(session)
     dashboard_filters = _get_explore_dashboard_filters(request)
     reports_df = _apply_explore_dashboard_filters(reports_df_full, dashboard_filters)
+    network_scope_controls = _parse_network_scope_controls(request)
+    has_network_scope_query = _request_has_network_scope_query(request)
+    if has_network_scope_query:
+        reports_df = _apply_network_scope_filters_to_reports(reports_df, network_scope_controls)
     theme_summary_df = get_dataframe(session, "theme_summary_table")
     feature_grid_raw = _get_feature_grid_df(request, use_default=False)
     feature_grid_df = feature_grid_raw if not feature_grid_raw.empty else _get_feature_grid_df(request, use_default=True)
@@ -1722,7 +2573,10 @@ def _build_context(request: HttpRequest, *, include_dashboard_payload: bool = Fa
     page_start = (page - 1) * page_size
     page_end = page_start + page_size
     reports_page_df = reports_df.iloc[page_start:page_end].copy()
-    reports_columns, reports_rows = _dataset_table_rows(reports_page_df, include_reason=False)
+    reports_columns, reports_rows = _dataset_table_rows(
+        _display_dataset_df(reports_page_df),
+        include_reason=False,
+    )
     earliest_display = "-"
     latest_display = "-"
     if not reports_df.empty and "date" in reports_df.columns:
@@ -1761,6 +2615,8 @@ def _build_context(request: HttpRequest, *, include_dashboard_payload: bool = Fa
     history_depth = len(session.get("history", []))
     redo_depth = len(session.get("redo_history", []))
     dashboard_filter_query = _workbook_filter_query(dashboard_filters)
+    network_scope_query = _network_scope_query_string(network_scope_controls) if has_network_scope_query else ""
+    dataset_shared_query = _join_query_strings(dashboard_filter_query, network_scope_query)
     report_limit = _normalise_report_limit(session.get("report_limit"))
     if isinstance(report_limit, int) and report_limit > 0:
         report_limit_for_slider = min(7000, max(1, report_limit))
@@ -1836,6 +2692,7 @@ def _build_context(request: HttpRequest, *, include_dashboard_payload: bool = Fa
         "dashboard_selected_areas": dashboard_filters["area"],
         "dashboard_selected_receivers": dashboard_filters["receiver"],
         "dashboard_filter_query": dashboard_filter_query,
+        "dataset_shared_query": dataset_shared_query,
         "dataset_panel_base": "/dataset-panel/",
         "dataset_browser_base": "?page=",
         **excluded_context,
@@ -1885,6 +2742,7 @@ def _render_sitemap_xml(request: HttpRequest) -> HttpResponse:
             (reverse("workbench:index"), "daily", "1.0", None),
             (reverse("workbench:browse"), "daily", "0.9", None),
             (reverse("workbench:explore"), "daily", "0.9", None),
+            (reverse("workbench:network"), "daily", "0.8", None),
             (reverse("workbench:themes"), "weekly", "0.7", None),
             (reverse("workbench:extract"), "weekly", "0.7", None),
             (reverse("workbench:for_coders"), "weekly", "0.6", None),
@@ -2587,7 +3445,10 @@ def _build_shared_dataset_context(
     page_start = (page - 1) * page_size
     page_end = page_start + page_size
     reports_page_df = filtered_df.iloc[page_start:page_end].copy()
-    reports_columns, reports_rows = _dataset_table_rows(reports_page_df, include_reason=False)
+    reports_columns, reports_rows = _dataset_table_rows(
+        _display_dataset_df(reports_page_df),
+        include_reason=False,
+    )
 
     earliest_display = "-"
     latest_display = "-"
@@ -2628,6 +3489,7 @@ def _build_shared_dataset_context(
         f"{prefix}dashboard_selected_areas": dashboard_filters["area"],
         f"{prefix}dashboard_selected_receivers": dashboard_filters["receiver"],
         f"{prefix}dashboard_filter_query": dashboard_filter_query,
+        f"{prefix}dataset_shared_query": dashboard_filter_query,
         f"{prefix}dataset_available": not filtered_df.empty,
         f"{prefix}dataset_panel_base": panel_base,
         f"{prefix}dataset_browser_base": browser_base,
@@ -3374,6 +4236,55 @@ def explore(request: HttpRequest) -> HttpResponse:
 
 
 @require_http_methods(["GET", "POST"])
+def network_page(request: HttpRequest) -> HttpResponse:
+    started_at = perf_counter()
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+
+    if request.method == "POST":
+        response = _handle_post_action(request)
+        if response is not None:
+            return response
+        query = request.GET.urlencode()
+        target = reverse("workbench:network")
+        if query:
+            target = f"{target}?{query}"
+        return redirect(target)
+
+    context = _build_context(request)
+    reports_df = _get_reports_df_with_row_ids(request.session)
+    selected_filters = _get_explore_dashboard_filters(request)
+    context["network_graph_payload"] = _build_network_graph_payload(
+        reports_df,
+        selected_filters=selected_filters,
+    )
+    context["network_data_base"] = reverse("workbench:network_data")
+    active_workbook, workbook_editable = _resolve_active_workbook(request)
+    context["active_workbook"] = active_workbook
+    context["active_workbook_editable"] = workbook_editable
+    context["active_workbook_id"] = str(active_workbook.public_id) if active_workbook else ""
+    context["active_workbook_edit_token"] = (
+        str(active_workbook.edit_token) if active_workbook and workbook_editable else ""
+    )
+    _set_explore_modal_flag(request, context, "network")
+    context["current_page"] = "network"
+    context.update(
+        _build_seo_context(
+            request,
+            "network",
+            canonical_path=reverse("workbench:network"),
+        )
+    )
+    _log_timed_event(
+        "network_page",
+        started_at,
+        report_count=context.get("reports_count", 0),
+        graph_nodes=context.get("network_graph_payload", {}).get("summary", {}).get("nodes", 0),
+    )
+    return render(request, "workbench/network.html", context)
+
+
+@require_http_methods(["GET", "POST"])
 def filter_page(request: HttpRequest) -> HttpResponse:
     if request.method == "POST":
         init_state(request.session)
@@ -3560,6 +4471,27 @@ def dashboard_data(request: HttpRequest) -> HttpResponse:
         started_at,
         report_count=payload.get("summary", {}).get("reports_shown", 0),
         selected_filters=sum(len(values) for values in selected_filters.values()),
+    )
+    return JsonResponse(payload)
+
+
+@require_http_methods(["GET"])
+def network_data(request: HttpRequest) -> HttpResponse:
+    started_at = perf_counter()
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    reports_df = _get_reports_df_with_row_ids(request.session)
+    selected_filters = _get_explore_dashboard_filters(request)
+    payload = _build_network_graph_payload(
+        reports_df,
+        selected_filters=selected_filters,
+    )
+    _log_timed_event(
+        "network_data",
+        started_at,
+        report_count=payload.get("summary", {}).get("reports_shown", 0),
+        graph_nodes=payload.get("summary", {}).get("nodes", 0),
+        graph_edges=payload.get("summary", {}).get("edges", 0),
     )
     return JsonResponse(payload)
 

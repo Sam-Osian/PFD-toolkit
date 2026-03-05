@@ -63,6 +63,116 @@ class WorkbenchViewTests(TestCase):
             ],
         )
 
+    def test_network_page_renders_graph_payload(self) -> None:
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England; CQC",
+                    "theme_suicide": True,
+                    "theme_medication_safety": True,
+                },
+                {
+                    "date": "2024-02-20",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_suicide": True,
+                    "theme_medication_safety": False,
+                },
+                {
+                    "date": "2024-03-11",
+                    "coroner": "B. Example",
+                    "area": "Merseyside",
+                    "receiver": "CQC",
+                    "theme_suicide": False,
+                    "theme_medication_safety": True,
+                },
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        response = self.client.get(reverse("workbench:network"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Interconnected signal map")
+
+        payload = response.context["network_graph_payload"]
+        self.assertEqual(payload["summary"]["reports_shown"], 3)
+        self.assertGreaterEqual(payload["summary"]["nodes"], 2)
+        self.assertGreaterEqual(payload["summary"]["edges"], 1)
+        self.assertTrue(any(node["type"] == "theme" for node in payload["graph"]["nodes"]))
+
+    def test_network_data_endpoint_returns_json_payload(self) -> None:
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_suicide": True,
+                },
+                {
+                    "date": "2024-02-20",
+                    "coroner": "B. Example",
+                    "area": "Merseyside",
+                    "receiver": "CQC",
+                    "theme_suicide": True,
+                },
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("summary", payload)
+        self.assertIn("graph", payload)
+        self.assertIn("options", payload)
+        self.assertEqual(payload["summary"]["reports_shown"], 2)
+
+    def test_explore_hides_theme_columns_but_network_uses_them(self) -> None:
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_suicide": True,
+                },
+                {
+                    "date": "2024-02-20",
+                    "coroner": "B. Example",
+                    "area": "Merseyside",
+                    "receiver": "CQC",
+                    "theme_suicide": True,
+                },
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        explore_response = self.client.get(reverse("workbench:explore"))
+        self.assertEqual(explore_response.status_code, 200)
+        self.assertNotContains(explore_response, "theme_suicide")
+
+        network_response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(network_response.status_code, 200)
+        network_payload = network_response.json()
+        self.assertGreaterEqual(len(network_payload.get("graph", {}).get("nodes", [])), 1)
+        self.assertGreaterEqual(len(network_payload.get("graph", {}).get("edges", [])), 1)
+
     def test_exclude_and_restore_report_updates_working_dataset(self) -> None:
         reports_df = pd.DataFrame(
             [

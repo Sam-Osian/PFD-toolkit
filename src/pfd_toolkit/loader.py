@@ -48,29 +48,35 @@ def _normalise_collection_name(raw_value: str) -> str:
     value = _normalise_theme_name(raw_value).strip()
     return _COLLECTION_ALIASES.get(value, value)
 
-def _ensure_dataset(force_download: bool = False) -> Path:
-    """Download the dataset if not already cached and return its path.
+def _ensure_cached_dataset(
+    cache_file: Path,
+    *,
+    dataset_url: str,
+    force_download: bool = False,
+) -> Path:
+    if force_download and cache_file.exists():
+        cache_file.unlink()
 
-    Parameters
-    ----------
-    force_download : bool, optional
-        If ``True``, delete any cached file before downloading a fresh copy.
-        Defaults to ``False``.
-    """
-    if force_download and _CACHE_FILE.exists():
-        _CACHE_FILE.unlink()
-
-    if not _CACHE_FILE.exists():
+    if not cache_file.exists():
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
         try:
-            resp = requests.get(_DATA_URL, timeout=30)
+            resp = requests.get(dataset_url, timeout=30)
             resp.raise_for_status()
-            _CACHE_FILE.write_bytes(resp.content)
+            cache_file.write_bytes(resp.content)
         except Exception as exc:  # pragma: no cover - network failure
             raise FileNotFoundError(
                 "Failed to download dataset from GitHub release"
             ) from exc
-    return _CACHE_FILE
+    return cache_file
+
+
+def _ensure_dataset(force_download: bool = False) -> Path:
+    """Download the base dataset if not already cached and return its path."""
+    return _ensure_cached_dataset(
+        _CACHE_FILE,
+        dataset_url=_DATA_URL,
+        force_download=force_download,
+    )
 
 
 def _reset_dataframe_cache() -> None:

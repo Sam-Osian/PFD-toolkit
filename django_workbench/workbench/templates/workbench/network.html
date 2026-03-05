@@ -5,33 +5,113 @@
 {% endblock %}
 
 {% block content %}
-<div class="workbench explore-workbench os-workbench">
+<div class="workbench explore-workbench">
     {% include "workbench/_workspace_hud.html" %}
 
-    <section class="explore-surface os-network-shell reveal-up">
-        <div class="section-card-header">
-            <span class="section-kicker">Network</span>
-            <h3>Relationship map</h3>
-            <p>Preview graph-ready signals from the same active workspace. This area is ready for network visual modules.</p>
+    <section
+        class="explore-surface network-surface reveal-up"
+        id="network-analysis"
+        data-network-data-base="{{ network_data_base|default:'/network-data/' }}"
+    >
+        <div class="section-card-header section-card-header--inline">
+            <div>
+                <span class="section-kicker">Network analysis</span>
+                <h3>Interconnected signal map</h3>
+                <p id="network-status">Loading network graph...</p>
+            </div>
+            <div class="network-header-actions">
+                <button type="button" class="button-secondary" id="network-refresh-data">Refresh data</button>
+                <button type="button" class="button-secondary" id="network-reset-controls">Reset controls</button>
+                <button type="button" class="button-secondary" id="network-fit-graph">Refocus graph</button>
+            </div>
         </div>
-        <div class="os-network-metrics">
-            <article class="os-mini-card">
-                <span class="os-mini-card__label">Active reports</span>
-                <strong>{{ reports_count }}</strong>
+
+        <div class="network-control-grid">
+            <section class="network-control-card network-control-card--search">
+                <label for="network-search-query">Find node</label>
+                <div class="network-search-picker">
+                    <input
+                        id="network-search-query"
+                        type="search"
+                        placeholder="Type to filter nodes, then select one..."
+                        autocomplete="off"
+                    >
+                    <button type="button" class="button-secondary network-search-clear" id="network-search-clear">Clear</button>
+                </div>
+                <div class="network-search-dropdown hidden" id="network-search-dropdown" role="listbox" aria-label="Node search results"></div>
+                <p class="network-search-selection" id="network-search-selection">No node selected.</p>
+            </section>
+            <section class="network-control-card">
+                <label for="network-layout">Layout</label>
+                <select id="network-layout">
+                    <option value="force" selected>Force-directed</option>
+                    <option value="circular">Circular</option>
+                </select>
+            </section>
+            <section class="network-control-card">
+                <label for="network-node-limit">Max nodes <span id="network-node-limit-value"></span></label>
+                <input id="network-node-limit" type="range" min="24" max="240" value="140" step="1">
+            </section>
+            <section class="network-control-card">
+                <label for="network-min-edge">Minimum edge weight <span id="network-min-edge-value"></span></label>
+                <input id="network-min-edge" type="range" min="1" max="10" value="1" step="1">
+            </section>
+            <section class="network-control-card network-control-card--types">
+                <span>Node types</span>
+                <label class="checkbox"><input type="checkbox" value="theme" data-network-type checked> <span>Themes</span></label>
+                <label class="checkbox"><input type="checkbox" value="receiver" data-network-type checked> <span>Receivers</span></label>
+                <label class="checkbox"><input type="checkbox" value="coroner" data-network-type checked> <span>Coroners</span></label>
+                <label class="checkbox"><input type="checkbox" value="area" data-network-type checked> <span>Areas</span></label>
+            </section>
+        </div>
+
+        <div class="network-stat-grid">
+            <article class="network-stat-card">
+                <span class="network-stat-card__label">Reports in graph scope</span>
+                <strong class="network-stat-card__value" id="network-stat-reports">{{ network_graph_payload.summary.reports_shown|default:0 }}</strong>
             </article>
-            <article class="os-mini-card">
-                <span class="os-mini-card__label">Theme table</span>
-                <strong>{% if has_theme_summary %}Available{% else %}Not generated{% endif %}</strong>
+            <article class="network-stat-card">
+                <span class="network-stat-card__label">Nodes rendered</span>
+                <strong class="network-stat-card__value" id="network-stat-nodes">0</strong>
             </article>
-            <article class="os-mini-card">
-                <span class="os-mini-card__label">Dataset scope</span>
-                <strong>{{ earliest_display }} to {{ latest_display }}</strong>
+            <article class="network-stat-card">
+                <span class="network-stat-card__label">Edges rendered</span>
+                <strong class="network-stat-card__value" id="network-stat-edges">0</strong>
+            </article>
+            <article class="network-stat-card">
+                <span class="network-stat-card__label">Top theme</span>
+                <strong class="network-stat-card__value" id="network-stat-top-theme">{{ network_graph_payload.summary.top_theme.name|default:"-" }}</strong>
+            </article>
+            <article class="network-stat-card">
+                <span class="network-stat-card__label" id="network-stat-degree-label">Highest degree</span>
+                <strong class="network-stat-card__value" id="network-stat-degree-node">-</strong>
+                <span class="network-stat-card__meta" id="network-stat-degree-score">-</span>
+            </article>
+            <article class="network-stat-card">
+                <span class="network-stat-card__label" id="network-stat-bridge-label">Highest betweenness</span>
+                <strong class="network-stat-card__value" id="network-stat-bridge-node">-</strong>
+                <span class="network-stat-card__meta" id="network-stat-bridge-score">-</span>
             </article>
         </div>
-        <div class="os-network-canvas">
-            <span>Network visualisation modules can plug in here without breaking workflow state continuity.</span>
+
+        <div class="network-main-grid">
+            <article class="network-graph-card">
+                <div class="network-graph-canvas" id="network-graph-canvas" role="img" aria-label="Interactive network graph of report links"></div>
+            </article>
+            <aside class="network-focus-card">
+                <h4>Focus details</h4>
+                <p class="network-focus-empty" id="network-focus-empty">Click a node in the graph to inspect its strongest links.</p>
+                <div class="network-focus-body hidden" id="network-focus-body">
+                    <h5 id="network-focus-title"></h5>
+                    <p id="network-focus-meta"></p>
+                    <ul class="network-focus-links" id="network-focus-links"></ul>
+                    <div class="network-focus-targets" id="network-focus-targets"></div>
+                </div>
+            </aside>
         </div>
     </section>
+
+    {{ network_graph_payload|json_script:"network-graph-data" }}
 
     {% include "workbench/_workspace_dataset.html" %}
 </div>
