@@ -2968,7 +2968,6 @@ def workbook_clone(request: HttpRequest, share_number: int, title_slug: str) -> 
 @require_http_methods(["GET"])
 def index(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
-    _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
     context["current_page"] = "home"
     context.update(
@@ -2989,7 +2988,6 @@ def home(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def privacy_policy(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
-    _ensure_workspace_reports_loaded(request)
     context = _build_context(request)
     context["current_page"] = "privacy_policy"
     context["privacy_policy_last_updated"] = "17 February 2026"
