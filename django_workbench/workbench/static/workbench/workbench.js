@@ -2826,8 +2826,6 @@
         const searchSelection = byId("network-search-selection");
         const searchClearButton = byId("network-search-clear");
         const layoutSelect = byId("network-layout");
-        const nodeLimitInput = byId("network-node-limit");
-        const nodeLimitValue = byId("network-node-limit-value");
         const minEdgeInput = byId("network-min-edge");
         const minEdgeValue = byId("network-min-edge-value");
         const typeInputs = Array.from(root.querySelectorAll("[data-network-type]"));
@@ -2864,8 +2862,6 @@
             !searchSelection ||
             !searchClearButton ||
             !layoutSelect ||
-            !nodeLimitInput ||
-            !nodeLimitValue ||
             !minEdgeInput ||
             !minEdgeValue ||
             !typeInputs.length ||
@@ -2969,6 +2965,7 @@
         let currentNodesById = new Map();
         let currentEdges = [];
         let searchDropdownIntentOpen = false;
+        let currentNodeLimit = 120;
         let currentCentrality = {
             degree: new Map(),
             betweenness: new Map(),
@@ -3085,18 +3082,14 @@
             minEdgeInput.min = "1";
             minEdgeInput.max = String(maxEdgeWeight);
             minEdgeInput.step = "1";
-            nodeLimitInput.min = "24";
-            nodeLimitInput.max = String(maxNodeLimit);
-            nodeLimitInput.step = "1";
 
             if (!preserveValues) {
                 minEdgeInput.value = String(defaultMinEdgeWeight);
-                nodeLimitInput.value = String(defaultNodeLimit);
+                currentNodeLimit = defaultNodeLimit;
             } else {
                 const clampedMinEdge = Math.min(maxEdgeWeight, Math.max(1, Number(minEdgeInput.value || 1)));
-                const clampedNodeLimit = Math.min(maxNodeLimit, Math.max(24, Number(nodeLimitInput.value || defaultNodeLimit)));
                 minEdgeInput.value = String(clampedMinEdge);
-                nodeLimitInput.value = String(clampedNodeLimit);
+                currentNodeLimit = Math.min(maxNodeLimit, Math.max(24, Number(currentNodeLimit || defaultNodeLimit)));
             }
 
             statReports.textContent = Number(summary.reports_shown || 0).toLocaleString();
@@ -3510,7 +3503,6 @@
                 params.delete("network_selected_node");
             }
             params.set("network_min_edge", String(Math.max(1, Number(minEdgeInput.value || 1))));
-            params.set("network_node_limit", String(Math.max(24, Number(nodeLimitInput.value || 120))));
             params.delete("network_type");
             typeInputs.forEach((input) => {
                 if (input.checked) {
@@ -3551,11 +3543,10 @@
         function renderGraph() {
             const selectedTypes = getSelectedTypes();
             const minEdgeWeight = Math.max(1, Number(minEdgeInput.value || 1));
-            const maxNodes = Math.max(24, Number(nodeLimitInput.value || 120));
+            const maxNodes = Math.max(24, Number(currentNodeLimit || 120));
             const layout = layoutSelect.value === "circular" ? "circular" : "force";
 
             minEdgeValue.textContent = `${minEdgeWeight}`;
-            nodeLimitValue.textContent = `${maxNodes}`;
 
             let candidateNodes = sourceNodes.filter((node) => selectedTypes.has(node.type));
             candidateNodes.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
@@ -3959,7 +3950,7 @@
                 Math.min(maxNodeLimit, Number(options.default_node_limit || maxNodeLimit))
             );
             minEdgeInput.value = String(defaultMinEdgeWeight);
-            nodeLimitInput.value = String(defaultNodeLimit);
+            currentNodeLimit = defaultNodeLimit;
             renderSearchDropdown();
             renderGraph();
         });
@@ -3974,7 +3965,6 @@
         });
 
         minEdgeInput.addEventListener("input", renderGraph);
-        nodeLimitInput.addEventListener("input", renderGraph);
         layoutSelect.addEventListener("change", renderGraph);
         searchQueryInput.addEventListener("input", function () {
             searchDropdownIntentOpen = true;
