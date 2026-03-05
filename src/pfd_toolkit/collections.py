@@ -9,7 +9,7 @@ COLLECTION_COLUMNS: dict[str, str] = {
     "nhs": "theme_sent_to_nhs_bodies",
     "gov_department": "theme_sent_to_government_departments",
     "prisons": "theme_sent_to_prisons",
-    "health_reg": "theme_sent_to_health_regulators",
+    "health_regulators": "theme_sent_to_health_regulators",
     "local_gov": "theme_sent_to_local_government",
 }
 
@@ -189,7 +189,7 @@ def apply_collection_columns(
     )
     _apply_collection_rule(
         reports,
-        collection_column=COLLECTION_COLUMNS["health_reg"],
+        collection_column=COLLECTION_COLUMNS["health_regulators"],
         matcher=_match_health_regulators,
         receiver_column=receiver_column,
         row_mask=row_mask,

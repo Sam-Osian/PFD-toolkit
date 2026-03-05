@@ -178,7 +178,7 @@ BROWSE_COLLECTIONS: tuple[dict[str, str], ...] = (
         "accent": "rose",
     },
     {
-        "slug": "health_reg",
+        "slug": "health_regulators",
         "title": "Health Regulators",
         "description": (
             "Reports sent to national health regulators and oversight bodies including "
@@ -201,9 +201,114 @@ BROWSE_COLLECTIONS: tuple[dict[str, str], ...] = (
     },
 )
 
+THEME_COLLECTION_SLUG_PREFIX = "theme"
+THEME_COLLECTION_NAME_OVERRIDES: dict[str, str] = {
+    "suicide_risk": "suicide",
+    "care_home_safety": "care_home",
+}
+THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
+    "suicide_risk": "Suicide",
+    "care_home_safety": "Care home deaths",
+}
+THEME_COLLECTION_DESCRIPTIONS: dict[str, str] = {
+    "access_to_care": "Delays, referral barriers, and service gaps that block timely care.",
+    "ambulance_response": "Dispatch, triage, and handover failures in ambulance pathways.",
+    "care_home_safety": "Preventable harm risks in care homes, including supervision and safeguarding gaps.",
+    "discharge_planning": "Unsafe discharges, weak follow-up, and poor handover into community care.",
+    "environmental_safety": "Physical environment hazards in care and public settings.",
+    "equipment_safety": "Safety failures involving medical devices, alarms, beds, or monitoring equipment.",
+    "falls_prevention": "Missed falls risk assessment, prevention measures, or care plan review.",
+    "family_involvement": "Insufficient communication with or involvement of families and carers.",
+    "hospital_care": "Inpatient care failures in monitoring, escalation, treatment, or handover.",
+    "infection_control": "Breakdowns in infection prevention, recognition, and outbreak control.",
+    "interagency_communication": "Cross-service information-sharing and coordination failures.",
+    "medication_safety": "Prescribing, dispensing, monitoring, or medicines communication errors.",
+    "mental_health_care": "Gaps in access, continuity, or coordination of mental health support.",
+    "observation_failures": "Inadequate checks, supervision, or patient monitoring processes.",
+    "online_hazards": "Harms linked to unregulated online access to dangerous products or information.",
+    "physical_health_in_mental_health": "Physical health needs missed or poorly managed in mental health settings.",
+    "record_keeping": "Incomplete, inaccurate, or inaccessible documentation and records.",
+    "road_safety": "Road design, signage, lighting, or maintenance risks contributing to fatalities.",
+    "safeguarding": "Missed safeguarding action for vulnerable adults and children.",
+    "staff_shortages": "Safety risks from understaffing, workload pressure, or workforce instability.",
+    "staff_training": "Insufficient staff training, induction, or competency refreshers.",
+    "substance_misuse": "Risk management failures around substance misuse and related prescribing.",
+    "suicide_risk": "Missed identification or management of suicide and self-harm risk.",
+    "vulnerable_groups": "Inadequate support for people with elevated vulnerability or complex needs.",
+}
 
-def _browse_collection_meta(collection_slug: str) -> dict[str, str]:
-    for collection in BROWSE_COLLECTIONS:
+
+def _theme_collection_slug(collection_name: str) -> str:
+    return f"{THEME_COLLECTION_SLUG_PREFIX}-{slugify(str(collection_name or '')).replace('-', '_')}"
+
+
+def _theme_collection_description(theme_name: str, pretty_title: str) -> str:
+    key = str(theme_name or "").strip().lower()
+    if key in THEME_COLLECTION_DESCRIPTIONS:
+        return THEME_COLLECTION_DESCRIPTIONS[key]
+    return f"Reports grouped under the {pretty_title} theme."
+
+
+def _theme_collection_title(theme_name: str) -> str:
+    key = str(theme_name or "").strip().lower()
+    if key in THEME_COLLECTION_TITLE_OVERRIDES:
+        return THEME_COLLECTION_TITLE_OVERRIDES[key]
+    return key.replace("_", " ").strip().title() or "Theme Collection"
+
+
+def _theme_collection_name(theme_name: str) -> str:
+    key = str(theme_name or "").strip().lower()
+    return THEME_COLLECTION_NAME_OVERRIDES.get(key, key)
+
+
+def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, dict[str, str]]:
+    accent_cycle = ("slate", "sky", "mint", "amber", "rose", "violet")
+    receiver_collection_columns = set(COLLECTION_COLUMNS.values())
+    theme_columns = sorted(
+        str(column)
+        for column in reports_df.columns
+        if str(column).startswith("theme_") and str(column) not in receiver_collection_columns
+    )
+
+    collections: dict[str, dict[str, str]] = {}
+    for idx, column in enumerate(theme_columns):
+        theme_name = column[len("theme_"):]
+        collection_name = _theme_collection_name(theme_name)
+        pretty_title = _theme_collection_title(theme_name)
+        slug = _theme_collection_slug(collection_name)
+        if not slug:
+            continue
+        collections[slug] = {
+            "slug": slug,
+            "title": pretty_title or "Theme Collection",
+            "description": _theme_collection_description(theme_name, pretty_title or theme_name),
+            "badge": "Theme collection",
+            "icon": "hgi-bulb",
+            "accent": accent_cycle[idx % len(accent_cycle)],
+            "collection_column": column,
+            "collection_name": collection_name,
+        }
+    return collections
+
+
+def _all_browse_collections(reports_df: pd.DataFrame) -> list[dict[str, str]]:
+    combined = [dict(collection) for collection in BROWSE_COLLECTIONS]
+    combined.extend(_theme_collection_map_from_reports(reports_df).values())
+    return combined
+
+
+def _collection_column_for_slug(collection_slug: str, reports_df: pd.DataFrame) -> str:
+    receiver_column = COLLECTION_COLUMNS.get(collection_slug, "")
+    if receiver_column:
+        return receiver_column
+    theme_meta = _theme_collection_map_from_reports(reports_df).get(collection_slug)
+    if theme_meta:
+        return str(theme_meta.get("collection_column", "")).strip()
+    return ""
+
+
+def _browse_collection_meta(collection_slug: str, reports_df: pd.DataFrame) -> dict[str, str]:
+    for collection in _all_browse_collections(reports_df):
         if collection["slug"] == collection_slug:
             return collection
     raise Http404("Collection not found.")
@@ -231,11 +336,20 @@ def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: st
             column for column in reports_with_collections.columns if not str(column).startswith("theme_")
         ]
         return reports_with_collections.loc[:, visible_columns].reset_index(drop=True).copy()
-    collection_column = COLLECTION_COLUMNS.get(collection_slug)
-    if not collection_column or collection_column not in reports_with_collections.columns:
-        return reports_with_collections.iloc[0:0].copy()
-    collection_mask = reports_with_collections[collection_column].fillna(False).astype(bool)
-    filtered_reports = reports_with_collections.loc[collection_mask].reset_index(drop=True)
+
+    if collection_slug in COLLECTION_COLUMNS:
+        filtered_reports = load_reports(refresh=False, collection=collection_slug)
+    else:
+        theme_meta = _theme_collection_map_from_reports(reports_with_collections).get(collection_slug)
+        if not theme_meta:
+            return reports_with_collections.iloc[0:0].copy()
+        collection_name = str(theme_meta.get("collection_name") or "").strip()
+        if not collection_name:
+            return reports_with_collections.iloc[0:0].copy()
+        filtered_reports = load_reports(refresh=False, collection=collection_name)
+
+    filtered_reports, _ = _ensure_workbench_row_ids(filtered_reports)
+    filtered_reports = _ensure_collection_columns_in_reports(filtered_reports)
     visible_columns = [
         column for column in filtered_reports.columns if not str(column).startswith("theme_")
     ]
@@ -3007,8 +3121,8 @@ def browse_page(request: HttpRequest) -> HttpResponse:
     context = _build_context(request)
     reports_df = _load_browse_reports_df()
     browse_collections: list[dict[str, str | int]] = []
-    for collection in BROWSE_COLLECTIONS:
-        collection_column = COLLECTION_COLUMNS.get(collection["slug"], "")
+    for collection in _all_browse_collections(reports_df):
+        collection_column = _collection_column_for_slug(collection["slug"], reports_df)
         collection_count = 0
         if collection["slug"] == "custom":
             collection_count = len(reports_df)
@@ -3036,8 +3150,8 @@ def browse_page(request: HttpRequest) -> HttpResponse:
 @require_http_methods(["GET"])
 def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpResponse:
     init_state(request.session)
-    collection = _browse_collection_meta(collection_slug)
     reports_df_full = _load_browse_reports_df()
+    collection = _browse_collection_meta(collection_slug, reports_df_full)
     reports_df = _reports_for_browse_collection(reports_df_full, collection_slug)
     panel_base = reverse("workbench:browse_collection_dataset_panel", kwargs={"collection_slug": collection_slug})
     browser_base = f"{reverse('workbench:browse_collection', kwargs={'collection_slug': collection_slug})}?page="
@@ -3092,10 +3206,11 @@ def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpRe
 @require_http_methods(["GET"])
 def browse_collection_dataset_panel(request: HttpRequest, collection_slug: str) -> HttpResponse:
     init_state(request.session)
-    _browse_collection_meta(collection_slug)
+    reports_df_full = _load_browse_reports_df()
+    _browse_collection_meta(collection_slug, reports_df_full)
 
     reports_df = _reports_for_browse_collection(
-        _load_browse_reports_df(),
+        reports_df_full,
         collection_slug,
     )
     panel_base = reverse("workbench:browse_collection_dataset_panel", kwargs={"collection_slug": collection_slug})
@@ -3115,10 +3230,11 @@ def browse_collection_dataset_panel(request: HttpRequest, collection_slug: str) 
 @require_http_methods(["GET"])
 def browse_collection_dashboard_data(request: HttpRequest, collection_slug: str) -> HttpResponse:
     init_state(request.session)
-    _browse_collection_meta(collection_slug)
+    reports_df_full = _load_browse_reports_df()
+    _browse_collection_meta(collection_slug, reports_df_full)
 
     reports_df = _reports_for_browse_collection(
-        _load_browse_reports_df(),
+        reports_df_full,
         collection_slug,
     )
     selected_filters = _get_explore_dashboard_filters(request)
@@ -3133,10 +3249,11 @@ def browse_collection_dashboard_data(request: HttpRequest, collection_slug: str)
 @require_http_methods(["POST"])
 def browse_collection_clone(request: HttpRequest, collection_slug: str) -> HttpResponse:
     init_state(request.session)
-    collection = _browse_collection_meta(collection_slug)
+    reports_df_full = _load_browse_reports_df()
+    collection = _browse_collection_meta(collection_slug, reports_df_full)
 
     reports_df = _reports_for_browse_collection(
-        _load_browse_reports_df(),
+        reports_df_full,
         collection_slug,
     )
     selected_filters = _get_post_dashboard_filters(request)

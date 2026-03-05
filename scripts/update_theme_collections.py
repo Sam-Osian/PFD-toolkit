@@ -53,7 +53,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--input",
         type=Path,
-        default=Path("scripts/data/all_reports_with_collections.csv"),
+        default=Path("all_reports.csv"),
     )
     parser.add_argument("--schema", type=Path, default=Path("scripts/theme_collections/approved_themes.json"))
     parser.add_argument("--model", default="gpt-4.1")

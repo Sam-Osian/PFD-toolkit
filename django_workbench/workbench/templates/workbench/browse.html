@@ -75,7 +75,7 @@
                             <path d="M48 12V60"></path>
                             <path d="M12 24H60"></path>
                         </svg>
-                    {% elif collection.slug == "health_reg" %}
+                    {% elif collection.slug == "health_regulators" %}
                         <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M36 12L55 19V34C55 46 47.5 55 36 60C24.5 55 17 46 17 34V19L36 12Z"></path>
                             <path d="M27 35L33 41L45 29"></path>
@@ -84,6 +84,10 @@
                         <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M49 30C49 39.1 36 49 36 49C36 49 23 39.1 23 30C23 22.8 28.8 17 36 17C43.2 17 49 22.8 49 30Z"></path>
                             <circle cx="36" cy="30" r="4"></circle>
+                        </svg>
+                    {% else %}
+                        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M36 10L43.5 27.5L62 30L48 43.5L51.5 62L36 53.5L20.5 62L24 43.5L10 30L28.5 27.5L36 10Z"></path>
                         </svg>
                     {% endif %}
                 </span>
@@ -98,11 +102,5 @@
         {% endfor %}
     </section>
 
-    <section class="browse-note reveal-up" aria-label="Collections roadmap">
-        <div class="browse-note__inner">
-            <span class="section-kicker">Coming soon</span>
-            <p>More curated collections will be added over time.</p>
-        </div>
-    </section>
 </div>
 {% endblock %}

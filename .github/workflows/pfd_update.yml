@@ -49,6 +49,7 @@ jobs:
           set +x
           uv run python scripts/update_reports.py
           uv run python scripts/update_collections.py
+          uv run python scripts/update_theme_collections.py
           set -x
 
       - name: Upload dataset to release

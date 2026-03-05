@@ -3369,7 +3369,9 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 }
 
 .browse-stage {
-    position: relative;
+    position: sticky;
+    top: 0.7rem;
+    z-index: 30;
     display: grid;
     grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
     gap: 1rem;
@@ -3855,6 +3857,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     }
 
     .browse-stage {
+        top: 0.55rem;
         grid-template-columns: 1fr;
         padding: 1.1rem;
     }
