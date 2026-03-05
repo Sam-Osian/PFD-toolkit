@@ -4086,6 +4086,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 .network-graph-card {
     min-height: 620px;
     padding: 0.5rem;
+    position: relative;
 }
 
 .network-graph-canvas {
@@ -4096,6 +4097,73 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     background:
         radial-gradient(120% 100% at 85% -10%, rgba(139, 174, 255, 0.08), rgba(9, 14, 33, 0) 64%),
         rgba(8, 12, 33, 0.66);
+}
+
+.network-graph-fullscreen-btn {
+    position: absolute;
+    top: 0.85rem;
+    right: 0.85rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 999px;
+    border: 1px solid rgba(165, 183, 255, 0.42);
+    background: rgba(10, 18, 46, 0.78);
+    color: rgba(236, 244, 255, 0.94);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 4;
+    cursor: pointer;
+}
+
+.network-graph-fullscreen-btn i {
+    font-size: 1rem;
+}
+
+.network-graph-fullscreen-btn:hover {
+    border-color: rgba(186, 205, 255, 0.68);
+    background: rgba(18, 30, 68, 0.92);
+}
+
+.network-graph-fullscreen-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.network-graph-fullscreen-btn--exit {
+    right: 3.55rem;
+}
+
+.network-graph-card:fullscreen,
+.network-graph-card:-webkit-full-screen {
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    border-radius: 0;
+    margin: 0;
+    padding: 1rem;
+    border: none;
+    background:
+        radial-gradient(120% 120% at 85% -10%, rgba(126, 161, 255, 0.16), rgba(5, 9, 23, 0) 58%),
+        rgba(3, 6, 17, 0.97);
+}
+
+.network-graph-card:fullscreen .network-graph-canvas,
+.network-graph-card:-webkit-full-screen .network-graph-canvas {
+    width: 100%;
+    height: calc(100vh - 2rem);
+    min-height: calc(100vh - 2rem);
+    border-radius: 14px;
+}
+
+.network-graph-card:fullscreen .network-graph-fullscreen-btn--enter,
+.network-graph-card:-webkit-full-screen .network-graph-fullscreen-btn--enter {
+    display: none;
+}
+
+.network-graph-card:fullscreen .network-graph-fullscreen-btn--exit,
+.network-graph-card:-webkit-full-screen .network-graph-fullscreen-btn--exit {
+    display: inline-flex !important;
 }
 
 .network-focus-card {

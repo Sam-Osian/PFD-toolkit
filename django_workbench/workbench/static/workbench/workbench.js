@@ -2818,6 +2818,7 @@
         root.dataset.bound = "1";
 
         const dataNode = byId("network-graph-data");
+        const graphCard = byId("network-graph-card");
         const graphRoot = byId("network-graph-canvas");
         const statusNode = byId("network-status");
         const searchQueryInput = byId("network-search-query");
@@ -2830,6 +2831,9 @@
         const minEdgeInput = byId("network-min-edge");
         const minEdgeValue = byId("network-min-edge-value");
         const typeInputs = Array.from(root.querySelectorAll("[data-network-type]"));
+        const fullscreenEnterButton = byId("network-graph-fullscreen-enter");
+        const fullscreenExitButton = byId("network-graph-fullscreen-exit");
+        const applySelectionButton = byId("network-apply-selection");
         const refreshButton = byId("network-refresh-data");
         const resetButton = byId("network-reset-controls");
         const fitButton = byId("network-fit-graph");
@@ -2852,6 +2856,7 @@
 
         if (
             !dataNode ||
+            !graphCard ||
             !graphRoot ||
             !statusNode ||
             !searchQueryInput ||
@@ -2864,6 +2869,9 @@
             !minEdgeInput ||
             !minEdgeValue ||
             !typeInputs.length ||
+            !fullscreenEnterButton ||
+            !fullscreenExitButton ||
+            !applySelectionButton ||
             !refreshButton ||
             !resetButton ||
             !fitButton ||
@@ -2889,6 +2897,40 @@
 
         function setStatus(text) {
             statusNode.textContent = text;
+        }
+
+        function fullscreenElement() {
+            return document.fullscreenElement || document.webkitFullscreenElement || null;
+        }
+
+        function isGraphFullscreen() {
+            return fullscreenElement() === graphCard;
+        }
+
+        function syncFullscreenButtons() {
+            const active = isGraphFullscreen();
+            fullscreenEnterButton.classList.toggle("hidden", active);
+            fullscreenExitButton.classList.toggle("hidden", !active);
+        }
+
+        async function enterGraphFullscreen() {
+            if (graphCard.requestFullscreen) {
+                await graphCard.requestFullscreen();
+                return;
+            }
+            if (graphCard.webkitRequestFullscreen) {
+                graphCard.webkitRequestFullscreen();
+            }
+        }
+
+        async function exitGraphFullscreen() {
+            if (document.exitFullscreen) {
+                await document.exitFullscreen();
+                return;
+            }
+            if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
         }
 
         function escapeHtml(value) {
@@ -2922,6 +2964,8 @@
         let sourceNodes = [];
         let sourceEdges = [];
         let sourceNodesById = new Map();
+        let sourceSearchNodes = [];
+        let sourceSearchNodesById = new Map();
         let currentNodesById = new Map();
         let currentEdges = [];
         let searchDropdownIntentOpen = false;
@@ -2939,6 +2983,7 @@
         };
         const initialParams = new URLSearchParams(window.location.search);
         let selectedSearchNodeId = (initialParams.get("network_focus") || "").trim();
+        let selectedGraphNodeId = (initialParams.get("network_selected_node") || "").trim();
 
         function typePalette() {
             return {
@@ -3008,12 +3053,22 @@
                 .map(normalisePayloadEdge)
                 .filter(Boolean);
             sourceNodesById = new Map(sourceNodes.map((node) => [node.id, node]));
+            const searchIndex = payload.search_index && typeof payload.search_index === "object"
+                ? payload.search_index
+                : {};
+            sourceSearchNodes = (Array.isArray(searchIndex.nodes) ? searchIndex.nodes : sourceNodes)
+                .map(normalisePayloadNode)
+                .filter(Boolean);
+            sourceSearchNodesById = new Map(sourceSearchNodes.map((node) => [node.id, node]));
 
-            if (selectedSearchNodeId && !sourceNodesById.has(selectedSearchNodeId)) {
+            if (selectedSearchNodeId && !sourceSearchNodesById.has(selectedSearchNodeId)) {
                 selectedSearchNodeId = "";
             }
-            if (selectedSearchNodeId && sourceNodesById.has(selectedSearchNodeId)) {
-                searchQueryInput.value = sourceNodesById.get(selectedSearchNodeId).name;
+            if (selectedSearchNodeId && sourceSearchNodesById.has(selectedSearchNodeId)) {
+                searchQueryInput.value = sourceSearchNodesById.get(selectedSearchNodeId).name;
+            }
+            if (selectedGraphNodeId && !sourceSearchNodesById.has(selectedGraphNodeId)) {
+                selectedGraphNodeId = "";
             }
 
             const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
@@ -3323,7 +3378,7 @@
         function getSearchCandidateNodes() {
             const selectedTypes = getSelectedTypes();
             const searchTerm = (searchQueryInput.value || "").trim().toLowerCase();
-            const rows = sourceNodes
+            const rows = sourceSearchNodes
                 .filter((node) => selectedTypes.has(node.type))
                 .filter((node) => {
                     if (!searchTerm) {
@@ -3340,11 +3395,11 @@
 
         function renderSearchSelection() {
             searchSelection.innerHTML = "";
-            if (!selectedSearchNodeId || !sourceNodesById.has(selectedSearchNodeId)) {
+            if (!selectedSearchNodeId || !sourceSearchNodesById.has(selectedSearchNodeId)) {
                 searchSelection.textContent = "No node selected.";
                 return;
             }
-            const node = sourceNodesById.get(selectedSearchNodeId);
+            const node = sourceSearchNodesById.get(selectedSearchNodeId);
             const pill = document.createElement("span");
             pill.className = "network-search-selection-pill";
             pill.appendChild(buildTypeBadge(node.type));
@@ -3397,6 +3452,9 @@
                     syncSearchDropdownVisibility(true);
                     renderSearchSelection();
                     renderGraph();
+                    if (!sourceNodesById.has(node.id)) {
+                        refreshFromServer(buildNetworkScopeQueryString());
+                    }
                 });
                 searchDropdown.appendChild(optionButton);
             });
@@ -3446,6 +3504,11 @@
             } else {
                 params.delete("network_focus");
             }
+            if (selectedGraphNodeId) {
+                params.set("network_selected_node", selectedGraphNodeId);
+            } else {
+                params.delete("network_selected_node");
+            }
             params.set("network_min_edge", String(Math.max(1, Number(minEdgeInput.value || 1))));
             params.set("network_node_limit", String(Math.max(24, Number(nodeLimitInput.value || 120))));
             params.delete("network_type");
@@ -3457,34 +3520,32 @@
             return params.toString();
         }
 
-        let datasetRefreshTimer = null;
         let lastDatasetScopeQuery = "";
 
-        function scheduleDatasetScopeRefresh() {
+        function syncApplySelectionButtonState() {
             const query = buildNetworkScopeQueryString();
-            if (query === lastDatasetScopeQuery) {
+            const isDirty = query !== lastDatasetScopeQuery;
+            applySelectionButton.disabled = !isDirty;
+        }
+
+        function applySelectionToDataset() {
+            if (
+                !window.WorkbenchDatasetPanel ||
+                typeof window.WorkbenchDatasetPanel.fetchAndSwapDataset !== "function"
+            ) {
                 return;
             }
-
-            if (datasetRefreshTimer) {
-                window.clearTimeout(datasetRefreshTimer);
+            const query = buildNetworkScopeQueryString();
+            if (query === lastDatasetScopeQuery) {
+                syncApplySelectionButtonState();
+                return;
             }
-
-            datasetRefreshTimer = window.setTimeout(function () {
-                if (
-                    !window.WorkbenchDatasetPanel ||
-                    typeof window.WorkbenchDatasetPanel.fetchAndSwapDataset !== "function"
-                ) {
-                    return;
-                }
-                if (query === lastDatasetScopeQuery) {
-                    return;
-                }
-                lastDatasetScopeQuery = query;
-                const panelUrl = `/dataset-panel/?page=1${query ? `&${query}` : ""}`;
-                const targetUrl = `${window.location.pathname}?page=1${query ? `&${query}` : ""}`;
-                window.WorkbenchDatasetPanel.fetchAndSwapDataset(panelUrl, targetUrl);
-            }, 220);
+            applySelectionButton.disabled = true;
+            const panelUrl = `/dataset-panel/?page=1${query ? `&${query}` : ""}`;
+            const targetUrl = `${window.location.pathname}?page=1${query ? `&${query}` : ""}`;
+            window.WorkbenchDatasetPanel.fetchAndSwapDataset(panelUrl, targetUrl);
+            lastDatasetScopeQuery = query;
+            syncApplySelectionButtonState();
         }
 
         function renderGraph() {
@@ -3513,14 +3574,15 @@
             candidateNodes = candidateNodes.filter((node) => connectedIds.has(node.id) || !candidateEdges.length);
 
             let activeSearchNodeId = selectedSearchNodeId;
-            if (activeSearchNodeId && !nodeIdSet.has(activeSearchNodeId)) {
+            if (activeSearchNodeId && !sourceSearchNodesById.has(activeSearchNodeId)) {
                 activeSearchNodeId = "";
                 selectedSearchNodeId = "";
                 renderSearchSelection();
             }
+            const activeSearchNodeInGraph = Boolean(activeSearchNodeId && nodeIdSet.has(activeSearchNodeId));
 
             let focusedSearchNodeIds = new Set();
-            if (activeSearchNodeId) {
+            if (activeSearchNodeInGraph) {
                 focusedSearchNodeIds = new Set([activeSearchNodeId]);
                 candidateEdges.forEach((edge) => {
                     if (edge.source === activeSearchNodeId || edge.target === activeSearchNodeId) {
@@ -3534,6 +3596,7 @@
             }
 
             if (!candidateNodes.length) {
+                selectedGraphNodeId = "";
                 currentNodesById = new Map();
                 currentEdges = [];
                 currentCentrality = { degree: new Map(), betweenness: new Map() };
@@ -3548,7 +3611,7 @@
                 statBridgeScore.textContent = "-";
                 setStatus("No graph results match the current controls.");
                 updateFocusPanel("");
-                scheduleDatasetScopeRefresh();
+                syncApplySelectionButtonState();
                 return;
             }
 
@@ -3562,11 +3625,22 @@
             const valueThreshold = getLabelThreshold(candidateNodes.map((node) => Number(node.value || 0)));
 
             const chartNodes = candidateNodes.map((node) => {
-                const isFocusedSearchNode = Boolean(activeSearchNodeId && node.id === activeSearchNodeId);
+                const isFocusedSearchNode = Boolean(activeSearchNodeInGraph && node.id === activeSearchNodeId);
                 const isSearchNeighbour = Boolean(
-                    activeSearchNodeId && focusedSearchNodeIds.has(node.id) && node.id !== activeSearchNodeId
+                    activeSearchNodeInGraph && focusedSearchNodeIds.has(node.id) && node.id !== activeSearchNodeId
                 );
+                const isFocusedGraphNode = Boolean(selectedGraphNodeId && node.id === selectedGraphNodeId);
                 const showLabel = Number(node.value || 0) >= valueThreshold || isFocusedSearchNode || isSearchNeighbour;
+                let borderWidth = 1.2;
+                if (isSearchNeighbour) {
+                    borderWidth = 1.8;
+                }
+                if (isFocusedSearchNode) {
+                    borderWidth = 2.3;
+                }
+                if (isFocusedGraphNode) {
+                    borderWidth = Math.max(borderWidth, 2.8);
+                }
                 return {
                     id: node.id,
                     name: node.id,
@@ -3578,7 +3652,7 @@
                     itemStyle: {
                         color: paletteByType[node.type] || paletteByType.theme,
                         borderColor: "rgba(9, 15, 41, 0.88)",
-                        borderWidth: isFocusedSearchNode ? 2.3 : (isSearchNeighbour ? 1.8 : 1.2),
+                        borderWidth: borderWidth,
                         opacity: 0.96,
                     },
                     label: {
@@ -3625,7 +3699,7 @@
 
             let rankingNodes = chartNodes;
             let rankingEdges = chartEdges;
-            if (activeSearchNodeId && focusedSearchNodeIds.size) {
+            if (activeSearchNodeInGraph && focusedSearchNodeIds.size) {
                 rankingNodes = chartNodes.filter((node) => focusedSearchNodeIds.has(node.id));
                 const rankingNodeIds = new Set(rankingNodes.map((node) => node.id));
                 rankingEdges = chartEdges.filter(
@@ -3633,11 +3707,11 @@
                 );
             }
             const rankingCentrality = buildCentralitySnapshot(rankingNodes, rankingEdges, {
-                excludeNodeId: activeSearchNodeId || "",
+                excludeNodeId: activeSearchNodeInGraph ? (activeSearchNodeId || "") : "",
             });
 
-            statDegreeLabel.textContent = activeSearchNodeId ? "Highest degree around focus" : "Highest degree";
-            statBridgeLabel.textContent = activeSearchNodeId ? "Highest betweenness around focus" : "Highest betweenness";
+            statDegreeLabel.textContent = activeSearchNodeInGraph ? "Highest degree around focus" : "Highest degree";
+            statBridgeLabel.textContent = activeSearchNodeInGraph ? "Highest betweenness around focus" : "Highest betweenness";
 
             if (rankingCentrality.topDegree) {
                 statDegreeNode.textContent = rankingCentrality.topDegree.name;
@@ -3663,6 +3737,9 @@
 
             currentNodesById = new Map(chartNodes.map((node) => [node.id, node]));
             currentEdges = chartEdges;
+            if (selectedGraphNodeId && !currentNodesById.has(selectedGraphNodeId)) {
+                selectedGraphNodeId = "";
+            }
             statNodes.textContent = Number(chartNodes.length).toLocaleString();
             statEdges.textContent = Number(chartEdges.length).toLocaleString();
             const reportsInScope = Number(statReports.textContent.replace(/,/g, "") || 0);
@@ -3672,14 +3749,21 @@
                 `coroners ${typedCounts.coroner}`,
                 `areas ${typedCounts.area}`,
             ].join(" | ");
-            const focusedNodeName = activeSearchNodeId && sourceNodesById.has(activeSearchNodeId)
-                ? sourceNodesById.get(activeSearchNodeId).name
+            const focusedNodeName = activeSearchNodeId && sourceSearchNodesById.has(activeSearchNodeId)
+                ? sourceSearchNodesById.get(activeSearchNodeId).name
+                : "";
+            const clickedNodeName = selectedGraphNodeId && sourceSearchNodesById.has(selectedGraphNodeId)
+                ? sourceSearchNodesById.get(selectedGraphNodeId).name
                 : "";
             const focusSuffix = focusedNodeName ? ` Focused on ${focusedNodeName}.` : "";
+            const clickedSuffix = clickedNodeName ? ` Clicked node filter: ${clickedNodeName}.` : "";
+            const offGraphSuffix = focusedNodeName && !activeSearchNodeInGraph
+                ? " Focus node is outside current graph controls."
+                : "";
             setStatus(
-                `Showing ${Number(chartNodes.length).toLocaleString()} nodes and ${Number(chartEdges.length).toLocaleString()} links from ${reportsInScope.toLocaleString()} reports (${typeSummary}).${focusSuffix}`
+                `Showing ${Number(chartNodes.length).toLocaleString()} nodes and ${Number(chartEdges.length).toLocaleString()} links from ${reportsInScope.toLocaleString()} reports (${typeSummary}).${focusSuffix}${clickedSuffix}${offGraphSuffix}`
             );
-            updateFocusPanel("");
+            updateFocusPanel(selectedGraphNodeId || "");
 
             try {
                 chart.setOption(
@@ -3760,12 +3844,14 @@
                 setStatus("Graph render failed. Please click Refresh data.");
             }
 
-            scheduleDatasetScopeRefresh();
+            syncApplySelectionButtonState();
         }
 
-        async function refreshFromServer() {
+        async function refreshFromServer(scopeQueryString) {
             const base = root.dataset.networkDataBase || "/network-data/";
-            const params = new URLSearchParams(window.location.search);
+            const params = scopeQueryString
+                ? new URLSearchParams(scopeQueryString)
+                : new URLSearchParams(window.location.search);
             params.delete("page");
             const targetUrl = `${base}${params.toString() ? `?${params.toString()}` : ""}`;
 
@@ -3803,14 +3889,18 @@
         }
 
         applyPayload(payload, false);
+        lastDatasetScopeQuery = buildNetworkScopeQueryString();
         renderGraph();
+        syncFullscreenButtons();
 
         chart.on("click", function (params) {
             if (params.dataType === "node" && params.data && params.data.id) {
-                updateFocusPanel(String(params.data.id));
+                selectedGraphNodeId = String(params.data.id);
+                renderGraph();
                 return;
             }
-            updateFocusPanel("");
+            selectedGraphNodeId = "";
+            renderGraph();
         });
 
         fitButton.addEventListener("click", function () {
@@ -3818,12 +3908,37 @@
             chart.resize();
         });
 
+        fullscreenEnterButton.addEventListener("click", async function () {
+            try {
+                await enterGraphFullscreen();
+            } catch (error) {
+                return;
+            }
+            syncFullscreenButtons();
+            chart.resize();
+        });
+
+        fullscreenExitButton.addEventListener("click", async function () {
+            try {
+                await exitGraphFullscreen();
+            } catch (error) {
+                return;
+            }
+            syncFullscreenButtons();
+            chart.resize();
+        });
+
+        applySelectionButton.addEventListener("click", function () {
+            applySelectionToDataset();
+        });
+
         refreshButton.addEventListener("click", function () {
-            refreshFromServer();
+            refreshFromServer(buildNetworkScopeQueryString());
         });
 
         resetButton.addEventListener("click", function () {
             selectedSearchNodeId = "";
+            selectedGraphNodeId = "";
             searchQueryInput.value = "";
             syncSearchDropdownVisibility(true);
             renderSearchSelection();
@@ -3903,6 +4018,14 @@
         syncSearchDropdownVisibility(true);
 
         window.addEventListener("resize", function () {
+            chart.resize();
+        });
+        document.addEventListener("fullscreenchange", function () {
+            syncFullscreenButtons();
+            chart.resize();
+        });
+        document.addEventListener("webkitfullscreenchange", function () {
+            syncFullscreenButtons();
             chart.resize();
         });
     }

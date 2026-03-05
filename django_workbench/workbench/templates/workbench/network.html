@@ -20,6 +20,7 @@
                 <p id="network-status">Loading network graph...</p>
             </div>
             <div class="network-header-actions">
+                <button type="button" class="button-secondary" id="network-apply-selection">Show reports for selection</button>
                 <button type="button" class="button-secondary" id="network-refresh-data">Refresh data</button>
                 <button type="button" class="button-secondary" id="network-reset-controls">Reset controls</button>
                 <button type="button" class="button-secondary" id="network-fit-graph">Refocus graph</button>
@@ -95,7 +96,25 @@
         </div>
 
         <div class="network-main-grid">
-            <article class="network-graph-card">
+            <article class="network-graph-card" id="network-graph-card">
+                <button
+                    type="button"
+                    class="network-graph-fullscreen-btn network-graph-fullscreen-btn--enter"
+                    id="network-graph-fullscreen-enter"
+                    aria-label="Enter full screen"
+                    title="Enter full screen"
+                >
+                    <i class="hgi hgi-stroke hgi-maximize-01" aria-hidden="true"></i>
+                </button>
+                <button
+                    type="button"
+                    class="network-graph-fullscreen-btn network-graph-fullscreen-btn--exit hidden"
+                    id="network-graph-fullscreen-exit"
+                    aria-label="Exit full screen"
+                    title="Exit full screen"
+                >
+                    <i class="hgi hgi-stroke hgi-minimize-01" aria-hidden="true"></i>
+                </button>
                 <div class="network-graph-canvas" id="network-graph-canvas" role="img" aria-label="Interactive network graph of report links"></div>
             </article>
             <aside class="network-focus-card">

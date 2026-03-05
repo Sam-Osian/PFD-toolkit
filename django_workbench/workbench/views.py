@@ -431,6 +431,7 @@ NETWORK_EDGE_MAX = 2600
 NETWORK_SCOPE_QUERY_KEYS: tuple[str, ...] = (
     "network_search",
     "network_focus",
+    "network_selected_node",
     "network_min_edge",
     "network_node_limit",
     "network_type",
@@ -940,6 +941,18 @@ def _network_node_id(node_type: str, value: str) -> str:
     return f"{node_type}::{value}"
 
 
+def _network_parse_node_id(node_id: str) -> Optional[tuple[str, str]]:
+    cleaned = str(node_id or "").strip()
+    if "::" not in cleaned:
+        return None
+    node_type, raw_value = cleaned.split("::", 1)
+    parsed_type = str(node_type).strip().lower()
+    parsed_value = str(raw_value).strip()
+    if parsed_type not in NETWORK_NODE_TYPES or not parsed_value:
+        return None
+    return parsed_type, parsed_value
+
+
 def _network_theme_columns(reports_df: pd.DataFrame) -> list[str]:
     receiver_collection_columns = set(COLLECTION_COLUMNS.values())
     thematic_columns: list[str] = []
@@ -966,10 +979,31 @@ def _network_scale_node_size(
     return round(size_floor + ((size_ceiling - size_floor) * eased_ratio), 2)
 
 
+def _network_search_nodes_from_counter(
+    node_type: str,
+    counter: Counter[str],
+    *,
+    label_fn: Optional[Callable[[str], str]] = None,
+) -> list[dict[str, Any]]:
+    labels = label_fn or (lambda value: value)
+    rows = sorted(counter.items(), key=lambda item: (-int(item[1]), str(item[0]).casefold()))
+    return [
+        {
+            "id": _network_node_id(node_type, str(value)),
+            "name": str(labels(str(value))),
+            "type": node_type,
+            "raw_key": str(value),
+            "value": int(count),
+        }
+        for value, count in rows
+    ]
+
+
 def _build_network_graph_payload(
     reports_df: pd.DataFrame,
     *,
     selected_filters: Optional[dict[str, list[str]]] = None,
+    forced_node_ids: Optional[list[str]] = None,
 ) -> dict[str, Any]:
     filters = selected_filters or {"coroner": [], "area": [], "receiver": []}
     normalised_filters = {
@@ -980,6 +1014,18 @@ def _build_network_graph_payload(
     filtered_df = _apply_explore_dashboard_filters(reports_df, normalised_filters)
     reports_total = int(len(reports_df))
     reports_shown = int(len(filtered_df))
+    forced_nodes: list[tuple[str, str]] = []
+    seen_forced: set[str] = set()
+    for raw_id in forced_node_ids or []:
+        parsed = _network_parse_node_id(raw_id)
+        if not parsed:
+            continue
+        node_type, node_value = parsed
+        key = f"{node_type}::{node_value.casefold()}"
+        if key in seen_forced:
+            continue
+        seen_forced.add(key)
+        forced_nodes.append((node_type, node_value))
 
     theme_columns = _network_theme_columns(filtered_df)
     if filtered_df.empty:
@@ -995,6 +1041,7 @@ def _build_network_graph_payload(
                 "top_theme": {"name": "-", "count": 0},
             },
             "graph": {"nodes": [], "edges": []},
+            "search_index": {"nodes": []},
             "options": {
                 "max_edge_weight": 1,
                 "default_min_edge_weight": 1,
@@ -1054,6 +1101,24 @@ def _build_network_graph_payload(
         selected_receivers = set(top_receivers)
         selected_coroners = set(top_coroners)
         selected_areas = set(top_areas)
+        forced_ids = {
+            _network_node_id(node_type, node_value)
+            for node_type, node_value in forced_nodes
+        }
+
+        for node_type, node_value in forced_nodes:
+            if node_type == "receiver" and int(receiver_counter.get(node_value, 0)) > 0:
+                selected_receivers.add(node_value)
+                if node_value not in top_receivers:
+                    top_receivers.append(node_value)
+            elif node_type == "coroner" and int(coroner_counter.get(node_value, 0)) > 0:
+                selected_coroners.add(node_value)
+                if node_value not in top_coroners:
+                    top_coroners.append(node_value)
+            elif node_type == "area" and int(area_counter.get(node_value, 0)) > 0:
+                selected_areas.add(node_value)
+                if node_value not in top_areas:
+                    top_areas.append(node_value)
 
         edges: list[dict[str, Any]] = []
         for (receiver_name, coroner_name), count in edge_receiver_coroner.items():
@@ -1115,7 +1180,7 @@ def _build_network_graph_payload(
         ) -> None:
             for value in values:
                 node_id = _network_node_id(node_type, value)
-                if connected_node_ids and node_id not in connected_node_ids:
+                if connected_node_ids and node_id not in connected_node_ids and node_id not in forced_ids:
                     continue
                 node_rows.append(
                     {
@@ -1190,6 +1255,10 @@ def _build_network_graph_payload(
         max_edge_weight = max((int(edge["value"]) for edge in edges_filtered), default=1)
         default_node_limit = min(180, max(24, len(nodes)))
         max_node_limit = max(default_node_limit, min(420, max(80, len(nodes))))
+        search_nodes = []
+        search_nodes.extend(_network_search_nodes_from_counter("receiver", receiver_counter))
+        search_nodes.extend(_network_search_nodes_from_counter("coroner", coroner_counter))
+        search_nodes.extend(_network_search_nodes_from_counter("area", area_counter))
 
         return {
             "selected": normalised_filters,
@@ -1206,6 +1275,7 @@ def _build_network_graph_payload(
                 "nodes": nodes,
                 "edges": edges_filtered,
             },
+            "search_index": {"nodes": search_nodes},
             "options": {
                 "max_edge_weight": int(max_edge_weight),
                 "default_min_edge_weight": int(min_count_for_edge),
@@ -1298,6 +1368,28 @@ def _build_network_graph_payload(
     selected_receivers = set(top_receivers)
     selected_coroners = set(top_coroners)
     selected_areas = set(top_areas)
+    forced_ids = {
+        _network_node_id(node_type, node_value)
+        for node_type, node_value in forced_nodes
+    }
+
+    for node_type, node_value in forced_nodes:
+        if node_type == "theme" and int(theme_counter.get(node_value, 0)) > 0:
+            selected_themes.add(node_value)
+            if node_value not in top_themes:
+                top_themes.append(node_value)
+        elif node_type == "receiver" and int(receiver_counter.get(node_value, 0)) > 0:
+            selected_receivers.add(node_value)
+            if node_value not in top_receivers:
+                top_receivers.append(node_value)
+        elif node_type == "coroner" and int(coroner_counter.get(node_value, 0)) > 0:
+            selected_coroners.add(node_value)
+            if node_value not in top_coroners:
+                top_coroners.append(node_value)
+        elif node_type == "area" and int(area_counter.get(node_value, 0)) > 0:
+            selected_areas.add(node_value)
+            if node_value not in top_areas:
+                top_areas.append(node_value)
 
     edges: list[dict[str, Any]] = []
     for (theme_key, receiver_name), count in edge_theme_receiver.items():
@@ -1363,7 +1455,7 @@ def _build_network_graph_payload(
         labels = label_fn or (lambda value: value)
         for value in values:
             node_id = _network_node_id(node_type, value)
-            if connected_node_ids and node_id not in connected_node_ids:
+            if connected_node_ids and node_id not in connected_node_ids and node_id not in forced_ids:
                 continue
             node_rows.append(
                 {
@@ -1443,6 +1535,13 @@ def _build_network_graph_payload(
     default_node_limit = min(180, max(24, len(nodes)))
     max_node_limit = max(default_node_limit, min(420, max(80, len(nodes))))
     top_theme_key = top_themes[0] if top_themes else ""
+    search_nodes = []
+    search_nodes.extend(
+        _network_search_nodes_from_counter("theme", theme_counter, label_fn=_network_theme_label)
+    )
+    search_nodes.extend(_network_search_nodes_from_counter("receiver", receiver_counter))
+    search_nodes.extend(_network_search_nodes_from_counter("coroner", coroner_counter))
+    search_nodes.extend(_network_search_nodes_from_counter("area", area_counter))
 
     return {
         "selected": normalised_filters,
@@ -1462,6 +1561,7 @@ def _build_network_graph_payload(
             "nodes": nodes,
             "edges": edges,
         },
+        "search_index": {"nodes": search_nodes},
         "options": {
             "max_edge_weight": int(max_edge_weight),
             "default_min_edge_weight": int(min_count_for_edge),
@@ -1557,6 +1657,7 @@ def _request_has_network_scope_query(request: HttpRequest) -> bool:
 def _parse_network_scope_controls(request: HttpRequest) -> dict[str, Any]:
     search = str(request.GET.get("network_search") or "").strip()
     focus_node = str(request.GET.get("network_focus") or "").strip()
+    selected_node = str(request.GET.get("network_selected_node") or "").strip()
 
     min_edge: Optional[int] = None
     min_edge_raw = str(request.GET.get("network_min_edge") or "").strip()
@@ -1590,6 +1691,7 @@ def _parse_network_scope_controls(request: HttpRequest) -> dict[str, Any]:
     return {
         "search": search,
         "focus_node": focus_node,
+        "selected_node": selected_node,
         "min_edge": min_edge,
         "node_limit": node_limit,
         "types": types,
@@ -1605,6 +1707,9 @@ def _network_scope_query_string(controls: dict[str, Any]) -> str:
     focus_node = str(controls.get("focus_node") or "").strip()
     if focus_node:
         pairs.append(("network_focus", focus_node))
+    selected_node = str(controls.get("selected_node") or "").strip()
+    if selected_node:
+        pairs.append(("network_selected_node", selected_node))
 
     min_edge = controls.get("min_edge")
     if isinstance(min_edge, int) and min_edge > 0:
@@ -1788,16 +1893,34 @@ def _apply_network_scope_filters_to_reports(
     payload = _build_network_graph_payload(
         reports_df,
         selected_filters={"coroner": [], "area": [], "receiver": []},
+        forced_node_ids=[
+            str(controls.get("focus_node") or "").strip(),
+            str(controls.get("selected_node") or "").strip(),
+        ],
     )
     visible_node_ids = _network_visible_node_ids(payload, controls)
     if not visible_node_ids:
         return reports_df.iloc[0:0].copy().reset_index(drop=True)
 
+    required_node_ids: list[str] = []
+    for key in ("focus_node", "selected_node"):
+        node_id = str(controls.get(key) or "").strip()
+        if node_id and node_id not in required_node_ids:
+            required_node_ids.append(node_id)
+    if required_node_ids:
+        visible_node_ids.update(required_node_ids)
+
     theme_columns = _network_theme_columns(reports_df)
     mask: list[bool] = []
     for _, row in reports_df.iterrows():
         row_node_ids = _network_row_node_ids(row, theme_columns)
-        mask.append(bool(row_node_ids.intersection(visible_node_ids)))
+        if not row_node_ids.intersection(visible_node_ids):
+            mask.append(False)
+            continue
+        if required_node_ids and not all(node_id in row_node_ids for node_id in required_node_ids):
+            mask.append(False)
+            continue
+        mask.append(True)
 
     filtered_df = reports_df.loc[pd.Series(mask, index=reports_df.index)]
     return filtered_df.reset_index(drop=True)
@@ -4254,9 +4377,14 @@ def network_page(request: HttpRequest) -> HttpResponse:
     context = _build_context(request)
     reports_df = _get_reports_df_with_row_ids(request.session)
     selected_filters = _get_explore_dashboard_filters(request)
+    network_scope_controls = _parse_network_scope_controls(request)
     context["network_graph_payload"] = _build_network_graph_payload(
         reports_df,
         selected_filters=selected_filters,
+        forced_node_ids=[
+            str(network_scope_controls.get("focus_node") or "").strip(),
+            str(network_scope_controls.get("selected_node") or "").strip(),
+        ],
     )
     context["network_data_base"] = reverse("workbench:network_data")
     active_workbook, workbook_editable = _resolve_active_workbook(request)
@@ -4482,9 +4610,14 @@ def network_data(request: HttpRequest) -> HttpResponse:
     _ensure_workspace_reports_loaded(request)
     reports_df = _get_reports_df_with_row_ids(request.session)
     selected_filters = _get_explore_dashboard_filters(request)
+    network_scope_controls = _parse_network_scope_controls(request)
     payload = _build_network_graph_payload(
         reports_df,
         selected_filters=selected_filters,
+        forced_node_ids=[
+            str(network_scope_controls.get("focus_node") or "").strip(),
+            str(network_scope_controls.get("selected_node") or "").strip(),
+        ],
     )
     _log_timed_event(
         "network_data",
