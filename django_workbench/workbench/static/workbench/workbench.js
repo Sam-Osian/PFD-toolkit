@@ -3125,16 +3125,6 @@
                 return;
             }
 
-            if (
-                (action === "filter_reports" || action === "discover_themes" || action === "extract_features") &&
-                !form.dataset.manualFilterDecision &&
-                window.WorkbenchDashboardFilters &&
-                typeof window.WorkbenchDashboardFilters.hasAny === "function" &&
-                window.WorkbenchDashboardFilters.hasAny()
-            ) {
-                return;
-            }
-
             showLoader(ACTION_MESSAGES[action] || "Running your request...");
         }, true);
 
