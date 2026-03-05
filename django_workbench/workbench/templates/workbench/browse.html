@@ -37,7 +37,9 @@
                 data-browse-filter="{{ collection.title|lower }} {{ collection.description|lower }}"
             >
                 <span class="browse-card__motif {% if collection.slug == 'local_gov' %}browse-card__motif--large{% endif %}" aria-hidden="true">
-                    {% if collection.slug == "custom" %}
+                    {% if collection.icon_svg %}
+                        {{ collection.icon_svg|safe }}
+                    {% elif collection.slug == "custom" %}
                         <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M16 18H46"></path>
                             <path d="M16 30H56"></path>
