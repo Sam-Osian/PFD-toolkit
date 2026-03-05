@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import pandas as pd
 import json
 import pytest
@@ -604,6 +605,51 @@ def test_discover_themes_handles_code_fence(monkeypatch):
 
     assert "fence" in theme_model.model_fields
     assert ext.identified_themes == "```json\n{\n  \"fence\": \"ok\"\n}\n```"
+
+
+def test_discover_themes_repairs_unquoted_json_keys(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
+    ext = Extractor(llm=llm, reports=df)
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        outputs = []
+        for prompt in prompts:
+            if "Report excerpt" in prompt:
+                outputs.append("summary text")
+            else:
+                outputs.append('```json\n{ safety_theme: "desc" }\n```')
+        return outputs
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    theme_model = ext.discover_themes()
+
+    assert "safety_theme" in theme_model.model_fields
+
+
+def test_discover_themes_invalid_json_raises_with_raw_path(monkeypatch):
+    df = pd.DataFrame({GeneralConfig.COL_CONCERNS: ["one"]})
+    llm = DummyLLM()
+    ext = Extractor(llm=llm, reports=df)
+
+    def fake_generate(prompts, response_format=None, **kwargs):
+        llm.called += len(prompts)
+        outputs = []
+        for prompt in prompts:
+            if "Report excerpt" in prompt:
+                outputs.append("summary text")
+            else:
+                outputs.append("this is not json at all")
+        return outputs
+
+    monkeypatch.setattr(llm, "generate", fake_generate)
+
+    with pytest.raises(ValueError, match="Failed to parse discovered theme JSON"):
+        ext.discover_themes()
+
+    assert ext.last_discover_themes_raw_path
+    assert Path(ext.last_discover_themes_raw_path).exists()
 
 
 def test_discover_themes_bool_fields(monkeypatch):

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import logging
+import ast
 import json
 import re
+import tempfile
 import warnings
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union, Literal
 
 import matplotlib.pyplot as plt
@@ -127,6 +131,7 @@ class Extractor:
         self._last_summary_trim_approach: Optional[str] = None
         self._last_summary_max_tokens: Optional[int] = None
         self._last_summary_max_words: Optional[int] = None
+        self.last_discover_themes_raw_path: Optional[str] = None
 
     # ------------------------------------------------------------------
     def _get_field_parts(
@@ -1183,36 +1188,17 @@ Here is the report excerpt:
 
         result = self.llm.generate([prompt])[0]
         self.identified_themes = result
+        raw_path = self._persist_discover_themes_raw_output(result)
+        self.last_discover_themes_raw_path = raw_path
 
-        if isinstance(result, dict):
-            theme_dict = result
-        else:
-            raw = str(result)
-            try:
-                theme_dict = json.loads(raw)
-                if not isinstance(theme_dict, dict):
-                    raise ValueError("LLM output is not a JSON object")
-            except Exception as exc:
-                fenced = re.match(r"^```(?:json)?\n(?P<json>.*)\n```$", raw.strip(), re.DOTALL)
-                if fenced:
-                    try:
-                        theme_dict = json.loads(fenced.group("json"))
-                        if not isinstance(theme_dict, dict):
-                            raise ValueError("LLM output is not a JSON object")
-                    except Exception as exc2:
-                        logger.warning(
-                            "Failed to parse theme JSON: %s. Raw output: %r",
-                            exc2,
-                            result,
-                        )
-                        return self.feature_model
-                else:
-                    logger.warning(
-                        "Failed to parse theme JSON: %s. Raw output: %r",
-                        exc,
-                        result,
-                    )
-                    return self.feature_model
+        try:
+            theme_dict = self._parse_discovered_theme_mapping(result)
+        except ValueError as exc:
+            if raw_path:
+                raise ValueError(
+                    f"Failed to parse discovered theme JSON ({exc}). Raw output saved to: {raw_path}"
+                ) from exc
+            raise ValueError(f"Failed to parse discovered theme JSON ({exc}).") from exc
 
         fields = {
             name: (bool, Field(description=str(desc)))
@@ -1231,6 +1217,83 @@ Here is the report excerpt:
         self.prompt_template = self._build_prompt_template()
         self._grammar_model = self._build_grammar_model()
         return ThemeModel
+
+    # ------------------------------------------------------------------
+    def _persist_discover_themes_raw_output(self, result: Any) -> Optional[str]:
+        """Persist raw discover_themes output for post-run debugging."""
+        try:
+            output_dir = Path(tempfile.gettempdir()) / "pfd_toolkit" / "theme_discovery_runs"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
+            path = output_dir / f"discover_themes_{stamp}.txt"
+            if isinstance(result, (dict, list)):
+                text = json.dumps(result, indent=2, ensure_ascii=False)
+            else:
+                text = str(result)
+            path.write_text(text, encoding="utf-8")
+            return str(path)
+        except Exception as exc:
+            logger.warning("Could not persist raw discover_themes output: %s", exc)
+            return None
+
+    # ------------------------------------------------------------------
+    def _parse_discovered_theme_mapping(self, result: Any) -> Dict[str, str]:
+        """Parse discovered themes from strict or mildly malformed JSON output."""
+        if isinstance(result, dict):
+            parsed = result
+        else:
+            raw = str(result or "").strip()
+            if not raw:
+                raise ValueError("empty model output")
+
+            fenced = re.match(
+                r"^```(?:json)?\s*(?P<json>[\s\S]*?)\s*```$",
+                raw,
+                flags=re.IGNORECASE,
+            )
+            if fenced:
+                raw = fenced.group("json").strip()
+
+            parsed = None
+            for candidate in (raw, self._quote_bare_json_keys(raw)):
+                try:
+                    loaded = json.loads(candidate)
+                    if isinstance(loaded, dict):
+                        parsed = loaded
+                        break
+                except Exception:
+                    continue
+
+            if parsed is None:
+                try:
+                    loaded = ast.literal_eval(self._quote_bare_json_keys(raw))
+                    if isinstance(loaded, dict):
+                        parsed = loaded
+                except Exception as exc:
+                    raise ValueError(str(exc)) from exc
+
+            if parsed is None:
+                raise ValueError("LLM output is not a JSON object")
+
+        theme_dict: Dict[str, str] = {}
+        for name, desc in parsed.items():
+            key = str(name or "").strip()
+            if not key:
+                continue
+            theme_dict[key] = str(desc or "").strip()
+        return theme_dict
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _quote_bare_json_keys(raw: str) -> str:
+        repaired = re.sub(
+            r'([{\s,])([A-Za-z_][A-Za-z0-9_]*)\s*:',
+            r'\1"\2":',
+            raw,
+        )
+        repaired = re.sub(r",\s*}", "}", repaired)
+        repaired = re.sub(r",\s*]", "]", repaired)
+        return repaired
 
 
     # ------------------------------------------------------------------
@@ -1396,4 +1459,3 @@ Here is the report excerpt:
                 rows.append({"Category": row_label, count_col: int(count), pct_col: percentage})
 
         return pd.DataFrame(rows)
-

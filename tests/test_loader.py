@@ -105,6 +105,11 @@ def test_load_reports_filters_multiple_themes_with_or_semantics():
     assert set(df["url"]) == {"u1", "u2", "u3"}
 
 
+def test_load_reports_filters_theme_with_prefix():
+    df = loader.load_reports(theme="theme_patient_safety", refresh=False)
+    assert set(df["url"]) == {"u1", "u3"}
+
+
 def test_load_reports_invalid_theme_raises():
     with pytest.raises(ValueError, match="Unknown theme"):
         loader.load_reports(theme="not_a_real_theme", refresh=False)

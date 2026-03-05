@@ -27,6 +27,13 @@ _DATAFRAME_CACHE_SIGNATURE: tuple[str, int, int] | None = None
 _DATAFRAME_CACHE_FRAME: pd.DataFrame | None = None
 _THEME_PREFIX: Final[str] = "theme_"
 
+
+def _normalise_theme_name(raw_theme: str) -> str:
+    value = str(raw_theme or "").strip()
+    if value.startswith(_THEME_PREFIX):
+        return value[len(_THEME_PREFIX):]
+    return value
+
 def _ensure_dataset(force_download: bool = False) -> Path:
     """Download the dataset if not already cached and return its path.
 
@@ -92,8 +99,9 @@ def _get_theme_columns(reports: pd.DataFrame) -> dict[str, str]:
     boolean-style column prefixed with ``theme_`` as an available theme filter.
     """
     theme_columns: dict[str, str] = {}
+    collection_columns = set(_COLLECTION_COLUMNS.values())
     for column in reports.columns:
-        if column.startswith(_THEME_PREFIX):
+        if column.startswith(_THEME_PREFIX) and column not in collection_columns:
             theme_name = column[len(_THEME_PREFIX):]
             if theme_name:
                 theme_columns[theme_name] = column
@@ -125,12 +133,12 @@ def load_reports(
         If ``True`` (the default), force a fresh download of the dataset. Set to
         ``False`` to reuse the previously cached copy.
     theme : str | list[str] | None, optional
-        Filter rows using packaged boolean theme columns named with the
-        provisional ``theme_*`` convention, e.g. ``theme_medication_safety``.
-        This scaffold is intentionally simple until the final packaged theme set
-        is fixed. Pass a single theme name or a list of theme names. When
-        multiple themes are supplied, rows matching **any** requested theme are
-        returned.
+        Filter rows using packaged boolean theme columns with the ``theme_*``
+        convention. Values can be supplied with or without the ``theme_``
+        prefix. For example, both ``"medication_safety"`` and
+        ``"theme_medication_safety"`` are valid. Pass a single theme name or a
+        list of theme names. When multiple themes are supplied, rows matching
+        **any** requested theme are returned.
     collection : str | list[str] | None, optional
         Filter rows using packaged receiver-based collections. Supported
         collection names are ``"nhs"``, ``"gov_department"``, ``"prisons"``,
@@ -178,8 +186,12 @@ def load_reports(
     reports.reset_index(drop=True, inplace=True)
 
     if theme is not None:
-        requested_themes = [theme] if isinstance(theme, str) else list(theme)
-        requested_themes = [item.strip() for item in requested_themes if item and item.strip()]
+        requested_themes_raw = [theme] if isinstance(theme, str) else list(theme)
+        requested_themes = []
+        for item in requested_themes_raw:
+            cleaned = _normalise_theme_name(str(item or "").strip())
+            if cleaned:
+                requested_themes.append(cleaned)
         if not requested_themes:
             raise ValueError("theme must contain at least one non-empty theme name.")
 
