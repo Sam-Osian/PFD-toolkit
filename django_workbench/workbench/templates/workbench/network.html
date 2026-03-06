@@ -19,103 +19,101 @@
                 <h3>Interconnected signal map</h3>
                 <p id="network-status">Loading network graph...</p>
             </div>
-            <div class="network-header-actions">
-                <button type="button" class="button-secondary" id="network-apply-selection">Show reports for selection</button>
-                <button type="button" class="button-secondary" id="network-refresh-data">Refresh data</button>
-                <button type="button" class="button-secondary" id="network-reset-controls">Reset controls</button>
-                <button type="button" class="button-secondary" id="network-fit-graph">Refocus graph</button>
-            </div>
         </div>
 
-        <div class="network-control-grid">
-            <section class="network-control-card network-control-card--search">
-                <label for="network-search-query">Find node</label>
-                <div class="network-search-picker">
-                    <input
-                        id="network-search-query"
-                        type="search"
-                        placeholder="Type to filter nodes, then select one..."
-                        autocomplete="off"
-                    >
-                    <button type="button" class="button-secondary network-search-clear" id="network-search-clear">Clear</button>
+        <article class="network-graph-card" id="network-graph-card">
+            <button
+                type="button"
+                class="network-graph-fullscreen-btn network-graph-fullscreen-btn--enter"
+                id="network-graph-fullscreen-enter"
+                aria-label="Enter full screen"
+                title="Enter full screen"
+            >
+                <i class="hgi hgi-stroke hgi-maximize-01" aria-hidden="true"></i>
+            </button>
+            <button
+                type="button"
+                class="network-graph-fullscreen-btn network-graph-fullscreen-btn--exit hidden"
+                id="network-graph-fullscreen-exit"
+                aria-label="Exit full screen"
+                title="Exit full screen"
+            >
+                <i class="hgi hgi-stroke hgi-minimize-01" aria-hidden="true"></i>
+            </button>
+            <div class="network-overlay-stack">
+                <div class="network-control-grid">
+                    <section class="network-control-card network-control-card--search">
+                        <label for="network-search-query">Find node</label>
+                        <div class="network-search-picker">
+                            <input
+                                id="network-search-query"
+                                type="search"
+                                placeholder="Find node"
+                                autocomplete="off"
+                            >
+                            <button type="button" class="button-secondary network-search-clear" id="network-search-clear">Clear</button>
+                        </div>
+                        <div class="network-search-dropdown hidden" id="network-search-dropdown" role="listbox" aria-label="Node search results"></div>
+                        <p class="network-search-selection" id="network-search-selection">No node selected.</p>
+                    </section>
+                    <section class="network-control-card">
+                        <label for="network-layout">Layout</label>
+                        <select id="network-layout">
+                            <option value="force" selected>Force</option>
+                            <option value="circular">Circular</option>
+                        </select>
+                    </section>
+                    <section class="network-control-card">
+                        <label for="network-min-edge">Min edge <span id="network-min-edge-value"></span></label>
+                        <input id="network-min-edge" type="range" min="1" max="10" value="1" step="1">
+                    </section>
+                    <section class="network-control-card network-control-card--types">
+                        <label class="checkbox"><input type="checkbox" value="theme" data-network-type checked> <span>Themes</span></label>
+                        <label class="checkbox"><input type="checkbox" value="receiver" data-network-type checked> <span>Receivers</span></label>
+                        <label class="checkbox"><input type="checkbox" value="coroner" data-network-type checked> <span>Coroners</span></label>
+                        <label class="checkbox"><input type="checkbox" value="area" data-network-type checked> <span>Areas</span></label>
+                    </section>
+                    <div class="network-header-actions">
+                        <button type="button" class="button-secondary" id="network-apply-selection">Apply selection</button>
+                        <button type="button" class="button-secondary" id="network-refresh-data">Refresh</button>
+                        <button type="button" class="button-secondary" id="network-reset-controls">Reset</button>
+                        <button type="button" class="button-secondary" id="network-fit-graph">Refocus</button>
+                    </div>
                 </div>
-                <div class="network-search-dropdown hidden" id="network-search-dropdown" role="listbox" aria-label="Node search results"></div>
-                <p class="network-search-selection" id="network-search-selection">No node selected.</p>
-            </section>
-            <section class="network-control-card">
-                <label for="network-layout">Layout</label>
-                <select id="network-layout">
-                    <option value="force" selected>Force-directed</option>
-                    <option value="circular">Circular</option>
-                </select>
-            </section>
-            <section class="network-control-card">
-                <label for="network-min-edge">Minimum edge weight <span id="network-min-edge-value"></span></label>
-                <input id="network-min-edge" type="range" min="1" max="10" value="1" step="1">
-            </section>
-            <section class="network-control-card network-control-card--types">
-                <span>Node types</span>
-                <label class="checkbox"><input type="checkbox" value="theme" data-network-type checked> <span>Themes</span></label>
-                <label class="checkbox"><input type="checkbox" value="receiver" data-network-type checked> <span>Receivers</span></label>
-                <label class="checkbox"><input type="checkbox" value="coroner" data-network-type checked> <span>Coroners</span></label>
-                <label class="checkbox"><input type="checkbox" value="area" data-network-type checked> <span>Areas</span></label>
-            </section>
-        </div>
-
-        <div class="network-stat-grid">
-            <article class="network-stat-card">
-                <span class="network-stat-card__label">Reports in graph scope</span>
-                <strong class="network-stat-card__value" id="network-stat-reports">{{ network_graph_payload.summary.reports_shown|default:0 }}</strong>
-            </article>
-            <article class="network-stat-card">
-                <span class="network-stat-card__label">Nodes rendered</span>
-                <strong class="network-stat-card__value" id="network-stat-nodes">0</strong>
-            </article>
-            <article class="network-stat-card">
-                <span class="network-stat-card__label">Edges rendered</span>
-                <strong class="network-stat-card__value" id="network-stat-edges">0</strong>
-            </article>
-            <article class="network-stat-card">
-                <span class="network-stat-card__label">Top theme</span>
-                <strong class="network-stat-card__value" id="network-stat-top-theme">{{ network_graph_payload.summary.top_theme.name|default:"-" }}</strong>
-            </article>
-            <article class="network-stat-card">
-                <span class="network-stat-card__label" id="network-stat-degree-label">Highest degree</span>
-                <strong class="network-stat-card__value" id="network-stat-degree-node">-</strong>
-                <span class="network-stat-card__meta" id="network-stat-degree-score">-</span>
-            </article>
-            <article class="network-stat-card">
-                <span class="network-stat-card__label" id="network-stat-bridge-label">Highest betweenness</span>
-                <strong class="network-stat-card__value" id="network-stat-bridge-node">-</strong>
-                <span class="network-stat-card__meta" id="network-stat-bridge-score">-</span>
-            </article>
-        </div>
-
-        <div class="network-main-grid">
-            <article class="network-graph-card" id="network-graph-card">
-                <button
-                    type="button"
-                    class="network-graph-fullscreen-btn network-graph-fullscreen-btn--enter"
-                    id="network-graph-fullscreen-enter"
-                    aria-label="Enter full screen"
-                    title="Enter full screen"
-                >
-                    <i class="hgi hgi-stroke hgi-maximize-01" aria-hidden="true"></i>
-                </button>
-                <button
-                    type="button"
-                    class="network-graph-fullscreen-btn network-graph-fullscreen-btn--exit hidden"
-                    id="network-graph-fullscreen-exit"
-                    aria-label="Exit full screen"
-                    title="Exit full screen"
-                >
-                    <i class="hgi hgi-stroke hgi-minimize-01" aria-hidden="true"></i>
-                </button>
-                <div class="network-graph-canvas" id="network-graph-canvas" role="img" aria-label="Interactive network graph of report links"></div>
-            </article>
-            <aside class="network-focus-card">
+                <div class="network-stat-grid">
+                    <article class="network-stat-card">
+                        <span class="network-stat-card__label">Reports</span>
+                        <strong class="network-stat-card__value" id="network-stat-reports">{{ network_graph_payload.summary.reports_shown|default:0 }}</strong>
+                    </article>
+                    <article class="network-stat-card">
+                        <span class="network-stat-card__label">Nodes</span>
+                        <strong class="network-stat-card__value" id="network-stat-nodes">0</strong>
+                    </article>
+                    <article class="network-stat-card">
+                        <span class="network-stat-card__label">Edges</span>
+                        <strong class="network-stat-card__value" id="network-stat-edges">0</strong>
+                    </article>
+                    <article class="network-stat-card">
+                        <span class="network-stat-card__label">Top theme</span>
+                        <strong class="network-stat-card__value" id="network-stat-top-theme">{{ network_graph_payload.summary.top_theme.name|default:"-" }}</strong>
+                    </article>
+                    <article class="network-stat-card">
+                        <span class="network-stat-card__label" id="network-stat-degree-label">Highest degree</span>
+                        <strong class="network-stat-card__value" id="network-stat-degree-node">-</strong>
+                        <span class="network-stat-card__meta" id="network-stat-degree-score">-</span>
+                    </article>
+                    <article class="network-stat-card">
+                        <span class="network-stat-card__label" id="network-stat-bridge-label">Highest betweenness</span>
+                        <strong class="network-stat-card__value" id="network-stat-bridge-node">-</strong>
+                        <span class="network-stat-card__meta" id="network-stat-bridge-score">-</span>
+                    </article>
+                </div>
+            </div>
+            <div class="network-graph-canvas" id="network-graph-canvas" role="img" aria-label="Interactive network graph of report links"></div>
+            <aside class="network-focus-card hidden" id="network-focus-card">
+                <button type="button" class="network-focus-close" id="network-focus-close" aria-label="Close focus details">×</button>
                 <h4>Focus details</h4>
-                <p class="network-focus-empty" id="network-focus-empty">Click a node in the graph to inspect its strongest links.</p>
+                <p class="network-focus-empty" id="network-focus-empty">Click a node in the graph to inspect links.</p>
                 <div class="network-focus-body hidden" id="network-focus-body">
                     <h5 id="network-focus-title"></h5>
                     <p id="network-focus-meta"></p>
@@ -123,7 +121,7 @@
                     <div class="network-focus-targets" id="network-focus-targets"></div>
                 </div>
             </aside>
-        </div>
+        </article>
     </section>
 
     {{ network_graph_payload|json_script:"network-graph-data" }}

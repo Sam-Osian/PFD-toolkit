@@ -2845,6 +2845,8 @@
         const statDegreeScore = byId("network-stat-degree-score");
         const statBridgeNode = byId("network-stat-bridge-node");
         const statBridgeScore = byId("network-stat-bridge-score");
+        const focusCard = byId("network-focus-card");
+        const focusCloseButton = byId("network-focus-close");
         const focusEmpty = byId("network-focus-empty");
         const focusBody = byId("network-focus-body");
         const focusTitle = byId("network-focus-title");
@@ -2881,6 +2883,8 @@
             !statDegreeScore ||
             !statBridgeNode ||
             !statBridgeScore ||
+            !focusCard ||
+            !focusCloseButton ||
             !focusEmpty ||
             !focusBody ||
             !focusTitle ||
@@ -3268,6 +3272,7 @@
 
         function updateFocusPanel(nodeId) {
             if (!nodeId || !currentNodesById.has(nodeId)) {
+                focusCard.classList.add("hidden");
                 focusBody.classList.add("hidden");
                 focusEmpty.classList.remove("hidden");
                 focusLinks.innerHTML = "";
@@ -3364,6 +3369,7 @@
                 focusTargets.appendChild(block);
             });
 
+            focusCard.classList.remove("hidden");
             focusEmpty.classList.add("hidden");
             focusBody.classList.remove("hidden");
         }
@@ -3441,6 +3447,7 @@
                 optionButton.appendChild(valueNode);
                 optionButton.addEventListener("click", function () {
                     selectedSearchNodeId = node.id;
+                    selectedGraphNodeId = node.id;
                     searchQueryInput.value = node.name;
                     syncSearchDropdownVisibility(true);
                     renderSearchSelection();
@@ -3988,10 +3995,19 @@
                 return;
             }
             selectedSearchNodeId = "";
+            selectedGraphNodeId = "";
             searchQueryInput.value = "";
             renderSearchSelection();
             renderSearchDropdown();
             syncSearchDropdownVisibility(true);
+            renderGraph();
+        });
+
+        focusCloseButton.addEventListener("click", function () {
+            if (!selectedGraphNodeId) {
+                return;
+            }
+            selectedGraphNodeId = "";
             renderGraph();
         });
 

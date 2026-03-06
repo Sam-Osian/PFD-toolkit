@@ -3816,84 +3816,117 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 .page-network .explore-workbench {
     gap: 1.35rem;
     padding-top: 0;
+    max-width: none;
+    width: 100%;
 }
 
 .network-surface {
-    margin-top: 0.4rem;
-    padding: 1.2rem;
-    border: 1px solid rgba(165, 179, 255, 0.16);
-    border-radius: 14px;
-    background:
-        radial-gradient(90% 125% at 85% -14%, rgba(118, 171, 255, 0.19) 0%, rgba(10, 15, 37, 0) 56%),
-        linear-gradient(168deg, rgba(10, 14, 36, 0.9), rgba(8, 11, 31, 0.88));
+    margin-top: 0.2rem;
+    padding: 0.2rem 0.1rem 0.5rem;
+    border: none;
+    border-radius: 0;
+    background: transparent;
 }
 
 .network-header-actions {
-    display: inline-flex;
+    display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.28rem;
     flex-wrap: wrap;
 }
 
-.network-control-grid {
-    margin-top: 0.9rem;
+.network-header-actions .button-secondary {
+    min-height: 1.56rem;
+    padding: 0.28rem 0.52rem;
+    font-size: 0.68rem;
+    border-radius: 999px;
+    background: rgba(10, 18, 46, 0.64);
+    border-color: rgba(163, 181, 252, 0.34);
+}
+
+.network-overlay-stack {
+    position: absolute;
+    top: 0.52rem;
+    left: 0.52rem;
+    right: 0.52rem;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.72rem;
+    gap: 0.36rem;
+    z-index: 6;
+    pointer-events: none;
+}
+
+.network-control-grid {
+    margin-top: 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.36rem;
+    flex-wrap: wrap;
+    pointer-events: auto;
+    max-width: min(1200px, calc(100% - 0.2rem));
 }
 
 .network-control-card {
-    border: 1px solid rgba(158, 176, 255, 0.2);
-    border-radius: 10px;
-    background: rgba(22, 31, 74, 0.34);
-    padding: 0.62rem 0.7rem;
+    border: 1px solid rgba(161, 178, 252, 0.26);
+    border-radius: 9px;
+    background: rgba(8, 14, 37, 0.52);
+    backdrop-filter: blur(8px);
+    padding: 0.36rem 0.44rem;
     display: grid;
-    gap: 0.42rem;
+    gap: 0.28rem;
+    min-width: 0;
 }
 
 .network-control-card label,
 .network-control-card span {
     margin: 0;
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
+    font-size: 0.58rem;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: rgba(201, 214, 255, 0.78);
+    color: rgba(212, 223, 255, 0.74);
 }
 
 .network-control-card input[type="search"],
 .network-control-card select {
-    min-height: 2.1rem;
-    font-size: 0.84rem;
+    min-height: 1.6rem;
+    font-size: 0.72rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.network-control-card select {
+    min-width: 7.3rem;
 }
 
 .network-control-card--search {
     position: relative;
+    min-width: min(20rem, 100%);
+    width: min(25rem, 100%);
     overflow: visible;
 }
 
 .network-search-picker {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.42rem;
+    gap: 0.26rem;
     align-items: center;
 }
 
 .network-search-clear {
-    min-height: 2.1rem;
-    padding: 0 0.62rem;
-    font-size: 0.76rem;
+    min-height: 1.6rem;
+    padding: 0 0.46rem;
+    font-size: 0.68rem;
+    border-radius: 7px;
 }
 
 .network-search-dropdown {
     position: absolute;
-    left: 0.7rem;
-    right: 0.7rem;
-    top: 5.2rem;
+    left: 0.44rem;
+    right: 0.44rem;
+    top: calc(100% + 0.3rem);
     margin-top: 0;
-    border: 1px solid rgba(154, 172, 245, 0.22);
+    border: 1px solid rgba(154, 172, 245, 0.28);
     border-radius: 9px;
-    background: rgba(12, 18, 47, 0.92);
-    max-height: 14.5rem;
+    background: rgba(7, 12, 32, 0.92);
+    max-height: 12rem;
     overflow-y: auto;
     display: grid;
     gap: 0.2rem;
@@ -3911,7 +3944,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     border: 1px solid rgba(154, 172, 245, 0.14);
     border-radius: 7px;
     background: rgba(20, 29, 70, 0.58);
-    padding: 0.38rem 0.44rem;
+    padding: 0.29rem 0.38rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -3935,7 +3968,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 }
 
 .network-search-option__label {
-    font-size: 0.76rem;
+    font-size: 0.7rem;
     color: rgba(233, 241, 255, 0.96);
     white-space: nowrap;
     overflow: hidden;
@@ -3943,21 +3976,21 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 }
 
 .network-search-option__value {
-    font-size: 0.72rem;
+    font-size: 0.66rem;
     color: rgba(208, 222, 255, 0.78);
     letter-spacing: 0.02em;
 }
 
 .network-search-option-empty {
-    padding: 0.42rem 0.46rem;
-    font-size: 0.76rem;
+    padding: 0.36rem 0.42rem;
+    font-size: 0.68rem;
     color: rgba(200, 214, 255, 0.72);
 }
 
 .network-search-selection {
-    margin: 0.44rem 0 0;
-    min-height: 1.2rem;
-    font-size: 0.74rem;
+    margin: 0.06rem 0 0;
+    min-height: 0.9rem;
+    font-size: 0.64rem;
     color: rgba(196, 210, 249, 0.74);
 }
 
@@ -3969,7 +4002,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 
 .network-search-selection-pill__label {
     color: rgba(234, 242, 255, 0.93);
-    font-size: 0.76rem;
+    font-size: 0.68rem;
 }
 
 .network-node-badge {
@@ -3977,8 +4010,8 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    padding: 0.12rem 0.42rem;
-    font-size: 0.63rem;
+    padding: 0.1rem 0.34rem;
+    font-size: 0.56rem;
     letter-spacing: 0.02em;
     text-transform: uppercase;
     border: 1px solid transparent;
@@ -4007,104 +4040,99 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 }
 
 .network-control-card input[type="range"] {
-    width: 100%;
+    width: 8.6rem;
     min-height: auto;
-    margin: 0.1rem 0 0;
+    margin: 0.02rem 0 0;
 }
 
 .network-control-card--types {
-    grid-column: span 3;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
     align-items: center;
-    column-gap: 0.4rem;
-    row-gap: 0.45rem;
-}
-
-.network-control-card--types > span {
-    grid-column: 1 / -1;
+    gap: 0.34rem;
+    padding-right: 0.52rem;
 }
 
 .network-control-card--types .checkbox {
     justify-self: start;
-    font-size: 0.8rem;
+    font-size: 0.65rem;
     color: rgba(229, 237, 255, 0.9);
+    gap: 0.24rem;
 }
 
 .network-control-card--types .checkbox span {
     text-transform: none;
     letter-spacing: 0.01em;
-    font-size: 0.8rem;
+    font-size: 0.66rem;
     color: rgba(229, 237, 255, 0.9);
 }
 
 .network-stat-grid {
-    margin-top: 0.88rem;
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.72rem;
+    margin-top: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+    pointer-events: auto;
+    max-width: min(1000px, calc(100% - 0.2rem));
 }
 
 .network-stat-card {
-    border: 1px solid rgba(158, 176, 255, 0.2);
-    border-radius: 10px;
-    background: rgba(22, 31, 74, 0.37);
-    padding: 0.68rem 0.82rem;
+    border: 1px solid rgba(158, 176, 255, 0.22);
+    border-radius: 8px;
+    background: rgba(8, 14, 37, 0.46);
+    backdrop-filter: blur(8px);
+    padding: 0.3rem 0.4rem;
     display: grid;
-    gap: 0.25rem;
+    gap: 0.08rem;
+    min-width: 7rem;
 }
 
 .network-stat-card__label {
-    font-size: 0.72rem;
-    color: rgba(203, 215, 255, 0.72);
+    font-size: 0.56rem;
+    color: rgba(203, 215, 255, 0.74);
 }
 
 .network-stat-card__value {
-    font-size: 1.08rem;
+    font-size: 0.76rem;
     color: rgba(242, 247, 255, 0.98);
     letter-spacing: 0.02em;
+    line-height: 1.22;
 }
 
 .network-stat-card__meta {
-    font-size: 0.68rem;
+    font-size: 0.56rem;
     color: rgba(197, 210, 244, 0.74);
 }
 
-.network-main-grid {
-    margin-top: 0.95rem;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(270px, 0.36fr);
-    gap: 0.72rem;
-}
-
-.network-graph-card,
-.network-focus-card {
-    border: 1px solid rgba(154, 172, 245, 0.18);
-    border-radius: 12px;
-    background: rgba(12, 18, 47, 0.58);
-}
-
 .network-graph-card {
-    min-height: 620px;
-    padding: 0.5rem;
+    margin-top: 0.52rem;
+    width: 100%;
+    min-height: min(86vh, 1040px);
+    padding: 0.52rem;
+    border: 1px solid rgba(154, 172, 245, 0.2);
+    border-radius: 14px;
+    background:
+        radial-gradient(120% 140% at 80% -20%, rgba(121, 167, 255, 0.22), rgba(8, 12, 30, 0) 58%),
+        linear-gradient(165deg, rgba(8, 13, 34, 0.9), rgba(5, 9, 24, 0.9));
     position: relative;
+    overflow: hidden;
 }
 
 .network-graph-canvas {
     width: 100%;
     height: 100%;
-    min-height: 600px;
-    border-radius: 10px;
+    min-height: min(82vh, 1000px);
+    border-radius: 12px;
     background:
-        radial-gradient(120% 100% at 85% -10%, rgba(139, 174, 255, 0.08), rgba(9, 14, 33, 0) 64%),
-        rgba(8, 12, 33, 0.66);
+        radial-gradient(120% 100% at 85% -10%, rgba(139, 174, 255, 0.11), rgba(9, 14, 33, 0) 64%),
+        rgba(5, 9, 25, 0.74);
 }
 
 .network-graph-fullscreen-btn {
     position: absolute;
-    top: 0.85rem;
-    right: 0.85rem;
-    width: 2.25rem;
-    height: 2.25rem;
+    top: 0.78rem;
+    right: 0.78rem;
+    width: 1.9rem;
+    height: 1.9rem;
     border-radius: 999px;
     border: 1px solid rgba(165, 183, 255, 0.42);
     background: rgba(10, 18, 46, 0.78);
@@ -4112,12 +4140,12 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    z-index: 4;
+    z-index: 8;
     cursor: pointer;
 }
 
 .network-graph-fullscreen-btn i {
-    font-size: 1rem;
+    font-size: 0.86rem;
 }
 
 .network-graph-fullscreen-btn:hover {
@@ -4131,7 +4159,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 }
 
 .network-graph-fullscreen-btn--exit {
-    right: 3.55rem;
+    right: 3.05rem;
 }
 
 .network-graph-card:fullscreen,
@@ -4167,38 +4195,63 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 }
 
 .network-focus-card {
-    padding: 0.86rem 0.82rem;
+    position: absolute;
+    top: 4.65rem;
+    right: 0.78rem;
+    width: min(21rem, calc(100% - 1.56rem));
+    max-height: min(64vh, 42rem);
+    overflow: auto;
+    padding: 0.52rem 0.56rem;
+    border: 1px solid rgba(154, 172, 245, 0.28);
+    border-radius: 10px;
+    background: rgba(6, 12, 32, 0.8);
+    backdrop-filter: blur(10px);
+    z-index: 7;
 }
 
 .network-focus-card h4 {
     margin: 0;
-    font-size: 0.86rem;
+    font-size: 0.76rem;
     font-weight: 600;
     color: rgba(231, 238, 255, 0.9);
 }
 
+.network-focus-close {
+    position: absolute;
+    top: 0.28rem;
+    right: 0.34rem;
+    width: 1.4rem;
+    height: 1.4rem;
+    border-radius: 999px;
+    border: 1px solid rgba(165, 183, 255, 0.34);
+    background: rgba(10, 18, 46, 0.6);
+    color: rgba(236, 244, 255, 0.9);
+    cursor: pointer;
+    line-height: 1;
+}
+
 .network-focus-empty {
-    margin-top: 0.6rem;
+    margin-top: 0.4rem;
     color: rgba(210, 223, 255, 0.74);
-    font-size: 0.84rem;
-    line-height: 1.5;
+    font-size: 0.7rem;
+    line-height: 1.35;
 }
 
 .network-focus-body {
-    margin-top: 0.6rem;
+    margin-top: 0.42rem;
     display: grid;
-    gap: 0.45rem;
+    gap: 0.3rem;
 }
 
 .network-focus-body h5 {
     margin: 0;
-    font-size: 0.97rem;
+    font-size: 0.8rem;
 }
 
 .network-focus-body p {
     margin: 0;
     color: rgba(214, 226, 255, 0.72);
-    font-size: 0.82rem;
+    font-size: 0.68rem;
 }
 
 .network-focus-links {
@@ -4213,12 +4266,12 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     border: 1px solid rgba(154, 172, 245, 0.2);
     border-radius: 8px;
     background: rgba(15, 22, 53, 0.56);
-    padding: 0.36rem 0.46rem;
+    padding: 0.28rem 0.38rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 0.55rem;
-    font-size: 0.76rem;
+    font-size: 0.67rem;
 }
 
 .network-focus-links li span {
@@ -4241,7 +4294,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 
 .network-focus-links li strong {
     color: rgba(236, 243, 255, 0.98);
-    font-size: 0.74rem;
+    font-size: 0.64rem;
     letter-spacing: 0.03em;
 }
 
@@ -4255,12 +4308,12 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     border: 1px solid rgba(154, 172, 245, 0.2);
     border-radius: 8px;
     background: rgba(14, 21, 52, 0.48);
-    padding: 0.36rem 0.44rem;
+    padding: 0.28rem 0.34rem;
 }
 
 .network-focus-target-group h6 {
     margin: 0 0 0.26rem;
-    font-size: 0.66rem;
+    font-size: 0.58rem;
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: rgba(201, 214, 255, 0.75);
@@ -4279,7 +4332,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     align-items: center;
     justify-content: space-between;
     gap: 0.42rem;
-    font-size: 0.72rem;
+    font-size: 0.64rem;
 }
 
 .network-focus-target-list li span {
@@ -4291,7 +4344,7 @@ body.page-extract .workflow-clean .workflow-clean-shell {
 
 .network-focus-target-list li strong {
     color: rgba(235, 243, 255, 0.97);
-    font-size: 0.7rem;
+    font-size: 0.62rem;
     letter-spacing: 0.02em;
 }
 
@@ -4305,29 +4358,17 @@ body.page-extract .workflow-clean .workflow-clean-shell {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .network-control-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .network-control-card--types {
-        grid-column: span 2;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .network-stat-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .network-main-grid {
-        grid-template-columns: 1fr;
-    }
-
     .network-graph-card {
-        min-height: 520px;
+        min-height: min(82vh, 920px);
     }
 
     .network-graph-canvas {
-        min-height: 500px;
+        min-height: min(78vh, 880px);
+    }
+
+    .network-focus-card {
+        top: 5.1rem;
+        width: min(18.5rem, calc(100% - 1.56rem));
     }
 }
 
@@ -4457,26 +4498,42 @@ body.page-extract .workflow-clean .workflow-clean-shell {
         grid-template-columns: 1fr;
     }
 
-    .network-control-grid,
-    .network-control-card--types,
-    .network-stat-grid {
-        grid-template-columns: 1fr;
+    .network-overlay-stack {
+        gap: 0.28rem;
+    }
+
+    .network-control-grid {
+        max-width: 100%;
+        gap: 0.26rem;
+    }
+
+    .network-control-card--search {
+        width: min(100%, 16.8rem);
     }
 
     .network-control-card--types {
-        grid-column: auto;
+        width: auto;
+        padding-right: 0.36rem;
     }
 
-    .network-surface {
-        padding: 0.95rem;
+    .network-stat-card {
+        min-width: 5.9rem;
     }
 
     .network-graph-card {
-        min-height: 460px;
+        min-height: 72vh;
     }
 
     .network-graph-canvas {
-        min-height: 440px;
+        min-height: 68vh;
+    }
+
+    .network-focus-card {
+        top: auto;
+        bottom: 0.78rem;
+        right: 0.78rem;
+        width: min(17.6rem, calc(100% - 1.56rem));
+        max-height: 52vh;
     }
 }
 
@@ -4618,21 +4675,41 @@ body.page-extract .workflow-clean .workflow-clean-shell {
     }
 
     .network-header-actions {
-        width: 100%;
         justify-content: flex-start;
     }
 
     .network-header-actions .button-secondary {
-        flex: 1 1 11rem;
+        flex: 0 0 auto;
     }
 
     .network-graph-card {
-        min-height: 360px;
+        min-height: 66vh;
         padding: 0.42rem;
     }
 
     .network-graph-canvas {
-        min-height: 340px;
+        min-height: 62vh;
+    }
+
+    .network-control-card {
+        width: 100%;
+    }
+
+    .network-control-card input[type="range"],
+    .network-control-card select {
+        width: 100%;
+    }
+
+    .network-control-card--types {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.16rem 0.32rem;
+    }
+
+    .network-focus-card {
+        left: 0.78rem;
+        width: auto;
     }
 }
 
