@@ -1,0 +1,30 @@
+{% extends "workbench/base.html" %}
+
+{% block sidebar %}
+    {% include "workbench/_sidebar.html" %}
+{% endblock %}
+
+{% block content %}
+<div class="workbench explore-workbench">
+    <section class="explore-surface reveal-up">
+        <div class="section-card-header section-card-header--inline">
+            <div>
+                <span class="section-kicker">Network analysis</span>
+                <h3>Invite-only preview</h3>
+                <p>This feature is currently being tested and is invite only.</p>
+            </div>
+        </div>
+
+        <form method="post" action="{% url 'workbench:network_unlock' %}" class="form-card config-form" autocomplete="off">
+            {% csrf_token %}
+            <div class="field-group">
+                <label for="network_password">Access password</label>
+                <input id="network_password" name="network_password" type="password" required autocomplete="current-password">
+            </div>
+            <div class="settings-actions">
+                <button type="submit" class="button-primary">Unlock network tab</button>
+            </div>
+        </form>
+    </section>
+</div>
+{% endblock %}

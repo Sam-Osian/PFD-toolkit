@@ -9,6 +9,13 @@ from .state import dataframe_from_payload, dataframe_to_payload
 class WorkbenchViewTests(TestCase):
     """Smoke tests for the Workbench page."""
 
+    def _unlock_network_tab(self) -> None:
+        response = self.client.post(
+            reverse("workbench:network_unlock"),
+            data={"network_password": "tape-arena-edit"},
+        )
+        self.assertEqual(response.status_code, 302)
+
     def test_index_renders(self) -> None:
         response = self.client.get(reverse("workbench:index"))
         self.assertEqual(response.status_code, 200)
@@ -63,7 +70,32 @@ class WorkbenchViewTests(TestCase):
             ],
         )
 
+    def test_network_page_is_invite_only_until_unlocked(self) -> None:
+        response = self.client.get(reverse("workbench:network"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This feature is currently being tested and is invite only.")
+        self.assertContains(response, "Access password")
+        self.assertNotContains(response, "Interconnected signal map")
+
+        data_response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(data_response.status_code, 403)
+
+    def test_network_unlock_requires_correct_password(self) -> None:
+        wrong_response = self.client.post(
+            reverse("workbench:network_unlock"),
+            data={"network_password": "wrong-password"},
+        )
+        self.assertEqual(wrong_response.status_code, 302)
+
+        locked_response = self.client.get(reverse("workbench:network"))
+        self.assertContains(locked_response, "This feature is currently being tested and is invite only.")
+
+        self._unlock_network_tab()
+        unlocked_response = self.client.get(reverse("workbench:network"))
+        self.assertContains(unlocked_response, "Interconnected signal map")
+
     def test_network_page_renders_graph_payload(self) -> None:
+        self._unlock_network_tab()
         reports_df = pd.DataFrame(
             [
                 {
@@ -108,6 +140,7 @@ class WorkbenchViewTests(TestCase):
         self.assertTrue(any(node["type"] == "theme" for node in payload["graph"]["nodes"]))
 
     def test_network_data_endpoint_returns_json_payload(self) -> None:
+        self._unlock_network_tab()
         reports_df = pd.DataFrame(
             [
                 {
@@ -139,7 +172,76 @@ class WorkbenchViewTests(TestCase):
         self.assertIn("options", payload)
         self.assertEqual(payload["summary"]["reports_shown"], 2)
 
+    def test_network_theme_cooccurrence_edges_include_normalized_score(self) -> None:
+        self._unlock_network_tab()
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_suicide": True,
+                    "theme_medication_safety": True,
+                },
+                {
+                    "date": "2024-01-12",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_suicide": True,
+                    "theme_medication_safety": True,
+                },
+                {
+                    "date": "2024-01-20",
+                    "coroner": "B. Example",
+                    "area": "Merseyside",
+                    "receiver": "CQC",
+                    "theme_suicide": True,
+                    "theme_medication_safety": False,
+                },
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        theme_theme_edges = [
+            edge for edge in payload.get("graph", {}).get("edges", []) if edge.get("kind") == "theme_theme"
+        ]
+        self.assertGreaterEqual(len(theme_theme_edges), 1)
+        self.assertTrue(any(float(edge.get("normalized_value", 0.0)) > 0 for edge in theme_theme_edges))
+
+    def test_network_default_types_exclude_coroners(self) -> None:
+        self._unlock_network_tab()
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_suicide": True,
+                }
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(response.status_code, 200)
+        options = response.json().get("options", {})
+        self.assertEqual(options.get("default_types"), ["theme", "receiver", "area"])
+        self.assertNotIn("coroner", options.get("default_types", []))
+
     def test_explore_hides_theme_columns_but_network_uses_them(self) -> None:
+        self._unlock_network_tab()
         reports_df = pd.DataFrame(
             [
                 {

@@ -31,6 +31,7 @@ urlpatterns = [
     ),
     path("explore-pfds/", views.explore, name="explore"),
     path("network/", views.network_page, name="network"),
+    path("network/unlock/", views.network_unlock, name="network_unlock"),
     path("network-data/", views.network_data, name="network_data"),
     path("workbooks/create/", views.workbook_create, name="workbook_create"),
     path(

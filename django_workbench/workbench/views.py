@@ -70,6 +70,9 @@ from .state import (
 
 logger = logging.getLogger(__name__)
 
+NETWORK_INVITE_PASSWORD = "tape-arena-edit"
+NETWORK_INVITE_SESSION_KEY = "network_tab_unlocked"
+
 SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
     "home": {
         "title": "PFD Toolkit - Analyse Prevention of Future Deaths Reports with AI",
@@ -428,6 +431,8 @@ NETWORK_RECEIVER_TOP_N = 72
 NETWORK_CORONER_TOP_N = 44
 NETWORK_AREA_TOP_N = 36
 NETWORK_EDGE_MAX = 2600
+NETWORK_THEME_THEME_EDGE_MAX = 420
+NETWORK_THEME_THEME_MAX_PER_THEME = 8
 NETWORK_SCOPE_QUERY_KEYS: tuple[str, ...] = (
     "network_search",
     "network_focus",
@@ -1048,6 +1053,8 @@ def _build_network_graph_payload(
                 "max_node_limit": 120,
                 "default_node_limit": 120,
                 "available_types": ["theme", "receiver", "coroner", "area"],
+            "default_types": ["theme", "receiver", "area"],
+            "default_normalise_theme_cooccurrence": True,
             },
         }
 
@@ -1282,6 +1289,8 @@ def _build_network_graph_payload(
                 "max_node_limit": int(max_node_limit),
                 "default_node_limit": int(default_node_limit),
                 "available_types": ["receiver", "coroner", "area"],
+                "default_types": ["receiver", "area"],
+                "default_normalise_theme_cooccurrence": True,
             },
         }
 
@@ -1295,6 +1304,7 @@ def _build_network_graph_payload(
     edge_theme_receiver: Counter[tuple[str, str]] = Counter()
     edge_theme_coroner: Counter[tuple[str, str]] = Counter()
     edge_theme_area: Counter[tuple[str, str]] = Counter()
+    edge_theme_theme: Counter[tuple[str, str]] = Counter()
 
     reports_with_theme = 0
     theme_assignments = 0
@@ -1317,6 +1327,11 @@ def _build_network_graph_payload(
             continue
         reports_with_theme += 1
         theme_assignments += len(active_themes)
+
+        unique_active_themes = sorted(set(active_themes))
+        for idx, left_theme in enumerate(unique_active_themes):
+            for right_theme in unique_active_themes[idx + 1 :]:
+                edge_theme_theme[(left_theme, right_theme)] += 1
 
         receivers = _split_dashboard_receivers(row.get("receiver"))
         coroner = _normalise_dashboard_value(row.get("coroner"))
@@ -1433,6 +1448,57 @@ def _build_network_graph_payload(
                 "kind": "theme_area",
             }
         )
+
+    for (left_theme, right_theme), count in edge_theme_theme.items():
+        if count < min_count_for_edge:
+            continue
+        if left_theme not in selected_themes or right_theme not in selected_themes:
+            continue
+        left_total = int(theme_counter.get(left_theme, 0))
+        right_total = int(theme_counter.get(right_theme, 0))
+        denominator = left_total + right_total - int(count)
+        if denominator <= 0:
+            continue
+        jaccard = float(count) / float(denominator)
+        edges.append(
+            {
+                "source": _network_node_id("theme", left_theme),
+                "target": _network_node_id("theme", right_theme),
+                "value": int(count),
+                "normalized_value": round(jaccard, 6),
+                "kind": "theme_theme",
+            }
+        )
+
+    theme_theme_edges = [edge for edge in edges if str(edge.get("kind")) == "theme_theme"]
+    non_theme_theme_edges = [edge for edge in edges if str(edge.get("kind")) != "theme_theme"]
+    theme_theme_edges.sort(
+        key=lambda item: (
+            -float(item.get("normalized_value", 0.0)),
+            -int(item.get("value", 0)),
+            str(item.get("source", "")),
+            str(item.get("target", "")),
+        )
+    )
+    theme_theme_node_degree: Counter[str] = Counter()
+    limited_theme_theme_edges: list[dict[str, Any]] = []
+    for edge in theme_theme_edges:
+        source_id = str(edge.get("source", ""))
+        target_id = str(edge.get("target", ""))
+        if not source_id or not target_id:
+            continue
+        if (
+            int(theme_theme_node_degree.get(source_id, 0)) >= NETWORK_THEME_THEME_MAX_PER_THEME
+            or int(theme_theme_node_degree.get(target_id, 0)) >= NETWORK_THEME_THEME_MAX_PER_THEME
+        ):
+            continue
+        limited_theme_theme_edges.append(edge)
+        theme_theme_node_degree[source_id] += 1
+        theme_theme_node_degree[target_id] += 1
+        if len(limited_theme_theme_edges) >= NETWORK_THEME_THEME_EDGE_MAX:
+            break
+
+    edges = non_theme_theme_edges + limited_theme_theme_edges
 
     edges.sort(key=lambda item: (-int(item["value"]), str(item["source"]), str(item["target"])))
     if len(edges) > NETWORK_EDGE_MAX:
@@ -1568,6 +1634,8 @@ def _build_network_graph_payload(
             "max_node_limit": int(max_node_limit),
             "default_node_limit": int(default_node_limit),
             "available_types": ["theme", "receiver", "coroner", "area"],
+            "default_types": ["theme", "receiver", "area"],
+            "default_normalise_theme_cooccurrence": True,
         },
     }
 
@@ -4362,6 +4430,20 @@ def explore(request: HttpRequest) -> HttpResponse:
 def network_page(request: HttpRequest) -> HttpResponse:
     started_at = perf_counter()
     init_state(request.session)
+    if not _is_network_tab_unlocked(request):
+        context = {
+            "current_page": "network",
+        }
+        context.update(
+            _build_seo_context(
+                request,
+                "network",
+                canonical_path=reverse("workbench:network"),
+            )
+        )
+        _log_timed_event("network_page_locked", started_at)
+        return render(request, "workbench/network_locked.html", context)
+
     _ensure_workspace_reports_loaded(request)
 
     if request.method == "POST":
@@ -4410,6 +4492,27 @@ def network_page(request: HttpRequest) -> HttpResponse:
         graph_nodes=context.get("network_graph_payload", {}).get("summary", {}).get("nodes", 0),
     )
     return render(request, "workbench/network.html", context)
+
+
+def _is_network_tab_unlocked(request: HttpRequest) -> bool:
+    return bool(request.session.get(NETWORK_INVITE_SESSION_KEY))
+
+
+@require_http_methods(["POST"])
+def network_unlock(request: HttpRequest) -> HttpResponse:
+    init_state(request.session)
+    candidate_password = str(request.POST.get("network_password", "")).strip()
+
+    if candidate_password == NETWORK_INVITE_PASSWORD:
+        request.session[NETWORK_INVITE_SESSION_KEY] = True
+        request.session.modified = True
+        messages.success(request, "Network access unlocked for this session.")
+    else:
+        request.session.pop(NETWORK_INVITE_SESSION_KEY, None)
+        request.session.modified = True
+        messages.error(request, "Incorrect password. Network analysis is currently being tested and invite only.")
+
+    return redirect("workbench:network")
 
 
 @require_http_methods(["GET", "POST"])
@@ -4607,6 +4710,14 @@ def dashboard_data(request: HttpRequest) -> HttpResponse:
 def network_data(request: HttpRequest) -> HttpResponse:
     started_at = perf_counter()
     init_state(request.session)
+    if not _is_network_tab_unlocked(request):
+        return JsonResponse(
+            {
+                "detail": "Network analysis is currently being tested and invite only.",
+            },
+            status=403,
+        )
+
     _ensure_workspace_reports_loaded(request)
     reports_df = _get_reports_df_with_row_ids(request.session)
     selected_filters = _get_explore_dashboard_filters(request)

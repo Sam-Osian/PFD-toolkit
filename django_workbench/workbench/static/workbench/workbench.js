@@ -2829,6 +2829,7 @@
         const minEdgeInput = byId("network-min-edge");
         const minEdgeValue = byId("network-min-edge-value");
         const typeInputs = Array.from(root.querySelectorAll("[data-network-type]"));
+        const normalizeThemeCooccurrenceInput = byId("network-normalise-theme-cooccurrence");
         const fullscreenEnterButton = byId("network-graph-fullscreen-enter");
         const fullscreenExitButton = byId("network-graph-fullscreen-exit");
         const applySelectionButton = byId("network-apply-selection");
@@ -2867,6 +2868,7 @@
             !minEdgeInput ||
             !minEdgeValue ||
             !typeInputs.length ||
+            !normalizeThemeCooccurrenceInput ||
             !fullscreenEnterButton ||
             !fullscreenExitButton ||
             !applySelectionButton ||
@@ -2985,6 +2987,7 @@
         const initialParams = new URLSearchParams(window.location.search);
         let selectedSearchNodeId = (initialParams.get("network_focus") || "").trim();
         let selectedGraphNodeId = (initialParams.get("network_selected_node") || "").trim();
+        const initialNormaliseThemeCooccurrence = (initialParams.get("network_normalise_theme_cooccurrence") || "").trim().toLowerCase();
 
         function typePalette() {
             return {
@@ -3000,6 +3003,7 @@
                 theme_receiver: getCssVar("--network-edge-theme-receiver", "rgba(121, 210, 176, 0.58)"),
                 theme_coroner: getCssVar("--network-edge-theme-coroner", "rgba(255, 178, 126, 0.56)"),
                 theme_area: getCssVar("--network-edge-theme-area", "rgba(184, 162, 255, 0.58)"),
+                theme_theme: getCssVar("--network-edge-theme-theme", "rgba(137, 171, 255, 0.66)"),
                 fallback: getCssVar("--network-edge-fallback", "rgba(164, 185, 255, 0.48)"),
             };
         }
@@ -3035,10 +3039,17 @@
             const target = typeof edge.target === "string" ? edge.target : "";
             const value = Number(edge.value || 0);
             const kind = typeof edge.kind === "string" ? edge.kind : "";
+            const normalizedValue = Number(edge.normalized_value || 0);
             if (!source || !target || !Number.isFinite(value) || value <= 0) {
                 return null;
             }
-            return { source: source, target: target, value: value, kind: kind };
+            return {
+                source: source,
+                target: target,
+                value: value,
+                kind: kind,
+                normalizedValue: Number.isFinite(normalizedValue) && normalizedValue > 0 ? normalizedValue : 0,
+            };
         }
 
         function applyPayload(newPayload, preserveValues) {
@@ -3075,7 +3086,7 @@
             const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
             const defaultMinEdgeWeight = Math.max(
                 1,
-                Math.min(maxEdgeWeight, Number(options.default_min_edge_weight || 1))
+                Math.min(maxEdgeWeight, 20)
             );
             const maxNodeLimit = Math.max(24, Number(options.max_node_limit || sourceNodes.length || 120));
             const defaultNodeLimit = Math.max(
@@ -3090,6 +3101,29 @@
             if (!preserveValues) {
                 minEdgeInput.value = String(defaultMinEdgeWeight);
                 currentNodeLimit = defaultNodeLimit;
+
+                const defaultTypes = Array.isArray(options.default_types) ? options.default_types : [];
+                const defaultTypeSet = new Set(
+                    defaultTypes
+                        .map((value) => String(value || "").trim())
+                        .filter((value) => categoryOrder.includes(value))
+                );
+                typeInputs.forEach((input) => {
+                    if (defaultTypeSet.size) {
+                        input.checked = defaultTypeSet.has(String(input.value || "").trim());
+                    } else {
+                        input.checked = String(input.value || "").trim() !== "coroner";
+                    }
+                });
+                forceAtLeastOneType(typeInputs[0] || null);
+
+                if (initialNormaliseThemeCooccurrence === "1" || initialNormaliseThemeCooccurrence === "true") {
+                    normalizeThemeCooccurrenceInput.checked = true;
+                } else if (initialNormaliseThemeCooccurrence === "0" || initialNormaliseThemeCooccurrence === "false") {
+                    normalizeThemeCooccurrenceInput.checked = false;
+                } else {
+                    normalizeThemeCooccurrenceInput.checked = options.default_normalise_theme_cooccurrence !== false;
+                }
             } else {
                 const clampedMinEdge = Math.min(maxEdgeWeight, Math.max(1, Number(minEdgeInput.value || 1)));
                 minEdgeInput.value = String(clampedMinEdge);
@@ -3134,7 +3168,11 @@
             return sorted[index] || 0;
         }
 
-        function edgeWidthForValue(weight) {
+        function edgeWidthForValue(weight, kind, useNormalisedThemeCooccurrence, displayWeight) {
+            if (useNormalisedThemeCooccurrence && kind === "theme_theme") {
+                const normalized = Math.max(0, Math.min(1, Number(displayWeight || 0)));
+                return 1.1 + (normalized * 4.8);
+            }
             return Math.min(6.5, 0.85 + (Math.log(weight + 1) * 1.35));
         }
 
@@ -3510,6 +3548,7 @@
                 params.delete("network_selected_node");
             }
             params.set("network_min_edge", String(Math.max(1, Number(minEdgeInput.value || 1))));
+            params.set("network_normalise_theme_cooccurrence", normalizeThemeCooccurrenceInput.checked ? "1" : "0");
             params.delete("network_type");
             typeInputs.forEach((input) => {
                 if (input.checked) {
@@ -3549,6 +3588,7 @@
 
         function renderGraph() {
             const selectedTypes = getSelectedTypes();
+            const useNormalisedThemeCooccurrence = Boolean(normalizeThemeCooccurrenceInput.checked);
             const minEdgeWeight = Math.max(1, Number(minEdgeInput.value || 1));
             const maxNodes = Math.max(24, Number(currentNodeLimit || 120));
             const layout = layoutSelect.value === "circular" ? "circular" : "force";
@@ -3669,21 +3709,27 @@
                 .map((edge) => {
                     const lineColor = edgeColors[edge.kind] || edgeColors.fallback;
                     const edgeWeight = Number(edge.value || 0);
+                    const normalizedWeight = Number(edge.normalizedValue || 0);
+                    const displayWeight = useNormalisedThemeCooccurrence && edge.kind === "theme_theme"
+                        ? normalizedWeight
+                        : edgeWeight;
                     return {
                         source: edge.source,
                         target: edge.target,
                         value: edgeWeight,
+                        normalizedValue: normalizedWeight,
+                        displayValue: displayWeight,
                         kind: edge.kind,
                         lineStyle: {
                             color: lineColor,
                             opacity: 0.44,
-                            width: edgeWidthForValue(edgeWeight),
+                            width: edgeWidthForValue(edgeWeight, edge.kind, useNormalisedThemeCooccurrence, displayWeight),
                             curveness: 0.13,
                         },
                         emphasis: {
                             lineStyle: {
                                 opacity: 0.86,
-                                width: edgeWidthForValue(edgeWeight) + 0.8,
+                                width: edgeWidthForValue(edgeWeight, edge.kind, useNormalisedThemeCooccurrence, displayWeight) + 0.8,
                             },
                         },
                     };
@@ -3758,8 +3804,11 @@
             const offGraphSuffix = focusedNodeName && !activeSearchNodeInGraph
                 ? " Focus node is outside current graph controls."
                 : "";
+            const cooccurrenceModeSuffix = useNormalisedThemeCooccurrence
+                ? " Theme co-occurrence links are normalised."
+                : " Theme co-occurrence links use raw counts.";
             setStatus(
-                `Showing ${Number(chartNodes.length).toLocaleString()} nodes and ${Number(chartEdges.length).toLocaleString()} links from ${reportsInScope.toLocaleString()} reports (${typeSummary}).${focusSuffix}${clickedSuffix}${offGraphSuffix}`
+                `Showing ${Number(chartNodes.length).toLocaleString()} nodes and ${Number(chartEdges.length).toLocaleString()} links from ${reportsInScope.toLocaleString()} reports (${typeSummary}).${focusSuffix}${clickedSuffix}${offGraphSuffix}${cooccurrenceModeSuffix}`
             );
             updateFocusPanel(selectedGraphNodeId || "");
 
@@ -3773,6 +3822,12 @@
                         formatter: function (params) {
                             if (params.dataType === "edge") {
                                 const edgeValue = Number(params.data.value || 0);
+                                const edgeKind = String(params.data.kind || "");
+                                const edgeNormalisedValue = Number(params.data.normalizedValue || 0);
+                                if (edgeKind === "theme_theme" && edgeNormalisedValue > 0) {
+                                    const normalisedLabel = edgeNormalisedValue.toFixed(3);
+                                    return `Co-occurrence: ${edgeValue.toLocaleString()} | Normalised: ${normalisedLabel}`;
+                                }
                                 return `Link strength: ${edgeValue.toLocaleString()}`;
                             }
                             const nodeType = categoryLabels[params.data.type] || "Node";
@@ -3941,11 +3996,23 @@
             syncSearchDropdownVisibility(true);
             renderSearchSelection();
             layoutSelect.value = "force";
-            typeInputs.forEach((input) => {
-                input.checked = true;
-            });
-
             const options = payload.options && typeof payload.options === "object" ? payload.options : {};
+            const defaultTypes = Array.isArray(options.default_types) ? options.default_types : [];
+            const defaultTypeSet = new Set(
+                defaultTypes
+                    .map((value) => String(value || "").trim())
+                    .filter((value) => categoryOrder.includes(value))
+            );
+            typeInputs.forEach((input) => {
+                if (defaultTypeSet.size) {
+                    input.checked = defaultTypeSet.has(String(input.value || "").trim());
+                } else {
+                    input.checked = String(input.value || "").trim() !== "coroner";
+                }
+            });
+            forceAtLeastOneType(typeInputs[0] || null);
+            normalizeThemeCooccurrenceInput.checked = options.default_normalise_theme_cooccurrence !== false;
+
             const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
             const defaultMinEdgeWeight = Math.max(
                 1,
@@ -3972,6 +4039,7 @@
         });
 
         minEdgeInput.addEventListener("input", renderGraph);
+        normalizeThemeCooccurrenceInput.addEventListener("change", renderGraph);
         layoutSelect.addEventListener("change", renderGraph);
         searchQueryInput.addEventListener("input", function () {
             searchDropdownIntentOpen = true;
