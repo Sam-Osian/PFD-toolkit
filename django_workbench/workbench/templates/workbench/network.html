@@ -81,32 +81,12 @@
                     </div>
                 </div>
                 <div class="network-stat-grid">
-                    <article class="network-stat-card">
-                        <span class="network-stat-card__label">Reports</span>
-                        <strong class="network-stat-card__value" id="network-stat-reports">{{ network_graph_payload.summary.reports_shown|default:0 }}</strong>
-                    </article>
-                    <article class="network-stat-card">
-                        <span class="network-stat-card__label">Nodes</span>
-                        <strong class="network-stat-card__value" id="network-stat-nodes">0</strong>
-                    </article>
-                    <article class="network-stat-card">
-                        <span class="network-stat-card__label">Edges</span>
-                        <strong class="network-stat-card__value" id="network-stat-edges">0</strong>
-                    </article>
-                    <article class="network-stat-card">
-                        <span class="network-stat-card__label">Top theme</span>
-                        <strong class="network-stat-card__value" id="network-stat-top-theme">{{ network_graph_payload.summary.top_theme.name|default:"-" }}</strong>
-                    </article>
-                    <article class="network-stat-card">
-                        <span class="network-stat-card__label" id="network-stat-degree-label">Highest degree</span>
-                        <strong class="network-stat-card__value" id="network-stat-degree-node">-</strong>
-                        <span class="network-stat-card__meta" id="network-stat-degree-score">-</span>
-                    </article>
-                    <article class="network-stat-card">
-                        <span class="network-stat-card__label" id="network-stat-bridge-label">Highest betweenness</span>
-                        <strong class="network-stat-card__value" id="network-stat-bridge-node">-</strong>
-                        <span class="network-stat-card__meta" id="network-stat-bridge-score">-</span>
-                    </article>
+                    <div class="network-stat-line"><span class="network-stat-card__label">Reports</span><strong class="network-stat-card__value" id="network-stat-reports">{{ network_graph_payload.summary.reports_shown|default:0 }}</strong></div>
+                    <div class="network-stat-line"><span class="network-stat-card__label">Nodes</span><strong class="network-stat-card__value" id="network-stat-nodes">0</strong></div>
+                    <div class="network-stat-line"><span class="network-stat-card__label">Edges</span><strong class="network-stat-card__value" id="network-stat-edges">0</strong></div>
+                    <div class="network-stat-line"><span class="network-stat-card__label">Top theme</span><strong class="network-stat-card__value" id="network-stat-top-theme">{{ network_graph_payload.summary.top_theme.name|default:"-" }}</strong></div>
+                    <div class="network-stat-line"><span class="network-stat-card__label" id="network-stat-degree-label">Highest degree</span><strong class="network-stat-card__value" id="network-stat-degree-node">-</strong><span class="network-stat-card__meta" id="network-stat-degree-score">-</span></div>
+                    <div class="network-stat-line"><span class="network-stat-card__label" id="network-stat-bridge-label">Highest betweenness</span><strong class="network-stat-card__value" id="network-stat-bridge-node">-</strong><span class="network-stat-card__meta" id="network-stat-bridge-score">-</span></div>
                 </div>
             </div>
             <div class="network-graph-canvas" id="network-graph-canvas" role="img" aria-label="Interactive network graph of report links"></div>
