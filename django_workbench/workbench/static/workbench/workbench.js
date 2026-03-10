@@ -2827,7 +2827,9 @@
         const searchClearButton = byId("network-search-clear");
         const layoutSelect = byId("network-layout");
         const minEdgeInput = byId("network-min-edge");
-        const minEdgeValue = byId("network-min-edge-value");
+        const minEdgeApplyButton = byId("network-min-edge-apply");
+        const themeCapInput = byId("network-theme-cap");
+        const themeCapApplyButton = byId("network-theme-cap-apply");
         const typeInputs = Array.from(root.querySelectorAll("[data-network-type]"));
         const normalizeThemeCooccurrenceInput = byId("network-normalise-theme-cooccurrence");
         const fullscreenEnterButton = byId("network-graph-fullscreen-enter");
@@ -2866,7 +2868,9 @@
             !searchClearButton ||
             !layoutSelect ||
             !minEdgeInput ||
-            !minEdgeValue ||
+            !minEdgeApplyButton ||
+            !themeCapInput ||
+            !themeCapApplyButton ||
             !typeInputs.length ||
             !normalizeThemeCooccurrenceInput ||
             !fullscreenEnterButton ||
@@ -2970,8 +2974,12 @@
         let sourceSearchNodesById = new Map();
         let currentNodesById = new Map();
         let currentEdges = [];
+        const DEFAULT_NETWORK_EDGE_THRESHOLD = 50;
+        const MIN_NETWORK_NODE_LIMIT = 50;
         let searchDropdownIntentOpen = false;
         let currentNodeLimit = 120;
+        let appliedMinEdgeWeight = DEFAULT_NETWORK_EDGE_THRESHOLD;
+        let appliedThemeCap = null;
         let currentCentrality = {
             degree: new Map(),
             betweenness: new Map(),
@@ -2985,9 +2993,71 @@
             area: "Area",
         };
         const initialParams = new URLSearchParams(window.location.search);
+        const initialMinEdgeParam = (initialParams.get("network_min_edge") || "").trim();
+        const initialThemeCapParam = (initialParams.get("network_theme_cap") || "").trim();
+        let initialMinEdgeApplied = false;
+        let initialThemeCapApplied = false;
         let selectedSearchNodeId = (initialParams.get("network_focus") || "").trim();
         let selectedGraphNodeId = (initialParams.get("network_selected_node") || "").trim();
         const initialNormaliseThemeCooccurrence = (initialParams.get("network_normalise_theme_cooccurrence") || "").trim().toLowerCase();
+
+        function normaliseMinEdgeThreshold(rawValue, fallback) {
+            const cleaned = String(rawValue || "").trim();
+            if (!cleaned) {
+                return fallback;
+            }
+            const parsed = Number(cleaned);
+            if (!Number.isFinite(parsed)) {
+                return fallback;
+            }
+            const rounded = Math.round(parsed);
+            if (rounded <= 0) {
+                return fallback;
+            }
+            return rounded;
+        }
+
+        function normaliseThemeCap(rawValue, fallback) {
+            const cleaned = String(rawValue || "").trim();
+            if (!cleaned) {
+                return null;
+            }
+            const parsed = Number(cleaned);
+            if (!Number.isFinite(parsed)) {
+                return fallback;
+            }
+            const rounded = Math.round(parsed);
+            if (rounded <= 0) {
+                return fallback;
+            }
+            return rounded;
+        }
+
+        function applyMinEdgeInputValue(options) {
+            const settings = options && typeof options === "object" ? options : {};
+            const fallback = Number.isFinite(settings.fallback)
+                ? Number(settings.fallback)
+                : appliedMinEdgeWeight;
+            const normalized = normaliseMinEdgeThreshold(minEdgeInput.value, fallback);
+            appliedMinEdgeWeight = normalized;
+            minEdgeInput.value = String(normalized);
+            if (settings.render !== false) {
+                renderGraph();
+            }
+            return normalized;
+        }
+
+        function applyThemeCapInputValue(options) {
+            const settings = options && typeof options === "object" ? options : {};
+            const fallback = Number.isFinite(settings.fallback) ? Number(settings.fallback) : appliedThemeCap;
+            const normalized = normaliseThemeCap(themeCapInput.value, fallback);
+            appliedThemeCap = normalized;
+            themeCapInput.value = normalized ? String(normalized) : "";
+            if (settings.render !== false) {
+                renderGraph();
+            }
+            return normalized;
+        }
 
         function typePalette() {
             return {
@@ -3083,23 +3153,40 @@
                 selectedGraphNodeId = "";
             }
 
-            const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
-            const defaultMinEdgeWeight = Math.max(
-                1,
-                Math.min(maxEdgeWeight, 20)
+            const optionDefaultMinEdgeWeight = normaliseMinEdgeThreshold(
+                options.default_min_edge_weight,
+                DEFAULT_NETWORK_EDGE_THRESHOLD
             );
-            const maxNodeLimit = Math.max(24, Number(options.max_node_limit || sourceNodes.length || 120));
+            const maxNodeLimit = Math.max(
+                MIN_NETWORK_NODE_LIMIT,
+                Number(options.max_node_limit || sourceNodes.length || 120)
+            );
             const defaultNodeLimit = Math.max(
-                24,
+                MIN_NETWORK_NODE_LIMIT,
                 Math.min(maxNodeLimit, Number(options.default_node_limit || maxNodeLimit))
             );
 
-            minEdgeInput.min = "1";
-            minEdgeInput.max = String(maxEdgeWeight);
             minEdgeInput.step = "1";
 
             if (!preserveValues) {
-                minEdgeInput.value = String(defaultMinEdgeWeight);
+                if (!initialMinEdgeApplied && initialMinEdgeParam) {
+                    appliedMinEdgeWeight = normaliseMinEdgeThreshold(
+                        initialMinEdgeParam,
+                        optionDefaultMinEdgeWeight
+                    );
+                    initialMinEdgeApplied = true;
+                } else {
+                    appliedMinEdgeWeight = optionDefaultMinEdgeWeight;
+                }
+                minEdgeInput.value = String(appliedMinEdgeWeight);
+
+                if (!initialThemeCapApplied && initialThemeCapParam) {
+                    appliedThemeCap = normaliseThemeCap(initialThemeCapParam, null);
+                    initialThemeCapApplied = true;
+                } else {
+                    appliedThemeCap = null;
+                }
+                themeCapInput.value = appliedThemeCap ? String(appliedThemeCap) : "";
                 currentNodeLimit = defaultNodeLimit;
 
                 const defaultTypes = Array.isArray(options.default_types) ? options.default_types : [];
@@ -3125,9 +3212,15 @@
                     normalizeThemeCooccurrenceInput.checked = options.default_normalise_theme_cooccurrence !== false;
                 }
             } else {
-                const clampedMinEdge = Math.min(maxEdgeWeight, Math.max(1, Number(minEdgeInput.value || 1)));
-                minEdgeInput.value = String(clampedMinEdge);
-                currentNodeLimit = Math.min(maxNodeLimit, Math.max(24, Number(currentNodeLimit || defaultNodeLimit)));
+                appliedMinEdgeWeight = normaliseMinEdgeThreshold(
+                    appliedMinEdgeWeight,
+                    optionDefaultMinEdgeWeight
+                );
+                minEdgeInput.value = String(appliedMinEdgeWeight);
+                currentNodeLimit = Math.min(
+                    maxNodeLimit,
+                    Math.max(MIN_NETWORK_NODE_LIMIT, Number(currentNodeLimit || defaultNodeLimit))
+                );
             }
 
             statReports.textContent = Number(summary.reports_shown || 0).toLocaleString();
@@ -3547,7 +3640,15 @@
             } else {
                 params.delete("network_selected_node");
             }
-            params.set("network_min_edge", String(Math.max(1, Number(minEdgeInput.value || 1))));
+            params.set(
+                "network_min_edge",
+                String(appliedMinEdgeWeight)
+            );
+            if (Number.isInteger(appliedThemeCap) && appliedThemeCap > 0) {
+                params.set("network_theme_cap", String(appliedThemeCap));
+            } else {
+                params.delete("network_theme_cap");
+            }
             params.set("network_normalise_theme_cooccurrence", normalizeThemeCooccurrenceInput.checked ? "1" : "0");
             params.delete("network_type");
             typeInputs.forEach((input) => {
@@ -3589,14 +3690,28 @@
         function renderGraph() {
             const selectedTypes = getSelectedTypes();
             const useNormalisedThemeCooccurrence = Boolean(normalizeThemeCooccurrenceInput.checked);
-            const minEdgeWeight = Math.max(1, Number(minEdgeInput.value || 1));
-            const maxNodes = Math.max(24, Number(currentNodeLimit || 120));
+            const minEdgeWeight = normaliseMinEdgeThreshold(
+                appliedMinEdgeWeight,
+                DEFAULT_NETWORK_EDGE_THRESHOLD
+            );
+            const maxNodes = Math.max(MIN_NETWORK_NODE_LIMIT, Number(currentNodeLimit || 120));
             const layout = layoutSelect.value === "circular" ? "circular" : "force";
-
-            minEdgeValue.textContent = `${minEdgeWeight}`;
 
             let candidateNodes = sourceNodes.filter((node) => selectedTypes.has(node.type));
             candidateNodes.sort((a, b) => b.value - a.value || a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+            if (Number.isInteger(appliedThemeCap) && appliedThemeCap > 0) {
+                let themeCount = 0;
+                candidateNodes = candidateNodes.filter((node) => {
+                    if (node.type !== "theme") {
+                        return true;
+                    }
+                    if (themeCount >= appliedThemeCap) {
+                        return false;
+                    }
+                    themeCount += 1;
+                    return true;
+                });
+            }
             candidateNodes = candidateNodes.slice(0, maxNodes);
 
             const nodeIdSet = new Set(candidateNodes.map((node) => node.id));
@@ -3986,6 +4101,8 @@
         });
 
         refreshButton.addEventListener("click", function () {
+            applyMinEdgeInputValue({ render: false, fallback: DEFAULT_NETWORK_EDGE_THRESHOLD });
+            applyThemeCapInputValue({ render: false, fallback: null });
             refreshFromServer(buildNetworkScopeQueryString());
         });
 
@@ -4013,17 +4130,22 @@
             forceAtLeastOneType(typeInputs[0] || null);
             normalizeThemeCooccurrenceInput.checked = options.default_normalise_theme_cooccurrence !== false;
 
-            const maxEdgeWeight = Math.max(1, Number(options.max_edge_weight || 1));
-            const defaultMinEdgeWeight = Math.max(
-                1,
-                Math.min(maxEdgeWeight, Number(options.default_min_edge_weight || 1))
+            const defaultMinEdgeWeight = normaliseMinEdgeThreshold(
+                options.default_min_edge_weight,
+                DEFAULT_NETWORK_EDGE_THRESHOLD
             );
-            const maxNodeLimit = Math.max(24, Number(options.max_node_limit || sourceNodes.length || 120));
+            const maxNodeLimit = Math.max(
+                MIN_NETWORK_NODE_LIMIT,
+                Number(options.max_node_limit || sourceNodes.length || 120)
+            );
             const defaultNodeLimit = Math.max(
-                24,
+                MIN_NETWORK_NODE_LIMIT,
                 Math.min(maxNodeLimit, Number(options.default_node_limit || maxNodeLimit))
             );
-            minEdgeInput.value = String(defaultMinEdgeWeight);
+            appliedMinEdgeWeight = defaultMinEdgeWeight;
+            minEdgeInput.value = String(appliedMinEdgeWeight);
+            appliedThemeCap = null;
+            themeCapInput.value = "";
             currentNodeLimit = defaultNodeLimit;
             renderSearchDropdown();
             renderGraph();
@@ -4038,7 +4160,24 @@
             });
         });
 
-        minEdgeInput.addEventListener("input", renderGraph);
+        minEdgeApplyButton.addEventListener("click", function () {
+            applyMinEdgeInputValue({ render: true, fallback: DEFAULT_NETWORK_EDGE_THRESHOLD });
+        });
+        minEdgeInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                applyMinEdgeInputValue({ render: true, fallback: DEFAULT_NETWORK_EDGE_THRESHOLD });
+            }
+        });
+        themeCapApplyButton.addEventListener("click", function () {
+            applyThemeCapInputValue({ render: true, fallback: null });
+        });
+        themeCapInput.addEventListener("keydown", function (event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                applyThemeCapInputValue({ render: true, fallback: null });
+            }
+        });
         normalizeThemeCooccurrenceInput.addEventListener("change", renderGraph);
         layoutSelect.addEventListener("change", renderGraph);
         searchQueryInput.addEventListener("input", function () {

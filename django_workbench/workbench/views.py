@@ -637,10 +637,11 @@ def favicon(request: HttpRequest) -> HttpResponse:
 UI_THEME_IDS = {choice["id"] for choice in UI_THEME_CHOICES}
 DASHBOARD_TOP_N = 12
 DASHBOARD_UNKNOWN_LABEL = "Not specified"
-NETWORK_THEME_TOP_N = 36
 NETWORK_RECEIVER_TOP_N = 72
 NETWORK_CORONER_TOP_N = 44
 NETWORK_AREA_TOP_N = 36
+NETWORK_MIN_NODE_LIMIT = 50
+NETWORK_DEFAULT_EDGE_THRESHOLD = 50
 NETWORK_EDGE_MAX = 2600
 NETWORK_THEME_THEME_EDGE_MAX = 420
 NETWORK_THEME_THEME_MAX_PER_THEME = 8
@@ -649,6 +650,7 @@ NETWORK_SCOPE_QUERY_KEYS: tuple[str, ...] = (
     "network_focus",
     "network_selected_node",
     "network_min_edge",
+    "network_theme_cap",
     "network_node_limit",
     "network_type",
 )
@@ -1294,7 +1296,7 @@ def _build_network_graph_payload(
             "search_index": {"nodes": []},
             "options": {
                 "max_edge_weight": 1,
-                "default_min_edge_weight": 1,
+                "default_min_edge_weight": int(NETWORK_DEFAULT_EDGE_THRESHOLD),
                 "max_node_limit": 120,
                 "default_node_limit": 120,
                 "available_types": ["theme", "receiver", "coroner", "area"],
@@ -1505,7 +1507,7 @@ def _build_network_graph_payload(
             if str(edge["source"]) in node_ids and str(edge["target"]) in node_ids
         ]
         max_edge_weight = max((int(edge["value"]) for edge in edges_filtered), default=1)
-        default_node_limit = min(180, max(24, len(nodes)))
+        default_node_limit = min(180, max(NETWORK_MIN_NODE_LIMIT, len(nodes)))
         max_node_limit = max(default_node_limit, min(420, max(80, len(nodes))))
         search_nodes = []
         search_nodes.extend(_network_search_nodes_from_counter("receiver", receiver_counter))
@@ -1530,7 +1532,7 @@ def _build_network_graph_payload(
             "search_index": {"nodes": search_nodes},
             "options": {
                 "max_edge_weight": int(max_edge_weight),
-                "default_min_edge_weight": int(min_count_for_edge),
+                "default_min_edge_weight": int(NETWORK_DEFAULT_EDGE_THRESHOLD),
                 "max_node_limit": int(max_node_limit),
                 "default_node_limit": int(default_node_limit),
                 "available_types": ["receiver", "coroner", "area"],
@@ -1600,7 +1602,7 @@ def _build_network_graph_payload(
 
     top_themes = _network_top_items(
         theme_counter,
-        limit=NETWORK_THEME_TOP_N,
+        limit=max(1, len(theme_counter)),
         min_value=min_count_for_node,
     )
     top_receivers = _network_top_items(
@@ -1838,7 +1840,7 @@ def _build_network_graph_payload(
     ]
 
     max_edge_weight = max((int(edge["value"]) for edge in edges), default=1)
-    default_node_limit = min(180, max(24, len(nodes)))
+    default_node_limit = min(180, max(NETWORK_MIN_NODE_LIMIT, len(nodes)))
     max_node_limit = max(default_node_limit, min(420, max(80, len(nodes))))
     top_theme_key = top_themes[0] if top_themes else ""
     search_nodes = []
@@ -1870,7 +1872,7 @@ def _build_network_graph_payload(
         "search_index": {"nodes": search_nodes},
         "options": {
             "max_edge_weight": int(max_edge_weight),
-            "default_min_edge_weight": int(min_count_for_edge),
+            "default_min_edge_weight": int(NETWORK_DEFAULT_EDGE_THRESHOLD),
             "max_node_limit": int(max_node_limit),
             "default_node_limit": int(default_node_limit),
             "available_types": ["theme", "receiver", "coroner", "area"],
@@ -1987,6 +1989,16 @@ def _parse_network_scope_controls(request: HttpRequest) -> dict[str, Any]:
         except ValueError:
             node_limit = None
 
+    theme_cap: Optional[int] = None
+    theme_cap_raw = str(request.GET.get("network_theme_cap") or "").strip()
+    if theme_cap_raw:
+        try:
+            parsed = int(theme_cap_raw)
+            if parsed > 0:
+                theme_cap = parsed
+        except ValueError:
+            theme_cap = None
+
     types: list[str] = []
     seen: set[str] = set()
     for raw_value in request.GET.getlist("network_type"):
@@ -2001,6 +2013,7 @@ def _parse_network_scope_controls(request: HttpRequest) -> dict[str, Any]:
         "focus_node": focus_node,
         "selected_node": selected_node,
         "min_edge": min_edge,
+        "theme_cap": theme_cap,
         "node_limit": node_limit,
         "types": types,
     }
@@ -2026,6 +2039,10 @@ def _network_scope_query_string(controls: dict[str, Any]) -> str:
     node_limit = controls.get("node_limit")
     if isinstance(node_limit, int) and node_limit > 0:
         pairs.append(("network_node_limit", str(node_limit)))
+
+    theme_cap = controls.get("theme_cap")
+    if isinstance(theme_cap, int) and theme_cap > 0:
+        pairs.append(("network_theme_cap", str(theme_cap)))
 
     for value in controls.get("types", []):
         cleaned = str(value or "").strip().lower()
@@ -2098,21 +2115,35 @@ def _network_visible_node_ids(payload: dict[str, Any], controls: dict[str, Any])
 
     max_nodes = controls.get("node_limit")
     if isinstance(max_nodes, int) and max_nodes > 0:
-        node_limit = max(24, max_nodes)
+        node_limit = max(NETWORK_MIN_NODE_LIMIT, max_nodes)
     else:
-        node_limit = max(24, len(normalised_nodes))
+        node_limit = max(NETWORK_MIN_NODE_LIMIT, len(normalised_nodes))
 
     min_edge = controls.get("min_edge")
     if isinstance(min_edge, int) and min_edge > 0:
-        min_edge_weight = max(1, min_edge)
+        min_edge_weight = min_edge
     else:
-        min_edge_weight = 1
+        min_edge_weight = NETWORK_DEFAULT_EDGE_THRESHOLD
 
     focus_node = str(controls.get("focus_node") or "").strip()
     search_term = str(controls.get("search") or "").strip().casefold()
+    theme_cap = controls.get("theme_cap")
+    theme_cap_value = int(theme_cap) if isinstance(theme_cap, int) and theme_cap > 0 else 0
 
     candidate_nodes = [node for node in normalised_nodes if node["type"] in selected_types]
     candidate_nodes.sort(key=lambda row: (-int(row["value"]), str(row["name"]).casefold()))
+    if theme_cap_value > 0:
+        theme_count = 0
+        reduced_nodes: list[dict[str, Any]] = []
+        for node in candidate_nodes:
+            if node["type"] != "theme":
+                reduced_nodes.append(node)
+                continue
+            if theme_count >= theme_cap_value:
+                continue
+            reduced_nodes.append(node)
+            theme_count += 1
+        candidate_nodes = reduced_nodes
     candidate_nodes = candidate_nodes[:node_limit]
 
     node_ids = {node["id"] for node in candidate_nodes}

@@ -64,8 +64,34 @@
                         </select>
                     </section>
                     <section class="network-control-card">
-                        <label for="network-min-edge">Min edge <span id="network-min-edge-value"></span></label>
-                        <input id="network-min-edge" type="range" min="1" max="10" value="1" step="1">
+                        <label for="network-min-edge">Min edge</label>
+                        <div class="network-min-edge-picker">
+                            <input
+                                id="network-min-edge"
+                                class="network-min-edge-input"
+                                type="number"
+                                step="1"
+                                value="50"
+                                inputmode="numeric"
+                            >
+                            <button type="button" class="button-secondary network-min-edge-apply" id="network-min-edge-apply">Apply</button>
+                        </div>
+                    </section>
+                    <section class="network-control-card">
+                        <label for="network-theme-cap">Theme cap</label>
+                        <div class="network-min-edge-picker">
+                            <input
+                                id="network-theme-cap"
+                                class="network-min-edge-input"
+                                type="number"
+                                min="1"
+                                step="1"
+                                value=""
+                                inputmode="numeric"
+                                placeholder="None"
+                            >
+                            <button type="button" class="button-secondary network-min-edge-apply" id="network-theme-cap-apply">Apply</button>
+                        </div>
                     </section>
                     <section class="network-control-card network-control-card--types">
                         <label class="checkbox"><input type="checkbox" value="theme" data-network-type checked> <span>Themes</span></label>
