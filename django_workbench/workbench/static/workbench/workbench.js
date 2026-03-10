@@ -2301,9 +2301,9 @@
 
         const chartRoots = {
             monthly: byId("dashboard-chart-monthly"),
-            coroner: byId("dashboard-chart-coroner"),
             area: byId("dashboard-chart-area"),
             receiver: byId("dashboard-chart-receiver"),
+            theme: byId("dashboard-chart-theme"),
         };
 
         if (
@@ -2324,9 +2324,9 @@
             !filterAreaField ||
             !filterReceiverField ||
             !chartRoots.monthly ||
-            !chartRoots.coroner ||
             !chartRoots.area ||
-            !chartRoots.receiver
+            !chartRoots.receiver ||
+            !chartRoots.theme
         ) {
             return;
         }
@@ -2394,9 +2394,9 @@
                 splitLineColor: getCssVar("--chart-axis-line", "rgba(156, 173, 232, 0.18)"),
                 monthlyLine: getCssVar("--chart-monthly-line", "#66d7ff"),
                 monthlyArea: getCssVar("--chart-monthly-area", "rgba(102, 215, 255, 0.18)"),
-                coronerBar: getCssVar("--chart-coroner-bar", "#5b9dff"),
                 areaBar: getCssVar("--chart-area-bar", "#7ac26b"),
                 receiverBar: getCssVar("--chart-receiver-bar", "#f2a85a"),
+                themeBar: getCssVar("--chart-theme-bar", "#b38af7"),
                 emptyTextColor: getCssVar("--chart-empty-text", "rgba(210, 220, 255, 0.7)"),
             };
         }
@@ -2482,7 +2482,7 @@
         function renderMonthlyChart(seriesRows) {
             const palette = chartPalette();
             const months = seriesRows.map((row) => row.name);
-            const counts = seriesRows.map((row) => row.value);
+            const counts = seriesRows.map((row) => Number(row.value) || 0);
             charts.monthly.setOption(
                 {
                     animationDuration: 240,
@@ -2502,7 +2502,8 @@
                     series: [
                         {
                             type: "line",
-                            smooth: true,
+                            smooth: false,
+                            connectNulls: true,
                             showSymbol: false,
                             lineStyle: { width: 2.2, color: palette.monthlyLine },
                             itemStyle: { color: palette.monthlyLine },
@@ -2590,20 +2591,15 @@
             const uniqueCoroners = Number(currentSummary.unique_coroners || 0);
             const receiverLinks = Number(currentSummary.receiver_links || 0);
             const monthlyRows = Array.isArray(currentSummary.monthly) ? currentSummary.monthly : [];
-            const topCoroners = Array.isArray(currentSummary.top_coroners) ? currentSummary.top_coroners : [];
             const topAreas = Array.isArray(currentSummary.top_areas) ? currentSummary.top_areas : [];
             const topReceivers = Array.isArray(currentSummary.top_receivers) ? currentSummary.top_receivers : [];
+            const topThemes = Array.isArray(currentSummary.top_themes) ? currentSummary.top_themes : [];
+            const excludedThemeKey = normaliseValue(root.dataset.dashboardExcludedThemeKey);
 
             statReports.textContent = reportsShown.toLocaleString();
             statCoroners.textContent = uniqueCoroners.toLocaleString();
             statReceiverLinks.textContent = receiverLinks.toLocaleString();
             renderMonthlyChart(monthlyRows);
-            renderBarChart(
-                charts.coroner,
-                topCoroners,
-                chartPalette().coronerBar,
-                "No coroner values for this filter."
-            );
             renderBarChart(
                 charts.area,
                 topAreas,
@@ -2615,6 +2611,14 @@
                 topReceivers,
                 chartPalette().receiverBar,
                 "No receiver values for this filter."
+            );
+            renderBarChart(
+                charts.theme,
+                topThemes,
+                chartPalette().themeBar,
+                excludedThemeKey
+                    ? "No co-occurring themes for this collection."
+                    : "No theme values for this filter."
             );
 
             setStatus(`Showing ${reportsShown.toLocaleString()} of ${reportsTotal.toLocaleString()} reports.`);

@@ -46,6 +46,7 @@
         data-dashboard-panel-base="{{ dataset_panel_base }}"
         data-dashboard-browser-base="{{ dataset_browser_base }}"
         data-dashboard-data-base="{{ dashboard_data_base }}"
+        data-dashboard-excluded-theme-key="{{ collection_excluded_theme_key }}"
     >
         <div class="section-card-header section-card-header--inline">
             <div>
@@ -99,16 +100,16 @@
                 <div class="dashboard-chart" id="dashboard-chart-monthly"></div>
             </article>
             <article class="dashboard-chart-card">
-                <h4>Most common coroners</h4>
-                <div class="dashboard-chart" id="dashboard-chart-coroner"></div>
-            </article>
-            <article class="dashboard-chart-card">
                 <h4>Most common areas</h4>
                 <div class="dashboard-chart" id="dashboard-chart-area"></div>
             </article>
             <article class="dashboard-chart-card">
                 <h4>Most common receivers</h4>
                 <div class="dashboard-chart" id="dashboard-chart-receiver"></div>
+            </article>
+            <article class="dashboard-chart-card">
+                <h4>Most common co-occurring themes</h4>
+                <div class="dashboard-chart" id="dashboard-chart-theme"></div>
             </article>
         </div>
     </section>

@@ -308,6 +308,37 @@ THEME_SEMANTIC_ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
 THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
     "suicide_risk": "Suicide",
     "care_home_safety": "Care home deaths",
+    "acute_hospital_wards": "Acute Hospital Care",
+    "alarm_alert_failures": "Alarms and Alerts",
+    "capacity_best_interests_failures": "Capacity and Best Interests",
+    "consent_decision_making_failures": "Consent and Decision-making",
+    "failure_recognise_escalate_deterioration": "Recognising and Escalating Deterioration",
+    "family_carer_concerns_not_acted_on": "Family and Carer Concerns",
+    "failure_learn_previous_deaths_incidents": "Failure to Learn",
+    "follow_up_failures": "Follow-up",
+    "housing_homelessness": "Housing and Homelessness",
+    "inter_agency_working": "Inter-agency Working",
+    "investigation_incident_review_failures": "Investigations and Incident Reviews",
+    "it_digital_system_failures": "IT and Digital Systems",
+    "language_interpreter_barriers": "Language and Interpreter Barriers",
+    "maternity_neonatal_perinatal_care": "Maternity, Neonatal and Perinatal Care",
+    "missed_appointments_non_attendance": "Missed Appointments and Non-attendance",
+    "observation_monitoring_failures": "Observation and Monitoring",
+    "policy_procedure_failures": "Policy and Procedure",
+    "record_sharing_failures": "Record Sharing",
+    "referral_failures": "Referrals",
+    "risk_assessment_failures": "Risk Assessment",
+    "roads_highways": "Roads and Highways",
+    "sepsis_infection": "Sepsis and Infection",
+    "staffing_shortages_workload_pressure": "Staffing Shortages and Workload Pressure",
+    "suicide_self_harm": "Suicide and Self-harm",
+    "test_result_management_failures": "Test Result Management",
+    "training_competence_gaps": "Training and Competence",
+    "transitions_discharge_failures": "Transitions and Discharge",
+    "violence_homicide_related_systems_failures": "Violence and Homicide-related Systems",
+    "falls_frailty": "Falls and Frailty",
+    "equipment_failures": "Equipment",
+    "environmental_design_failures": "Environmental Design",
 }
 APPROVED_THEME_SCHEMA_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "theme_collections" / "approved_themes.json"
@@ -535,6 +566,13 @@ def _collection_column_for_slug(collection_slug: str, reports_df: pd.DataFrame) 
     if theme_meta:
         return str(theme_meta.get("collection_column", "")).strip()
     return ""
+
+
+def _collection_excluded_theme_key(collection_slug: str, reports_df: pd.DataFrame) -> Optional[str]:
+    collection_column = _collection_column_for_slug(collection_slug, reports_df)
+    if not collection_column:
+        return None
+    return _network_theme_key_from_column(collection_column)
 
 
 def _browse_collection_meta(collection_slug: str, reports_df: pd.DataFrame) -> dict[str, str]:
@@ -1037,7 +1075,41 @@ def _build_explore_dashboard_options(reports_df: pd.DataFrame) -> dict[str, list
     }
 
 
-def _build_explore_dashboard_summary(filtered_df: pd.DataFrame, *, total_reports: int) -> dict[str, Any]:
+def _build_explore_dashboard_theme_counts(
+    filtered_df: pd.DataFrame,
+    *,
+    excluded_theme_key: Optional[str] = None,
+) -> dict[str, int]:
+    if filtered_df.empty:
+        return {}
+
+    excluded_key = str(excluded_theme_key or "").strip().lower()
+    theme_columns = _network_theme_columns(filtered_df)
+    if not theme_columns:
+        return {}
+
+    theme_label_lookup = _network_theme_label_lookup(filtered_df)
+    theme_counts: dict[str, int] = {}
+    for column in theme_columns:
+        theme_key = _network_theme_key_from_column(column)
+        if not theme_key or theme_key.lower() == excluded_key:
+            continue
+        if column not in filtered_df.columns:
+            continue
+        count = int(filtered_df[column].map(_network_truthy).sum())
+        if count <= 0:
+            continue
+        label = str(theme_label_lookup.get(theme_key) or _network_theme_label(theme_key)).strip() or theme_key
+        theme_counts[label] = count
+    return theme_counts
+
+
+def _build_explore_dashboard_summary(
+    filtered_df: pd.DataFrame,
+    *,
+    total_reports: int,
+    excluded_theme_key: Optional[str] = None,
+) -> dict[str, Any]:
     if filtered_df.empty:
         return {
             "reports_shown": 0,
@@ -1048,6 +1120,7 @@ def _build_explore_dashboard_summary(filtered_df: pd.DataFrame, *, total_reports
             "top_coroners": [],
             "top_areas": [],
             "top_receivers": [],
+            "top_themes": [],
         }
 
     row_count = len(filtered_df)
@@ -1094,6 +1167,10 @@ def _build_explore_dashboard_summary(filtered_df: pd.DataFrame, *, total_reports
             monthly = [{"name": month, "value": int(count)} for month, count in month_counts.items()]
 
     unique_coroners = int(coroner_series[coroner_series != ""].nunique())
+    theme_counts = _build_explore_dashboard_theme_counts(
+        filtered_df,
+        excluded_theme_key=excluded_theme_key,
+    )
 
     return {
         "reports_shown": int(len(filtered_df)),
@@ -1104,6 +1181,7 @@ def _build_explore_dashboard_summary(filtered_df: pd.DataFrame, *, total_reports
         "top_coroners": _sorted_dashboard_count_rows(coroner_counts, limit=DASHBOARD_TOP_N),
         "top_areas": _sorted_dashboard_count_rows(area_counts, limit=DASHBOARD_TOP_N),
         "top_receivers": _sorted_dashboard_count_rows(receiver_counts, limit=DASHBOARD_TOP_N),
+        "top_themes": _sorted_dashboard_count_rows(theme_counts, limit=DASHBOARD_TOP_N),
     }
 
 
@@ -1112,6 +1190,7 @@ def _build_explore_dashboard_payload(
     *,
     selected_filters: Optional[dict[str, list[str]]] = None,
     include_options: bool = True,
+    excluded_theme_key: Optional[str] = None,
 ) -> dict[str, Any]:
     filters = selected_filters or {"coroner": [], "area": [], "receiver": []}
     normalised_filters = {
@@ -1122,7 +1201,11 @@ def _build_explore_dashboard_payload(
     filtered_df = _apply_explore_dashboard_filters(reports_df, normalised_filters)
     payload = {
         "selected": normalised_filters,
-        "summary": _build_explore_dashboard_summary(filtered_df, total_reports=len(reports_df)),
+        "summary": _build_explore_dashboard_summary(
+            filtered_df,
+            total_reports=len(reports_df),
+            excluded_theme_key=excluded_theme_key,
+        ),
     }
     if include_options:
         payload["options"] = _build_explore_dashboard_options(reports_df)
@@ -4539,16 +4622,19 @@ def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpRe
         "area": shared_context.get("dashboard_selected_areas", []),
         "receiver": shared_context.get("dashboard_selected_receivers", []),
     }
+    excluded_theme_key = _collection_excluded_theme_key(collection_slug, reports_df_full)
     payload = _build_explore_dashboard_payload(
         reports_df,
         selected_filters=selected_filters,
         include_options=True,
+        excluded_theme_key=excluded_theme_key,
     )
 
     context = {
         "current_page": "browse",
         **shared_context,
         "collection": collection,
+        "collection_excluded_theme_key": excluded_theme_key or "",
         "explore_dashboard_payload": payload,
         "dashboard_data_base": reverse(
             "workbench:browse_collection_dashboard_data",
@@ -4611,10 +4697,12 @@ def browse_collection_dashboard_data(request: HttpRequest, collection_slug: str)
         collection_slug,
     )
     selected_filters = _get_explore_dashboard_filters(request)
+    excluded_theme_key = _collection_excluded_theme_key(collection_slug, reports_df_full)
     payload = _build_explore_dashboard_payload(
         reports_df,
         selected_filters=selected_filters,
         include_options=False,
+        excluded_theme_key=excluded_theme_key,
     )
     return JsonResponse(payload)
 
@@ -4636,10 +4724,12 @@ def browse_collection_clone(request: HttpRequest, collection_slug: str) -> HttpR
         messages.error(request, f'No reports are currently available for "{collection["title"]}".')
         return redirect("workbench:browse_collection", collection_slug=collection_slug)
 
+    excluded_theme_key = _collection_excluded_theme_key(collection_slug, reports_df_full)
     payload = _build_explore_dashboard_payload(
         reports_df,
         selected_filters=selected_filters,
         include_options=True,
+        excluded_theme_key=excluded_theme_key,
     )
     snapshot = {
         "dashboard_payload": payload,
