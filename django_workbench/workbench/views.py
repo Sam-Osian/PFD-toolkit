@@ -322,6 +322,7 @@ THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
     "it_digital_system_failures": "IT and Digital Systems",
     "language_interpreter_barriers": "Language and Interpreter Barriers",
     "maternity_neonatal_perinatal_care": "Maternity, Neonatal and Perinatal Care",
+    "children_young_people": "Children and Young People",
     "missed_appointments_non_attendance": "Missed Appointments and Non-attendance",
     "observation_monitoring_failures": "Observation and Monitoring",
     "policy_procedure_failures": "Policy and Procedure",
@@ -339,6 +340,10 @@ THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
     "falls_frailty": "Falls and Frailty",
     "equipment_failures": "Equipment",
     "environmental_design_failures": "Environmental Design",
+}
+EXCLUDED_THEME_KEYS: set[str] = {
+    "policy_procedure_failures",
+    "failure_recognise_escalate_deterioration",
 }
 APPROVED_THEME_SCHEMA_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "theme_collections" / "approved_themes.json"
@@ -491,6 +496,8 @@ def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, di
     collections: dict[str, dict[str, str]] = {}
     for idx, column in enumerate(theme_columns):
         theme_name = column[len("theme_"):]
+        if theme_name in EXCLUDED_THEME_KEYS:
+            continue
         collection_name = _theme_collection_name(theme_name)
         pretty_title = _theme_collection_title(theme_name)
         slug = _theme_collection_slug(collection_name)
