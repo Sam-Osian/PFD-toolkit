@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 
 import pandas as pd
+from pfd_toolkit.config import GeneralConfig
 
 
 COLLECTION_COLUMNS: dict[str, str] = {
@@ -11,6 +12,7 @@ COLLECTION_COLUMNS: dict[str, str] = {
     "prisons": "theme_sent_to_prisons",
     "health_regulators": "theme_sent_to_health_regulators",
     "local_gov": "theme_sent_to_local_government",
+    "welsh": "theme_welsh",
 }
 
 _GOVERNMENT_DEPARTMENTS = (
@@ -65,6 +67,40 @@ _LOCAL_GOVERNMENT_COUNCIL_EXCLUSIONS = (
     "national police chiefs council",
     "royal college",
 )
+
+_WELSH_CANONICAL_AREAS = (
+    "Carmarthenshire and Pembrokeshire",
+    "Ceredigion",
+    "Gwent",
+    "North Wales (East and Central)",
+    "North West Wales",
+    "South Wales Central",
+    "Swansea and Neath Port Talbot",
+)
+
+
+def _normalise_area(area: str) -> str:
+    if not isinstance(area, str):
+        return ""
+    cleaned = area.strip().casefold()
+    cleaned = cleaned.replace("&", " and ")
+    cleaned = re.sub(r"[^a-z0-9]+", " ", cleaned)
+    return " ".join(cleaned.split())
+
+
+def _build_welsh_area_keys() -> set[str]:
+    welsh_canonical = set(_WELSH_CANONICAL_AREAS)
+    keys = {_normalise_area(value) for value in welsh_canonical}
+    for alias, canonical in GeneralConfig.AREA_SYNONYMS.items():
+        if canonical in welsh_canonical:
+            keys.add(_normalise_area(alias))
+    for alias, canonical in GeneralConfig.LEGACY_AREA_SYNONYMS.items():
+        if canonical in welsh_canonical:
+            keys.add(_normalise_area(alias))
+    return {value for value in keys if value}
+
+
+_WELSH_AREA_KEYS = _build_welsh_area_keys()
 
 
 def _split_receiver_segments(receiver: str) -> list[str]:
@@ -141,64 +177,102 @@ def _apply_collection_rule(
     *,
     collection_column: str,
     matcher,
-    receiver_column: str,
+    source_column: str,
     row_mask: pd.Series | None,
+    recompute_all: bool,
 ) -> None:
-    target_mask = (
+    base_mask = (
         row_mask.reindex(reports.index, fill_value=False)
         if row_mask is not None
         else pd.Series(True, index=reports.index)
     )
+    if recompute_all:
+        target_mask = base_mask
+    elif collection_column in reports.columns:
+        target_mask = base_mask & reports[collection_column].isna()
+    else:
+        target_mask = base_mask
+
     if collection_column not in reports.columns:
-        reports[collection_column] = False
-    reports.loc[target_mask, collection_column] = reports.loc[target_mask, receiver_column].apply(
-        lambda value: any(matcher(segment) for segment in _split_receiver_segments(value))
-    )
+        reports[collection_column] = pd.NA
+
+    if not bool(target_mask.any()):
+        return
+
+    computed_values = reports.loc[target_mask, source_column].apply(matcher).astype(bool)
+    reports.loc[target_mask, collection_column] = computed_values
+
+
+def _match_welsh_area(area: str) -> bool:
+    return _normalise_area(area) in _WELSH_AREA_KEYS
 
 
 def apply_collection_columns(
     reports: pd.DataFrame,
     *,
     receiver_column: str = "receiver",
+    area_column: str = "area",
     row_mask: pd.Series | None = None,
+    recompute_all: bool = False,
 ) -> pd.DataFrame:
-    """Populate rule-based collection columns from a receiver column."""
+    """Populate rule-based collection columns from receiver and area columns."""
     if receiver_column not in reports.columns:
         raise ValueError(f"Receiver column '{receiver_column}' is not present in the dataset.")
+    if area_column not in reports.columns:
+        raise ValueError(f"Area column '{area_column}' is not present in the dataset.")
 
     _apply_collection_rule(
         reports,
         collection_column=COLLECTION_COLUMNS["nhs"],
-        matcher=_match_nhs_bodies,
-        receiver_column=receiver_column,
+        matcher=lambda value: any(_match_nhs_bodies(segment) for segment in _split_receiver_segments(value)),
+        source_column=receiver_column,
         row_mask=row_mask,
+        recompute_all=recompute_all,
     )
     _apply_collection_rule(
         reports,
         collection_column=COLLECTION_COLUMNS["gov_department"],
-        matcher=_match_government_departments,
-        receiver_column=receiver_column,
+        matcher=lambda value: any(
+            _match_government_departments(segment) for segment in _split_receiver_segments(value)
+        ),
+        source_column=receiver_column,
         row_mask=row_mask,
+        recompute_all=recompute_all,
     )
     _apply_collection_rule(
         reports,
         collection_column=COLLECTION_COLUMNS["prisons"],
-        matcher=_match_prisons,
-        receiver_column=receiver_column,
+        matcher=lambda value: any(_match_prisons(segment) for segment in _split_receiver_segments(value)),
+        source_column=receiver_column,
         row_mask=row_mask,
+        recompute_all=recompute_all,
     )
     _apply_collection_rule(
         reports,
         collection_column=COLLECTION_COLUMNS["health_regulators"],
-        matcher=_match_health_regulators,
-        receiver_column=receiver_column,
+        matcher=lambda value: any(
+            _match_health_regulators(segment) for segment in _split_receiver_segments(value)
+        ),
+        source_column=receiver_column,
         row_mask=row_mask,
+        recompute_all=recompute_all,
     )
     _apply_collection_rule(
         reports,
         collection_column=COLLECTION_COLUMNS["local_gov"],
-        matcher=_match_local_government,
-        receiver_column=receiver_column,
+        matcher=lambda value: any(
+            _match_local_government(segment) for segment in _split_receiver_segments(value)
+        ),
+        source_column=receiver_column,
         row_mask=row_mask,
+        recompute_all=recompute_all,
+    )
+    _apply_collection_rule(
+        reports,
+        collection_column=COLLECTION_COLUMNS["welsh"],
+        matcher=_match_welsh_area,
+        source_column=area_column,
+        row_mask=row_mask,
+        recompute_all=recompute_all,
     )
     return reports

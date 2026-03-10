@@ -18,3 +18,5 @@ Themes included:
 - `theme_sent_to_local_government`
   Matches local-government bodies such as `County Council`, `City Council`, `Borough Council`, `District Council`, `County Borough Council`, `Metropolitan Borough Council`, `London Borough of ...`, `Unitary Authority`, `Local Authority`, and council names that end in `Council` unless they match known non-local authority exclusions such as `General Medical Council` or `National Police Chiefs Council`.
 
+- `theme_welsh`
+  Matches reports where the `area` column maps to Welsh coroner areas. This includes the current Welsh areas (`Carmarthenshire and Pembrokeshire`, `Ceredigion`, `Gwent`, `North Wales (East and Central)`, `North West Wales`, `South Wales Central`, `Swansea and Neath Port Talbot`) plus legacy/synonym area labels that are recoded by the cleaner.

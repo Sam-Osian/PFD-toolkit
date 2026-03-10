@@ -31,6 +31,7 @@ def use_local_dataset(tmp_path, monkeypatch):
             "theme_sent_to_prisons": [False, False, True, False],
             "theme_sent_to_health_regulators": [False, False, True, False],
             "theme_sent_to_local_government": [False, True, False, True],
+            "theme_welsh": [False, False, True, False],
         }
     )
 
@@ -139,4 +140,9 @@ def test_load_reports_filters_multiple_collections_with_or_semantics():
 
 def test_load_reports_receiver_collection_alias_health_reg():
     df = loader.load_reports(collection="health_reg", refresh=False)
+    assert set(df["url"]) == {"u3"}
+
+
+def test_load_reports_filters_welsh_collection():
+    df = loader.load_reports(collection="welsh", refresh=False)
     assert set(df["url"]) == {"u3"}
