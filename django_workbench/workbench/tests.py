@@ -1,6 +1,7 @@
 import pandas as pd
 from django.test import TestCase
 from django.urls import reverse
+from unittest.mock import patch
 
 from .models import Workbook
 from .state import dataframe_from_payload, dataframe_to_payload
@@ -79,6 +80,30 @@ class WorkbenchViewTests(TestCase):
 
         data_response = self.client.get(reverse("workbench:network_data"))
         self.assertEqual(data_response.status_code, 403)
+
+    @patch("workbench.views.load_reports")
+    def test_browse_wales_collection_works_when_theme_welsh_missing_in_source(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "South Wales Central",
+                    "receiver": "NHS England",
+                    "theme_medication_safety": True,
+                },
+                {
+                    "date": "2024-02-20",
+                    "coroner": "B. Example",
+                    "area": "London Inner South",
+                    "receiver": "Department of Health and Social Care",
+                    "theme_medication_safety": False,
+                },
+            ]
+        )
+        response = self.client.get(reverse("workbench:browse_collection", kwargs={"collection_slug": "wales"}))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Wales")
 
     def test_network_unlock_requires_correct_password(self) -> None:
         wrong_response = self.client.post(
@@ -181,7 +206,7 @@ class WorkbenchViewTests(TestCase):
                     "coroner": "A. Example",
                     "area": "London Inner South",
                     "receiver": "NHS England",
-                    "theme_suicide": True,
+                    "theme_suicide_self_harm": True,
                     "theme_medication_safety": True,
                 },
                 {
@@ -189,7 +214,7 @@ class WorkbenchViewTests(TestCase):
                     "coroner": "A. Example",
                     "area": "London Inner South",
                     "receiver": "NHS England",
-                    "theme_suicide": True,
+                    "theme_suicide_self_harm": True,
                     "theme_medication_safety": True,
                 },
                 {
@@ -197,7 +222,7 @@ class WorkbenchViewTests(TestCase):
                     "coroner": "B. Example",
                     "area": "Merseyside",
                     "receiver": "CQC",
-                    "theme_suicide": True,
+                    "theme_suicide_self_harm": True,
                     "theme_medication_safety": False,
                 },
             ]
@@ -239,6 +264,38 @@ class WorkbenchViewTests(TestCase):
         options = response.json().get("options", {})
         self.assertEqual(options.get("default_types"), ["theme", "receiver", "area"])
         self.assertNotIn("coroner", options.get("default_types", []))
+
+    def test_network_includes_all_collection_types_as_themes(self) -> None:
+        self._unlock_network_tab()
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "South Wales Central",
+                    "receiver": "NHS England",
+                    "theme_medication_safety": True,
+                    "theme_welsh": True,
+                    "theme_sent_to_nhs_bodies": True,
+                },
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        theme_keys = {
+            str(node.get("raw_key"))
+            for node in payload.get("graph", {}).get("nodes", [])
+            if str(node.get("type")) == "theme"
+        }
+        self.assertIn("medication_safety", theme_keys)
+        self.assertIn("welsh", theme_keys)
+        self.assertIn("sent_to_nhs_bodies", theme_keys)
 
     def test_explore_hides_theme_columns_but_network_uses_them(self) -> None:
         self._unlock_network_tab()

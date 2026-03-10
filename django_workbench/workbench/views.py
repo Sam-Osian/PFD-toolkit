@@ -12,6 +12,7 @@ import copy
 import importlib
 import importlib.util
 import inspect
+from threading import Lock
 from html import escape
 from datetime import date, datetime
 from io import BytesIO, StringIO
@@ -142,73 +143,82 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
     },
 }
 
-BROWSE_COLLECTIONS: tuple[dict[str, str], ...] = (
-    {
-        "slug": "custom",
-        "title": "Custom Collection",
+BROWSE_CUSTOM_COLLECTION: dict[str, str] = {
+    "slug": "custom",
+    "title": "Custom Collection",
+    "description": (
+        "Open the full report archive as a starting point for building your own "
+        "editable collection and dashboard workflow."
+    ),
+    "badge": "Browse starter",
+    "icon": "hgi-search-01",
+    "accent": "slate",
+}
+
+RULE_COLLECTION_CARD_OVERRIDES: dict[str, dict[str, str]] = {
+    "wales": {
+        "title": "Wales",
         "description": (
-            "Open the full report archive as a starting point for building your own "
-            "editable collection and dashboard workflow."
+            "Reports where the coroner area is a Welsh jurisdiction, including "
+            "legacy area names recoded to current Welsh areas."
         ),
-        "badge": "Browse starter",
-        "icon": "hgi-search-01",
-        "accent": "slate",
+        "badge": "Area collection",
+        "accent": "mint",
+        "icon_svg": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 52L24 30L36 44L46 22L58 52H14Z"></path><path d="M20 24L28 18L34 26"></path><path d="M42 16L50 22L44 30"></path></svg>',
     },
-    {
-        "slug": "nhs",
+    "nhs": {
         "title": "NHS Bodies",
         "description": (
             "Reports sent to NHS organisations including trusts, foundation trusts, "
             "integrated care boards, and health boards."
         ),
         "badge": "Receiver collection",
-        "icon": "hgi-dashboard-square-01",
         "accent": "sky",
     },
-    {
-        "slug": "gov_department",
+    "gov_department": {
         "title": "Government Departments",
         "description": (
             "Reports addressed to UK government departments and central offices such as "
             "the Home Office, Cabinet Office, and ministerial departments."
         ),
         "badge": "Receiver collection",
-        "icon": "hgi-chart-bar-line",
         "accent": "amber",
     },
-    {
-        "slug": "prisons",
+    "prisons": {
         "title": "Prisons",
         "description": (
             "Reports sent directly to prisons, prison institutions, young offender "
             "settings, or HM Prison and Probation Service."
         ),
         "badge": "Receiver collection",
-        "icon": "hgi-filter-horizontal",
         "accent": "rose",
     },
-    {
-        "slug": "health_regulators",
+    "health_regulators": {
         "title": "Health Regulators",
         "description": (
             "Reports sent to national health regulators and oversight bodies including "
             "the Care Quality Commission, NICE, MHRA, GMC, and related regulators."
         ),
         "badge": "Receiver collection",
-        "icon": "hgi-bulb",
         "accent": "violet",
     },
-    {
-        "slug": "local_gov",
+    "local_gov": {
         "title": "Local Government",
         "description": (
             "Reports addressed to councils and local authorities, covering county, "
             "borough, district, city, and unitary local government bodies."
         ),
         "badge": "Receiver collection",
-        "icon": "hgi-user",
         "accent": "mint",
     },
+}
+RULE_COLLECTION_CARD_ORDER: tuple[str, ...] = (
+    "wales",
+    "nhs",
+    "gov_department",
+    "prisons",
+    "health_regulators",
+    "local_gov",
 )
 
 THEME_COLLECTION_SLUG_PREFIX = "theme"
@@ -243,10 +253,67 @@ THEME_COLLECTION_SVG_MAP: dict[str, str] = {
     "vulnerable_groups": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="36" cy="18" r="6"></circle><path d="M24 56V40C24 32 29 26 36 26C43 26 48 32 48 40V56"></path><path d="M18 56H54"></path><path d="M22 36H50"></path></svg>',
 }
 DEFAULT_THEME_COLLECTION_SVG = '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 11L54 18V33C54 45 46 55 36 60C26 55 18 45 18 33V18L36 11Z"></path><path d="M28 35L34 41L45 29"></path></svg>'
+THEME_SEMANTIC_SVG_MAP: dict[str, str] = {
+    "bed": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="12" y="34" width="48" height="16" rx="4"></rect><rect x="16" y="26" width="14" height="8" rx="2"></rect><path d="M14 50V56"></path><path d="M58 50V56"></path></svg>',
+    "ambulance": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="12" y="26" width="34" height="20" rx="4"></rect><path d="M46 31H56L60 37V46H46V31Z"></path><path d="M20 36H28"></path><path d="M24 32V40"></path><circle cx="24" cy="50" r="3"></circle><circle cx="52" cy="50" r="3"></circle></svg>',
+    "hospital": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="14" width="40" height="44" rx="6"></rect><path d="M36 24V38"></path><path d="M29 31H43"></path><rect x="24" y="42" width="24" height="12" rx="2"></rect></svg>',
+    "house": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M14 33L36 16L58 33"></path><path d="M20 31V57H52V31"></path><rect x="30" y="41" width="12" height="16" rx="2"></rect></svg>',
+    "prison": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="16" y="14" width="40" height="44" rx="5"></rect><path d="M24 14V58"></path><path d="M32 14V58"></path><path d="M40 14V58"></path><path d="M48 14V58"></path></svg>',
+    "police": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 12L54 18V32C54 44 46 54 36 59C26 54 18 44 18 32V18L36 12Z"></path><path d="M36 24L39 30H45L40 34L42 40L36 36L30 40L32 34L27 30H33L36 24Z"></path></svg>',
+    "medication": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="14" y="25" width="44" height="22" rx="11"></rect><path d="M36 25V47"></path><path d="M24 36H30"></path><path d="M42 36H48"></path></svg>',
+    "mental_health": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 56C49 48 56 40 56 30C56 21 49 14 41 14C36 14 33 16 30 20C27 16 24 14 19 14C11 14 4 21 4 30C4 40 11 48 24 56L30 59L36 56Z"></path><path d="M24 35H30L34 30L39 38L43 33H50"></path></svg>',
+    "infection": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 12C36 12 22 24 22 36C22 46 28 54 36 54C44 54 50 46 50 36C50 24 36 12 36 12Z"></path><path d="M28 36H44"></path><path d="M36 28V44"></path></svg>',
+    "warning": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 14L58 54H14L36 14Z"></path><path d="M36 30V41"></path><circle cx="36" cy="48" r="1.8"></circle></svg>',
+    "road": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M27 12L18 60"></path><path d="M45 12L54 60"></path><path d="M36 16V24"></path><path d="M36 30V38"></path><path d="M36 44V52"></path></svg>',
+    "rail": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="22" y="14" width="28" height="28" rx="6"></rect><path d="M28 24H44"></path><path d="M30 44L24 56"></path><path d="M42 44L48 56"></path><path d="M20 56H52"></path></svg>',
+    "communication": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="10" y="16" width="24" height="16" rx="4"></rect><path d="M18 32V38L24 33"></path><rect x="38" y="24" width="24" height="16" rx="4"></rect><path d="M46 40V46L52 41"></path><path d="M34 28L38 30"></path></svg>',
+    "documents": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 12H43L54 23V60H22V12Z"></path><path d="M43 12V23H54"></path><path d="M28 33H46"></path><path d="M28 41H46"></path><path d="M28 49H40"></path></svg>',
+    "clock": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="36" cy="36" r="20"></circle><path d="M36 24V37"></path><path d="M36 36L45 42"></path></svg>',
+    "staffing": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="5"></circle><circle cx="36" cy="22" r="5"></circle><circle cx="48" cy="24" r="5"></circle><path d="M16 48C16 40 21 35 24 35C27 35 32 40 32 48"></path><path d="M28 48C28 40 33 35 36 35C39 35 44 40 44 48"></path><path d="M40 48C40 40 45 35 48 35C51 35 56 40 56 48"></path></svg>',
+    "digital": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="12" y="14" width="48" height="32" rx="5"></rect><path d="M28 56H44"></path><path d="M36 46V56"></path><path d="M20 26H28"></path><path d="M20 34H36"></path><path d="M40 34H52"></path></svg>',
+    "safeguarding": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M36 11L54 18V33C54 45 46 55 36 60C26 55 18 45 18 33V18L36 11Z"></path><path d="M28 35L34 41L45 29"></path></svg>',
+    "family": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="24" cy="24" r="5"></circle><circle cx="48" cy="24" r="5"></circle><circle cx="36" cy="18" r="4"></circle><path d="M16 48C16 40 20 35 24 35C28 35 32 40 32 48"></path><path d="M40 48C40 40 44 35 48 35C52 35 56 40 56 48"></path><path d="M30 48C30 42 33 38 36 38C39 38 42 42 42 48"></path></svg>',
+    "transport": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="14" y="20" width="44" height="24" rx="6"></rect><path d="M20 30H52"></path><circle cx="24" cy="50" r="3"></circle><circle cx="48" cy="50" r="3"></circle></svg>',
+    "accessibility": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="36" cy="16" r="4"></circle><path d="M24 26H48"></path><path d="M36 20V34"></path><path d="M36 34L28 44"></path><path d="M36 34L44 40"></path><path d="M44 40C47 42 48 46 46 50C44 54 39 56 34 55C29 54 25 50 24 45"></path></svg>',
+    "investigation": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 12H42L52 22V58H20V12Z"></path><path d="M42 12V22H52"></path><circle cx="44" cy="42" r="8"></circle><path d="M50 48L58 56"></path></svg>',
+    "children": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="36" cy="18" r="5"></circle><path d="M26 30H46"></path><path d="M36 23V40"></path><path d="M36 40L28 52"></path><path d="M36 40L44 52"></path><path d="M36 31L28 38"></path><path d="M36 31L44 38"></path></svg>',
+    "older_people": '<svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="34" cy="16" r="5"></circle><path d="M34 22V36"></path><path d="M34 36L28 48"></path><path d="M34 36L40 48"></path><path d="M34 28L26 34"></path><path d="M46 24V54"></path><path d="M46 54H52"></path></svg>',
+}
+THEME_SEMANTIC_ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("bed_shortages", "delayed_admission", "acute_hospital_wards", "intensive_care"), "bed"),
+    (("ambulance",), "ambulance"),
+    (("police",), "police"),
+    (("prison", "detention", "custody", "criminal_justice", "state_control", "restraint"), "prison"),
+    (("housing", "homeless", "care_homes", "domiciliary", "domestic"), "house"),
+    (("hospital", "emergency_departments", "surgical", "maternity", "neonatal", "perinatal", "primary_care", "out_of_hours", "palliative"), "hospital"),
+    (("medication", "polypharmacy", "substance", "drug_related", "alcohol_related", "nutrition"), "medication"),
+    (("mental_health", "suicide", "self_harm", "autism", "learning_disability", "cognitive_impairment"), "mental_health"),
+    (("sepsis", "infection", "respiratory", "cancer", "cardiovascular", "neurological", "epilepsy", "allergy", "anaphylaxis", "choking"), "infection"),
+    (("environmental_hazards", "falls", "frailty", "ligature", "equipment", "hazards"), "warning"),
+    (("roads", "highways"), "road"),
+    (("rail",), "rail"),
+    (("communication", "handover", "record_sharing", "language_interpreter", "inter_agency"), "communication"),
+    (("record", "referral", "consent", "capacity_best_interests", "policy_procedure"), "documents"),
+    (("follow_up", "waiting_times", "missed_appointments", "repeated_missed_opportunities", "continuity"), "clock"),
+    (("staffing", "training", "competence", "workload", "workplaces", "universities"), "staffing"),
+    (("it_digital", "remote_digital", "alarm_alert", "test_result"), "digital"),
+    (("safeguarding", "risk_assessment", "failure_recognise_escalate_deterioration"), "safeguarding"),
+    (("family_carer", "people_experiencing_multiple_disadvantage", "people_living_alone"), "family"),
+    (("transport_access",), "transport"),
+    (("reasonable_adjustments", "thresholds_eligibility"), "accessibility"),
+    (("investigation", "incident_review", "learn_previous_deaths"), "investigation"),
+    (("children_young_people",), "children"),
+    (("older_people",), "older_people"),
+)
 THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
     "suicide_risk": "Suicide",
     "care_home_safety": "Care home deaths",
 }
+APPROVED_THEME_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2] / "scripts" / "theme_collections" / "approved_themes.json"
+)
+_APPROVED_THEME_DESCRIPTIONS_CACHE: dict[str, str] = {}
+_APPROVED_THEME_DESCRIPTIONS_MTIME_NS: Optional[int] = None
 THEME_COLLECTION_DESCRIPTIONS: dict[str, str] = {
     "access_to_care": "Delays, referral barriers, and service gaps that block timely care.",
     "ambulance_response": "Dispatch, triage, and handover failures in ambulance pathways.",
@@ -279,11 +346,89 @@ def _theme_collection_slug(collection_name: str) -> str:
     return f"{THEME_COLLECTION_SLUG_PREFIX}-{slugify(str(collection_name or '')).replace('-', '_')}"
 
 
+def _theme_semantic_icon_key(collection_name: str) -> str:
+    key = str(collection_name or "").strip().lower()
+    for keywords, icon_key in THEME_SEMANTIC_ICON_RULES:
+        if any(keyword in key for keyword in keywords):
+            return icon_key
+    return ""
+
+
+def _theme_collection_svg(collection_name: str) -> str:
+    key = str(collection_name or "").strip().lower()
+    explicit = THEME_COLLECTION_SVG_MAP.get(key)
+    if explicit:
+        return explicit
+    semantic_key = _theme_semantic_icon_key(key)
+    if semantic_key:
+        semantic_icon = THEME_SEMANTIC_SVG_MAP.get(semantic_key)
+        if semantic_icon:
+            return semantic_icon
+    return DEFAULT_THEME_COLLECTION_SVG
+
+
+def _clean_theme_description(raw_text: str) -> str:
+    text = str(raw_text or "").strip()
+    if not text:
+        return ""
+    # Strip lightweight markdown markers used in approved theme descriptions.
+    text = text.replace("**", "").replace("`", "")
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _approved_theme_descriptions() -> dict[str, str]:
+    global _APPROVED_THEME_DESCRIPTIONS_CACHE, _APPROVED_THEME_DESCRIPTIONS_MTIME_NS
+    try:
+        stat = APPROVED_THEME_SCHEMA_PATH.stat()
+    except FileNotFoundError:
+        return {}
+
+    mtime_ns = int(stat.st_mtime_ns)
+    if _APPROVED_THEME_DESCRIPTIONS_CACHE and _APPROVED_THEME_DESCRIPTIONS_MTIME_NS == mtime_ns:
+        return _APPROVED_THEME_DESCRIPTIONS_CACHE
+
+    try:
+        payload = json.loads(APPROVED_THEME_SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    raw_themes = payload.get("themes")
+    if not isinstance(raw_themes, dict):
+        return {}
+
+    cleaned: dict[str, str] = {}
+    for raw_key, raw_description in raw_themes.items():
+        key = str(raw_key or "").strip().lower()
+        if key.startswith("theme_"):
+            key = key[len("theme_") :]
+        if not key:
+            continue
+        description = _clean_theme_description(str(raw_description or ""))
+        if description:
+            cleaned[key] = description
+
+    _APPROVED_THEME_DESCRIPTIONS_CACHE = cleaned
+    _APPROVED_THEME_DESCRIPTIONS_MTIME_NS = mtime_ns
+    return cleaned
+
+
+def _theme_collection_descriptions() -> dict[str, str]:
+    merged = dict(THEME_COLLECTION_DESCRIPTIONS)
+    merged.update(_approved_theme_descriptions())
+    return merged
+
+
+def _approved_theme_collection_columns() -> set[str]:
+    return {f"theme_{name}" for name in _approved_theme_descriptions().keys()}
+
+
 def _theme_collection_description(theme_name: str, pretty_title: str) -> str:
     key = str(theme_name or "").strip().lower()
-    if key in THEME_COLLECTION_DESCRIPTIONS:
-        return THEME_COLLECTION_DESCRIPTIONS[key]
-    return f"Reports grouped under the {pretty_title} theme."
+    descriptions = _theme_collection_descriptions()
+    if key in descriptions:
+        return descriptions[key]
+    return f"Safety failures and preventable risks linked to {str(pretty_title or key).lower()}."
 
 
 def _theme_collection_title(theme_name: str) -> str:
@@ -301,11 +446,16 @@ def _theme_collection_name(theme_name: str) -> str:
 def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, dict[str, str]]:
     accent_cycle = ("slate", "sky", "mint", "amber", "rose", "violet")
     receiver_collection_columns = set(COLLECTION_COLUMNS.values())
-    theme_columns = sorted(
+    approved_theme_columns = _approved_theme_collection_columns()
+    discovered_theme_columns = sorted(
         str(column)
         for column in reports_df.columns
         if str(column).startswith("theme_") and str(column) not in receiver_collection_columns
     )
+    whitelisted_theme_columns = [
+        column for column in discovered_theme_columns if column in approved_theme_columns
+    ]
+    theme_columns = sorted(whitelisted_theme_columns or discovered_theme_columns)
 
     collections: dict[str, dict[str, str]] = {}
     for idx, column in enumerate(theme_columns):
@@ -320,7 +470,7 @@ def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, di
             "title": pretty_title or "Theme Collection",
             "description": _theme_collection_description(theme_name, pretty_title or theme_name),
             "badge": "Theme collection",
-            "icon_svg": THEME_COLLECTION_SVG_MAP.get(collection_name, DEFAULT_THEME_COLLECTION_SVG),
+            "icon_svg": _theme_collection_svg(collection_name),
             "accent": accent_cycle[idx % len(accent_cycle)],
             "collection_column": column,
             "collection_name": collection_name,
@@ -341,9 +491,40 @@ def _display_dataset_df(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _all_browse_collections(reports_df: pd.DataFrame) -> list[dict[str, str]]:
-    combined = [dict(collection) for collection in BROWSE_COLLECTIONS]
+    combined = [dict(BROWSE_CUSTOM_COLLECTION)]
+    combined.extend(_rule_collection_cards())
     combined.extend(_theme_collection_map_from_reports(reports_df).values())
     return combined
+
+
+def _rule_collection_cards() -> list[dict[str, str]]:
+    accent_cycle = ("sky", "amber", "rose", "violet", "mint", "slate")
+    ordered_rule_slugs: list[str] = [
+        slug for slug in RULE_COLLECTION_CARD_ORDER if slug in COLLECTION_COLUMNS
+    ]
+    ordered_rule_slugs.extend(
+        slug for slug in COLLECTION_COLUMNS.keys() if slug not in ordered_rule_slugs
+    )
+
+    cards: list[dict[str, str]] = []
+    for idx, slug in enumerate(ordered_rule_slugs):
+        override = RULE_COLLECTION_CARD_OVERRIDES.get(slug, {})
+        title = str(override.get("title") or str(slug).replace("_", " ").title())
+        description = str(
+            override.get("description")
+            or f"Reports in the {title} collection."
+        )
+        cards.append(
+            {
+                "slug": slug,
+                "title": title,
+                "description": description,
+                "badge": str(override.get("badge") or "Collection"),
+                "accent": str(override.get("accent") or accent_cycle[idx % len(accent_cycle)]),
+                "icon_svg": str(override.get("icon_svg") or ""),
+            }
+        )
+    return cards
 
 
 def _collection_column_for_slug(collection_slug: str, reports_df: pd.DataFrame) -> str:
@@ -373,9 +554,41 @@ def _ensure_collection_columns_in_reports(reports_df: pd.DataFrame) -> pd.DataFr
 
 
 def _load_browse_reports_df() -> pd.DataFrame:
-    reports_df = load_reports(refresh=False)
+    return _load_browse_reports_df_with_strategy(force_refresh=False)
+
+
+def _browse_reports_cache_is_stale(now_utc: datetime) -> bool:
+    if BROWSE_REPORTS_CACHE_DF is None or BROWSE_REPORTS_CACHE_UPDATED_AT is None:
+        return True
+    age_seconds = (now_utc - BROWSE_REPORTS_CACHE_UPDATED_AT).total_seconds()
+    return age_seconds >= BROWSE_REPORTS_REFRESH_TTL_SECONDS
+
+
+def _load_browse_reports_df_with_strategy(*, force_refresh: bool) -> pd.DataFrame:
+    global BROWSE_REPORTS_CACHE_DF, BROWSE_REPORTS_CACHE_UPDATED_AT
+
+    now_utc = datetime.utcnow()
+    with BROWSE_REPORTS_CACHE_LOCK:
+        cache_stale = _browse_reports_cache_is_stale(now_utc)
+        if not force_refresh and not cache_stale and BROWSE_REPORTS_CACHE_DF is not None:
+            return BROWSE_REPORTS_CACHE_DF.copy()
+
+    should_refresh_remote = bool(force_refresh or cache_stale)
+    try:
+        reports_df = load_reports(refresh=should_refresh_remote)
+    except Exception as exc:
+        if not should_refresh_remote:
+            raise
+        logger.warning("Browse dataset refresh failed; falling back to cached dataset. error=%r", exc)
+        reports_df = load_reports(refresh=False)
+
     reports_df, _ = _ensure_workbench_row_ids(reports_df)
-    return _ensure_collection_columns_in_reports(reports_df)
+    reports_df = _ensure_collection_columns_in_reports(reports_df)
+
+    with BROWSE_REPORTS_CACHE_LOCK:
+        BROWSE_REPORTS_CACHE_DF = reports_df.copy()
+        BROWSE_REPORTS_CACHE_UPDATED_AT = datetime.utcnow()
+    return reports_df.copy()
 
 
 def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: str) -> pd.DataFrame:
@@ -383,20 +596,14 @@ def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: st
     if collection_slug == "custom":
         return reports_with_collections.reset_index(drop=True).copy()
 
-    if collection_slug in COLLECTION_COLUMNS:
-        filtered_reports = load_reports(refresh=False, collection=collection_slug)
-    else:
-        theme_meta = _theme_collection_map_from_reports(reports_with_collections).get(collection_slug)
-        if not theme_meta:
-            return reports_with_collections.iloc[0:0].copy()
-        collection_name = str(theme_meta.get("collection_name") or "").strip()
-        if not collection_name:
-            return reports_with_collections.iloc[0:0].copy()
-        filtered_reports = load_reports(refresh=False, collection=collection_name)
+    collection_column = _collection_column_for_slug(collection_slug, reports_with_collections)
+    if not collection_column or collection_column not in reports_with_collections.columns:
+        return reports_with_collections.iloc[0:0].copy()
 
+    column_values = reports_with_collections[collection_column].map(_network_truthy)
+    filtered_reports = reports_with_collections.loc[column_values].reset_index(drop=True).copy()
     filtered_reports, _ = _ensure_workbench_row_ids(filtered_reports)
-    filtered_reports = _ensure_collection_columns_in_reports(filtered_reports)
-    return filtered_reports.copy()
+    return filtered_reports
 
 UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
     {
@@ -417,6 +624,10 @@ UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
 )
 DASHBOARD_PAYLOAD_CACHE: "OrderedDict[tuple[str, tuple[str, ...], tuple[str, ...], tuple[str, ...], bool], dict[str, Any]]" = OrderedDict()
 DASHBOARD_PAYLOAD_CACHE_MAX = 64
+BROWSE_REPORTS_CACHE_LOCK = Lock()
+BROWSE_REPORTS_CACHE_DF: Optional[pd.DataFrame] = None
+BROWSE_REPORTS_CACHE_UPDATED_AT: Optional[datetime] = None
+BROWSE_REPORTS_REFRESH_TTL_SECONDS = 6 * 60 * 60
 
 
 def favicon(request: HttpRequest) -> HttpResponse:
@@ -958,16 +1169,43 @@ def _network_parse_node_id(node_id: str) -> Optional[tuple[str, str]]:
     return parsed_type, parsed_value
 
 
-def _network_theme_columns(reports_df: pd.DataFrame) -> list[str]:
-    receiver_collection_columns = set(COLLECTION_COLUMNS.values())
-    thematic_columns: list[str] = []
-    for column in reports_df.columns:
-        column_name = str(column)
-        if column_name in receiver_collection_columns:
+def _network_theme_key_from_column(column_name: str) -> str:
+    column = str(column_name or "").strip()
+    if column.startswith("theme_"):
+        return column[len("theme_") :]
+    if column.startswith("collection_"):
+        return column[len("collection_") :]
+    return column
+
+
+def _network_theme_label_lookup(reports_df: pd.DataFrame) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for collection in _all_browse_collections(reports_df):
+        slug = str(collection.get("slug", "")).strip()
+        if not slug or slug == "custom":
             continue
-        if column_name.startswith("theme_") or column_name.startswith("collection_"):
-            thematic_columns.append(column_name)
-    return sorted(thematic_columns)
+        collection_column = _collection_column_for_slug(slug, reports_df)
+        if not collection_column or collection_column not in reports_df.columns:
+            continue
+        theme_key = _network_theme_key_from_column(collection_column)
+        if not theme_key:
+            continue
+        title = str(collection.get("title", "")).strip()
+        if title:
+            labels[theme_key] = title
+    return labels
+
+
+def _network_theme_columns(reports_df: pd.DataFrame) -> list[str]:
+    columns: set[str] = set()
+    for collection in _all_browse_collections(reports_df):
+        slug = str(collection.get("slug", "")).strip()
+        if not slug or slug == "custom":
+            continue
+        collection_column = _collection_column_for_slug(slug, reports_df)
+        if collection_column and collection_column in reports_df.columns:
+            columns.add(str(collection_column))
+    return sorted(columns)
 
 
 def _network_theme_label(theme_key: str) -> str:
@@ -1033,6 +1271,13 @@ def _build_network_graph_payload(
         forced_nodes.append((node_type, node_value))
 
     theme_columns = _network_theme_columns(filtered_df)
+    theme_label_lookup = _network_theme_label_lookup(filtered_df)
+
+    def _label_for_theme(theme_key: str) -> str:
+        key = str(theme_key or "").strip()
+        if key in theme_label_lookup:
+            return theme_label_lookup[key]
+        return _network_theme_label(key)
     if filtered_df.empty:
         return {
             "selected": normalised_filters,
@@ -1314,12 +1559,7 @@ def _build_network_graph_payload(
         for column in theme_columns:
             if not _network_truthy(row.get(column)):
                 continue
-            if column.startswith("theme_"):
-                theme_key = column[len("theme_") :]
-            elif column.startswith("collection_"):
-                theme_key = column[len("collection_") :]
-            else:
-                theme_key = column
+            theme_key = _network_theme_key_from_column(column)
             active_themes.append(theme_key)
             theme_counter[theme_key] += 1
 
@@ -1533,7 +1773,7 @@ def _build_network_graph_payload(
                 }
             )
 
-    add_nodes("theme", top_themes, counter=theme_counter, label_fn=_network_theme_label)
+    add_nodes("theme", top_themes, counter=theme_counter, label_fn=_label_for_theme)
     add_nodes("receiver", top_receivers, counter=receiver_counter)
     add_nodes("coroner", top_coroners, counter=coroner_counter)
     add_nodes("area", top_areas, counter=area_counter)
@@ -1544,7 +1784,7 @@ def _build_network_graph_payload(
             node_rows.append(
                 {
                     "id": _network_node_id("theme", theme_key),
-                    "name": _network_theme_label(theme_key),
+                    "name": _label_for_theme(theme_key),
                     "type": "theme",
                     "value": int(theme_counter.get(theme_key, 0)),
                     "raw_key": str(theme_key),
@@ -1603,7 +1843,7 @@ def _build_network_graph_payload(
     top_theme_key = top_themes[0] if top_themes else ""
     search_nodes = []
     search_nodes.extend(
-        _network_search_nodes_from_counter("theme", theme_counter, label_fn=_network_theme_label)
+        _network_search_nodes_from_counter("theme", theme_counter, label_fn=_label_for_theme)
     )
     search_nodes.extend(_network_search_nodes_from_counter("receiver", receiver_counter))
     search_nodes.extend(_network_search_nodes_from_counter("coroner", coroner_counter))
@@ -1619,7 +1859,7 @@ def _build_network_graph_payload(
             "nodes": int(len(nodes)),
             "edges": int(len(edges)),
             "top_theme": {
-                "name": _network_theme_label(top_theme_key) if top_theme_key else "-",
+                "name": _label_for_theme(top_theme_key) if top_theme_key else "-",
                 "count": int(theme_counter.get(top_theme_key, 0)),
             },
         },
@@ -1929,12 +2169,7 @@ def _network_row_node_ids(row: pd.Series, theme_columns: list[str]) -> set[str]:
     for column in theme_columns:
         if not _network_truthy(row.get(column)):
             continue
-        if column.startswith("theme_"):
-            theme_key = column[len("theme_") :]
-        elif column.startswith("collection_"):
-            theme_key = column[len("collection_") :]
-        else:
-            theme_key = column
+        theme_key = _network_theme_key_from_column(column)
         node_ids.add(_network_node_id("theme", theme_key))
 
     for receiver_name in _split_dashboard_receivers(row.get("receiver")):
@@ -3854,6 +4089,31 @@ def _handle_restore_excluded_report(request: HttpRequest) -> None:
     messages.success(request, "Excluded report restored to the working dataset.")
 
 
+def _handle_refresh_collections_cache(request: HttpRequest) -> None:
+    started_at = perf_counter()
+    try:
+        reports_df = _load_browse_reports_df_with_strategy(force_refresh=True)
+    except Exception as exc:
+        messages.error(request, f"Could not refresh collections dataset: {exc}")
+        return
+
+    theme_collection_count = len(_theme_collection_map_from_reports(reports_df))
+    messages.success(
+        request,
+        (
+            "Collections dataset refreshed from the remote release "
+            f"({len(reports_df):,} reports; {theme_collection_count} themed collections)."
+        ),
+    )
+    _log_timed_event(
+        "refresh_collections_cache",
+        started_at,
+        force_info=True,
+        report_count=len(reports_df),
+        theme_collections=theme_collection_count,
+    )
+
+
 def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
     _update_sidebar_state(request)
     action = request.POST.get("action", "")
@@ -3887,6 +4147,8 @@ def _handle_post_action(request: HttpRequest) -> Optional[HttpResponse]:
         _handle_exclude_report(request)
     elif action == "restore_excluded_report":
         _handle_restore_excluded_report(request)
+    elif action == "refresh_collections_cache":
+        _handle_refresh_collections_cache(request)
     elif action == "download_bundle":
         try:
             return _bundle_download_response(request)
