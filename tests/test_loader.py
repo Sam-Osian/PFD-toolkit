@@ -107,9 +107,9 @@ def test_load_reports_filters_multiple_thematic_collections_with_or_semantics():
     assert set(df["url"]) == {"u1", "u2", "u3"}
 
 
-def test_load_reports_filters_collection_with_theme_prefix():
-    df = loader.load_reports(collection="theme_medication_safety", refresh=False)
-    assert set(df["url"]) == {"u1", "u3"}
+def test_load_reports_rejects_collection_with_theme_prefix():
+    with pytest.raises(ValueError, match="Unknown collection"):
+        loader.load_reports(collection="theme_medication_safety", refresh=False)
 
 
 def test_load_reports_supports_collection_aliases():
@@ -138,11 +138,16 @@ def test_load_reports_filters_multiple_collections_with_or_semantics():
     assert "theme_sent_to_local_government" in df.columns
 
 
-def test_load_reports_receiver_collection_alias_health_reg():
-    df = loader.load_reports(collection="health_reg", refresh=False)
+def test_load_reports_filters_by_multiple_rule_collections():
+    df = loader.load_reports(collection=["nhs", "wales"], refresh=False)
+    assert set(df["url"]) == {"u1", "u3"}
+
+
+def test_load_reports_filters_wales_collection():
+    df = loader.load_reports(collection="wales", refresh=False)
     assert set(df["url"]) == {"u3"}
 
 
-def test_load_reports_filters_welsh_collection():
-    df = loader.load_reports(collection="welsh", refresh=False)
+def test_load_reports_receiver_collection_alias_health_reg():
+    df = loader.load_reports(collection="health_reg", refresh=False)
     assert set(df["url"]) == {"u3"}

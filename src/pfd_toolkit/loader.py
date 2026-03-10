@@ -31,21 +31,15 @@ _THEME_COLLECTION_NAME_OVERRIDES: Final[dict[str, str]] = {
     "care_home_safety": "care_home",
 }
 _COLLECTION_ALIASES: Final[dict[str, str]] = {
+    "welsh": "wales",
     "health_reg": "health_regulators",
     "suicide_risk": "suicide",
     "care_home_safety": "care_home",
 }
 
 
-def _normalise_theme_name(raw_theme: str) -> str:
-    value = str(raw_theme or "").strip()
-    if value.startswith(_THEME_PREFIX):
-        return value[len(_THEME_PREFIX):]
-    return value
-
-
 def _normalise_collection_name(raw_value: str) -> str:
-    value = _normalise_theme_name(raw_value).strip()
+    value = str(raw_value or "").strip()
     return _COLLECTION_ALIASES.get(value, value)
 
 def _ensure_cached_dataset(
@@ -137,29 +131,144 @@ def load_reports(
     ----------
     start_date : str, optional
         Inclusive lower bound for the report date in ``YYYY-MM-DD`` format.
-        Defaults to ``"2000-01-01"``.
+        Default: ``"2000-01-01"``.
     end_date : str, optional
         Inclusive upper bound for the report date in ``YYYY-MM-DD`` format.
-        Defaults to ``"2050-01-01"``.
+        Default: ``"2050-01-01"``.
     n_reports : int or None, optional
         Keep only the most recent ``n_reports`` rows after filtering by date.
-        ``None`` (the default) returns all rows.
+        Default: ``None`` (all rows).
     refresh : bool, optional
-        If ``True`` (the default), force a fresh download of the dataset. Set to
-        ``False`` to reuse the previously cached copy.
+        If ``True``, force a fresh download of the dataset. If ``False``, reuse
+        the cached copy.
+        Default: ``True``.
     collection : str | list[str] | None, optional
-        Filter rows using packaged collections. This includes receiver-based
-        collections (e.g. ``"nhs"``, ``"gov_department"``,
-        ``"health_regulators"``) and thematic collections inferred from
-        packaged ``theme_*`` columns (e.g. ``"medication_safety"``,
-        ``"suicide"``, ``"care_home"``). Values may be supplied with or
-        without the ``theme_`` prefix for thematic collections. Pass a single
-        collection name or a list of collection names. When multiple
-        collections are supplied, rows matching **any** requested collection are
-        returned. When a single collection is supplied, its boolean helper
-        column is dropped from the returned DataFrame. When two or more
-        collections are supplied, the requested boolean columns are retained for
-        comparison.
+        One collection name or a list of collection names.
+        Collection matching uses OR semantics across provided names.
+        When one collection is provided, the helper boolean column is dropped from
+        output. When multiple collections are provided, helper columns are kept.
+        Supported collection names:
+
+        - wales
+        - nhs
+        - gov_department
+        - prisons
+        - health_regulators
+        - health_reg
+        - local_gov
+        - access_to_care
+        - ambulance_response
+        - care_home
+        - discharge_planning
+        - environmental_safety
+        - equipment_safety
+        - falls_prevention
+        - family_involvement
+        - hospital_care
+        - infection_control
+        - interagency_communication
+        - medication_safety
+        - mental_health_care
+        - observation_failures
+        - online_hazards
+        - physical_health_in_mental_health
+        - record_keeping
+        - road_safety
+        - safeguarding
+        - staff_shortages
+        - staff_training
+        - substance_misuse
+        - suicide
+        - vulnerable_groups
+        - emergency_departments
+        - ambulance_services
+        - primary_care
+        - out_of_hours_care
+        - acute_hospital_wards
+        - intensive_care
+        - surgical_care
+        - maternity_neonatal_perinatal_care
+        - mental_health_services
+        - substance_use_services
+        - care_homes
+        - domiciliary_care
+        - hospices_palliative_care
+        - prisons_criminal_justice_supervision
+        - police_custody
+        - immigration_detention
+        - secure_health_settings
+        - housing_homelessness
+        - universities
+        - workplaces
+        - roads_highways
+        - rail_settings
+        - domestic_settings
+        - suicide_self_harm
+        - drug_related_deaths
+        - alcohol_related_deaths
+        - polypharmacy
+        - diagnostic_delay
+        - sepsis_infection
+        - cancer_care
+        - cardiovascular_conditions
+        - respiratory_conditions
+        - neurological_conditions
+        - diabetes_metabolic_conditions
+        - falls_frailty
+        - choking_aspiration
+        - learning_disability
+        - autism
+        - cognitive_impairment
+        - substance_dependence
+        - domestic_abuse
+        - self_neglect
+        - violence_homicide_related_systems_failures
+        - environmental_hazards
+        - nutrition
+        - epilepsy_seizure_management
+        - allergy_anaphylaxis
+        - ligature_anchor_point_risks
+        - risk_assessment_failures
+        - failure_recognise_escalate_deterioration
+        - communication_failures
+        - handover_failures
+        - record_sharing_failures
+        - referral_failures
+        - follow_up_failures
+        - transitions_discharge_failures
+        - observation_monitoring_failures
+        - test_result_management_failures
+        - consent_decision_making_failures
+        - capacity_best_interests_failures
+        - staffing_shortages_workload_pressure
+        - training_competence_gaps
+        - policy_procedure_failures
+        - equipment_failures
+        - it_digital_system_failures
+        - alarm_alert_failures
+        - environmental_design_failures
+        - transport_access_barriers
+        - repeated_missed_opportunities
+        - missed_appointments_non_attendance
+        - restraint_restrictive_intervention
+        - delayed_admission
+        - bed_shortages
+        - language_interpreter_barriers
+        - remote_digital_care
+        - safeguarding_failures
+        - inter_agency_working
+        - continuity_of_care
+        - family_carer_concerns_not_acted_on
+        - reasonable_adjustments_not_made
+        - investigation_incident_review_failures
+        - failure_learn_previous_deaths_incidents
+        - thresholds_eligibility_barriers
+        - waiting_times_delays
+        - children_young_people
+        - older_people
+        - people_detention_state_control
+        - people_experiencing_multiple_disadvantage
+        - people_living_alone_socially_isolated
 
     Returns
     -------
@@ -195,15 +304,19 @@ def load_reports(
     ].copy()
     reports.reset_index(drop=True, inplace=True)
 
+    requested_collections_raw: list[str] = []
     if collection is not None:
-        requested_collections_raw = (
+        requested_collections_raw.extend(
             [collection] if isinstance(collection, str) else list(collection)
         )
+
+    if requested_collections_raw:
         requested_collections = []
         for item in requested_collections_raw:
             cleaned = _normalise_collection_name(str(item or "").strip())
             if cleaned:
                 requested_collections.append(cleaned)
+        requested_collections = list(dict.fromkeys(requested_collections))
         if not requested_collections:
             raise ValueError(
                 "collection must contain at least one non-empty collection name."

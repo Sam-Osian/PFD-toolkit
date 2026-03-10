@@ -7,12 +7,12 @@ from pfd_toolkit.config import GeneralConfig
 
 
 COLLECTION_COLUMNS: dict[str, str] = {
+    "wales": "theme_welsh",
     "nhs": "theme_sent_to_nhs_bodies",
     "gov_department": "theme_sent_to_government_departments",
     "prisons": "theme_sent_to_prisons",
     "health_regulators": "theme_sent_to_health_regulators",
     "local_gov": "theme_sent_to_local_government",
-    "welsh": "theme_welsh",
 }
 
 _GOVERNMENT_DEPARTMENTS = (
@@ -269,7 +269,7 @@ def apply_collection_columns(
     )
     _apply_collection_rule(
         reports,
-        collection_column=COLLECTION_COLUMNS["welsh"],
+        collection_column=COLLECTION_COLUMNS["wales"],
         matcher=_match_welsh_area,
         source_column=area_column,
         row_mask=row_mask,
