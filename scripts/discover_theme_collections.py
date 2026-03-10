@@ -19,11 +19,15 @@ from pfd_toolkit import Extractor, LLM
 
 DEFAULT_SEED_TOPICS = [
     "Suicide-related deaths",
-    "Deaths in hospital settings",
-    "Medication purchased online",
-    "Medication-related deaths",
     "Deaths in care home settings",
 ]
+
+
+def _confirm_discovery_run(total_reports: int, total_tokens: int) -> None:
+    print(f"\nTheme discovery preflight: {total_reports:,} reports, {total_tokens:,} estimated tokens.")
+    response = input("Proceed with discovery? [Y/n]: ").strip().lower()
+    if response in {"n", "no"}:
+        raise SystemExit("Aborted by user before theme discovery run.")
 
 
 def _load_local_openai_key() -> str:
@@ -68,28 +72,43 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Discover candidate themes from a sample, then curate them interactively."
     )
-    parser.add_argument("--input", type=Path, default=Path("all_reports.csv"))
+    parser.add_argument("--input", type=Path, default=Path("scripts/data/all_reports_with_collections.csv"))
     parser.add_argument(
         "--output",
         type=Path,
         default=Path("scripts/theme_collections/approved_themes.json"),
         help="Where to save the approved theme schema JSON.",
     )
-    parser.add_argument("--sample-size", type=int, default=3000)
+    parser.add_argument("--sample-size", type=int, default=1500)
     parser.add_argument("--sample-seed", type=int, default=67)
-    parser.add_argument("--min-themes", type=int, default=20)
-    parser.add_argument("--max-themes", type=int, default=30)
+    parser.add_argument("--min-themes", type=int, default=100)
+    parser.add_argument("--max-themes", type=int, default=100)
     parser.add_argument("--model", default="gpt-4.1")
     parser.add_argument("--max-workers", type=int, default=18)
+    parser.add_argument("--trim-approach", choices=["truncate", "summarise"], default="truncate")
     parser.add_argument("--summarise-intensity", default="high")
+    parser.add_argument("--max-tokens", type=int, default=1000)
+    parser.add_argument("--max-words", type=int)
     parser.add_argument(
         "--extra-instructions",
         default=(
-            "Prioritise recurring, actionable prevention topics in coroners' concerns. "
+            "Prioritise recurring, actionable prevention topics. "
             "Avoid creating near-duplicate themes."
         ),
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.max_tokens is not None and args.max_words is not None:
+        parser.error("Use only one of --max-tokens or --max-words.")
+    if args.trim_approach == "summarise":
+        if args.max_tokens is not None or args.max_words is not None:
+            parser.error("--max-tokens/--max-words can only be used with --trim-approach truncate.")
+    else:
+        if args.max_tokens is None and args.max_words is None:
+            args.max_tokens = 4000
+        args.summarise_intensity = None
+
+    return args
 
 
 def _normalise_identifier(text: str) -> str:
@@ -170,30 +189,56 @@ def _discover_themes(args: argparse.Namespace, reports_sample: pd.DataFrame) -> 
         model=args.model,
         max_workers=max(1, args.max_workers),
         temperature=0.0,
-        timeout=30,
+        timeout=90,
         seed=123,
         validation_attempts=2,
     )
     extractor = Extractor(
         llm=llm_client,
         reports=reports_sample,
-        include_date=True,
-        include_coroner=True,
-        include_area=True,
-        include_receiver=True,
-        include_investigation=True,
+        include_date=False,
+        include_coroner=False,
+        include_area=False,
+        include_receiver=False,
+        include_investigation=False,
         include_circumstances=True,
-        include_concerns=True,
+        include_concerns=False,
         verbose=False,
     )
-    theme_model = extractor.discover_themes(
-        min_themes=args.min_themes,
-        max_themes=args.max_themes,
-        extra_instructions=args.extra_instructions,
-        seed_topics=DEFAULT_SEED_TOPICS,
-        trim_approach="summarise",
-        summarise_intensity=args.summarise_intensity,
-    )
+    summarise_kwargs: dict[str, Any] = {
+        "result_col_name": extractor.summary_col,
+        "trim_approach": args.trim_approach,
+        "discover_themes_extra_instructions": args.extra_instructions,
+    }
+    if args.trim_approach == "summarise":
+        summarise_kwargs["summarise_intensity"] = args.summarise_intensity
+    else:
+        if args.max_words is not None:
+            summarise_kwargs["max_words"] = args.max_words
+        elif args.max_tokens is not None:
+            summarise_kwargs["max_tokens"] = args.max_tokens
+
+    extractor.summarise(**summarise_kwargs)
+    total_tokens = extractor.estimate_tokens(col_name=extractor.summary_col)
+    _confirm_discovery_run(len(reports_sample), int(total_tokens))
+
+    discover_kwargs: dict[str, Any] = {
+        "error_exceed": 950000,
+        "min_themes": args.min_themes,
+        "max_themes": args.max_themes,
+        "extra_instructions": args.extra_instructions,
+        "seed_topics": DEFAULT_SEED_TOPICS,
+        "trim_approach": args.trim_approach,
+    }
+    if args.trim_approach == "summarise":
+        discover_kwargs["summarise_intensity"] = args.summarise_intensity
+    else:
+        if args.max_words is not None:
+            discover_kwargs["max_words"] = args.max_words
+        elif args.max_tokens is not None:
+            discover_kwargs["max_tokens"] = args.max_tokens
+
+    theme_model = extractor.discover_themes(**discover_kwargs)
 
     if theme_model is not None and hasattr(theme_model, "model_json_schema"):
         schema = theme_model.model_json_schema()
@@ -366,8 +411,10 @@ def _save_approved_themes(
         "sample_rows": int(sample_rows),
         "sample_seed": int(args.sample_seed),
         "model": args.model,
-        "trim_approach": "summarise",
-        "summarise_intensity": args.summarise_intensity,
+        "trim_approach": args.trim_approach,
+        "summarise_intensity": args.summarise_intensity if args.trim_approach == "summarise" else None,
+        "max_tokens": args.max_tokens if args.trim_approach == "truncate" and args.max_words is None else None,
+        "max_words": args.max_words if args.trim_approach == "truncate" else None,
         "min_themes": int(args.min_themes),
         "max_themes": int(args.max_themes),
         "seed_topics": DEFAULT_SEED_TOPICS,

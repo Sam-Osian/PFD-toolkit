@@ -6,8 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import hashlib
 from pathlib import Path
 from typing import Any
+import math
 
 import pandas as pd
 from pydantic import Field, create_model
@@ -59,6 +61,12 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="gpt-4.1")
     parser.add_argument("--max-workers", type=int, default=18)
     parser.add_argument(
+        "--theme-batches",
+        type=int,
+        default=3,
+        help="Number of theme batches to process sequentially. Defaults to 3.",
+    )
+    parser.add_argument(
         "--recompute-all",
         action="store_true",
         help="Recompute theme columns for every row, not only rows with missing values.",
@@ -67,6 +75,23 @@ def _parse_args() -> argparse.Namespace:
         "--summary-file",
         type=Path,
         default=Path(".github/workflows/update_summary.txt"),
+    )
+    parser.add_argument(
+        "--checkpoint-file",
+        type=Path,
+        default=Path("scripts/theme_collections/update_theme_collections_checkpoint.csv"),
+        help="CSV file used for incremental checkpointing and resume.",
+    )
+    parser.add_argument(
+        "--checkpoint-metadata-file",
+        type=Path,
+        default=Path("scripts/theme_collections/update_theme_collections_checkpoint.meta.json"),
+        help="Metadata file used to validate checkpoint compatibility on resume.",
+    )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Ignore any existing checkpoint and recompute from scratch.",
     )
     return parser.parse_args()
 
@@ -95,6 +120,20 @@ def _build_theme_model(themes: dict[str, str]):
         for name, description in themes.items()
     }
     return create_model("ApprovedThemeCollections", **fields)
+
+
+def _chunk_theme_map(themes: dict[str, str], batches: int) -> list[dict[str, str]]:
+    if batches <= 0:
+        raise ValueError("--theme-batches must be at least 1.")
+    items = list(themes.items())
+    if not items:
+        return []
+    batch_size = max(1, math.ceil(len(items) / batches))
+    chunks: list[dict[str, str]] = []
+    for start in range(0, len(items), batch_size):
+        chunk_items = items[start : start + batch_size]
+        chunks.append(dict(chunk_items))
+    return chunks
 
 
 def _coerce_boolean_series(series: pd.Series) -> pd.Series:
@@ -136,6 +175,74 @@ def _append_summary(summary_file: Path, message: str) -> None:
             handle.write("\n")
 
 
+def _metadata_signature(
+    input_path: Path,
+    schema_path: Path,
+    theme_columns: list[str],
+    source_indices: pd.Index,
+) -> dict[str, Any]:
+    digest = hashlib.sha256()
+    digest.update(str(input_path.resolve()).encode("utf-8"))
+    digest.update(str(schema_path.resolve()).encode("utf-8"))
+    digest.update("|".join(theme_columns).encode("utf-8"))
+    digest.update(",".join(str(int(idx)) for idx in source_indices.tolist()).encode("utf-8"))
+    return {
+        "input_path": str(input_path.resolve()),
+        "schema_path": str(schema_path.resolve()),
+        "theme_columns": theme_columns,
+        "source_index_hash": digest.hexdigest(),
+        "row_count": int(len(source_indices)),
+    }
+
+
+def _save_checkpoint(
+    checkpoint_file: Path,
+    metadata_file: Path,
+    source_indices: pd.Index,
+    assigned_subset: pd.DataFrame,
+    theme_columns: list[str],
+    metadata: dict[str, Any],
+) -> None:
+    checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+    metadata_file.parent.mkdir(parents=True, exist_ok=True)
+
+    checkpoint_payload = pd.DataFrame({"__source_index": source_indices.to_list()})
+    for column in theme_columns:
+        if column in assigned_subset.columns:
+            checkpoint_payload[column] = assigned_subset[column]
+
+    tmp_checkpoint = checkpoint_file.with_suffix(f"{checkpoint_file.suffix}.tmp")
+    tmp_metadata = metadata_file.with_suffix(f"{metadata_file.suffix}.tmp")
+    checkpoint_payload.to_csv(tmp_checkpoint, index=False)
+    tmp_metadata.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    tmp_checkpoint.replace(checkpoint_file)
+    tmp_metadata.replace(metadata_file)
+
+
+def _load_checkpoint_if_compatible(
+    checkpoint_file: Path,
+    metadata_file: Path,
+    metadata: dict[str, Any],
+) -> pd.DataFrame | None:
+    if not checkpoint_file.exists() or not metadata_file.exists():
+        return None
+
+    try:
+        checkpoint_metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+
+    if checkpoint_metadata != metadata:
+        return None
+
+    checkpoint = pd.read_csv(checkpoint_file)
+    if "__source_index" not in checkpoint.columns:
+        return None
+    if len(checkpoint) != metadata["row_count"]:
+        return None
+    return checkpoint
+
+
 def main() -> None:
     args = _parse_args()
     if not args.input.exists():
@@ -154,7 +261,14 @@ def main() -> None:
         _append_summary(args.summary_file, "Theme collections already up to date (no rows updated).")
         return
 
+    subset_source_indices = reports.index[row_mask]
     subset = reports.loc[row_mask].copy().reset_index(drop=True)
+    checkpoint_metadata = _metadata_signature(
+        input_path=args.input,
+        schema_path=args.schema,
+        theme_columns=theme_columns,
+        source_indices=subset_source_indices,
+    )
     llm_client = LLM(
         api_key=api_key,
         model=args.model,
@@ -176,13 +290,74 @@ def main() -> None:
         include_concerns=True,
         verbose=False,
     )
-    theme_model = _build_theme_model(themes)
-    assigned_subset = extractor.extract_features(
-        feature_model=theme_model,
-        force_assign=True,
-        allow_multiple=True,
-        skip_if_present=False,
-    )
+    theme_batches = _chunk_theme_map(themes, args.theme_batches)
+    assigned_subset = subset.copy()
+
+    if args.no_resume:
+        if args.checkpoint_file.exists():
+            print(f"Ignoring checkpoint due to --no-resume: {args.checkpoint_file}")
+    else:
+        checkpoint = _load_checkpoint_if_compatible(
+            checkpoint_file=args.checkpoint_file,
+            metadata_file=args.checkpoint_metadata_file,
+            metadata=checkpoint_metadata,
+        )
+        if checkpoint is None and args.checkpoint_file.exists():
+            print("Existing checkpoint is incompatible with current run; recomputing from scratch.")
+        if checkpoint is not None:
+            print(f"Resuming from checkpoint: {args.checkpoint_file}")
+            for column in theme_columns:
+                if column in checkpoint.columns:
+                    assigned_subset[column] = _coerce_boolean_series(checkpoint[column])
+
+    total_batches = len(theme_batches)
+    try:
+        for batch_idx, batch_themes in enumerate(theme_batches, start=1):
+            batch_columns = list(batch_themes.keys())
+            already_complete = all(
+                column in assigned_subset.columns and assigned_subset[column].notna().all()
+                for column in batch_columns
+            )
+            if already_complete:
+                print(
+                    f"Skipping batch {batch_idx}/{total_batches} "
+                    f"({len(batch_columns)} themes) from checkpoint."
+                )
+                continue
+
+            print(
+                f"Running theme assignment batch {batch_idx}/{total_batches} "
+                f"({len(batch_columns)} themes)."
+            )
+            batch_model = _build_theme_model(batch_themes)
+            batch_assigned = extractor.extract_features(
+                feature_model=batch_model,
+                force_assign=True,
+                allow_multiple=True,
+                skip_if_present=False,
+            )
+            for column in batch_columns:
+                assigned_subset[column] = _coerce_boolean_series(batch_assigned[column])
+            _save_checkpoint(
+                checkpoint_file=args.checkpoint_file,
+                metadata_file=args.checkpoint_metadata_file,
+                source_indices=subset_source_indices,
+                assigned_subset=assigned_subset,
+                theme_columns=theme_columns,
+                metadata=checkpoint_metadata,
+            )
+            print(f"Checkpoint saved: {args.checkpoint_file}")
+    except (KeyboardInterrupt, Exception):
+        _save_checkpoint(
+            checkpoint_file=args.checkpoint_file,
+            metadata_file=args.checkpoint_metadata_file,
+            source_indices=subset_source_indices,
+            assigned_subset=assigned_subset,
+            theme_columns=theme_columns,
+            metadata=checkpoint_metadata,
+        )
+        print(f"Interrupted; partial checkpoint saved to {args.checkpoint_file}")
+        raise
 
     for column in theme_columns:
         assigned_subset[column] = _coerce_boolean_series(assigned_subset[column])
@@ -197,7 +372,10 @@ def main() -> None:
 
     _append_summary(
         args.summary_file,
-        f"Theme collections updated for {rows_to_update} row(s) using {len(theme_columns)} approved themes.",
+        (
+            f"Theme collections updated for {rows_to_update} row(s) using "
+            f"{len(theme_columns)} approved themes across {len(theme_batches)} batch(es)."
+        ),
     )
 
 
