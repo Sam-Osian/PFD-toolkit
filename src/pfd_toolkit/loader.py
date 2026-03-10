@@ -134,6 +134,7 @@ def load_reports(
         Default: ``"2000-01-01"``.
     end_date : str, optional
         Inclusive upper bound for the report date in ``YYYY-MM-DD`` format.
+        Dates after today are capped to the current date at runtime.
         Default: ``"2050-01-01"``.
     n_reports : int or None, optional
         Keep only the most recent ``n_reports`` rows after filtering by date.
@@ -294,7 +295,9 @@ def load_reports(
     
     # Date param reading
     date_from = _date_parser.parse(start_date)
-    date_to = _date_parser.parse(end_date)
+    requested_date_to = _date_parser.parse(end_date)
+    today = pd.Timestamp.today().normalize()
+    date_to = min(requested_date_to, today)
     if date_from > date_to:
         raise ValueError("start_date must be earlier than or equal to end_date")
 
