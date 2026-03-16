@@ -31,12 +31,6 @@
                     <span class="explore-top-stat__value">Read-only</span>
                 </div>
             </div>
-            <div class="explore-action-rail__controls">
-                <button type="button" class="action-rail-btn action-rail-btn--copy" data-readonly-clone-open>
-                    <i class="hgi hgi-stroke hgi-copy-01 action-rail-btn__share-mark" aria-hidden="true"></i>
-                    <span>Make editable copy</span>
-                </button>
-            </div>
         </div>
     </section>
 
@@ -116,28 +110,5 @@
     {{ explore_dashboard_payload|json_script:"explore-dashboard-data" }}
 
     {% include "workbench/_dataset_table_section.html" with workspace_label="Browse collection" %}
-</div>
-
-<div class="confirm-modal-backdrop hidden" id="readonly-clone-confirm" aria-modal="true" role="dialog" aria-labelledby="readonly-clone-title">
-    <section class="confirm-modal">
-        <h3 id="readonly-clone-title">Create your own editable copy?</h3>
-        <p>You can move this collection into Explore and continue working on it as an editable workspace.</p>
-        <div class="confirm-modal__actions">
-            <button type="button" class="button-secondary" data-readonly-clone-cancel>Cancel</button>
-            <form method="post" action="{{ clone_url }}">
-                {% csrf_token %}
-                {% for value in dashboard_selected_coroners %}
-                    <input type="hidden" name="coroner" value="{{ value }}">
-                {% endfor %}
-                {% for value in dashboard_selected_areas %}
-                    <input type="hidden" name="area" value="{{ value }}">
-                {% endfor %}
-                {% for value in dashboard_selected_receivers %}
-                    <input type="hidden" name="receiver" value="{{ value }}">
-                {% endfor %}
-                <button type="submit" class="button-primary">Create editable copy</button>
-            </form>
-        </div>
-    </section>
 </div>
 {% endblock %}
