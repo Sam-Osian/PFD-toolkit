@@ -143,16 +143,29 @@ SEO_PAGE_METADATA: dict[str, dict[str, str]] = {
     },
 }
 
-BROWSE_CUSTOM_COLLECTION: dict[str, str] = {
+BROWSE_CUSTOM_COLLECTION: dict[str, Any] = {
     "slug": "custom",
-    "title": "Custom Collection",
+    "title": "All reports",
     "description": (
-        "Open the full report archive as a starting point for building your own "
-        "editable collection and dashboard workflow."
+        "Open the full PFD archive in one place, with the standard dashboard and filters."
     ),
     "badge": "Browse starter",
     "icon": "hgi-search-01",
     "accent": "slate",
+    "dark_card": True,
+}
+
+BROWSE_SEARCH_COLLECTION: dict[str, Any] = {
+    "slug": "custom-search",
+    "title": "Custom collection",
+    "description": (
+        "Create a custom collection by searching the full archive for relevant reports."
+    ),
+    "badge": "Custom search",
+    "icon": "hgi-search-02",
+    "accent": "slate",
+    "dark_card": True,
+    "opens_modal": True,
 }
 
 RULE_COLLECTION_CARD_OVERRIDES: dict[str, dict[str, str]] = {
@@ -528,8 +541,8 @@ def _display_dataset_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[:, visible_columns].copy()
 
 
-def _all_browse_collections(reports_df: pd.DataFrame) -> list[dict[str, str]]:
-    combined = [dict(BROWSE_CUSTOM_COLLECTION)]
+def _all_browse_collections(reports_df: pd.DataFrame) -> list[dict[str, Any]]:
+    combined = [dict(BROWSE_CUSTOM_COLLECTION), dict(BROWSE_SEARCH_COLLECTION)]
     combined.extend(_rule_collection_cards())
     combined.extend(_theme_collection_map_from_reports(reports_df).values())
     return combined
@@ -649,6 +662,216 @@ def _reports_for_browse_collection(reports_df: pd.DataFrame, collection_slug: st
     filtered_reports = reports_with_collections.loc[column_values].reset_index(drop=True).copy()
     filtered_reports, _ = _ensure_workbench_row_ids(filtered_reports)
     return filtered_reports
+
+
+LEXICAL_SEARCH_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "for",
+    "from",
+    "how",
+    "in",
+    "into",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "their",
+    "this",
+    "to",
+    "what",
+    "with",
+}
+LEXICAL_SEARCH_FIELDS: tuple[tuple[str, int], ...] = (
+    ("coroner", 3),
+    ("area", 3),
+    ("concerns", 8),
+    ("circumstances", 7),
+    ("investigation", 5),
+)
+
+
+def _lexical_normalise_text(raw_value: Any) -> str:
+    text = str(raw_value or "").strip().lower()
+    if not text:
+        return ""
+    text = re.sub(r"[’']", "", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _lexical_stem_token(token: str) -> str:
+    value = str(token or "").strip().lower()
+    if len(value) <= 3:
+        return value
+    if value.endswith("ies") and len(value) > 4:
+        return f"{value[:-3]}y"
+    for suffix in ("ingly", "edly", "ing", "ed", "es", "s"):
+        if value.endswith(suffix) and len(value) - len(suffix) >= 3:
+            return value[: -len(suffix)]
+    return value
+
+
+def _lexical_query_terms(raw_query: str) -> tuple[str, list[str], list[str]]:
+    normalised_query = _lexical_normalise_text(raw_query)
+    raw_tokens = [token for token in normalised_query.split() if token]
+    filtered_tokens = [
+        token for token in raw_tokens
+        if len(token) > 1 and token not in LEXICAL_SEARCH_STOPWORDS
+    ]
+    tokens = filtered_tokens or raw_tokens
+    stems: list[str] = []
+    seen_stems: set[str] = set()
+    for token in tokens:
+        stem = _lexical_stem_token(token)
+        if stem and stem not in seen_stems:
+            stems.append(stem)
+            seen_stems.add(stem)
+    return normalised_query, tokens, stems
+
+
+def _lexical_search_score(row: pd.Series, *, raw_query: str) -> float:
+    normalised_query, tokens, stems = _lexical_query_terms(raw_query)
+    if not normalised_query or not stems:
+        return 0.0
+
+    score = 0.0
+    matched_stems: set[str] = set()
+    phrase_hit = False
+
+    for field_name, weight in LEXICAL_SEARCH_FIELDS:
+        field_text = _lexical_normalise_text(row.get(field_name, ""))
+        if not field_text:
+            continue
+        field_tokens = set(field_text.split())
+        field_stems = {_lexical_stem_token(token) for token in field_tokens if token}
+
+        if normalised_query and normalised_query in field_text:
+            score += weight * 6
+            phrase_hit = True
+
+        for token in tokens:
+            if token in field_tokens:
+                score += weight * 2.5
+        for stem in stems:
+            if stem in field_stems:
+                score += weight
+                matched_stems.add(stem)
+
+    required_stem_matches = 1 if len(stems) <= 2 else 2
+    if len(matched_stems) < required_stem_matches and not phrase_hit:
+        return 0.0
+    if len(matched_stems) == len(stems):
+        score += 10
+    return score
+
+
+def _lexical_minimum_score(raw_query: str) -> float:
+    _, _, stems = _lexical_query_terms(raw_query)
+    if len(stems) <= 1:
+        return 22.0
+    if len(stems) == 2:
+        return 36.0
+    return 44.0
+
+
+def _search_reports_for_custom_collection(reports_df: pd.DataFrame, raw_query: str) -> pd.DataFrame:
+    query_text = str(raw_query or "").strip()
+    if not query_text or reports_df.empty:
+        return reports_df.iloc[0:0].copy()
+
+    scored_df = reports_df.copy()
+    minimum_score = _lexical_minimum_score(query_text)
+    scored_df["_lexical_search_score"] = scored_df.apply(
+        lambda row: _lexical_search_score(row, raw_query=query_text),
+        axis=1,
+    )
+    scored_df = scored_df.loc[scored_df["_lexical_search_score"] >= minimum_score].copy()
+    if scored_df.empty:
+        return scored_df.drop(columns=["_lexical_search_score"], errors="ignore")
+
+    if "date" in scored_df.columns:
+        scored_df["_lexical_search_date"] = pd.to_datetime(scored_df["date"], errors="coerce")
+        scored_df = scored_df.sort_values(
+            by=["_lexical_search_score", "_lexical_search_date"],
+            ascending=[False, False],
+            na_position="last",
+        )
+        scored_df = scored_df.drop(columns=["_lexical_search_date"], errors="ignore")
+    else:
+        scored_df = scored_df.sort_values(by="_lexical_search_score", ascending=False)
+
+    scored_df = scored_df.drop(columns=["_lexical_search_score"], errors="ignore").reset_index(drop=True)
+    scored_df, _ = _ensure_workbench_row_ids(scored_df)
+    return scored_df
+
+
+def _browse_custom_search_query(request: HttpRequest, collection_slug: str) -> str:
+    if collection_slug != "custom-search":
+        return ""
+    return str(request.GET.get("q") or "").strip()
+
+
+def _query_string_from_pairs(pairs: list[tuple[str, str]]) -> str:
+    cleaned_pairs = [(key, value) for key, value in pairs if str(value or "").strip()]
+    return urlencode(cleaned_pairs, doseq=True)
+
+
+def _combine_query_strings(*query_strings: str) -> str:
+    combined_pairs: list[tuple[str, str]] = []
+    for query_string in query_strings:
+        if not query_string:
+            continue
+        for key, values in parse_qs(query_string, keep_blank_values=False).items():
+            for value in values:
+                if str(value or "").strip():
+                    combined_pairs.append((key, value))
+    return urlencode(combined_pairs, doseq=True)
+
+
+def _collection_base_query_string(collection_slug: str, search_query: str) -> str:
+    if collection_slug != "custom-search":
+        return ""
+    return _query_string_from_pairs([("q", search_query)])
+
+
+def _collection_browser_base(collection_slug: str, base_query: str) -> str:
+    base_path = reverse("workbench:browse_collection", kwargs={"collection_slug": collection_slug})
+    if base_query:
+        return f"{base_path}?{base_query}&page="
+    return f"{base_path}?page="
+
+
+def _collection_page_meta(
+    collection: dict[str, Any],
+    *,
+    collection_slug: str,
+    search_query: str,
+    reports_count: int,
+) -> dict[str, Any]:
+    if collection_slug != "custom-search":
+        return dict(collection)
+
+    meta = dict(collection)
+    if search_query:
+        meta["description"] = (
+            f'Search results for "{search_query}". '
+            f"{reports_count:,} reports matched across report text, receiver, coroner, and area fields."
+        )
+    else:
+        meta["description"] = (
+            "Create a custom collection by entering a search phrase and reviewing the matching reports."
+        )
+    return meta
 
 UI_THEME_CHOICES: tuple[dict[str, str], ...] = (
     {
@@ -3972,6 +4195,7 @@ def _build_shared_dataset_context(
     *,
     panel_base: str,
     browser_base: str,
+    base_query: str = "",
     prefix: str = "",
 ) -> dict[str, Any]:
     reports_df, _ = _ensure_workbench_row_ids(reports_df)
@@ -4017,6 +4241,7 @@ def _build_shared_dataset_context(
         ],
         doseq=True,
     )
+    dataset_shared_query = _combine_query_strings(base_query, dashboard_filter_query)
 
     return {
         f"{prefix}reports_df": filtered_df,
@@ -4036,7 +4261,7 @@ def _build_shared_dataset_context(
         f"{prefix}dashboard_selected_areas": dashboard_filters["area"],
         f"{prefix}dashboard_selected_receivers": dashboard_filters["receiver"],
         f"{prefix}dashboard_filter_query": dashboard_filter_query,
-        f"{prefix}dataset_shared_query": dashboard_filter_query,
+        f"{prefix}dataset_shared_query": dataset_shared_query,
         f"{prefix}dataset_available": not filtered_df.empty,
         f"{prefix}dataset_panel_base": panel_base,
         f"{prefix}dataset_browser_base": browser_base,
@@ -4583,11 +4808,11 @@ def browse_page(request: HttpRequest) -> HttpResponse:
     init_state(request.session)
     context = _build_context(request)
     reports_df = _load_browse_reports_df()
-    browse_collections: list[dict[str, str | int]] = []
+    browse_collections: list[dict[str, Any]] = []
     for collection in _all_browse_collections(reports_df):
         collection_column = _collection_column_for_slug(collection["slug"], reports_df)
         collection_count = 0
-        if collection["slug"] == "custom":
+        if collection["slug"] in {"custom", "custom-search"}:
             collection_count = len(reports_df)
         elif collection_column and collection_column in reports_df.columns:
             collection_count = int(reports_df[collection_column].fillna(False).astype(bool).sum())
@@ -4615,14 +4840,27 @@ def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpRe
     init_state(request.session)
     reports_df_full = _load_browse_reports_df()
     collection = _browse_collection_meta(collection_slug, reports_df_full)
-    reports_df = _reports_for_browse_collection(reports_df_full, collection_slug)
+    custom_search_query = _browse_custom_search_query(request, collection_slug)
+    base_query = _collection_base_query_string(collection_slug, custom_search_query)
+    reports_df = (
+        _search_reports_for_custom_collection(reports_df_full, custom_search_query)
+        if collection_slug == "custom-search"
+        else _reports_for_browse_collection(reports_df_full, collection_slug)
+    )
+    collection = _collection_page_meta(
+        collection,
+        collection_slug=collection_slug,
+        search_query=custom_search_query,
+        reports_count=len(reports_df),
+    )
     panel_base = reverse("workbench:browse_collection_dataset_panel", kwargs={"collection_slug": collection_slug})
-    browser_base = f"{reverse('workbench:browse_collection', kwargs={'collection_slug': collection_slug})}?page="
+    browser_base = _collection_browser_base(collection_slug, base_query)
     shared_context = _build_shared_dataset_context(
         request,
         reports_df,
         panel_base=panel_base,
         browser_base=browser_base,
+        base_query=base_query,
     )
     selected_filters = {
         "coroner": shared_context.get("dashboard_selected_coroners", []),
@@ -4641,15 +4879,16 @@ def browse_collection_page(request: HttpRequest, collection_slug: str) -> HttpRe
         "current_page": "browse",
         **shared_context,
         "collection": collection,
+        "custom_collection_query": custom_search_query,
         "collection_excluded_theme_key": excluded_theme_key or "",
         "explore_dashboard_payload": payload,
         "dashboard_data_base": reverse(
             "workbench:browse_collection_dashboard_data",
             kwargs={"collection_slug": collection_slug},
         ),
-        "clone_url": reverse(
-            "workbench:browse_collection_clone",
-            kwargs={"collection_slug": collection_slug},
+        "clone_url": (
+            f"{reverse('workbench:browse_collection_clone', kwargs={'collection_slug': collection_slug})}"
+            f"{'?' + urlencode({'q': custom_search_query}) if collection_slug == 'custom-search' and custom_search_query else ''}"
         ),
         "browse_back_url": reverse("workbench:browse"),
         "workspace_label": "Browse collection",
@@ -4674,18 +4913,22 @@ def browse_collection_dataset_panel(request: HttpRequest, collection_slug: str) 
     init_state(request.session)
     reports_df_full = _load_browse_reports_df()
     _browse_collection_meta(collection_slug, reports_df_full)
+    custom_search_query = _browse_custom_search_query(request, collection_slug)
+    base_query = _collection_base_query_string(collection_slug, custom_search_query)
 
-    reports_df = _reports_for_browse_collection(
-        reports_df_full,
-        collection_slug,
+    reports_df = (
+        _search_reports_for_custom_collection(reports_df_full, custom_search_query)
+        if collection_slug == "custom-search"
+        else _reports_for_browse_collection(reports_df_full, collection_slug)
     )
     panel_base = reverse("workbench:browse_collection_dataset_panel", kwargs={"collection_slug": collection_slug})
-    browser_base = f"{reverse('workbench:browse_collection', kwargs={'collection_slug': collection_slug})}?page="
+    browser_base = _collection_browser_base(collection_slug, base_query)
     context = _build_shared_dataset_context(
         request,
         reports_df,
         panel_base=panel_base,
         browser_base=browser_base,
+        base_query=base_query,
     )
     context["workspace_label"] = "Browse collection"
     response = render(request, "workbench/_dataset_table_section.html", context)
@@ -4698,10 +4941,12 @@ def browse_collection_dashboard_data(request: HttpRequest, collection_slug: str)
     init_state(request.session)
     reports_df_full = _load_browse_reports_df()
     _browse_collection_meta(collection_slug, reports_df_full)
+    custom_search_query = _browse_custom_search_query(request, collection_slug)
 
-    reports_df = _reports_for_browse_collection(
-        reports_df_full,
-        collection_slug,
+    reports_df = (
+        _search_reports_for_custom_collection(reports_df_full, custom_search_query)
+        if collection_slug == "custom-search"
+        else _reports_for_browse_collection(reports_df_full, collection_slug)
     )
     selected_filters = _get_explore_dashboard_filters(request)
     excluded_theme_key = _collection_excluded_theme_key(collection_slug, reports_df_full)
@@ -4719,10 +4964,11 @@ def browse_collection_clone(request: HttpRequest, collection_slug: str) -> HttpR
     init_state(request.session)
     reports_df_full = _load_browse_reports_df()
     collection = _browse_collection_meta(collection_slug, reports_df_full)
-
-    reports_df = _reports_for_browse_collection(
-        reports_df_full,
-        collection_slug,
+    custom_search_query = _browse_custom_search_query(request, collection_slug)
+    reports_df = (
+        _search_reports_for_custom_collection(reports_df_full, custom_search_query)
+        if collection_slug == "custom-search"
+        else _reports_for_browse_collection(reports_df_full, collection_slug)
     )
     selected_filters = _get_post_dashboard_filters(request)
     if any(selected_filters[field] for field in ("coroner", "area", "receiver")):
@@ -4746,7 +4992,7 @@ def browse_collection_clone(request: HttpRequest, collection_slug: str) -> HttpR
         "theme_summary_df": _snapshot_dataframe_to_payload(pd.DataFrame()),
         "saved_from_path": request.path,
     }
-    if not _workbook_payload_size_ok(snapshot):
+    if collection_slug != "custom-search" and not _workbook_payload_size_ok(snapshot):
         messages.error(request, "This collection is too large to copy into an editable workspace.")
         return redirect("workbench:browse_collection", collection_slug=collection_slug)
 

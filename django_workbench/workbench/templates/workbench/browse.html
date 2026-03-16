@@ -32,14 +32,15 @@
         {% for collection in browse_collections %}
             <a
                 href="{{ collection.url }}"
-                class="browse-card reveal-up{% if collection.slug == 'custom' %} browse-card--custom{% endif %}"
+                class="browse-card reveal-up{% if collection.dark_card %} browse-card--custom{% endif %}"
                 data-browse-card
                 data-browse-filter="{{ collection.title|lower }} {{ collection.description|lower }}"
+                {% if collection.opens_modal %}data-custom-collection-open{% endif %}
             >
                 <span class="browse-card__motif {% if collection.slug == 'local_gov' %}browse-card__motif--large{% endif %}" aria-hidden="true">
                     {% if collection.icon_svg %}
                         {{ collection.icon_svg|safe }}
-                    {% elif collection.slug == "custom" %}
+                    {% elif collection.slug == "custom" or collection.slug == "custom-search" %}
                         <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M16 18H46"></path>
                             <path d="M16 30H56"></path>
@@ -104,5 +105,31 @@
         {% endfor %}
     </section>
 
+</div>
+
+<div class="confirm-modal-backdrop hidden" id="custom-collection-modal" aria-modal="true" role="dialog" aria-labelledby="custom-collection-title">
+    <section class="confirm-modal browse-search-modal">
+        <h3 id="custom-collection-title">Create a custom collection</h3>
+        <p>What do you want to search for?</p>
+        <form method="get" action="{% url 'workbench:browse_collection' collection_slug='custom-search' %}" class="browse-search-modal__form" data-custom-collection-form>
+            <label for="custom-collection-query">Search query</label>
+            <input
+                id="custom-collection-query"
+                name="q"
+                type="search"
+                maxlength="200"
+                placeholder="e.g. suicide in prison, methotrexate toxicity, missed follow-up"
+                required
+                autocomplete="off"
+            >
+            <div class="confirm-modal__actions">
+                <button type="button" class="button-secondary" data-custom-collection-cancel>Cancel</button>
+                <button type="submit" class="button-primary browse-search-submit" data-custom-collection-submit>
+                    <span data-custom-collection-submit-label>Search reports</span>
+                    <span class="browse-search-submit__spinner" aria-hidden="true"></span>
+                </button>
+            </div>
+        </form>
+    </section>
 </div>
 {% endblock %}

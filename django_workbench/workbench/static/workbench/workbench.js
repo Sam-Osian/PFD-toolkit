@@ -173,6 +173,13 @@
 
         const searchInput = document.querySelector("[data-browse-search]");
         const cards = Array.from(grid.querySelectorAll("[data-browse-card]"));
+        const customCollectionModal = byId("custom-collection-modal");
+        const customCollectionInput = byId("custom-collection-query");
+        const customCollectionCancel = document.querySelector("[data-custom-collection-cancel]");
+        const customCollectionOpeners = Array.from(document.querySelectorAll("[data-custom-collection-open]"));
+        const customCollectionForm = document.querySelector("[data-custom-collection-form]");
+        const customCollectionSubmit = document.querySelector("[data-custom-collection-submit]");
+        let lastCustomCollectionTrigger = null;
 
         function applySearchFilter() {
             if (!searchInput) {
@@ -189,6 +196,73 @@
         if (searchInput && searchInput.dataset.bound !== "1") {
             searchInput.dataset.bound = "1";
             searchInput.addEventListener("input", applySearchFilter);
+        }
+
+        function closeCustomCollectionModal(restoreFocus) {
+            if (!customCollectionModal) {
+                return;
+            }
+            customCollectionModal.classList.add("hidden");
+            if (restoreFocus && lastCustomCollectionTrigger) {
+                lastCustomCollectionTrigger.focus();
+            }
+        }
+
+        function openCustomCollectionModal(trigger) {
+            if (!customCollectionModal) {
+                return;
+            }
+            lastCustomCollectionTrigger = trigger || null;
+            customCollectionModal.classList.remove("hidden");
+            if (customCollectionInput) {
+                window.setTimeout(function () {
+                    customCollectionInput.focus();
+                    customCollectionInput.select();
+                }, 0);
+            }
+        }
+
+        customCollectionOpeners.forEach((card) => {
+            if (card.dataset.customCollectionBound === "1") {
+                return;
+            }
+            card.dataset.customCollectionBound = "1";
+            card.addEventListener("click", function (event) {
+                event.preventDefault();
+                openCustomCollectionModal(card);
+            });
+        });
+
+        if (customCollectionCancel && customCollectionCancel.dataset.bound !== "1") {
+            customCollectionCancel.dataset.bound = "1";
+            customCollectionCancel.addEventListener("click", function () {
+                closeCustomCollectionModal(true);
+            });
+        }
+
+        if (customCollectionModal && customCollectionModal.dataset.bound !== "1") {
+            customCollectionModal.dataset.bound = "1";
+            customCollectionModal.addEventListener("click", function (event) {
+                if (event.target === customCollectionModal) {
+                    closeCustomCollectionModal(true);
+                }
+            });
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape" && !customCollectionModal.classList.contains("hidden")) {
+                    closeCustomCollectionModal(true);
+                }
+            });
+        }
+
+        if (customCollectionForm && customCollectionForm.dataset.bound !== "1") {
+            customCollectionForm.dataset.bound = "1";
+            customCollectionForm.addEventListener("submit", function () {
+                if (!customCollectionSubmit) {
+                    return;
+                }
+                customCollectionSubmit.disabled = true;
+                customCollectionSubmit.classList.add("is-loading");
+            });
         }
 
         cards.forEach((card, index) => {
@@ -2448,20 +2522,16 @@
         }
 
         function syncBrowserUrl() {
-            const params = new URLSearchParams(window.location.search);
-            params.delete("page");
-            ["coroner", "area", "receiver"].forEach((field) => {
-                params.delete(field);
-                Array.from(selectedFilters[field]).forEach((value) => params.append(field, value));
-            });
-            const query = params.toString();
+            const query = buildFilterQueryString();
             const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}`;
             window.history.replaceState(window.history.state, "", nextUrl);
         }
 
         function buildFilterQueryString() {
-            const params = new URLSearchParams();
+            const params = new URLSearchParams(window.location.search);
+            params.delete("page");
             ["coroner", "area", "receiver"].forEach((field) => {
+                params.delete(field);
                 Array.from(selectedFilters[field]).forEach((value) => params.append(field, value));
             });
             return params.toString();

@@ -5,10 +5,16 @@ from unittest.mock import patch
 
 from .models import Workbook
 from .state import dataframe_from_payload, dataframe_to_payload
+from . import views
 
 
 class WorkbenchViewTests(TestCase):
     """Smoke tests for the Workbench page."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        views.BROWSE_REPORTS_CACHE_DF = None
+        views.BROWSE_REPORTS_CACHE_UPDATED_AT = None
 
     def _unlock_network_tab(self) -> None:
         response = self.client.post(
@@ -104,6 +110,161 @@ class WorkbenchViewTests(TestCase):
         response = self.client.get(reverse("workbench:browse_collection", kwargs={"collection_slug": "wales"}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Wales")
+
+    @patch("workbench.views.load_reports")
+    def test_browse_page_renames_custom_collection_and_adds_custom_search_panel(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "investigation": "Inquest conclusion",
+                    "circumstances": "Circumstances text",
+                    "concerns": "Concerns text",
+                }
+            ]
+        )
+
+        response = self.client.get(reverse("workbench:browse"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "All reports")
+        self.assertContains(response, "Custom collection")
+        self.assertContains(response, "Create a custom collection")
+        self.assertContains(response, 'name="q"')
+
+    @patch("workbench.views.load_reports")
+    def test_custom_collection_search_returns_ranked_results(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "investigation": "Conclusion narrative",
+                    "circumstances": "A patient developed methotrexate toxicity after delayed monitoring.",
+                    "concerns": "Methotrexate guidance was outdated and monitoring failed.",
+                },
+                {
+                    "date": "2024-02-20",
+                    "coroner": "B. Example",
+                    "area": "Merseyside",
+                    "receiver": "Department of Health and Social Care",
+                    "investigation": "Road traffic death",
+                    "circumstances": "A collision happened on the motorway.",
+                    "concerns": "Road signage was unclear.",
+                },
+            ]
+        )
+
+        response = self.client.get(
+            reverse("workbench:browse_collection", kwargs={"collection_slug": "custom-search"}),
+            data={"q": "methotrexate monitoring"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Search query</span>')
+        self.assertContains(response, '"methotrexate monitoring"')
+        self.assertContains(response, "Search results for")
+        self.assertContains(response, "Make editable copy")
+        self.assertEqual(response.context["reports_count"], 1)
+        self.assertContains(response, "NHS England")
+        self.assertNotContains(response, "Road signage was unclear")
+
+    @patch("workbench.views.load_reports")
+    def test_custom_collection_dashboard_data_respects_query(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "investigation": "Medication review",
+                    "circumstances": "Methotrexate toxicity followed a delay.",
+                    "concerns": "Monitoring failed and treatment was delayed.",
+                },
+                {
+                    "date": "2024-02-20",
+                    "coroner": "B. Example",
+                    "area": "Merseyside",
+                    "receiver": "Home Office",
+                    "investigation": "Custody death",
+                    "circumstances": "A ligature point was found in custody.",
+                    "concerns": "Observation levels were inadequate.",
+                },
+            ]
+        )
+
+        response = self.client.get(
+            reverse("workbench:browse_collection_dashboard_data", kwargs={"collection_slug": "custom-search"}),
+            data={"q": "methotrexate"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["summary"]["reports_shown"], 1)
+        self.assertEqual(payload["summary"]["top_receivers"], [{"name": "NHS England", "value": 1}])
+
+    @patch("workbench.views.load_reports")
+    def test_custom_collection_clone_ignores_snapshot_size_cap(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "investigation": "Medication review",
+                    "circumstances": "Methotrexate toxicity followed a delay.",
+                    "concerns": "Monitoring failed and treatment was delayed.",
+                }
+            ]
+        )
+
+        with patch("workbench.views._workbook_payload_size_ok", return_value=False):
+            response = self.client.post(
+                f"{reverse('workbench:browse_collection_clone', kwargs={'collection_slug': 'custom-search'})}?q=methotrexate",
+            )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Workbook.objects.count(), 1)
+        location = response["Location"]
+        self.assertIn("/explore-pfds/?", location)
+
+    @patch("workbench.views.load_reports")
+    def test_custom_collection_search_applies_query_length_score_cutoffs(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "Monitoring Service",
+                    "investigation": "",
+                    "circumstances": "",
+                    "concerns": "",
+                },
+                {
+                    "date": "2024-01-11",
+                    "coroner": "B. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "investigation": "",
+                    "circumstances": "Methotrexate toxicity followed delayed monitoring.",
+                    "concerns": "Monitoring failures contributed to toxicity.",
+                },
+            ]
+        )
+
+        response = self.client.get(
+            reverse("workbench:browse_collection", kwargs={"collection_slug": "custom-search"}),
+            data={"q": "methotrexate monitoring"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["reports_count"], 1)
+        self.assertContains(response, "Methotrexate toxicity followed delayed monitoring.")
+        self.assertNotContains(response, "Methotrexate only.")
 
     def test_network_unlock_requires_correct_password(self) -> None:
         wrong_response = self.client.post(
