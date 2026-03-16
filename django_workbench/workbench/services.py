@@ -16,6 +16,7 @@ from pfd_toolkit.screener import Screener
 from .state import LLM_SIGNATURE_KEY, format_call, record_repro_action
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
+LLM_REQUEST_TIMEOUT_SECONDS = 1800
 DEFAULT_THEME_EMOJI = "💡"
 THEME_EMOJI_BANNED_TOKENS = {
     "🩸",
@@ -91,7 +92,7 @@ def get_llm_config(session: dict[str, Any]) -> tuple[Optional[dict[str, Any]], O
         "temperature": 0.0,
         "validation_attempts": 2,
         "seed": 123,
-        "timeout": 30,
+        "timeout": LLM_REQUEST_TIMEOUT_SECONDS,
     }
     if provider == "OpenRouter":
         llm_kwargs["base_url"] = base_url or OPENROUTER_API_BASE

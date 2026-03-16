@@ -4639,11 +4639,6 @@
         }, true);
 
         window.addEventListener("pageshow", hideLoader);
-        document.addEventListener("visibilitychange", function () {
-            if (document.visibilityState === "visible") {
-                hideLoader();
-            }
-        });
 
         window.WorkbenchLoading = {
             show: showLoader,
