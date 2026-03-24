@@ -2797,8 +2797,12 @@ def _first_navigable_url(items: list[dict[str, Any]]) -> Optional[str]:
 def _enabled_markdown_extensions() -> list[str]:
     enabled: list[str] = []
     for extension_name in DOCS_MARKDOWN_EXTENSIONS:
-        if extension_name.startswith("pymdownx.") and importlib.util.find_spec(extension_name) is None:
-            continue
+        if extension_name.startswith("pymdownx."):
+            try:
+                if importlib.util.find_spec(extension_name) is None:
+                    continue
+            except ModuleNotFoundError:
+                continue
         enabled.append(extension_name)
     return enabled
 
