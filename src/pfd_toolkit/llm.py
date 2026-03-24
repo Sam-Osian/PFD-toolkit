@@ -5,7 +5,7 @@ import tiktoken
 import logging
 import base64
 import re
-from typing import List, Optional, Dict, Type, Any
+from typing import Callable, List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model, ConfigDict
 import pymupdf
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -218,6 +218,7 @@ class LLM:
         response_format: Optional[Type[BaseModel]] = None,
         max_workers: Optional[int] = None,
         tqdm_extra_kwargs: Optional[Dict[str, Any]] = None,
+        progress_callback: Optional[Callable[[int, int, str], None]] = None,
     ) -> List[BaseModel | str]:
         """Run many prompts either sequentially or in parallel.
 
@@ -350,6 +351,7 @@ class LLM:
             current_desc = bar_kwargs.pop(
                 "desc", "Sending requests to the LLM"
             )
+            completed_count = 0
             for fut in tqdm(
                 as_completed(futures),
                 total=len(prompts),
@@ -358,6 +360,9 @@ class LLM:
             ):
                 i, out = fut.result()
                 results[i] = out
+                completed_count += 1
+                if progress_callback is not None:
+                    progress_callback(completed_count, len(prompts), current_desc)
 
         return results
 

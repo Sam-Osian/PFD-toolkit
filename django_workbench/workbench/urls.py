@@ -70,6 +70,9 @@ urlpatterns = [
     path("settings/", views.settings_page, name="settings"),
     path("dataset-panel/", views.dataset_panel, name="dataset_panel"),
     path("dashboard-data/", views.dashboard_data, name="dashboard_data"),
+    path("sse/filter/", views.sse_filter_reports, name="sse_filter"),
+    path("sse/themes/", views.sse_discover_themes, name="sse_themes"),
+    path("sse/extract/", views.sse_extract_features, name="sse_extract"),
     path(
         "workbooks/<int:share_number>-<slug:title_slug>/dashboard-data/",
         views.workbook_dashboard_data,

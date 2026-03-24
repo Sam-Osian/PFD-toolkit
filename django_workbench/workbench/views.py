@@ -5392,3 +5392,356 @@ def workbook_dashboard_data(request: HttpRequest, share_number: int, title_slug:
         include_options=False,
     )
     return JsonResponse(payload)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# SSE endpoints for long-running AI workflows
+# ──────────────────────────────────────────────────────────────────────
+
+from .sse import SSEProgressBridge, run_in_background, sse_response  # noqa: E402
+
+
+def _patch_llm_progress(llm_client, bridge: SSEProgressBridge):
+    """Monkey-patch *llm_client.generate* to inject the SSE progress callback."""
+    original = llm_client.generate
+
+    def _generate_with_progress(*args, **kwargs):
+        kwargs.setdefault("progress_callback", bridge.progress_callback)
+        return original(*args, **kwargs)
+
+    llm_client.generate = _generate_with_progress
+
+
+@require_http_methods(["POST"])
+def sse_filter_reports(request: HttpRequest) -> HttpResponse:
+    """SSE endpoint for the screening workflow."""
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    _update_sidebar_state(request)
+    session = request.session
+
+    reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
+    if reports_df.empty:
+        return JsonResponse({"error": "No reports loaded."}, status=400)
+
+    search_query = (request.POST.get("search_query") or "").strip()
+    if not search_query:
+        return JsonResponse({"error": "Describe what the Screener should look for."}, status=400)
+
+    filter_df = _bool_from_post(request, "filter_df", default=True)
+    produce_spans = _bool_from_post(request, "produce_spans", default=False)
+    drop_spans = _bool_from_post(request, "drop_spans", default=False)
+
+    try:
+        llm_client = build_llm(session)
+    except Exception as exc:
+        return JsonResponse({"error": f"LLM setup failed: {exc}"}, status=400)
+
+    bridge = SSEProgressBridge()
+    _patch_llm_progress(llm_client, bridge)
+    initial_report_count = len(reports_df)
+
+    def _work():
+        started_at = perf_counter()
+        bridge.stage("screen", "Screening reports...")
+        push_history_snapshot(session)
+        screener = build_screener(llm_client, reports_df, session)
+        result_df = screener.screen_reports(
+            search_query=search_query,
+            filter_df=filter_df,
+            result_col_name="matches_query",
+            produce_spans=produce_spans,
+            drop_spans=drop_spans,
+        )
+        record_repro_action(
+            session, "run_screener", "Screen the reports",
+            format_call("result_df = screener.screen_reports", {
+                "search_query": search_query, "filter_df": filter_df,
+                "result_col_name": "matches_query",
+                "produce_spans": produce_spans, "drop_spans": drop_spans,
+            }),
+        )
+        set_dataframe(session, "screener_result", result_df)
+        _set_reports_df_with_row_ids(session, "reports_df", result_df)
+        clear_outputs_for_modified_dataset(session)
+        session["active_action"] = None
+
+        if filter_df:
+            matched = len(result_df)
+        elif isinstance(result_df, pd.DataFrame) and "matches_query" in result_df.columns:
+            matched = int(result_df["matches_query"].fillna(False).astype(bool).sum())
+        else:
+            matched = len(result_df)
+
+        messages.success(
+            request,
+            f"Screening successful! From the initial {initial_report_count:,} reports, "
+            f"{matched:,} matched your search query.",
+        )
+        session.modified = True
+        session.save()
+        _log_timed_event(
+            "screen_reports", started_at, force_info=True,
+            initial_reports=initial_report_count, matched_reports=matched, filter_df=filter_df,
+        )
+        bridge.complete(redirect=reverse("workbench:explore"))
+
+    run_in_background(bridge, _work)
+    return sse_response(bridge)
+
+
+@require_http_methods(["POST"])
+def sse_discover_themes(request: HttpRequest) -> HttpResponse:
+    """SSE endpoint for the theme-discovery workflow."""
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    _update_sidebar_state(request)
+    session = request.session
+
+    reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
+    if reports_df.empty:
+        return JsonResponse({"error": "No reports loaded."}, status=400)
+
+    all_reports_df = get_dataframe(session, "reports_df")
+    existing_theme_schema = session.get("theme_model_schema")
+    existing_theme_columns = [
+        col for col in _theme_columns_from_schema(existing_theme_schema)
+        if col in all_reports_df.columns
+    ]
+    has_existing = _has_existing_theme_assignments(session, all_reports_df)
+    rerun_confirmed = _bool_from_post(request, "confirm_rerun_themes", default=False)
+
+    if has_existing and not rerun_confirmed:
+        return JsonResponse(
+            {"error": "Themes already applied. Confirm rerun first."}, status=400,
+        )
+
+    extra_theme_instructions = (request.POST.get("extra_theme_instructions") or "").strip()
+    trim_approach = request.POST.get("trim_approach", "truncate")
+    if trim_approach not in {"truncate", "summarise"}:
+        trim_approach = "truncate"
+
+    summarise_intensity = None
+    max_tokens: Optional[int] = None
+    max_words: Optional[int] = None
+
+    if trim_approach == "truncate":
+        limit_type = request.POST.get("truncation_limit_type", "tokens")
+        if limit_type == "words":
+            try:
+                max_words = int(request.POST.get("max_words", "1500"))
+            except ValueError:
+                max_words = 1500
+        else:
+            try:
+                max_tokens = int(request.POST.get("max_tokens", "3000"))
+            except ValueError:
+                max_tokens = 3000
+    else:
+        summarise_intensity = request.POST.get("summarise_intensity", "medium")
+        if summarise_intensity not in {"low", "medium", "high", "very high"}:
+            summarise_intensity = "medium"
+
+    try:
+        warning_threshold = int(request.POST.get("warning_threshold", "100000"))
+    except ValueError:
+        warning_threshold = 100000
+    try:
+        error_threshold = int(request.POST.get("error_threshold", "500000"))
+    except ValueError:
+        error_threshold = 500000
+
+    min_themes_raw = request.POST.get("min_themes", "")
+    max_themes_raw = request.POST.get("max_themes", "")
+    try:
+        min_themes_value = parse_optional_non_negative_int(min_themes_raw, "Minimum number of themes")
+        max_themes_value = parse_optional_non_negative_int(max_themes_raw, "Maximum number of themes")
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    seed_topics = parse_seed_topics(request.POST.get("seed_topics", ""))
+
+    try:
+        llm_client = build_llm(session)
+    except Exception as exc:
+        return JsonResponse({"error": f"LLM setup failed: {exc}"}, status=400)
+
+    bridge = SSEProgressBridge()
+    _patch_llm_progress(llm_client, bridge)
+
+    def _work():
+        nonlocal reports_df
+        started_at = perf_counter()
+
+        if has_existing:
+            push_history_snapshot(session)
+            cleaned = all_reports_df.drop(columns=existing_theme_columns, errors="ignore").copy()
+            _set_reports_df_with_row_ids(session, "reports_df", cleaned)
+            clear_outputs_for_modified_dataset(session)
+            reports_df = (
+                _apply_explore_dashboard_filters(cleaned, dashboard_filters)
+                if any(dashboard_filters[f] for f in ("coroner", "area", "receiver"))
+                else cleaned
+            )
+
+        extractor = build_extractor(llm_client, reports_df, session)
+
+        bridge.stage("summarise", "Preparing report summaries...")
+        summary_col_name = extractor.summary_col or "summary"
+        summary_df = extractor.summarise(
+            result_col_name=summary_col_name,
+            trim_approach=trim_approach,
+            summarise_intensity=summarise_intensity,
+            discover_themes_extra_instructions=extra_theme_instructions or None,
+            max_tokens=max_tokens,
+            max_words=max_words,
+        )
+        record_repro_action(
+            session, "summarise_reports", "Prepare the reports for theme discovery",
+            format_call("summary_df = extractor.summarise", {
+                "result_col_name": summary_col_name, "trim_approach": trim_approach,
+                "summarise_intensity": summarise_intensity,
+                "discover_themes_extra_instructions": extra_theme_instructions or None,
+                "max_tokens": max_tokens, "max_words": max_words,
+            }),
+        )
+
+        bridge.stage("discover", "Identifying themes...")
+        ThemeModel = extractor.discover_themes(
+            warn_exceed=warning_threshold, error_exceed=error_threshold,
+            max_themes=max_themes_value, min_themes=min_themes_value,
+            extra_instructions=extra_theme_instructions or None,
+            seed_topics=seed_topics, trim_approach=trim_approach,
+            summarise_intensity=summarise_intensity,
+            max_tokens=max_tokens, max_words=max_words,
+        )
+        record_repro_action(
+            session, "discover_themes", "Discover recurring themes",
+            format_call("ThemeModel = extractor.discover_themes", {
+                "warn_exceed": warning_threshold, "error_exceed": error_threshold,
+                "max_themes": max_themes_value, "min_themes": min_themes_value,
+                "extra_instructions": extra_theme_instructions or None,
+                "seed_topics": seed_topics, "trim_approach": trim_approach,
+                "summarise_intensity": summarise_intensity,
+                "max_tokens": max_tokens, "max_words": max_words,
+            }),
+        )
+
+        if ThemeModel is None or not hasattr(ThemeModel, "model_json_schema"):
+            clear_preview_state(session)
+            messages.warning(request, "Theme discovery completed but did not return a schema.")
+            session.modified = True
+            session.save()
+            bridge.complete(redirect=reverse("workbench:themes"))
+            return
+
+        bridge.stage("assign", "Assigning themes to reports...")
+        theme_schema = ThemeModel.model_json_schema()
+        preview_df = extractor.extract_features(
+            feature_model=ThemeModel, force_assign=True,
+            allow_multiple=True, skip_if_present=False,
+        )
+        record_repro_action(
+            session, "assign_themes", "Assign discovered themes to the reports",
+            format_call("preview_df = extractor.extract_features",
+                        {"feature_model": "ThemeModel", "force_assign": True,
+                         "allow_multiple": True, "skip_if_present": False},
+                        raw_parameters={"feature_model"}),
+        )
+
+        theme_summary_df = build_theme_summary_table(preview_df, theme_schema)
+        session["preview_state"] = _serialize_preview_state({
+            "type": "discover",
+            "summary_df": summary_df, "preview_df": preview_df,
+            "theme_schema": theme_schema, "theme_summary": theme_summary_df,
+            "seed_topics": seed_topics,
+        })
+        messages.success(request, "Preview ready. Review the results below and apply them when happy.")
+        session.modified = True
+        session.save()
+        _log_timed_event(
+            "discover_themes", started_at, force_info=True,
+            report_count=len(reports_df), discovered_themes=len(theme_summary_df),
+        )
+        bridge.complete(redirect=reverse("workbench:themes"))
+
+    run_in_background(bridge, _work)
+    return sse_response(bridge)
+
+
+@require_http_methods(["POST"])
+def sse_extract_features(request: HttpRequest) -> HttpResponse:
+    """SSE endpoint for the feature-extraction workflow."""
+    init_state(request.session)
+    _ensure_workspace_reports_loaded(request)
+    _update_sidebar_state(request)
+    session = request.session
+
+    reports_df, dashboard_filters = _resolve_reports_for_ai_action(request)
+    if reports_df.empty:
+        return JsonResponse({"error": "No reports loaded."}, status=400)
+
+    feature_grid = _parse_feature_rows_from_post(request)
+    _set_feature_grid_df(request, feature_grid)
+
+    produce_spans = _bool_from_post(request, "extract_produce_spans", default=False)
+    drop_spans = _bool_from_post(request, "extract_drop_spans", default=False)
+    force_assign = _bool_from_post(request, "extract_force_assign", default=False)
+    allow_multiple = _bool_from_post(request, "extract_allow_multiple", default=False)
+    skip_if_present = _bool_from_post(request, "extract_skip_if_present", default=True)
+    extra_instructions = (request.POST.get("extract_extra_instructions") or "").strip()
+
+    try:
+        feature_model = build_feature_model_from_rows(feature_grid)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    try:
+        llm_client = build_llm(session)
+    except Exception as exc:
+        return JsonResponse({"error": f"LLM setup failed: {exc}"}, status=400)
+
+    bridge = SSEProgressBridge()
+    _patch_llm_progress(llm_client, bridge)
+
+    def _work():
+        started_at = perf_counter()
+        bridge.stage("extract", "Extracting structured fields...")
+        push_history_snapshot(session)
+        extractor = build_extractor(llm_client, reports_df, session)
+        result_df = extractor.extract_features(
+            reports=reports_df,
+            feature_model=feature_model,
+            produce_spans=produce_spans, drop_spans=drop_spans,
+            force_assign=force_assign, allow_multiple=allow_multiple,
+            schema_detail="minimal",
+            extra_instructions=extra_instructions or None,
+            skip_if_present=skip_if_present,
+        )
+        record_repro_action(
+            session, "extract_features", "Pull structured information",
+            format_call("result_df = extractor.extract_features", {
+                "reports": "reports_df", "feature_model": "feature_model",
+                "produce_spans": produce_spans, "drop_spans": drop_spans,
+                "force_assign": force_assign, "allow_multiple": allow_multiple,
+                "schema_detail": "minimal",
+                "extra_instructions": extra_instructions or None,
+                "skip_if_present": skip_if_present,
+            }, raw_parameters={"reports", "feature_model"}),
+        )
+        set_dataframe(session, "extractor_result", result_df)
+        _set_reports_df_with_row_ids(session, "reports_df", result_df)
+        session["reports_df_modified"] = True
+        clear_preview_state(session)
+        session["active_action"] = None
+        messages.success(request, "Tagging complete. The working dataset has been updated.")
+        session.modified = True
+        session.save()
+        _log_timed_event(
+            "extract_features", started_at, force_info=True,
+            report_count=len(reports_df), result_columns=len(result_df.columns),
+        )
+        bridge.complete(redirect=reverse("workbench:extract"))
+
+    run_in_background(bridge, _work)
+    return sse_response(bridge)

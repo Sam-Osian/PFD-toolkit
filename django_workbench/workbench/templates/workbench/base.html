@@ -69,9 +69,20 @@
             </div>
             <div class="global-loading-copy">
                 <p id="global-loading-message">Running your request...</p>
+                <p id="global-loading-stage" class="global-loading-stage" aria-live="polite"></p>
+                <div class="global-loading-progress-track" id="global-loading-progress-track" aria-hidden="true">
+                    <div class="global-loading-progress-bar" id="global-loading-progress-bar"></div>
+                </div>
             </div>
         </section>
     </div>
+    <script>
+        window.WorkbenchUrls = {
+            sseFilter: "{% url 'workbench:sse_filter' %}",
+            sseThemes: "{% url 'workbench:sse_themes' %}",
+            sseExtract: "{% url 'workbench:sse_extract' %}",
+        };
+    </script>
     <script src="{% static 'workbench/vendor/overlayscrollbars.browser.es6.min.js' %}?v=20260211l"></script>
     <script src="{% static 'workbench/vendor/echarts.min.js' %}" defer></script>
     {% if current_page != "for_coders" %}

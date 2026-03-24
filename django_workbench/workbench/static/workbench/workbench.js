@@ -4583,12 +4583,19 @@
             return;
         }
 
-        const LONG_RUNNING_ACTIONS = new Set([
-            "load_reports",
-            "filter_reports",
-            "discover_themes",
-            "extract_features",
-        ]);
+        const stageNode = byId("global-loading-stage");
+        const progressTrack = byId("global-loading-progress-track");
+        const progressBar = byId("global-loading-progress-bar");
+
+        // Actions that stream progress via SSE endpoints.
+        const SSE_ACTIONS = {
+            filter_reports: (window.WorkbenchUrls || {}).sseFilter,
+            discover_themes: (window.WorkbenchUrls || {}).sseThemes,
+            extract_features: (window.WorkbenchUrls || {}).sseExtract,
+        };
+
+        // Actions that submit normally (full page POST).
+        const PLAIN_ACTIONS = new Set(["load_reports"]);
 
         const ACTION_MESSAGES = {
             load_reports: "Loading report data and preparing your workspace...",
@@ -4599,6 +4606,9 @@
 
         function showLoader(message) {
             messageNode.textContent = message || "Running your request...";
+            if (stageNode) { stageNode.textContent = ""; }
+            if (progressTrack) { progressTrack.classList.remove("is-visible"); }
+            if (progressBar) { progressBar.style.width = "0%"; }
             overlay.classList.add("is-active");
             overlay.setAttribute("aria-hidden", "false");
             document.body.classList.add("loading-active");
@@ -4608,6 +4618,27 @@
             overlay.classList.remove("is-active");
             overlay.setAttribute("aria-hidden", "true");
             document.body.classList.remove("loading-active");
+        }
+
+        function showError(message) {
+            hideLoader();
+            // Inject an error message banner at the top of page content.
+            const pageContent = byId("page-content");
+            if (!pageContent) { return; }
+            const banner = document.createElement("div");
+            banner.className = "message error";
+            banner.innerHTML = "<span>" + message.replace(/</g, "&lt;") + "</span>";
+            pageContent.insertBefore(banner, pageContent.firstChild);
+        }
+
+        function updateProgress(percent) {
+            if (!progressTrack || !progressBar) { return; }
+            progressTrack.classList.add("is-visible");
+            progressBar.style.width = percent + "%";
+        }
+
+        function updateStage(message) {
+            if (stageNode) { stageNode.textContent = message || ""; }
         }
 
         function getSubmittedAction(form, submitter) {
@@ -4621,6 +4652,70 @@
             return "";
         }
 
+        async function runSse(sseUrl, formData) {
+            let buffer = "";
+            const response = await fetch(sseUrl, {
+                method: "POST",
+                body: formData,
+                headers: { "X-CSRFToken": getCsrfTokenFromPage() },
+            });
+
+            if (!response.ok) {
+                let msg = "Request failed.";
+                try {
+                    const json = await response.json();
+                    msg = json.error || msg;
+                } catch (_) {}
+                showError(msg);
+                return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) { break; }
+                buffer += decoder.decode(value, { stream: true });
+
+                // SSE frames are separated by double newlines.
+                const frames = buffer.split("\n\n");
+                buffer = frames.pop(); // keep incomplete trailing frame
+
+                for (const frame of frames) {
+                    if (!frame.trim() || frame.startsWith(":")) { continue; }
+
+                    let eventType = "message";
+                    let dataStr = "";
+                    for (const line of frame.split("\n")) {
+                        if (line.startsWith("event: ")) {
+                            eventType = line.slice(7).trim();
+                        } else if (line.startsWith("data: ")) {
+                            dataStr = line.slice(6).trim();
+                        }
+                    }
+
+                    let data = {};
+                    try { data = JSON.parse(dataStr); } catch (_) {}
+
+                    if (eventType === "progress") {
+                        updateProgress(data.percent);
+                        if (data.description) { updateStage(data.description); }
+                    } else if (eventType === "stage") {
+                        updateStage(data.message || "");
+                        if (progressTrack) { progressTrack.classList.remove("is-visible"); }
+                        if (progressBar) { progressBar.style.width = "0%"; }
+                    } else if (eventType === "complete") {
+                        window.location.href = data.redirect || window.location.href;
+                        return;
+                    } else if (eventType === "error") {
+                        showError(data.message || "An error occurred.");
+                        return;
+                    }
+                }
+            }
+        }
+
         document.addEventListener("submit", function (event) {
             const form = event.target.closest("form");
             if (!form || event.defaultPrevented) {
@@ -4631,11 +4726,29 @@
             }
 
             const action = getSubmittedAction(form, event.submitter);
-            if (!LONG_RUNNING_ACTIONS.has(action)) {
+            const sseUrl = SSE_ACTIONS[action];
+
+            if (sseUrl) {
+                // Intercept and stream via SSE.
+                event.preventDefault();
+                showLoader(ACTION_MESSAGES[action] || "Running your request...");
+
+                // If submitted via a button, add its name/value so the server
+                // sees it the same way a normal form submission would.
+                const formData = new FormData(form);
+                if (event.submitter && event.submitter.name) {
+                    formData.set(event.submitter.name, event.submitter.value || "");
+                }
+
+                runSse(sseUrl, formData).catch(function (err) {
+                    showError("Connection lost: " + (err.message || "unknown error"));
+                });
                 return;
             }
 
-            showLoader(ACTION_MESSAGES[action] || "Running your request...");
+            if (PLAIN_ACTIONS.has(action)) {
+                showLoader(ACTION_MESSAGES[action] || "Running your request...");
+            }
         }, true);
 
         window.addEventListener("pageshow", hideLoader);
