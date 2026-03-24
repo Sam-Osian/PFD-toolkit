@@ -200,6 +200,14 @@ body::after {
     transition: width 0.3s ease;
 }
 
+.global-loading-counter {
+    margin-top: 0.45rem;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.55;
+    min-height: 1.1em;
+}
+
 body.loading-active {
     overflow: hidden;
 }
