@@ -5745,7 +5745,7 @@ def sse_extract_features(request: HttpRequest) -> HttpResponse:
             "extract_features", started_at, force_info=True,
             report_count=len(reports_df), result_columns=len(result_df.columns),
         )
-        bridge.complete(redirect=reverse("workbench:extract"))
+        bridge.complete(redirect=reverse("workbench:explore"))
 
     run_in_background(bridge, _work)
     return sse_response(bridge)
