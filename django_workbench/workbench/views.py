@@ -2963,10 +2963,20 @@ def _build_docs_nav_items(entries: list[Any], current_doc_path: str) -> list[dic
     return nav_items
 
 
+class _MkDocsNavLoader(yaml.SafeLoader):
+    """SafeLoader that silently ignores !!python/... tags in mkdocs.yml."""
+
+
+_MkDocsNavLoader.add_multi_constructor(
+    "tag:yaml.org,2002:python/",
+    lambda loader, tag, node: None,
+)
+
+
 def _load_docs_nav_from_config(current_doc_path: str) -> list[dict[str, Any]]:
     if not DOCS_CONFIG_FILE.is_file():
         return []
-    config_data = yaml.safe_load(DOCS_CONFIG_FILE.read_text(encoding="utf-8")) or {}
+    config_data = yaml.load(DOCS_CONFIG_FILE.read_text(encoding="utf-8"), Loader=_MkDocsNavLoader) or {}
     nav_entries = config_data.get("nav") or []
     if not isinstance(nav_entries, list):
         return []
