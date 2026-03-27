@@ -41,6 +41,20 @@ def _env_csv(name: str, default: str) -> list[str]:
     return [item.strip() for item in raw_value.split(",") if item.strip()]
 
 
+def _env_int(name: str, default: int, *, min_value: int | None = None) -> int:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        value = default
+    else:
+        try:
+            value = int(raw_value.strip())
+        except ValueError:
+            value = default
+    if min_value is not None:
+        return max(min_value, value)
+    return value
+
+
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-kc)p(r!y+6yrj3e4^!hsf-wn3bn+omuz-@7!774=2$^d%0yqqo",
@@ -60,6 +74,11 @@ CSRF_TRUSTED_ORIGINS = _env_csv(
 
 CANONICAL_HOST = os.getenv("DJANGO_CANONICAL_HOST", "").strip().lower()
 CANONICAL_HOST_REDIRECTS = _env_csv("DJANGO_CANONICAL_HOST_REDIRECTS", "")
+WORKBOOK_SNAPSHOT_MAX_BYTES = _env_int(
+    "DJANGO_WORKBOOK_SNAPSHOT_MAX_BYTES",
+    12_500_000,
+    min_value=1,
+)
 
 
 # Application definition

@@ -27,6 +27,7 @@ import pandas as pd
 import yaml
 from bs4 import BeautifulSoup
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -2603,7 +2604,7 @@ def _has_existing_theme_assignments(session: dict[str, Any], reports_df: pd.Data
 
 
 WORKBOOK_TITLE_MAX_LENGTH = 120
-WORKBOOK_SNAPSHOT_MAX_BYTES = 2_500_000
+WORKBOOK_SNAPSHOT_MAX_BYTES = int(getattr(settings, "WORKBOOK_SNAPSHOT_MAX_BYTES", 12_500_000))
 WORKBOOK_TITLE_ALLOWED_PATTERN = re.compile(r"^[A-Za-z0-9 -]+$")
 WORKBENCH_ROW_ID_COL = "_workbench_row_id"
 EXCLUSION_REASON_COL = "_exclusion_reason"
