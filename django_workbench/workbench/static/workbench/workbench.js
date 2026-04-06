@@ -4716,6 +4716,8 @@
             }
         }
 
+        // Run in bubble phase so form-level onsubmit handlers can finalize
+        // hidden inputs/confirm flags before we serialize FormData for SSE.
         document.addEventListener("submit", function (event) {
             const form = event.target.closest("form");
             if (!form || event.defaultPrevented) {
@@ -4749,7 +4751,7 @@
             if (PLAIN_ACTIONS.has(action)) {
                 showLoader(ACTION_MESSAGES[action] || "Running your request...");
             }
-        }, true);
+        });
 
         window.addEventListener("pageshow", hideLoader);
 

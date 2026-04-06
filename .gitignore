@@ -27,3 +27,4 @@ docs/assets/images/social/*
 /dist/*
 
 .codex
+django_workbench/db.sqlite3
