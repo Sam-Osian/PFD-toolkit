@@ -135,6 +135,27 @@ class WorkbenchViewTests(TestCase):
         self.assertContains(response, 'name="q"')
 
     @patch("workbench.views.load_reports")
+    def test_browse_page_excludes_nutrition_collection(self, mock_load_reports) -> None:
+        mock_load_reports.return_value = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "theme_nutrition": True,
+                    "theme_medication_safety": True,
+                }
+            ]
+        )
+
+        response = self.client.get(reverse("workbench:browse"))
+        self.assertEqual(response.status_code, 200)
+        collection_slugs = {str(item.get("slug")) for item in response.context["browse_collections"]}
+        self.assertIn("theme-medication_safety", collection_slugs)
+        self.assertNotIn("theme-nutrition", collection_slugs)
+
+    @patch("workbench.views.load_reports")
     def test_custom_collection_search_returns_ranked_results(self, mock_load_reports) -> None:
         mock_load_reports.return_value = pd.DataFrame(
             [
@@ -539,6 +560,36 @@ class WorkbenchViewTests(TestCase):
         self.assertIn("medication_safety", theme_keys)
         self.assertIn("welsh", theme_keys)
         self.assertIn("sent_to_nhs_bodies", theme_keys)
+
+    def test_network_excludes_nutrition_theme(self) -> None:
+        self._unlock_network_tab()
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "South Wales Central",
+                    "receiver": "NHS England",
+                    "theme_nutrition": True,
+                    "theme_medication_safety": True,
+                },
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        response = self.client.get(reverse("workbench:network_data"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        theme_keys = {
+            str(node.get("raw_key"))
+            for node in payload.get("graph", {}).get("nodes", [])
+            if str(node.get("type")) == "theme"
+        }
+        self.assertIn("medication_safety", theme_keys)
+        self.assertNotIn("nutrition", theme_keys)
 
     def test_explore_hides_theme_columns_but_network_uses_them(self) -> None:
         self._unlock_network_tab()

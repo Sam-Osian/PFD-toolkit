@@ -300,7 +300,7 @@ THEME_SEMANTIC_ICON_RULES: tuple[tuple[tuple[str, ...], str], ...] = (
     (("prison", "detention", "custody", "criminal_justice", "state_control", "restraint"), "prison"),
     (("housing", "homeless", "care_homes", "domiciliary", "domestic"), "house"),
     (("hospital", "emergency_departments", "surgical", "maternity", "neonatal", "perinatal", "primary_care", "out_of_hours", "palliative"), "hospital"),
-    (("medication", "polypharmacy", "substance", "drug_related", "alcohol_related", "nutrition"), "medication"),
+    (("medication", "polypharmacy", "substance", "drug_related", "alcohol_related"), "medication"),
     (("mental_health", "suicide", "self_harm", "autism", "learning_disability", "cognitive_impairment"), "mental_health"),
     (("sepsis", "infection", "respiratory", "cancer", "cardiovascular", "neurological", "epilepsy", "allergy", "anaphylaxis", "choking"), "infection"),
     (("environmental_hazards", "falls", "frailty", "ligature", "equipment", "hazards"), "warning"),
@@ -358,6 +358,7 @@ THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
 EXCLUDED_THEME_KEYS: set[str] = {
     "policy_procedure_failures",
     "failure_recognise_escalate_deterioration",
+    "nutrition",
 }
 APPROVED_THEME_SCHEMA_PATH = (
     Path(__file__).resolve().parents[2] / "scripts" / "theme_collections" / "approved_themes.json"

@@ -36,6 +36,9 @@ _COLLECTION_ALIASES: Final[dict[str, str]] = {
     "suicide_risk": "suicide",
     "care_home_safety": "care_home",
 }
+_EXCLUDED_THEME_COLLECTIONS: Final[set[str]] = {
+    "nutrition",
+}
 
 
 def _normalise_collection_name(raw_value: str) -> str:
@@ -114,6 +117,8 @@ def _get_thematic_collection_columns(reports: pd.DataFrame) -> dict[str, str]:
             theme_name = column[len(_THEME_PREFIX):]
             if theme_name:
                 public_name = _THEME_COLLECTION_NAME_OVERRIDES.get(theme_name, theme_name)
+                if public_name in _EXCLUDED_THEME_COLLECTIONS:
+                    continue
                 theme_columns[public_name] = column
     return theme_columns
 
@@ -225,7 +230,6 @@ def load_reports(
         - self_neglect
         - violence_homicide_related_systems_failures
         - environmental_hazards
-        - nutrition
         - epilepsy_seizure_management
         - allergy_anaphylaxis
         - ligature_anchor_point_risks
