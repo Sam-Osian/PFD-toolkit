@@ -266,6 +266,88 @@ class WorkbenchViewTests(TestCase):
         self.assertContains(response, "Methotrexate toxicity followed delayed monitoring.")
         self.assertNotContains(response, "Methotrexate only.")
 
+    @patch("workbench.views.run_in_background")
+    @patch("workbench.views.build_extractor")
+    @patch("workbench.views.build_llm")
+    def test_sse_discover_themes_completes_back_to_explore_with_preview_state(
+        self,
+        mock_build_llm,
+        mock_build_extractor,
+        mock_run_in_background,
+    ) -> None:
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "date": "2024-01-10",
+                    "coroner": "A. Example",
+                    "area": "London Inner South",
+                    "receiver": "NHS England",
+                    "concerns": "Monitoring and communication failures.",
+                    "circumstances": "A delayed escalation was identified.",
+                }
+            ]
+        )
+        session = self.client.session
+        session["reports_df"] = dataframe_to_payload(reports_df)
+        session["reports_df_initial"] = dataframe_to_payload(reports_df)
+        session.save()
+
+        class _DummyLLM:
+            def generate(self, *args, **kwargs):
+                return "ok"
+
+        class _DummyThemeModel:
+            @staticmethod
+            def model_json_schema():
+                return {
+                    "properties": {
+                        "communication_risk": {"type": "boolean"},
+                    }
+                }
+
+        class _DummyExtractor:
+            summary_col = "summary"
+
+            def summarise(self, **kwargs):
+                return pd.DataFrame([{"summary": "Summary text"}])
+
+            def discover_themes(self, **kwargs):
+                return _DummyThemeModel
+
+            def extract_features(self, **kwargs):
+                return pd.DataFrame(
+                    [
+                        {
+                            "date": "2024-01-10",
+                            "coroner": "A. Example",
+                            "area": "London Inner South",
+                            "receiver": "NHS England",
+                            "communication_risk": True,
+                        }
+                    ]
+                )
+
+        def _run_inline(bridge, target, *, args=(), kwargs=None):
+            target(*args, **(kwargs or {}))
+            return None
+
+        mock_build_llm.return_value = _DummyLLM()
+        mock_build_extractor.return_value = _DummyExtractor()
+        mock_run_in_background.side_effect = _run_inline
+
+        response = self.client.post(reverse("workbench:sse_themes"), data={})
+        self.assertEqual(response.status_code, 200)
+
+        payload = "".join(
+            chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk)
+            for chunk in response.streaming_content
+        )
+        self.assertIn("event: complete", payload)
+        self.assertIn('"redirect": "/explore-pfds/"', payload)
+
+        updated_session = self.client.session
+        self.assertIsNotNone(updated_session.get("preview_state"))
+
     def test_network_unlock_requires_correct_password(self) -> None:
         wrong_response = self.client.post(
             reverse("workbench:network_unlock"),

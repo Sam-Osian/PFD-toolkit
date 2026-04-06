@@ -5647,7 +5647,7 @@ def sse_discover_themes(request: HttpRequest) -> HttpResponse:
             messages.warning(request, "Theme discovery completed but did not return a schema.")
             session.modified = True
             session.save()
-            bridge.complete(redirect=reverse("workbench:themes"))
+            bridge.complete(redirect=reverse("workbench:explore"))
             return
 
         bridge.stage("assign", "Assigning themes to reports...")
@@ -5678,7 +5678,7 @@ def sse_discover_themes(request: HttpRequest) -> HttpResponse:
             "discover_themes", started_at, force_info=True,
             report_count=len(reports_df), discovered_themes=len(theme_summary_df),
         )
-        bridge.complete(redirect=reverse("workbench:themes"))
+        bridge.complete(redirect=reverse("workbench:explore"))
 
     run_in_background(bridge, _work)
     return sse_response(bridge)

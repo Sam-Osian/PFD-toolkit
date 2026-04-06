@@ -25,3 +25,5 @@ docs/assets/images/social/*
 
 # Build
 /dist/*
+
+.codex
