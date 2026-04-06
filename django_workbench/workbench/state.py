@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import ast
 import tempfile
 from collections import OrderedDict
 from datetime import date
@@ -312,7 +313,10 @@ def format_theme_description(raw: Any) -> str:
             try:
                 parsed = json.loads(stripped)
             except json.JSONDecodeError:
-                return raw
+                try:
+                    parsed = ast.literal_eval(stripped)
+                except (ValueError, SyntaxError):
+                    return raw
             if isinstance(parsed, (dict, list)):
                 return format_theme_description(parsed)
         return raw

@@ -4,7 +4,7 @@ from django.urls import reverse
 from unittest.mock import patch
 
 from .models import Workbook
-from .state import dataframe_from_payload, dataframe_to_payload
+from .state import dataframe_from_payload, dataframe_to_payload, build_theme_summary_table
 from . import views
 
 
@@ -76,6 +76,20 @@ class WorkbenchViewTests(TestCase):
                 {"name": "NHS England", "value": 1},
             ],
         )
+
+    def test_theme_summary_description_uses_plain_text_from_dict_like_string(self) -> None:
+        extracted_reports = pd.DataFrame([{"theme_comms": True}, {"theme_comms": False}])
+        theme_schema = {
+            "properties": {
+                "theme_comms": {
+                    "title": "Communication",
+                    "description": "{'type': 'bool', 'description': 'Breakdowns in communication.'}",
+                }
+            }
+        }
+        summary = build_theme_summary_table(extracted_reports, theme_schema)
+        self.assertEqual(len(summary), 1)
+        self.assertEqual(summary.iloc[0]["Description"], "Breakdowns in communication.")
 
     def test_network_page_is_invite_only_until_unlocked(self) -> None:
         response = self.client.get(reverse("workbench:network"))

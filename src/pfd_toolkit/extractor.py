@@ -1280,8 +1280,25 @@ Here is the report excerpt:
             key = str(name or "").strip()
             if not key:
                 continue
-            theme_dict[key] = str(desc or "").strip()
+            theme_dict[key] = self._normalise_theme_description(desc)
         return theme_dict
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _normalise_theme_description(raw: Any) -> str:
+        if isinstance(raw, dict):
+            for key in ("description", "details", "detail", "text"):
+                value = raw.get(key)
+                if value is not None and str(value).strip():
+                    return str(value).strip()
+            return ""
+        if isinstance(raw, list):
+            parts = [
+                Extractor._normalise_theme_description(item)
+                for item in raw
+            ]
+            return ", ".join(part for part in parts if part)
+        return str(raw or "").strip()
 
     # ------------------------------------------------------------------
     @staticmethod
