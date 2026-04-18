@@ -1,3 +1,6 @@
+from pathlib import Path
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
@@ -9,7 +12,7 @@ from wb_investigations.services import create_investigation
 from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership
 from wb_workspaces.services import create_workspace_for_user
 
-from .models import RunStatus, RunType
+from .models import ArtifactStorageBackend, ArtifactType, RunStatus, RunType
 from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run
 
@@ -242,7 +245,7 @@ class RunWorkerTests(TestCase):
             actor=self.owner,
             investigation=self.investigation,
             run_type=RunType.FILTER,
-            input_config_json={},
+            input_config_json={"execution_mode": "simulate"},
         )
         processed = process_single_available_run(worker_id="test-worker")
         self.assertIsNotNone(processed)
@@ -259,7 +262,7 @@ class RunWorkerTests(TestCase):
             actor=self.owner,
             investigation=self.investigation,
             run_type=RunType.FILTER,
-            input_config_json={},
+            input_config_json={"execution_mode": "simulate"},
         )
         request_run_cancellation(actor=self.owner, run=run, reason="cancel early")
         process_single_available_run(worker_id="test-worker")
@@ -271,7 +274,11 @@ class RunWorkerTests(TestCase):
             actor=self.owner,
             investigation=self.investigation,
             run_type=RunType.FILTER,
-            input_config_json={"simulate_failure": True, "simulate_failure_stage": 1},
+            input_config_json={
+                "execution_mode": "simulate",
+                "simulate_failure": True,
+                "simulate_failure_stage": 1,
+            },
         )
         process_single_available_run(worker_id="test-worker")
         run.refresh_from_db()
@@ -284,9 +291,146 @@ class RunWorkerTests(TestCase):
             actor=self.owner,
             investigation=self.investigation,
             run_type=RunType.FILTER,
-            input_config_json={"simulate_timeout": True, "simulate_timeout_stage": 1},
+            input_config_json={
+                "execution_mode": "simulate",
+                "simulate_timeout": True,
+                "simulate_timeout_stage": 1,
+            },
         )
         process_single_available_run(worker_id="test-worker")
         run.refresh_from_db()
         self.assertEqual(run.status, RunStatus.TIMED_OUT)
         self.assertEqual(run.error_code, "SIMULATED_TIMEOUT")
+
+    def test_worker_uses_real_filter_adapter_when_enabled(self):
+        output_path = Path("/tmp/test-run-filter-output.csv")
+        output_path.write_text("id,matches_query\n1,True\n", encoding="utf-8")
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "real", "search_query": "medication safety"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_filter_workflow",
+            return_value={
+                "output_path": str(output_path),
+                "total_reports": 10,
+                "matched_reports": 3,
+                "output_reports": 3,
+                "search_query": "medication safety",
+                "filter_df": True,
+                "produce_spans": False,
+                "drop_spans": False,
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "report_limit": None,
+            },
+        ) as mocked:
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        artifact = run.artifacts.latest("created_at")
+        self.assertEqual(artifact.storage_backend, ArtifactStorageBackend.FILE)
+        self.assertEqual(artifact.storage_uri, str(output_path))
+        self.assertEqual(artifact.status, "ready")
+        mocked.assert_called_once()
+
+    def test_worker_uses_real_themes_adapter_when_enabled(self):
+        summary_path = Path("/tmp/test-run-theme-summary.csv")
+        assignments_path = Path("/tmp/test-run-theme-assignments.csv")
+        schema_path = Path("/tmp/test-run-theme-schema.json")
+        summaries_path = Path("/tmp/test-run-report-summaries.csv")
+        summary_path.write_text("theme,matched_reports\ncare_coordination,5\n", encoding="utf-8")
+        assignments_path.write_text("id,care_coordination\n1,True\n", encoding="utf-8")
+        schema_path.write_text('{"title":"ThemeModel"}\n', encoding="utf-8")
+        summaries_path.write_text("id,summary\n1,summary\n", encoding="utf-8")
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.THEMES,
+            input_config_json={"execution_mode": "real"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_themes_workflow",
+            return_value={
+                "output_path": str(summary_path),
+                "total_reports": 12,
+                "discovered_themes": 4,
+                "theme_summary_path": str(summary_path),
+                "theme_assignments_path": str(assignments_path),
+                "theme_schema_path": str(schema_path),
+                "report_summaries_path": str(summaries_path),
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "report_limit": None,
+            },
+        ) as mocked:
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        self.assertIn("Discovered 4 themes", run.events.latest("created_at").message)
+        self.assertTrue(
+            run.artifacts.filter(
+                artifact_type=ArtifactType.THEME_SUMMARY,
+                storage_uri=str(summary_path),
+                storage_backend=ArtifactStorageBackend.FILE,
+            ).exists()
+        )
+        self.assertTrue(
+            run.artifacts.filter(
+                artifact_type=ArtifactType.THEME_ASSIGNMENTS,
+                storage_uri=str(assignments_path),
+                storage_backend=ArtifactStorageBackend.FILE,
+            ).exists()
+        )
+        mocked.assert_called_once()
+
+    def test_worker_uses_real_extract_adapter_when_enabled(self):
+        output_path = Path("/tmp/test-run-extract-output.csv")
+        feature_schema_path = Path("/tmp/test-run-extract-schema.json")
+        output_path.write_text("id,feature_a\n1,yes\n", encoding="utf-8")
+        feature_schema_path.write_text('{"title":"RunExtractFeatures"}\n', encoding="utf-8")
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.EXTRACT,
+            input_config_json={"execution_mode": "real"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_extract_workflow",
+            return_value={
+                "output_path": str(output_path),
+                "feature_schema_path": str(feature_schema_path),
+                "total_reports": 20,
+                "output_reports": 20,
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "report_limit": None,
+                "produce_spans": False,
+                "drop_spans": False,
+                "force_assign": False,
+                "allow_multiple": False,
+                "skip_if_present": True,
+            },
+        ) as mocked:
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        self.assertTrue(
+            run.artifacts.filter(
+                artifact_type=ArtifactType.EXTRACTION_TABLE,
+                storage_uri=str(output_path),
+                storage_backend=ArtifactStorageBackend.FILE,
+            ).exists()
+        )
+        mocked.assert_called_once()
