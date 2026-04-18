@@ -10,7 +10,8 @@ from wb_workspaces.models import MembershipAccessMode, MembershipRole, Workspace
 from wb_workspaces.services import create_workspace_for_user
 
 from .models import RunStatus, RunType
-from .services import queue_run, request_run_cancellation
+from .services import queue_run, request_run_cancellation, set_run_status
+from .worker import process_single_available_run
 
 
 User = get_user_model()
@@ -98,6 +99,20 @@ class RunServiceTests(TestCase):
         run.save(update_fields=["status", "updated_at"])
         with self.assertRaises(ValidationError):
             request_run_cancellation(actor=self.owner, run=run)
+
+    def test_invalid_status_transition_is_rejected(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={},
+        )
+        with self.assertRaises(ValidationError):
+            set_run_status(
+                run=run,
+                status=RunStatus.SUCCEEDED,
+                message="Invalid direct success from queued",
+            )
 
 
 class RunViewTests(TestCase):
@@ -201,3 +216,77 @@ class RunViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.run.refresh_from_db()
         self.assertEqual(self.run.status, RunStatus.CANCELLING)
+
+
+class RunWorkerTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="worker-owner@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Worker Workspace",
+            slug="worker-workspace",
+            description="desc",
+        )
+        self.investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Worker Investigation",
+            question_text="Question",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+
+    def test_worker_processes_queued_run_to_success(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={},
+        )
+        processed = process_single_available_run(worker_id="test-worker")
+        self.assertIsNotNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        self.assertEqual(run.worker_id, "test-worker")
+        self.assertIsNotNone(run.started_at)
+        self.assertIsNotNone(run.finished_at)
+        self.assertEqual(run.progress_percent, 100)
+        self.assertTrue(run.artifacts.exists())
+
+    def test_worker_honors_pre_requested_cancellation(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={},
+        )
+        request_run_cancellation(actor=self.owner, run=run, reason="cancel early")
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.CANCELLED)
+
+    def test_worker_records_failure(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"simulate_failure": True, "simulate_failure_stage": 1},
+        )
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.FAILED)
+        self.assertEqual(run.error_code, "SIMULATED_FAILURE")
+        self.assertTrue(run.error_message)
+
+    def test_worker_records_timeout(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"simulate_timeout": True, "simulate_timeout_stage": 1},
+        )
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.TIMED_OUT)
+        self.assertEqual(run.error_code, "SIMULATED_TIMEOUT")

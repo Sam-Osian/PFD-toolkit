@@ -21,6 +21,48 @@ TERMINAL_STATUSES = {
     RunStatus.TIMED_OUT,
 }
 
+ALLOWED_STATUS_TRANSITIONS = {
+    RunStatus.QUEUED: {
+        RunStatus.STARTING,
+        RunStatus.CANCELLING,
+        RunStatus.CANCELLED,
+        RunStatus.FAILED,
+        RunStatus.TIMED_OUT,
+    },
+    RunStatus.STARTING: {
+        RunStatus.RUNNING,
+        RunStatus.CANCELLING,
+        RunStatus.CANCELLED,
+        RunStatus.FAILED,
+        RunStatus.TIMED_OUT,
+    },
+    RunStatus.RUNNING: {
+        RunStatus.RUNNING,  # allows progress updates while running
+        RunStatus.CANCELLING,
+        RunStatus.CANCELLED,
+        RunStatus.SUCCEEDED,
+        RunStatus.FAILED,
+        RunStatus.TIMED_OUT,
+    },
+    RunStatus.CANCELLING: {
+        RunStatus.CANCELLED,
+        RunStatus.FAILED,
+        RunStatus.TIMED_OUT,
+    },
+}
+
+
+def is_terminal_status(status: str) -> bool:
+    return status in TERMINAL_STATUSES
+
+
+def _validate_status_transition(current_status: str, next_status: str) -> None:
+    if current_status in TERMINAL_STATUSES:
+        raise RunServiceError("Cannot transition a terminal run.")
+    allowed = ALLOWED_STATUS_TRANSITIONS.get(current_status, set())
+    if next_status not in allowed:
+        raise RunServiceError(f"Invalid run transition: {current_status} -> {next_status}.")
+
 
 @transaction.atomic
 def queue_run(
@@ -82,8 +124,7 @@ def set_run_status(
     error_message: str = "",
     request=None,
 ) -> InvestigationRun:
-    if run.status in TERMINAL_STATUSES:
-        raise RunServiceError("Cannot transition a terminal run.")
+    _validate_status_transition(run.status, status)
 
     run.status = status
     if progress_percent is not None:
@@ -141,7 +182,7 @@ def request_run_cancellation(
     if not allowed:
         raise PermissionDenied("You do not have permission to cancel this run.")
 
-    if run.status in TERMINAL_STATUSES:
+    if is_terminal_status(run.status):
         raise RunServiceError("Run is already in a terminal state.")
 
     run.cancel_requested_at = timezone.now()

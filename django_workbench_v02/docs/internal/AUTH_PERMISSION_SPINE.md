@@ -134,5 +134,5 @@ Investigation + run lifecycle rules:
 ## 8. Next Integration Work
 
 1. Add integration tests for Auth0 callback and admin elevation path.
-2. Add worker-side run status transition hooks (`starting`, `running`, terminal states).
-3. Add API/JSON endpoints for frontend consumption (current endpoints are server-rendered forms/pages).
+2. Add API/JSON endpoints for frontend consumption (current endpoints are server-rendered forms/pages).
+3. Replace simulated worker logic with real toolkit adapters (see `docs/internal/RUN_WORKER.md`).
