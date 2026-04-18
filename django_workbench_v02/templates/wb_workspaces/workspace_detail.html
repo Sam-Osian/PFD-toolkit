@@ -9,4 +9,82 @@
 {% else %}
     <p>You are viewing this workspace as a guest.</p>
 {% endif %}
+
+<h3>Members</h3>
+{% if memberships %}
+    <table>
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Access</th>
+                <th>Run Workflows</th>
+                <th>Manage Members</th>
+                <th>Manage Shares</th>
+                {% if manage_members_allowed %}
+                    <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for row in memberships %}
+            <tr>
+                <td>{{ row.user.email }}</td>
+                <td>{{ row.role }}</td>
+                <td>{{ row.access_mode }}</td>
+                <td>{{ row.can_run_workflows }}</td>
+                <td>{{ row.can_manage_members }}</td>
+                <td>{{ row.can_manage_shares }}</td>
+                {% if manage_members_allowed %}
+                    <td>
+                        <form method="post" action="{% url 'workspace-member-update' workspace_id=workspace.id membership_id=row.id %}">
+                            {% csrf_token %}
+                            <label>Role</label>
+                            <select name="role">
+                                {% for value, label in role_choices %}
+                                    <option value="{{ value }}" {% if row.role == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <label>Access</label>
+                            <select name="access_mode">
+                                {% for value, label in access_mode_choices %}
+                                    <option value="{{ value }}" {% if row.access_mode == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <label>
+                                <input type="checkbox" name="can_run_workflows" {% if row.can_run_workflows %}checked{% endif %}>
+                                Run
+                            </label>
+                            <label>
+                                <input type="checkbox" name="can_manage_members" {% if row.can_manage_members %}checked{% endif %}>
+                                Manage Members
+                            </label>
+                            <label>
+                                <input type="checkbox" name="can_manage_shares" {% if row.can_manage_shares %}checked{% endif %}>
+                                Manage Shares
+                            </label>
+                            <button type="submit">Update</button>
+                        </form>
+                        <form method="post" action="{% url 'workspace-member-remove' workspace_id=workspace.id membership_id=row.id %}">
+                            {% csrf_token %}
+                            <button type="submit">Remove</button>
+                        </form>
+                    </td>
+                {% endif %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No members found.</p>
+{% endif %}
+
+{% if manage_members_allowed %}
+    <h3>Add Member</h3>
+    <form method="post" action="{% url 'workspace-member-add' workspace_id=workspace.id %}">
+        {% csrf_token %}
+        {{ add_form.as_p }}
+        <button type="submit">Add member</button>
+    </form>
+{% endif %}
 {% endblock %}

@@ -7,4 +7,19 @@ urlpatterns = [
     path("workspaces/", views.dashboard, name="workspace-dashboard"),
     path("workspaces/public/", views.public_workspace_list, name="workspace-public-list"),
     path("workspaces/<uuid:workspace_id>/", views.workspace_detail, name="workspace-detail"),
+    path(
+        "workspaces/<uuid:workspace_id>/members/add/",
+        views.add_member,
+        name="workspace-member-add",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/members/<uuid:membership_id>/update/",
+        views.update_member,
+        name="workspace-member-update",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/members/<uuid:membership_id>/remove/",
+        views.remove_member,
+        name="workspace-member-remove",
+    ),
 ]

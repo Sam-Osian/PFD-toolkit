@@ -91,10 +91,23 @@ Rules:
 5. `/workspaces/` (authenticated dashboard + create workspace)
 6. `/workspaces/public/`
 7. `/workspaces/<workspace_id>/`
+8. `/workspaces/<workspace_id>/members/add/`
+9. `/workspaces/<workspace_id>/members/<membership_id>/update/`
+10. `/workspaces/<workspace_id>/members/<membership_id>/remove/`
 
-## 7. Next Integration Work
+## 7. Stage 2 Invariants + Audit
+
+Membership changes are now service-layer operations with transactional safeguards:
+
+1. Workspace must always have at least one owner.
+2. Workspace must always have at least one owner with:
+   - `access_mode=edit`
+   - `can_manage_members=True`
+3. Only owners who can manage members can add/update/remove members.
+4. Every workspace and membership mutation writes `AuditEvent`.
+
+## 8. Next Integration Work
 
 1. Apply permission checks to all future investigation/run/share endpoints.
-2. Add service-layer invariants for owner safeguards (cannot remove last owner).
-3. Add audit event writes on membership and sharing changes.
-4. Add integration tests for Auth0 callback and admin elevation path.
+2. Add sharing services/endpoints and include audit writes for share mutations.
+3. Add integration tests for Auth0 callback and admin elevation path.
