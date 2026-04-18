@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Callable
@@ -603,4 +604,132 @@ def execute_extract_workflow(
         "force_assign": force_assign,
         "allow_multiple": allow_multiple,
         "skip_if_present": skip_if_present,
+    }
+
+
+def execute_export_workflow(
+    *,
+    run,
+    progress_callback: Callable[[int, str], None] | None = None,
+    cancellation_check: Callable[[], bool] | None = None,
+) -> dict:
+    from .models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact
+
+    config = run.input_config_json or {}
+    if cancellation_check and cancellation_check():
+        raise AdapterCancelledError("Run cancelled before export workflow started.")
+
+    if progress_callback:
+        progress_callback(8, "Collecting artifacts for export bundle...")
+
+    include_types_raw = config.get("include_run_types")
+    include_run_types = None
+    if isinstance(include_types_raw, list):
+        include_run_types = {str(value).strip().lower() for value in include_types_raw if str(value).strip()}
+
+    latest_per_artifact_type = _as_bool(config.get("latest_per_artifact_type"), default=True)
+    max_artifacts_raw = config.get("max_artifacts")
+    max_artifacts = None
+    if max_artifacts_raw not in {"", None}:
+        max_artifacts = int(max_artifacts_raw)
+        max_artifacts = max(1, min(500, max_artifacts))
+
+    artifacts_qs = (
+        RunArtifact.objects.select_related("run")
+        .filter(
+            run__investigation_id=run.investigation_id,
+            status=ArtifactStatus.READY,
+        )
+        .exclude(run_id=run.id)
+        .exclude(artifact_type=ArtifactType.BUNDLE_EXPORT)
+        .order_by("-created_at")
+    )
+    if include_run_types:
+        artifacts_qs = artifacts_qs.filter(run__run_type__in=include_run_types)
+
+    candidates = list(artifacts_qs)
+    selected = []
+    seen_types = set()
+    for artifact in candidates:
+        if latest_per_artifact_type:
+            key = artifact.artifact_type
+            if key in seen_types:
+                continue
+            seen_types.add(key)
+        selected.append(artifact)
+        if max_artifacts is not None and len(selected) >= max_artifacts:
+            break
+
+    if cancellation_check and cancellation_check():
+        raise AdapterCancelledError("Run cancelled after export artifact query.")
+
+    output_dir = _resolve_output_dir(run=run, config=config)
+    bundle_name = str(config.get("bundle_name") or "").strip() or f"investigation_export_{run.id}.zip"
+    if not bundle_name.lower().endswith(".zip"):
+        bundle_name = f"{bundle_name}.zip"
+    output_path = output_dir / bundle_name
+
+    manifest = {
+        "workspace_id": str(run.workspace_id),
+        "investigation_id": str(run.investigation_id),
+        "export_run_id": str(run.id),
+        "generated_at": timezone.now().isoformat(),
+        "selected_artifacts": len(selected),
+        "artifacts": [],
+    }
+    included_files = 0
+    skipped_count = 0
+
+    with zipfile.ZipFile(output_path, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
+        total = max(1, len(selected))
+        for index, artifact in enumerate(selected, start=1):
+            if cancellation_check and cancellation_check():
+                raise AdapterCancelledError("Run cancelled while exporting bundle artifacts.")
+
+            if progress_callback:
+                ratio = index / total
+                progress = min(92, max(20, int(20 + (ratio * 70))))
+                progress_callback(progress, f"Bundling artifact {index}/{len(selected)}...")
+
+            entry = {
+                "artifact_id": str(artifact.id),
+                "run_id": str(artifact.run_id),
+                "run_type": artifact.run.run_type,
+                "artifact_type": artifact.artifact_type,
+                "storage_backend": artifact.storage_backend,
+                "storage_uri": artifact.storage_uri,
+                "size_bytes": artifact.size_bytes,
+                "created_at": artifact.created_at.isoformat(),
+            }
+
+            if artifact.storage_backend == ArtifactStorageBackend.FILE and artifact.storage_uri:
+                source_path = Path(artifact.storage_uri)
+                if source_path.is_file():
+                    archive_name = (
+                        f"{artifact.run.run_type}/"
+                        f"{artifact.artifact_type}_{artifact.run_id}_{source_path.name}"
+                    )
+                    archive.write(source_path, arcname=archive_name)
+                    entry["bundle_path"] = archive_name
+                    entry["included"] = True
+                    included_files += 1
+                else:
+                    entry["included"] = False
+                    entry["skip_reason"] = "file_missing"
+                    skipped_count += 1
+            else:
+                entry["included"] = False
+                entry["skip_reason"] = "unsupported_storage_backend"
+                skipped_count += 1
+
+            manifest["artifacts"].append(entry)
+
+        archive.writestr("manifest.json", json.dumps(manifest, indent=2))
+
+    return {
+        "output_path": str(output_path),
+        "bundle_name": bundle_name,
+        "selected_artifacts": len(selected),
+        "included_files": included_files,
+        "skipped_artifacts": skipped_count,
     }

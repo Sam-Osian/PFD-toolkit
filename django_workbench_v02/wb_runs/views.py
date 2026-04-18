@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
@@ -8,8 +11,13 @@ from wb_investigations.models import Investigation
 from wb_workspaces.permissions import can_view_workspace
 
 from .forms import RunCancelForm, RunQueueForm
-from .models import InvestigationRun
-from .services import queue_run, request_run_cancellation, record_run_view
+from .models import ArtifactStatus, ArtifactStorageBackend, InvestigationRun, RunArtifact
+from .services import (
+    queue_run,
+    request_run_cancellation,
+    record_artifact_download,
+    record_run_view,
+)
 
 
 @login_required
@@ -102,3 +110,33 @@ def cancel_run(request, workspace_id, run_id):
     else:
         messages.success(request, "Run cancellation requested.")
     return redirect("run-detail", workspace_id=workspace_id, run_id=run_id)
+
+
+@require_GET
+def download_run_artifact(request, workspace_id, run_id, artifact_id):
+    artifact = get_object_or_404(
+        RunArtifact.objects.select_related("workspace", "run", "run__investigation"),
+        id=artifact_id,
+        run_id=run_id,
+        workspace_id=workspace_id,
+    )
+    if not can_view_workspace(request.user, artifact.workspace):
+        if request.user.is_authenticated:
+            raise PermissionDenied("You do not have access to this artifact.")
+        return redirect("accounts-login")
+
+    if artifact.status != ArtifactStatus.READY:
+        raise Http404("Artifact is not ready.")
+
+    if artifact.storage_backend != ArtifactStorageBackend.FILE:
+        raise Http404("Artifact backend is not yet downloadable.")
+    if not artifact.storage_uri:
+        raise Http404("Artifact file is unavailable.")
+
+    source_path = Path(artifact.storage_uri)
+    if not source_path.is_file():
+        raise Http404("Artifact file was not found.")
+
+    record_artifact_download(artifact=artifact, user=request.user, request=request)
+    download_name = source_path.name
+    return FileResponse(source_path.open("rb"), as_attachment=True, filename=download_name)

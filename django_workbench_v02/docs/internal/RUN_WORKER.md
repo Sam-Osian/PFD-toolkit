@@ -1,7 +1,7 @@
 # Run Worker Execution (v0.2)
 
 Status: Implemented adapter-backed execution  
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## 1. Purpose
 
@@ -48,12 +48,13 @@ Adapter-backed run types:
 1. `filter`
 2. `themes`
 3. `extract`
+4. `export`
 
-Non-adapter run types (currently `export`) continue to use simulation stages.
+If a run sets `execution_mode=simulate`, staged simulation is used for testing regardless of type.
 
 ## 5. Real Adapter Inputs (`input_config_json`)
 
-### 5.1 Shared keys (`filter`, `themes`, `extract`)
+### 5.1 Shared keys (`filter`, `themes`, `extract`, `export`)
 
 1. `provider` (`openai` or `openrouter`)
 2. `model_name`
@@ -108,6 +109,18 @@ Extract runs produce:
 1. Extraction table artifact (`extraction_table.csv`)
 2. Feature schema path in artifact metadata
 
+### 5.5 Export-specific keys
+
+1. `include_run_types` (optional list, e.g. `["filter","themes","extract"]`)
+2. `latest_per_artifact_type` (bool, default `true`)
+3. `max_artifacts` (int, capped for safety)
+4. `bundle_name` (optional custom zip filename)
+
+Export runs produce:
+
+1. Bundle artifact (`bundle_export`) as zip
+2. `manifest.json` inside zip with included/skipped artifact metadata
+
 ## 6. Testing/Simulation Inputs
 
 `InvestigationRun.input_config_json` supports simulation keys:
@@ -151,7 +164,20 @@ Optional later:
 1. Redis-backed queue and push progress transport
 2. Dedicated scheduler service for expiry/maintenance tasks
 
-## 9. Next Upgrade Path
+## 9. Artifact Download Endpoint
+
+Run artifacts with `storage_backend=file` and `status=ready` can be downloaded via:
+
+`/workspaces/<workspace_id>/runs/<run_id>/artifacts/<artifact_id>/download/`
+
+Behavior:
+
+1. Uses workspace-level view permissions.
+2. Returns file attachment response.
+3. Emits `run.artifact_downloaded` audit events.
+4. Updates `last_viewed_at` keepalive timestamps for artifact/workspace/investigation only for likely human user-agents.
+
+## 10. Next Upgrade Path
 
 1. Add retry policy for transient provider failures (network/rate limit classes).
 2. Add run-attempt model if multiple attempts per run are required.

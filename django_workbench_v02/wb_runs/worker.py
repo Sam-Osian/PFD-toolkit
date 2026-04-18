@@ -22,6 +22,7 @@ from .services import is_terminal_status, set_run_status
 from .pfd_toolkit_adapter import (
     AdapterCancelledError,
     AdapterConfigurationError,
+    execute_export_workflow,
     execute_extract_workflow,
     execute_filter_workflow,
     execute_themes_workflow,
@@ -61,18 +62,20 @@ ARTIFACT_TYPE_BY_RUN_TYPE = {
     RunType.EXPORT: ArtifactType.BUNDLE_EXPORT,
 }
 
-REAL_ADAPTER_RUN_TYPES = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT}
+REAL_ADAPTER_RUN_TYPES = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT, RunType.EXPORT}
 
 RUN_LABEL_BY_TYPE = {
     RunType.FILTER: "filter",
     RunType.THEMES: "themes",
     RunType.EXTRACT: "extract",
+    RunType.EXPORT: "export",
 }
 
 EXECUTION_ERROR_CODE_BY_RUN_TYPE = {
     RunType.FILTER: "FILTER_EXECUTION_ERROR",
     RunType.THEMES: "THEMES_EXECUTION_ERROR",
     RunType.EXTRACT: "EXTRACT_EXECUTION_ERROR",
+    RunType.EXPORT: "EXPORT_EXECUTION_ERROR",
 }
 
 
@@ -154,6 +157,8 @@ def _resolve_real_adapter(run_type: str):
         return execute_themes_workflow
     if run_type == RunType.EXTRACT:
         return execute_extract_workflow
+    if run_type == RunType.EXPORT:
+        return execute_export_workflow
     return None
 
 
@@ -172,6 +177,12 @@ def _build_success_message(run: InvestigationRun, result: dict) -> str:
         return (
             "Run completed successfully. "
             f"Extracted features for {result.get('output_reports', 0):,} reports."
+        )
+    if run.run_type == RunType.EXPORT:
+        return (
+            "Run completed successfully. "
+            f"Packaged {result.get('included_files', 0):,} files across "
+            f"{result.get('selected_artifacts', 0):,} artifacts."
         )
     return "Run completed successfully."
 

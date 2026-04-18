@@ -1,239 +1,292 @@
-# PFD Toolkit Workbench v0.2 - Starting Points and Rewrite Blueprint
+# PFD Toolkit Workbench v0.2 - Rewrite Blueprint and Live Status
+
+Last updated: 2026-04-19
+
+## 0. Current Status Snapshot
+
+This file started as a "starting points" brief. It now also tracks delivery status.
+
+### 0.1 Phase Status
+
+1. Phase 0 (Foundation Setup): Completed
+2. Phase 1 (Auth + Workspace Core): Completed
+3. Phase 2 (Investigation + Run Backbone): Completed
+4. Phase 3 (First AI Vertical Slice): Completed at backend level
+5. Phase 4 (Themes + Extract + Sharing): In progress (storage and lifecycle hardening pending)
+6. Phase 5 (Design System Port + Hardening): Not started
+7. Phase 6 (Migration + Cutover): Not started
+
+### 0.2 What Is Implemented
+
+1. New non-destructive v0.2 codebase in `django_workbench_v02/` (v0.1 still intact).
+2. Custom user model with first and last name.
+3. Auth0 login flow and local user linking.
+4. Admin path and superuser tooling.
+5. Workspace + membership model with per-user access mode (`edit`/`read_only`).
+6. Team/shared workspace support in beta.
+7. Investigation and run domain models with async worker lifecycle statuses.
+8. Run cancellation support.
+9. Audit events across key actions.
+10. Real `pfd_toolkit` adapters for `filter`, `themes`, `extract`, and `export`.
+11. Share links with public/private behavior and expiry/revocation.
+12. Internal architecture docs:
+   - `docs/internal/DATA_MODEL.md`
+   - `docs/internal/DATA_MODEL_CONSTRAINTS.md`
+   - `docs/internal/AUTH_PERMISSION_SPINE.md`
+   - `docs/internal/RUN_WORKER.md`
+   - `docs/internal/PFD_TOOLKIT_ADAPTERS.md`
+
+### 0.3 Major Open Items For Phase 4 Close
+
+1. Artifact delivery/storage strategy for production:
+   - stable download endpoints
+   - move from local filesystem artifacts to object storage
+2. Complete "human-view-only" keepalive/expiry lifecycle logic for artifacts/workspaces (baseline now implemented for artifact downloads).
+3. Optional completion notifications (email path later, per your plan).
 
 ## 1. Objective
 
 Build a new Workbench codebase in parallel to `django_workbench/` (v0.1), with:
 
-- real account creation and sign-in
-- durable user workspaces
-- safer and more maintainable backend architecture
-- cleaner delivery path for the Claude design refresh
+1. real account creation and sign-in
+2. durable user workspaces
+3. safer and more maintainable backend architecture
+4. cleaner delivery path for the Claude design refresh
 
-This v0.2 build is **non-destructive**. v0.1 stays online and untouched until final cutover.
-
+This v0.2 build is non-destructive. v0.1 stays online and untouched until final cutover.
 
 ## 2. Why Rewrite Instead of Iterating v0.1
 
-v0.1 proved demand and core workflows, but the current architecture makes extension risky:
+v0.1 proved demand and core workflows, but architecture constraints made extension risky:
 
-- one very large views module controls too many concerns
-- large amounts of state are session-bound
-- DataFrame payloads and temp-file storage are used as runtime state
-- limited domain model persistence (workbook-focused, not account/workspace-native)
-- AI workflow execution and UI flow are tightly coupled
+1. one very large views module controlling too many concerns
+2. session-heavy runtime state
+3. DataFrame/temp-file state leakage across concerns
+4. limited durable domain modeling
+5. tight coupling between AI execution and UI flow
 
-For v0.2, we should optimize for correctness, observability, and explicit domain boundaries.
+v0.2 optimizes for correctness, observability, and explicit domain boundaries.
 
+## 3. Early Non-Goals (Still Valid)
 
-## 3. Non-Goals for Early v0.2
+1. No instant full parity on day 1.
+2. No destructive decommissioning of v0.1 before acceptance.
+3. No blind copy-paste of old UI logic into new architecture.
 
-- No immediate full feature parity on day 1
-- No immediate migration of all old templates/scripts
-- No immediate destructive decommissioning of v0.1
+## 4. Target Architecture
 
+## 4.1 App Boundaries (Implemented Pattern)
 
-## 4. Target Architecture (Recommended)
+Current app split (with `wb_` prefixes) follows the intended boundaries:
 
-## 4.1 App Boundaries (Django)
-
-Create multiple apps with clear responsibilities:
-
-- `accounts`: auth, profile, user preferences
-- `workspaces`: workspace CRUD, ownership, collaboration roles
-- `datasets`: dataset references, report snapshots, metadata
-- `investigations`: question/scope/method definitions, status lifecycle
-- `runs`: async run tracking for filter/themes/extract operations
-- `artifacts`: run outputs (tables, summaries, exports, previews)
-- `sharing`: public share links, permissions, revocation
-- `ui` (or `web`): page views/templates/API endpoints only
-
-This keeps domain logic out of template/view monoliths.
+1. `accounts`: authentication and user account model
+2. `wb_workspaces`: workspaces, memberships, permissions, revision records
+3. `wb_investigations`: investigation definitions and lifecycle
+4. `wb_runs`: runs, events, artifacts, async worker
+5. `wb_sharing`: share links and public/private access behavior
+6. `wb_auditlog`: audit trail
+7. `wb_notifications`: notification request scaffolding
 
 ## 4.2 Service Layer + Adapters
 
-Use service modules per domain (application services), e.g.:
+Pattern in use:
 
-- `services/workspace_service.py`
-- `services/investigation_service.py`
-- `services/run_orchestrator.py`
-
-Keep calls into `pfd_toolkit` behind adapter interfaces so UI code does not call toolkit objects directly.
+1. Domain services for permissions and lifecycle invariants.
+2. Worker orchestration in `wb_runs/worker.py`.
+3. Toolkit integration isolated in `wb_runs/pfd_toolkit_adapter.py`.
 
 ## 4.3 Async Execution Model
 
-Move long-running AI operations to worker processes:
+Current model:
 
-- web process: enqueue, read status, render progress
-- worker process: execute `filter_reports`, `discover_themes`, `extract_features`
-- persistence: job state in Postgres + progress events in Redis/pubsub (or DB polling fallback)
+1. Web process enqueues run records in Postgres.
+2. Worker command claims and executes runs server-side.
+3. Progress and status are persisted in DB (`RunEvent` + run status fields).
+4. Cancellation is cooperative and persisted.
 
-This avoids request-thread blocking and reduces coupling to SSE internals.
+Note: current queue behavior is DB-backed polling. Redis-backed queueing remains an optional upgrade.
 
 ## 4.4 State Strategy
 
-Replace session-heavy state with database-backed state:
+Current model:
 
-- session: only identity + minimal transient UI state
-- DB: workspace configuration, selected filters, active dataset refs, run records, outputs
-- object storage: large exports/artifacts (CSV/zip/json)
+1. Session state minimized.
+2. Domain state persisted in Postgres.
+3. Artifacts currently written to local filesystem paths under runtime artifact directories.
 
+Phase 4/5 upgrade target:
 
-## 5. Data Model Foundation (v0.2 Phase 1)
+1. object storage-backed artifacts for production durability.
 
-Minimum core tables:
+## 5. Data Model Foundation
 
-- `User` (Django auth)
-- `Workspace`
-  - `id`, `owner_id`, `name`, `description`, `created_at`, `updated_at`
-- `WorkspaceMember`
-  - `workspace_id`, `user_id`, `role` (`owner|editor|viewer`)
-- `Investigation`
-  - `workspace_id`, `title`, `question`, `scope_json`, `method_json`, `status`
-- `InvestigationRun`
-  - `investigation_id`, `run_type`, `status`, `started_at`, `finished_at`, `error`
-- `RunArtifact`
-  - `run_id`, `artifact_type`, `storage_uri`, `metadata_json`, `size_bytes`
-- `WorkspaceShareLink`
-  - `workspace_id`, `token`, `is_public`, `expires_at`, `revoked_at`
+Core persisted entities are now present:
 
-Optional early additions:
+1. `User` (custom auth user)
+2. `Workspace`
+3. `WorkspaceMembership`
+4. `WorkspaceRevision`
+5. `Investigation`
+6. `InvestigationRun`
+7. `RunEvent`
+8. `RunArtifact`
+9. `WorkspaceShareLink`
+10. `AuditEvent`
 
-- `ApiCredential` (encrypted key storage if you decide to support saved keys)
-- `AuditEvent` for critical changes
-
+See internal docs for full schema rationale and constraints.
 
 ## 6. Security and Privacy Recommendations
 
-- Never store plaintext API keys in session.
-- If saved keys are needed, encrypt at rest (application-level encryption with key in env/secret manager).
-- Keep CSRF/session security defaults strict in production.
-- Add object-level permissions on all workspace/investigation endpoints.
-- Add signed, revocable share links with expiry support.
-- Keep network/invite-only gating out of hardcoded passwords; use feature flags + role checks.
+Confirmed direction for beta:
 
+1. Do not store user API keys by default.
+2. Snapshot sharing as default mode.
+3. Public links may be viewable without login when explicitly configured.
+4. Keep strict object-level permission checks across workspace-bound resources.
+5. Keep audit logging on critical state transitions.
+
+Future if live/shared-key mode is enabled:
+
+1. encrypted credential storage
+2. key-rotation policy
+3. breach response playbook
 
 ## 7. Infrastructure Recommendations (Railway + Postgres)
 
-## 7.1 Runtime Topology
+Current:
 
-Deploy as separate services:
+1. Web and worker split pattern is implemented at app level.
+2. Postgres-backed persistence is in place.
 
-- `web` (Django app)
-- `worker` (async jobs)
-- `scheduler` (if periodic tasks needed)
-- `postgres`
-- `redis` (queue + cache + progress pubsub)
+Recommended next infra hardening:
 
-## 7.2 Storage
-
-- Postgres for relational state
-- S3-compatible object storage for large artifacts
-- avoid `/tmp` as authoritative storage
-
-## 7.3 Observability
-
-- Sentry for app and worker errors
-- structured JSON logs with request/workspace/run IDs
-- health endpoints for web and worker
-- add metrics (queue depth, run duration, run failure rate)
-
-## 7.4 Delivery Pipeline
-
-- CI: lint + unit tests + migration checks
-- staging environment before production
-- release tags + rollback strategy
-
+1. add Redis only when needed for queue semantics or push progress
+2. move artifact binaries to object storage
+3. add Sentry and metrics dashboards
+4. codify CI gates (tests + migration check + lint)
 
 ## 8. Frontend/UX Integration Strategy
 
-Do not port the full Claude prototype immediately. Stage it:
+Still valid:
 
-1. Foundation UI shell with new auth + workspace navigation
-2. Wizard shell wired to real backend models
-3. One vertical slice working end-to-end (`Filter reports`)
-4. Add `Themes` and `Extract` flows
-5. Port advanced network UX after data contract stabilizes
+1. Keep backend contracts stable first.
+2. Port Claude design shell in slices.
+3. Avoid introducing UX polish that hides backend uncertainty.
 
-The prototype includes account/workspace assumptions; backend should be made real first.
+Suggested order:
 
+1. workspace/investigation shell
+2. run detail + artifact views
+3. export/download UX
+4. broader design-system migration
 
-## 9. Suggested Delivery Phases
+## 9. Delivery Phases (Live Tracker)
 
 ## Phase 0: Foundation Setup
 
-- scaffold v0.2 project structure
-- create core apps + settings split (`base/dev/prod`)
-- configure Postgres + Redis + basic worker framework
+Status: Completed
+
+Delivered:
+
+1. v0.2 project scaffold
+2. app structure and base settings
+3. initial migration baseline
 
 ## Phase 1: Auth + Workspace Core
 
-- sign up / sign in / sign out
-- workspace CRUD
-- workspace membership + permissions
-- basic dashboard listing user workspaces
+Status: Completed
+
+Delivered:
+
+1. Auth0-backed login flow
+2. custom user model (email + first/last name)
+3. workspace CRUD baseline
+4. workspace membership and permission controls
 
 ## Phase 2: Investigation and Run Backbone
 
-- investigation model + lifecycle
-- queue async runs and track status
-- persist artifacts and expose run history
+Status: Completed
+
+Delivered:
+
+1. investigation domain lifecycle
+2. run queue/status model
+3. run events and artifact persistence
 
 ## Phase 3: First AI Vertical Slice
 
-- implement `filter_reports` end-to-end through new run system
-- render progress and final artifact in UI
-- add integration tests around run orchestration
+Status: Completed at backend level
+
+Delivered:
+
+1. real filter workflow adapter integration
+2. async worker execution path
+3. tests for run orchestration and permissions
 
 ## Phase 4: Themes + Extract + Sharing
 
-- implement remaining workflows
-- share links + clone/copy semantics
-- export/download pipeline
+Status: In progress
+
+Delivered:
+
+1. real themes workflow adapter path
+2. real extract workflow adapter path
+3. real export workflow adapter path (zip bundle + manifest)
+4. share link lifecycle (create/update/revoke/public/private)
+5. artifact download endpoint with permission checks + download audit events
+
+Remaining:
+
+1. object-storage-backed artifact backend for production
+2. wider keepalive/expiry policy enforcement job (scheduler path)
 
 ## Phase 5: Design System Port + Hardening
 
-- port Claude design token system and shells
-- improve accessibility/performance
-- load/perf tests and bug hardening
+Status: Not started
+
+Planned:
+
+1. Claude design token/system port in slices
+2. accessibility and performance hardening
+3. end-to-end bug bash
 
 ## Phase 6: Migration + Cutover
 
-- migrate selected workbook/share data from v0.1 if needed
-- controlled beta with real users
-- switch traffic when stable
-- retire v0.1 only after acceptance
+Status: Not started
 
+Planned:
 
-## 10. Immediate Starting Tasks (Next 1-2 Weeks)
+1. decide v0.1 data migration scope
+2. staged beta cutover
+3. rollback-tested production switch
+4. retire v0.1 only after acceptance
 
-1. Create apps: `accounts`, `workspaces`, `investigations`, `runs`, `artifacts`, `sharing`.
-2. Define and migrate foundational models (`Workspace`, `WorkspaceMember`, `Investigation`, `InvestigationRun`).
-3. Implement auth pages and workspace list/create flow.
-4. Set up worker stack and a test background job.
-5. Add architecture tests for permission boundaries.
-6. Add initial ADRs (architecture decision records) for:
-   - queue framework choice
-   - API key handling strategy
+## 10. Next 1-2 Week Plan (Updated)
+
+1. Introduce object-storage-backed artifact backend (keep local backend for development).
+2. Implement wider human-view keepalive/expiry enforcement jobs (scheduler path).
+3. Add ADRs for:
+   - export architecture
    - artifact storage strategy
+   - run retry policy
 
+## 11. Confirmed Decision Log (Current)
 
-## 11. Decision Checkpoints to Confirm Together
-
-Please confirm these early so we do not build on shaky assumptions:
-
-1. Saved API keys vs session-only BYOK (and encryption policy)
-2. Queue stack choice (Celery/RQ/Dramatiq) for Railway
-3. Whether team/shared workspaces are needed in v0.2 beta or post-beta
-4. What v0.1 data must be migrated (if any) before launch
-5. Which Claude prototype screens are required for first beta cut
-
+1. Team/shared workspaces: Yes (beta).
+2. Workspace access model: per user-workspace membership; read-only is membership-level.
+3. Public sharing: allowed without login when explicitly public.
+4. Default sharing mode: snapshot.
+5. Live mode: technically possible later; keep API-key storage out of beta by default.
+6. Run cancellation: required and implemented.
+7. Audit trail: required and implemented.
+8. Artifact/activity expiry intent: long window with activity-based keepalive, human-view-only.
 
 ## 12. v0.1 Safety Rule
 
 `django_workbench/` remains intact until:
 
-- v0.2 has auth + workspace + core AI workflow stability
-- parity requirements are met for launch
-- deployment rollback plan is tested
+1. v0.2 has stable auth + workspace + core workflows
+2. parity requirements for beta are accepted
+3. deployment rollback has been tested
 
-Only then should we plan decommissioning of v0.1.
+Only then should v0.1 decommissioning be planned.

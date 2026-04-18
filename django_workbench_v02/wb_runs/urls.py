@@ -19,4 +19,9 @@ urlpatterns = [
         views.cancel_run,
         name="run-cancel",
     ),
+    path(
+        "workspaces/<uuid:workspace_id>/runs/<uuid:run_id>/artifacts/<uuid:artifact_id>/download/",
+        views.download_run_artifact,
+        name="run-artifact-download",
+    ),
 ]

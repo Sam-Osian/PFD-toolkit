@@ -12,7 +12,7 @@ from wb_investigations.services import create_investigation
 from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership
 from wb_workspaces.services import create_workspace_for_user
 
-from .models import ArtifactStorageBackend, ArtifactType, RunStatus, RunType
+from .models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact, RunStatus, RunType
 from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run
 
@@ -219,6 +219,96 @@ class RunViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.run.refresh_from_db()
         self.assertEqual(self.run.status, RunStatus.CANCELLING)
+
+    def test_owner_can_download_run_artifact(self):
+        output_path = Path("/tmp/test-run-detail-download.csv")
+        output_path.write_text("id,value\n1,ok\n", encoding="utf-8")
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri=str(output_path),
+            metadata_json={},
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "run-artifact-download",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "run_id": self.run.id,
+                    "artifact_id": artifact.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment;", response.headers.get("Content-Disposition", ""))
+        artifact.refresh_from_db()
+        self.assertIsNotNone(artifact.last_viewed_at)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action_type="run.artifact_downloaded",
+                target_id=str(artifact.id),
+            ).exists()
+        )
+
+    def test_bot_user_agent_does_not_update_artifact_last_viewed(self):
+        output_path = Path("/tmp/test-run-detail-bot-download.csv")
+        output_path.write_text("id,value\n1,ok\n", encoding="utf-8")
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri=str(output_path),
+            metadata_json={},
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "run-artifact-download",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "run_id": self.run.id,
+                    "artifact_id": artifact.id,
+                },
+            ),
+            HTTP_USER_AGENT="Googlebot/2.1",
+        )
+        self.assertEqual(response.status_code, 200)
+        artifact.refresh_from_db()
+        self.assertIsNone(artifact.last_viewed_at)
+
+    def test_authenticated_non_member_cannot_download_private_workspace_artifact(self):
+        output_path = Path("/tmp/test-run-detail-no-access.csv")
+        output_path.write_text("id,value\n1,ok\n", encoding="utf-8")
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri=str(output_path),
+            metadata_json={},
+        )
+        stranger = User.objects.create_user(email="artifact-stranger@example.com", password="x")
+        self.client.force_login(stranger)
+        response = self.client.get(
+            reverse(
+                "run-artifact-download",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "run_id": self.run.id,
+                    "artifact_id": artifact.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class RunWorkerTests(TestCase):
@@ -433,4 +523,39 @@ class RunWorkerTests(TestCase):
                 storage_backend=ArtifactStorageBackend.FILE,
             ).exists()
         )
+        mocked.assert_called_once()
+
+    def test_worker_uses_real_export_adapter_when_enabled(self):
+        output_path = Path("/tmp/test-run-export-output.zip")
+        output_path.write_bytes(b"PK\x03\x04")
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.EXPORT,
+            input_config_json={"execution_mode": "real"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_export_workflow",
+            return_value={
+                "output_path": str(output_path),
+                "bundle_name": "bundle.zip",
+                "selected_artifacts": 3,
+                "included_files": 2,
+                "skipped_artifacts": 1,
+            },
+        ) as mocked:
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        self.assertTrue(
+            run.artifacts.filter(
+                artifact_type=ArtifactType.BUNDLE_EXPORT,
+                storage_uri=str(output_path),
+                storage_backend=ArtifactStorageBackend.FILE,
+            ).exists()
+        )
+        self.assertIn("Packaged 2 files", run.events.latest("created_at").message)
         mocked.assert_called_once()

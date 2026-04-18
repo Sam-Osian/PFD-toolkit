@@ -1,7 +1,7 @@
 # PFD Toolkit Run Adapters (v0.2)
 
 Status: Implemented  
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## 1. Purpose
 
@@ -17,6 +17,7 @@ This keeps:
 1. `execute_filter_workflow(...)`
 2. `execute_themes_workflow(...)`
 3. `execute_extract_workflow(...)`
+4. `execute_export_workflow(...)`
 
 Each adapter:
 
@@ -28,6 +29,8 @@ Each adapter:
 6. Checks cancellation before/after expensive stages
 7. Writes CSV/JSON outputs under runtime artifact path
 8. Returns serializable metadata dict consumed by worker artifact creation
+
+The export adapter is file-bundling focused and does not call LLM APIs.
 
 ## 3. Configuration Model
 
@@ -75,6 +78,13 @@ Environment keys:
 6. `skip_if_present`
 7. `extra_instructions`
 
+### 3.5 Export
+
+1. `include_run_types` (optional list)
+2. `latest_per_artifact_type`
+3. `max_artifacts`
+4. `bundle_name`
+
 ## 4. Output Contract
 
 All adapters return a dict containing at least `output_path`.
@@ -84,6 +94,7 @@ Worker behavior:
 1. Uses `output_path` as primary artifact file URI.
 2. Persists additional adapter return values into artifact metadata.
 3. For theme runs, creates an additional `theme_assignments` artifact when present.
+4. For export runs, stores a `bundle_export` artifact pointing to the generated zip.
 
 ## 5. Error and Cancellation Contract
 
