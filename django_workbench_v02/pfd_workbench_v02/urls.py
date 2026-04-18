@@ -16,8 +16,12 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
+from accounts.views import admin_login_proxy
 
 urlpatterns = [
+    path("admin/login/", admin_login_proxy, name="admin-login-proxy"),
     path("admin/", admin.site.urls),
+    path("", include("accounts.urls")),
+    path("", include("wb_workspaces.urls")),
 ]

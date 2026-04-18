@@ -10,22 +10,52 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BASE_DIR.parent
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.exists():
+        return
+
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key, value)
+
+
+_load_env_file(PROJECT_ROOT / "api.env")
+_load_env_file(BASE_DIR / ".env")
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-*ess+!!2buh7*)9uid2w8))mj^+2@d*j5nf^6z-hj-*uroa$#%"
+SECRET_KEY = os.getenv(
+    "SECRET_KEY",
+    "django-insecure-*ess+!!2buh7*)9uid2w8))mj^+2@d*j5nf^6z-hj-*uroa$#%",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "True").lower() == "true"
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.getenv(
+        "ALLOWED_HOSTS",
+        "127.0.0.1,localhost,pfdtoolkit.org,www.pfdtoolkit.org",
+    ).split(",")
+    if host.strip()
+]
 
 
 # Application definition
@@ -37,6 +67,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "accounts",
     "wb_workspaces",
     "wb_investigations",
     "wb_runs",
@@ -60,7 +91,7 @@ ROOT_URLCONF = "pfd_workbench_v02.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -104,6 +135,14 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+AUTH_USER_MODEL = "accounts.User"
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+]
+LOGIN_URL = "/auth/login/"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
+
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
@@ -121,6 +160,40 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CSRF_TRUSTED_ORIGINS",
+        "https://pfdtoolkit.org,https://www.pfdtoolkit.org",
+    ).split(",")
+    if origin.strip()
+]
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+
+# Auth0 configuration
+AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN", "oreliandata.uk.auth0.com")
+AUTH0_CLIENT_ID = os.getenv("AUTH0_CLIENT_ID", "uirpul9BDRViPlCtkKJqDK7KrCPKQilD")
+AUTH0_CLIENT_SECRET = os.getenv("AUTH0_CLIENT_SECRET", "")
+AUTH0_SCOPES = os.getenv("AUTH0_SCOPES", "openid profile email")
+AUTH0_CALLBACK_PATH = "/auth/callback/"
+AUTH0_CALLBACK_URL = os.getenv(
+    "AUTH0_CALLBACK_URL",
+    f"http://127.0.0.1:8000{AUTH0_CALLBACK_PATH}",
+)
+AUTH0_POST_LOGOUT_REDIRECT_URI = os.getenv(
+    "AUTH0_POST_LOGOUT_REDIRECT_URI",
+    "http://127.0.0.1:8000/",
+)
+PFD_ADMIN_EMAIL = os.getenv("PFD_ADMIN_EMAIL", "sam.osian@oreliandata.co.uk").lower()
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

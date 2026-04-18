@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Your Workspaces</h2>
+{% if memberships %}
+    <ul>
+        {% for membership in memberships %}
+            <li>
+                <a href="{% url 'workspace-detail' workspace_id=membership.workspace.id %}">
+                    {{ membership.workspace.title }}
+                </a>
+                ({{ membership.role }}, {{ membership.access_mode }})
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>You are not currently a member of any workspaces.</p>
+{% endif %}
+
+<h3>Create Workspace</h3>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Create</button>
+</form>
+{% endblock %}

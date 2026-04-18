@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ workspace.title }}</h2>
+<p>{{ workspace.description }}</p>
+<p>Visibility: {{ workspace.visibility }}</p>
+{% if membership %}
+    <p>Your role: {{ membership.role }} | Access: {{ membership.access_mode }}</p>
+{% else %}
+    <p>You are viewing this workspace as a guest.</p>
+{% endif %}
+{% endblock %}
