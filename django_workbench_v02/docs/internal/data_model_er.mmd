@@ -1,0 +1,178 @@
+erDiagram
+    USER ||--o{ WORKSPACE : creates
+    USER ||--o{ WORKSPACE_MEMBERSHIP : assigned_to
+    WORKSPACE ||--o{ WORKSPACE_MEMBERSHIP : has_members
+    WORKSPACE ||--o{ WORKSPACE_REVISION : has_revisions
+    USER ||--o{ WORKSPACE_REVISION : authored
+
+    WORKSPACE ||--o{ INVESTIGATION : has_investigations
+    USER ||--o{ INVESTIGATION : creates
+
+    INVESTIGATION ||--o{ INVESTIGATION_RUN : has_runs
+    USER ||--o{ INVESTIGATION_RUN : requests
+    WORKSPACE ||--o{ INVESTIGATION_RUN : scopes
+
+    INVESTIGATION_RUN ||--o{ RUN_EVENT : emits
+    INVESTIGATION_RUN ||--o{ RUN_ARTIFACT : produces
+    WORKSPACE ||--o{ RUN_ARTIFACT : contains
+
+    WORKSPACE ||--o{ WORKSPACE_SHARE_LINK : has_share_links
+    USER ||--o{ WORKSPACE_SHARE_LINK : creates
+    WORKSPACE_REVISION ||--o{ WORKSPACE_SHARE_LINK : snapshots
+
+    WORKSPACE ||--o{ AUDIT_EVENT : logged_for
+    USER ||--o{ AUDIT_EVENT : performed_by
+
+    INVESTIGATION_RUN ||--o{ NOTIFICATION_REQUEST : has_notifications
+    USER ||--o{ NOTIFICATION_REQUEST : subscribes
+
+    USER {
+      uuid id PK
+      string email
+      boolean is_active
+      boolean is_staff
+      datetime created_at
+      datetime updated_at
+    }
+
+    WORKSPACE {
+      uuid id PK
+      uuid created_by_id FK
+      string title
+      string slug
+      text description
+      string visibility
+      boolean is_listed
+      datetime last_viewed_at
+      datetime created_at
+      datetime updated_at
+      datetime archived_at
+    }
+
+    WORKSPACE_MEMBERSHIP {
+      uuid id PK
+      uuid workspace_id FK
+      uuid user_id FK
+      string role
+      string access_mode
+      boolean can_manage_members
+      boolean can_manage_shares
+      boolean can_run_workflows
+      datetime created_at
+      datetime updated_at
+    }
+
+    WORKSPACE_REVISION {
+      uuid id PK
+      uuid workspace_id FK
+      int revision_number
+      jsonb state_json
+      uuid created_by_id FK
+      uuid parent_revision_id FK
+      string change_type
+      datetime created_at
+    }
+
+    INVESTIGATION {
+      uuid id PK
+      uuid workspace_id FK
+      uuid created_by_id FK
+      string title
+      text question_text
+      jsonb scope_json
+      jsonb method_json
+      string status
+      datetime last_viewed_at
+      datetime created_at
+      datetime updated_at
+    }
+
+    INVESTIGATION_RUN {
+      uuid id PK
+      uuid investigation_id FK
+      uuid workspace_id FK
+      uuid requested_by_id FK
+      uuid cancel_requested_by_id FK
+      string run_type
+      string status
+      int progress_percent
+      jsonb input_config_json
+      date query_start_date
+      date query_end_date
+      string worker_id
+      string error_code
+      text error_message
+      text cancel_reason
+      datetime queued_at
+      datetime started_at
+      datetime finished_at
+      datetime cancel_requested_at
+      datetime created_at
+      datetime updated_at
+    }
+
+    RUN_EVENT {
+      uuid id PK
+      uuid run_id FK
+      string event_type
+      text message
+      jsonb payload_json
+      datetime created_at
+    }
+
+    RUN_ARTIFACT {
+      uuid id PK
+      uuid run_id FK
+      uuid workspace_id FK
+      string artifact_type
+      string status
+      string storage_backend
+      string storage_uri
+      string content_hash
+      bigint size_bytes
+      jsonb metadata_json
+      datetime expires_at
+      datetime last_viewed_at
+      datetime created_at
+      datetime updated_at
+    }
+
+    WORKSPACE_SHARE_LINK {
+      uuid id PK
+      uuid workspace_id FK
+      uuid created_by_id FK
+      uuid snapshot_revision_id FK
+      string mode
+      boolean is_public
+      boolean is_active
+      datetime expires_at
+      datetime last_viewed_at
+      datetime created_at
+      datetime updated_at
+    }
+
+    AUDIT_EVENT {
+      uuid id PK
+      uuid workspace_id FK
+      uuid user_id FK
+      string action_type
+      string target_type
+      string target_id
+      string ip_hash
+      text user_agent
+      jsonb payload_json
+      datetime created_at
+    }
+
+    NOTIFICATION_REQUEST {
+      uuid id PK
+      uuid run_id FK
+      uuid user_id FK
+      string channel
+      string notify_on
+      string status
+      text error_message
+      datetime sent_at
+      datetime created_at
+      datetime updated_at
+    }

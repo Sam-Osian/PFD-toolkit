@@ -28,3 +28,5 @@ docs/assets/images/social/*
 
 .codex
 django_workbench/db.sqlite3
+
+claude_design/
