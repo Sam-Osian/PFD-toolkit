@@ -1,3 +1,104 @@
-from django.shortcuts import render
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_GET, require_POST
 
-# Create your views here.
+from wb_investigations.models import Investigation
+from wb_workspaces.permissions import can_view_workspace
+
+from .forms import RunCancelForm, RunQueueForm
+from .models import InvestigationRun
+from .services import queue_run, request_run_cancellation, record_run_view
+
+
+@login_required
+@require_POST
+def queue_investigation_run(request, workspace_id, investigation_id):
+    investigation = get_object_or_404(
+        Investigation.objects.select_related("workspace"),
+        id=investigation_id,
+        workspace_id=workspace_id,
+    )
+    form = RunQueueForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid run configuration.")
+        return redirect(
+            "investigation-detail",
+            workspace_id=workspace_id,
+            investigation_id=investigation_id,
+        )
+
+    try:
+        queue_run(
+            actor=request.user,
+            investigation=investigation,
+            run_type=form.cleaned_data["run_type"],
+            input_config_json=form.cleaned_data["input_config_json"],
+            query_start_date=form.cleaned_data["query_start_date"],
+            query_end_date=form.cleaned_data["query_end_date"],
+            request=request,
+        )
+    except (PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Run queued.")
+
+    return redirect(
+        "investigation-detail",
+        workspace_id=workspace_id,
+        investigation_id=investigation_id,
+    )
+
+
+@require_GET
+def run_detail(request, workspace_id, run_id):
+    run = get_object_or_404(
+        InvestigationRun.objects.select_related("workspace", "investigation", "requested_by"),
+        id=run_id,
+        workspace_id=workspace_id,
+    )
+    if not can_view_workspace(request.user, run.workspace):
+        return redirect("accounts-login")
+
+    record_run_view(run=run, user=request.user, request=request)
+    cancel_form = RunCancelForm()
+    return render(
+        request,
+        "wb_runs/run_detail.html",
+        {
+            "run": run,
+            "investigation": run.investigation,
+            "workspace": run.workspace,
+            "cancel_form": cancel_form,
+            "events": run.events.order_by("-created_at"),
+            "artifacts": run.artifacts.order_by("-created_at"),
+        },
+    )
+
+
+@login_required
+@require_POST
+def cancel_run(request, workspace_id, run_id):
+    run = get_object_or_404(
+        InvestigationRun.objects.select_related("workspace", "investigation"),
+        id=run_id,
+        workspace_id=workspace_id,
+    )
+    form = RunCancelForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid cancellation payload.")
+        return redirect("run-detail", workspace_id=workspace_id, run_id=run_id)
+
+    try:
+        request_run_cancellation(
+            actor=request.user,
+            run=run,
+            reason=form.cleaned_data["cancel_reason"],
+            request=request,
+        )
+    except (PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Run cancellation requested.")
+    return redirect("run-detail", workspace_id=workspace_id, run_id=run_id)

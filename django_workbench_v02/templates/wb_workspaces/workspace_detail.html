@@ -9,6 +9,23 @@
 {% else %}
     <p>You are viewing this workspace as a guest.</p>
 {% endif %}
+<p><a href="{% url 'investigation-list' workspace_id=workspace.id %}">Open investigations</a></p>
+
+<h3>Investigations</h3>
+{% if investigations %}
+    <ul>
+        {% for inv in investigations %}
+            <li>
+                <a href="{% url 'investigation-detail' workspace_id=workspace.id investigation_id=inv.id %}">
+                    {{ inv.title }}
+                </a>
+                ({{ inv.status }})
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No investigations yet.</p>
+{% endif %}
 
 <h3>Members</h3>
 {% if memberships %}
@@ -85,6 +102,76 @@
         {% csrf_token %}
         {{ add_form.as_p }}
         <button type="submit">Add member</button>
+    </form>
+{% endif %}
+
+<h3>Share Links</h3>
+{% if share_links %}
+    <table>
+        <thead>
+            <tr>
+                <th>Link</th>
+                <th>Mode</th>
+                <th>Public</th>
+                <th>Active</th>
+                <th>Expires</th>
+                <th>Last Viewed</th>
+                {% if manage_shares_allowed %}
+                    <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for share in share_links %}
+            <tr>
+                <td><a href="{% url 'share-link-detail' share_id=share.id %}">{{ share.id }}</a></td>
+                <td>{{ share.mode }}</td>
+                <td>{{ share.is_public }}</td>
+                <td>{{ share.is_active }}</td>
+                <td>{{ share.expires_at|default:"-" }}</td>
+                <td>{{ share.last_viewed_at|default:"-" }}</td>
+                {% if manage_shares_allowed %}
+                    <td>
+                        <form method="post" action="{% url 'workspace-share-update' workspace_id=workspace.id share_id=share.id %}">
+                            {% csrf_token %}
+                            <label>Mode</label>
+                            <select name="mode">
+                                {% for value, label in share_mode_choices %}
+                                    <option value="{{ value }}" {% if share.mode == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <label>
+                                <input type="checkbox" name="is_public" {% if share.is_public %}checked{% endif %}>
+                                Public
+                            </label>
+                            <label>
+                                <input type="checkbox" name="is_active" {% if share.is_active %}checked{% endif %}>
+                                Active
+                            </label>
+                            <label>Expires At</label>
+                            <input type="datetime-local" name="expires_at" value="{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d\\TH:i' }}{% endif %}">
+                            <button type="submit">Update</button>
+                        </form>
+                        <form method="post" action="{% url 'workspace-share-revoke' workspace_id=workspace.id share_id=share.id %}">
+                            {% csrf_token %}
+                            <button type="submit">Revoke</button>
+                        </form>
+                    </td>
+                {% endif %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No share links yet.</p>
+{% endif %}
+
+{% if manage_shares_allowed %}
+    <h3>Create Share Link</h3>
+    <form method="post" action="{% url 'workspace-share-create' workspace_id=workspace.id %}">
+        {% csrf_token %}
+        {{ share_create_form.as_p }}
+        <button type="submit">Create share link</button>
     </form>
 {% endif %}
 {% endblock %}

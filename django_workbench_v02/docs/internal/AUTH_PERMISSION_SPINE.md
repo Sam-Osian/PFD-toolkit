@@ -94,6 +94,16 @@ Rules:
 8. `/workspaces/<workspace_id>/members/add/`
 9. `/workspaces/<workspace_id>/members/<membership_id>/update/`
 10. `/workspaces/<workspace_id>/members/<membership_id>/remove/`
+11. `/workspaces/<workspace_id>/shares/create/`
+12. `/workspaces/<workspace_id>/shares/<share_id>/update/`
+13. `/workspaces/<workspace_id>/shares/<share_id>/revoke/`
+14. `/s/<share_id>/`
+15. `/workspaces/<workspace_id>/investigations/`
+16. `/workspaces/<workspace_id>/investigations/<investigation_id>/`
+17. `/workspaces/<workspace_id>/investigations/<investigation_id>/update/`
+18. `/workspaces/<workspace_id>/investigations/<investigation_id>/runs/queue/`
+19. `/workspaces/<workspace_id>/runs/<run_id>/`
+20. `/workspaces/<workspace_id>/runs/<run_id>/cancel/`
 
 ## 7. Stage 2 Invariants + Audit
 
@@ -106,8 +116,23 @@ Membership changes are now service-layer operations with transactional safeguard
 3. Only owners who can manage members can add/update/remove members.
 4. Every workspace and membership mutation writes `AuditEvent`.
 
+Sharing changes are now service-layer operations too:
+
+1. Only owners with `can_manage_shares=True` can create/update/revoke links.
+2. Snapshot links require an existing workspace revision.
+3. Share link views update `last_viewed_at` and write audit events.
+
+Investigation + run lifecycle rules:
+
+1. Investigation create/update requires `can_edit_workspace`.
+2. Run queue requires `can_run_workflows`.
+3. Run detail requires workspace view access.
+4. Cancellation requires requester/superuser or workspace run permission.
+5. Investigation and run lifecycle actions write `AuditEvent`.
+6. Run queue/cancel transitions write `RunEvent`.
+
 ## 8. Next Integration Work
 
-1. Apply permission checks to all future investigation/run/share endpoints.
-2. Add sharing services/endpoints and include audit writes for share mutations.
-3. Add integration tests for Auth0 callback and admin elevation path.
+1. Add integration tests for Auth0 callback and admin elevation path.
+2. Add worker-side run status transition hooks (`starting`, `running`, terminal states).
+3. Add API/JSON endpoints for frontend consumption (current endpoints are server-rendered forms/pages).

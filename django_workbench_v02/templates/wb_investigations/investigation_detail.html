@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ investigation.title }}</h2>
+<p>Workspace: <a href="{% url 'workspace-detail' workspace_id=workspace.id %}">{{ workspace.title }}</a></p>
+<p>Status: {{ investigation.status }}</p>
+<p>Question: {{ investigation.question_text|default:"-" }}</p>
+
+<h3>Scope JSON</h3>
+<pre>{{ investigation.scope_json }}</pre>
+
+<h3>Method JSON</h3>
+<pre>{{ investigation.method_json }}</pre>
+
+{% if can_edit %}
+    <h3>Update Investigation</h3>
+    <form method="post" action="{% url 'investigation-update' workspace_id=workspace.id investigation_id=investigation.id %}">
+        {% csrf_token %}
+        {{ update_form.as_p }}
+        <button type="submit">Update investigation</button>
+    </form>
+
+    <h3>Queue Run</h3>
+    <form method="post" action="{% url 'run-queue' workspace_id=workspace.id investigation_id=investigation.id %}">
+        {% csrf_token %}
+        {{ run_form.as_p }}
+        <button type="submit">Queue run</button>
+    </form>
+{% endif %}
+
+<h3>Runs</h3>
+{% if runs %}
+    <ul>
+        {% for run in runs %}
+            <li>
+                <a href="{% url 'run-detail' workspace_id=workspace.id run_id=run.id %}">
+                    {{ run.id }}
+                </a>
+                {{ run.run_type }} - {{ run.status }} - queued {{ run.queued_at }}
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No runs for this investigation yet.</p>
+{% endif %}
+{% endblock %}

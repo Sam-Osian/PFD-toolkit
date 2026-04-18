@@ -16,6 +16,12 @@ class WorkspaceShareLinkAdmin(admin.ModelAdmin):
         "last_viewed_at",
     ]
     list_filter = ["mode", "is_public", "is_active", "created_at"]
-    search_fields = ["id", "workspace__title", "created_by__username", "created_by__email"]
+    search_fields = [
+        "id",
+        "workspace__title",
+        "created_by__email",
+        "created_by__first_name",
+        "created_by__last_name",
+    ]
     autocomplete_fields = ["workspace", "created_by", "snapshot_revision"]
     readonly_fields = ["created_at", "updated_at", "last_viewed_at"]

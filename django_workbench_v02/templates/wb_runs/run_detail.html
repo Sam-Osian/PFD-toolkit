@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Run {{ run.id }}</h2>
+<p>
+    Investigation:
+    <a href="{% url 'investigation-detail' workspace_id=workspace.id investigation_id=investigation.id %}">
+        {{ investigation.title }}
+    </a>
+</p>
+<p>Status: {{ run.status }}</p>
+<p>Type: {{ run.run_type }}</p>
+<p>Requested by: {{ run.requested_by.email }}</p>
+<p>Queued at: {{ run.queued_at }}</p>
+<p>Started at: {{ run.started_at|default:"-" }}</p>
+<p>Finished at: {{ run.finished_at|default:"-" }}</p>
+<p>Progress: {{ run.progress_percent|default:"-" }}</p>
+{% if run.error_message %}
+    <p>Error: {{ run.error_message }}</p>
+{% endif %}
+
+<h3>Request Cancellation</h3>
+<form method="post" action="{% url 'run-cancel' workspace_id=workspace.id run_id=run.id %}">
+    {% csrf_token %}
+    {{ cancel_form.as_p }}
+    <button type="submit">Cancel run</button>
+</form>
+
+<h3>Events</h3>
+{% if events %}
+    <ul>
+        {% for event in events %}
+            <li>{{ event.created_at }} | {{ event.event_type }} | {{ event.message }}</li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No events yet.</p>
+{% endif %}
+
+<h3>Artifacts</h3>
+{% if artifacts %}
+    <ul>
+        {% for artifact in artifacts %}
+            <li>{{ artifact.artifact_type }} | {{ artifact.status }} | {{ artifact.storage_uri|default:"-" }}</li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No artifacts yet.</p>
+{% endif %}
+{% endblock %}

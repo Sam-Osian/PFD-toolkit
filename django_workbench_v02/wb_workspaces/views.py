@@ -6,9 +6,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from wb_investigations.models import Investigation
+from wb_sharing.forms import ShareLinkCreateForm
+from wb_sharing.models import ShareMode, WorkspaceShareLink
+
 from .forms import WorkspaceCreateForm, WorkspaceMemberAddForm, WorkspaceMemberUpdateForm
 from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceVisibility
-from .permissions import can_manage_members, can_view_workspace
+from .permissions import can_manage_members, can_manage_shares, can_view_workspace
 from .services import (
     WorkspaceMembershipError,
     add_workspace_member,
@@ -76,8 +80,16 @@ def workspace_detail(request, workspace_id):
     manage_members_allowed = bool(
         request.user.is_authenticated and can_manage_members(request.user, workspace)
     )
+    manage_shares_allowed = bool(
+        request.user.is_authenticated and can_manage_shares(request.user, workspace)
+    )
     memberships = WorkspaceMembership.objects.filter(workspace=workspace).select_related("user")
     add_form = WorkspaceMemberAddForm(initial={"can_run_workflows": True})
+    share_links = WorkspaceShareLink.objects.filter(workspace=workspace).order_by("-created_at")
+    investigations = Investigation.objects.filter(workspace=workspace).order_by("-updated_at")
+    share_create_form = ShareLinkCreateForm(
+        initial={"mode": ShareMode.SNAPSHOT, "is_public": True}
+    )
 
     return render(
         request,
@@ -87,9 +99,14 @@ def workspace_detail(request, workspace_id):
             "membership": membership,
             "memberships": memberships,
             "manage_members_allowed": manage_members_allowed,
+            "manage_shares_allowed": manage_shares_allowed,
             "add_form": add_form,
+            "share_links": share_links,
+            "investigations": investigations,
+            "share_create_form": share_create_form,
             "role_choices": MembershipRole.choices,
             "access_mode_choices": MembershipAccessMode.choices,
+            "share_mode_choices": ShareMode.choices,
         },
     )
 

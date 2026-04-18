@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Investigations for {{ workspace.title }}</h2>
+<p><a href="{% url 'workspace-detail' workspace_id=workspace.id %}">Back to workspace</a></p>
+
+{% if investigations %}
+    <ul>
+        {% for inv in investigations %}
+            <li>
+                <a href="{% url 'investigation-detail' workspace_id=workspace.id investigation_id=inv.id %}">
+                    {{ inv.title }}
+                </a>
+                ({{ inv.status }})
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No investigations yet.</p>
+{% endif %}
+
+{% if can_edit %}
+    <h3>Create Investigation</h3>
+    <form method="post">
+        {% csrf_token %}
+        {{ create_form.as_p }}
+        <button type="submit">Create investigation</button>
+    </form>
+{% endif %}
+{% endblock %}

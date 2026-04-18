@@ -36,8 +36,9 @@ class InvestigationRunAdmin(admin.ModelAdmin):
         "id",
         "investigation__title",
         "workspace__title",
-        "requested_by__username",
         "requested_by__email",
+        "requested_by__first_name",
+        "requested_by__last_name",
     ]
     autocomplete_fields = [
         "investigation",

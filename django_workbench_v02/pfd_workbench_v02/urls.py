@@ -24,4 +24,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("accounts.urls")),
     path("", include("wb_workspaces.urls")),
+    path("", include("wb_sharing.urls")),
+    path("", include("wb_investigations.urls")),
+    path("", include("wb_runs.urls")),
 ]

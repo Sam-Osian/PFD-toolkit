@@ -14,6 +14,12 @@ class InvestigationAdmin(admin.ModelAdmin):
         "updated_at",
     ]
     list_filter = ["status", "created_at", "updated_at"]
-    search_fields = ["title", "workspace__title", "created_by__username", "created_by__email"]
+    search_fields = [
+        "title",
+        "workspace__title",
+        "created_by__email",
+        "created_by__first_name",
+        "created_by__last_name",
+    ]
     autocomplete_fields = ["workspace", "created_by"]
     readonly_fields = ["created_at", "updated_at", "last_viewed_at"]

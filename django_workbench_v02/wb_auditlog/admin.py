@@ -19,8 +19,9 @@ class AuditEventAdmin(admin.ModelAdmin):
         "target_type",
         "target_id",
         "workspace__title",
-        "user__username",
         "user__email",
+        "user__first_name",
+        "user__last_name",
     ]
     autocomplete_fields = ["workspace", "user"]
     readonly_fields = ["created_at"]

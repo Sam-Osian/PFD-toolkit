@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Shared Workspace View</h2>
+<p>Workspace: <strong>{{ workspace.title }}</strong></p>
+<p>Share link ID: {{ share_link.id }}</p>
+<p>Mode: {{ share_link.mode }}</p>
+<p>Public: {{ share_link.is_public }}</p>
+<p>Active: {{ share_link.is_active }}</p>
+<p>Expires: {{ share_link.expires_at|default:"Never" }}</p>
+{% if share_link.snapshot_revision %}
+    <p>Snapshot revision: {{ share_link.snapshot_revision.revision_number }}</p>
+{% endif %}
+{% if workspace.description %}
+    <p>Description: {{ workspace.description }}</p>
+{% endif %}
+{% endblock %}
