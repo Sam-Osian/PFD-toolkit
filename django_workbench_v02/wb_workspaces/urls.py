@@ -22,4 +22,14 @@ urlpatterns = [
         views.remove_member,
         name="workspace-member-remove",
     ),
+    path(
+        "workspaces/<uuid:workspace_id>/credentials/save/",
+        views.save_credential,
+        name="workspace-credential-save",
+    ),
+    path(
+        "workspaces/<uuid:workspace_id>/credentials/remove/",
+        views.remove_credential,
+        name="workspace-credential-remove",
+    ),
 ]

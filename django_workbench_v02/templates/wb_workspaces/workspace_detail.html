@@ -105,6 +105,54 @@
     </form>
 {% endif %}
 
+<h3>LLM Credentials</h3>
+{% if request.user.is_authenticated %}
+    {% if user_credentials %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Provider</th>
+                    <th>Key Suffix</th>
+                    <th>Base URL</th>
+                    <th>Last Used</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for cred in user_credentials %}
+                <tr>
+                    <td>{{ cred.provider }}</td>
+                    <td>****{{ cred.key_last4 }}</td>
+                    <td>{{ cred.base_url|default:"-" }}</td>
+                    <td>{{ cred.last_used_at|default:"-" }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No saved credentials for your account in this workspace.</p>
+    {% endif %}
+
+    {% if can_manage_credentials %}
+        <h4>Save / Update Credential</h4>
+        <form method="post" action="{% url 'workspace-credential-save' workspace_id=workspace.id %}">
+            {% csrf_token %}
+            {{ credential_form.as_p }}
+            <button type="submit">Save credential</button>
+        </form>
+
+        <h4>Delete Credential</h4>
+        <form method="post" action="{% url 'workspace-credential-remove' workspace_id=workspace.id %}">
+            {% csrf_token %}
+            {{ credential_delete_form.as_p }}
+            <button type="submit">Delete credential</button>
+        </form>
+    {% else %}
+        <p>You do not currently have workflow permission in this workspace, so credential changes are disabled.</p>
+    {% endif %}
+{% else %}
+    <p>Log in to manage workspace credentials.</p>
+{% endif %}
+
 <h3>Share Links</h3>
 {% if share_links %}
     <table>

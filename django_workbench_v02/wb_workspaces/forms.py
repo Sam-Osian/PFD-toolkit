@@ -1,6 +1,6 @@
 from django import forms
 
-from .models import MembershipAccessMode, MembershipRole, Workspace
+from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceLLMProvider
 
 
 class WorkspaceCreateForm(forms.ModelForm):
@@ -24,3 +24,18 @@ class WorkspaceMemberUpdateForm(forms.Form):
     can_manage_members = forms.BooleanField(required=False)
     can_manage_shares = forms.BooleanField(required=False)
     can_run_workflows = forms.BooleanField(required=False, initial=True)
+
+
+class WorkspaceCredentialUpsertForm(forms.Form):
+    provider = forms.ChoiceField(
+        choices=WorkspaceLLMProvider.choices,
+        initial=WorkspaceLLMProvider.OPENAI,
+    )
+    api_key = forms.CharField(
+        widget=forms.PasswordInput(render_value=False),
+    )
+    base_url = forms.URLField(required=False)
+
+
+class WorkspaceCredentialDeleteForm(forms.Form):
+    provider = forms.ChoiceField(choices=WorkspaceLLMProvider.choices)

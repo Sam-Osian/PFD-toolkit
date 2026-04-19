@@ -11,14 +11,30 @@ from wb_sharing.forms import ShareLinkCreateForm
 from wb_sharing.models import ShareMode, WorkspaceShareLink
 
 from .activity import is_human_view_request, should_update_last_viewed
-from .forms import WorkspaceCreateForm, WorkspaceMemberAddForm, WorkspaceMemberUpdateForm
-from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceVisibility
+from .forms import (
+    WorkspaceCreateForm,
+    WorkspaceCredentialDeleteForm,
+    WorkspaceCredentialUpsertForm,
+    WorkspaceMemberAddForm,
+    WorkspaceMemberUpdateForm,
+)
+from .models import (
+    MembershipAccessMode,
+    MembershipRole,
+    Workspace,
+    WorkspaceCredential,
+    WorkspaceMembership,
+    WorkspaceVisibility,
+)
 from .permissions import can_manage_members, can_manage_shares, can_view_workspace
 from .services import (
+    WorkspaceCredentialValidationError,
     WorkspaceMembershipError,
     add_workspace_member,
     create_workspace_for_user,
+    delete_workspace_credential,
     remove_workspace_member,
+    upsert_workspace_credential,
     update_workspace_member,
 )
 
@@ -91,6 +107,17 @@ def workspace_detail(request, workspace_id):
     )
     memberships = WorkspaceMembership.objects.filter(workspace=workspace).select_related("user")
     add_form = WorkspaceMemberAddForm(initial={"can_run_workflows": True})
+    credential_form = WorkspaceCredentialUpsertForm()
+    credential_delete_form = WorkspaceCredentialDeleteForm()
+    user_credentials = WorkspaceCredential.objects.none()
+    can_manage_credentials = bool(
+        request.user.is_authenticated and membership and membership.can_run_workflows
+    ) or bool(request.user.is_authenticated and request.user.is_superuser)
+    if request.user.is_authenticated:
+        user_credentials = WorkspaceCredential.objects.filter(
+            workspace=workspace,
+            user=request.user,
+        ).order_by("provider")
     share_links = WorkspaceShareLink.objects.filter(workspace=workspace).order_by("-created_at")
     investigations = Investigation.objects.filter(workspace=workspace).order_by("-updated_at")
     share_create_form = ShareLinkCreateForm(
@@ -107,6 +134,10 @@ def workspace_detail(request, workspace_id):
             "manage_members_allowed": manage_members_allowed,
             "manage_shares_allowed": manage_shares_allowed,
             "add_form": add_form,
+            "credential_form": credential_form,
+            "credential_delete_form": credential_delete_form,
+            "user_credentials": user_credentials,
+            "can_manage_credentials": can_manage_credentials,
             "share_links": share_links,
             "investigations": investigations,
             "share_create_form": share_create_form,
@@ -216,4 +247,72 @@ def remove_member(request, workspace_id, membership_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Workspace membership removed.")
+    return redirect("workspace-detail", workspace_id=workspace_id)
+
+
+@login_required
+@require_POST
+def save_credential(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not can_view_workspace(request.user, workspace):
+        raise PermissionDenied("You do not have access to this workspace.")
+    membership = WorkspaceMembership.objects.filter(
+        workspace=workspace,
+        user=request.user,
+    ).first()
+    if not request.user.is_superuser and (membership is None or not membership.can_run_workflows):
+        raise PermissionDenied("You do not have permission to manage credentials in this workspace.")
+
+    form = WorkspaceCredentialUpsertForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid credential submission.")
+        return redirect("workspace-detail", workspace_id=workspace_id)
+
+    try:
+        credential = upsert_workspace_credential(
+            actor=request.user,
+            workspace=workspace,
+            provider=form.cleaned_data["provider"],
+            api_key=form.cleaned_data["api_key"],
+            base_url=form.cleaned_data["base_url"],
+            request=request,
+        )
+    except (WorkspaceCredentialValidationError, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(
+            request,
+            f"Saved {credential.provider} credential ending in {credential.key_last4}.",
+        )
+    return redirect("workspace-detail", workspace_id=workspace_id)
+
+
+@login_required
+@require_POST
+def remove_credential(request, workspace_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    if not can_view_workspace(request.user, workspace):
+        raise PermissionDenied("You do not have access to this workspace.")
+    membership = WorkspaceMembership.objects.filter(
+        workspace=workspace,
+        user=request.user,
+    ).first()
+    if not request.user.is_superuser and (membership is None or not membership.can_run_workflows):
+        raise PermissionDenied("You do not have permission to manage credentials in this workspace.")
+
+    form = WorkspaceCredentialDeleteForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid credential delete submission.")
+        return redirect("workspace-detail", workspace_id=workspace_id)
+
+    deleted = delete_workspace_credential(
+        actor=request.user,
+        workspace=workspace,
+        provider=form.cleaned_data["provider"],
+        request=request,
+    )
+    if deleted:
+        messages.success(request, f"Deleted {form.cleaned_data['provider']} credential.")
+    else:
+        messages.warning(request, f"No {form.cleaned_data['provider']} credential found.")
     return redirect("workspace-detail", workspace_id=workspace_id)

@@ -348,3 +348,35 @@ def has_workspace_credential(*, user, workspace: Workspace, provider: str) -> bo
         user=user,
         provider=resolved_provider,
     ).exists()
+
+
+@transaction.atomic
+def delete_workspace_credential(
+    *,
+    actor,
+    workspace: Workspace,
+    provider: str,
+    request=None,
+) -> bool:
+    resolved_provider = _normalise_provider(provider)
+    credential = WorkspaceCredential.objects.filter(
+        workspace=workspace,
+        user=actor,
+        provider=resolved_provider,
+    ).first()
+    if credential is None:
+        return False
+
+    credential_id = str(credential.id)
+    key_last4 = credential.key_last4
+    credential.delete()
+    log_audit_event(
+        action_type="workspace.credential_deleted",
+        target_type="workspace_credential",
+        target_id=credential_id,
+        workspace=workspace,
+        user=actor,
+        payload={"provider": resolved_provider, "key_last4": key_last4},
+        request=request,
+    )
+    return True

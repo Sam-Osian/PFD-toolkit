@@ -15,7 +15,14 @@ from wb_runs.models import ArtifactStatus, ArtifactStorageBackend, ArtifactType,
 from wb_runs.services import queue_run
 
 from .lifecycle import run_lifecycle_maintenance
-from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceVisibility
+from .models import (
+    MembershipAccessMode,
+    MembershipRole,
+    Workspace,
+    WorkspaceCredential,
+    WorkspaceMembership,
+    WorkspaceVisibility,
+)
 from .permissions import can_edit_workspace, can_manage_members, can_run_workflows, can_view_workspace
 from .services import (
     add_workspace_member,
@@ -282,11 +289,22 @@ class WorkspaceMemberViewsTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="owner3@example.com", password="x")
         self.editor = User.objects.create_user(email="editor3@example.com", password="x")
+        self.viewer = User.objects.create_user(email="viewer3@example.com", password="x")
         self.workspace = create_workspace_for_user(
             user=self.owner,
             title="View Workspace",
             slug="view-workspace",
             description="View Desc",
+        )
+        add_workspace_member(
+            actor=self.owner,
+            workspace=self.workspace,
+            target_user=self.viewer,
+            role=MembershipRole.VIEWER,
+            access_mode=MembershipAccessMode.READ_ONLY,
+            can_run_workflows=False,
+            can_manage_members_flag=False,
+            can_manage_shares_flag=False,
         )
 
     def test_owner_can_add_member_via_view(self):
@@ -340,6 +358,63 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(response.status_code, 302)
         target_membership.refresh_from_db()
         self.assertEqual(target_membership.role, MembershipRole.EDITOR)
+
+    def test_owner_can_save_workspace_credential_via_view(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workspace-credential-save", kwargs={"workspace_id": self.workspace.id}),
+            data={
+                "provider": "openai",
+                "api_key": "sk-test-owner-1234",
+                "base_url": "",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Saved openai credential ending in 1234.")
+        self.assertTrue(
+            WorkspaceCredential.objects.filter(
+                workspace=self.workspace,
+                user=self.owner,
+                provider="openai",
+                key_last4="1234",
+            ).exists()
+        )
+
+    def test_owner_can_delete_workspace_credential_via_view(self):
+        upsert_workspace_credential(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+            api_key="sk-test-owner-1234",
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workspace-credential-remove", kwargs={"workspace_id": self.workspace.id}),
+            data={"provider": "openai"},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Deleted openai credential.")
+        self.assertFalse(
+            WorkspaceCredential.objects.filter(
+                workspace=self.workspace,
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )
+
+    def test_viewer_without_run_permission_cannot_save_workspace_credential(self):
+        self.client.force_login(self.viewer)
+        response = self.client.post(
+            reverse("workspace-credential-save", kwargs={"workspace_id": self.workspace.id}),
+            data={
+                "provider": "openai",
+                "api_key": "sk-test-viewer-1234",
+                "base_url": "",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 class WorkspaceViewActivityTests(TestCase):
