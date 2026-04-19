@@ -2,14 +2,27 @@ from __future__ import annotations
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
 
 from wb_auditlog.services import log_audit_event
 
-from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership
+from .credentials import WorkspaceCredentialError, decrypt_secret, encrypt_secret
+from .models import (
+    MembershipAccessMode,
+    MembershipRole,
+    Workspace,
+    WorkspaceCredential,
+    WorkspaceLLMProvider,
+    WorkspaceMembership,
+)
 from .permissions import can_manage_members
 
 
 class WorkspaceMembershipError(ValidationError):
+    pass
+
+
+class WorkspaceCredentialValidationError(ValidationError):
     pass
 
 
@@ -218,3 +231,120 @@ def remove_workspace_member(
         payload=payload,
         request=request,
     )
+
+
+def _normalise_provider(provider: str) -> str:
+    raw = (provider or "").strip().lower()
+    if raw not in {WorkspaceLLMProvider.OPENAI, WorkspaceLLMProvider.OPENROUTER}:
+        raise WorkspaceCredentialValidationError(f"Unsupported provider '{provider}'.")
+    return raw
+
+
+def _key_last4(api_key: str) -> str:
+    compact = (api_key or "").strip()
+    if len(compact) < 4:
+        raise WorkspaceCredentialValidationError("API key must be at least 4 characters.")
+    return compact[-4:]
+
+
+@transaction.atomic
+def upsert_workspace_credential(
+    *,
+    actor,
+    workspace: Workspace,
+    provider: str,
+    api_key: str,
+    base_url: str = "",
+    request=None,
+) -> WorkspaceCredential:
+    if not api_key or not str(api_key).strip():
+        raise WorkspaceCredentialValidationError("API key is required.")
+    resolved_provider = _normalise_provider(provider)
+    try:
+        encrypted = encrypt_secret(str(api_key))
+    except WorkspaceCredentialError as exc:
+        raise WorkspaceCredentialValidationError(str(exc)) from exc
+
+    credential, created = WorkspaceCredential.objects.get_or_create(
+        workspace=workspace,
+        user=actor,
+        provider=resolved_provider,
+        defaults={
+            "encrypted_api_key": encrypted,
+            "key_last4": _key_last4(str(api_key)),
+            "base_url": (base_url or "").strip(),
+        },
+    )
+    if not created:
+        credential.encrypted_api_key = encrypted
+        credential.key_last4 = _key_last4(str(api_key))
+        credential.base_url = (base_url or "").strip()
+        credential.save(
+            update_fields=[
+                "encrypted_api_key",
+                "key_last4",
+                "base_url",
+                "updated_at",
+            ]
+        )
+
+    log_audit_event(
+        action_type="workspace.credential_saved",
+        target_type="workspace_credential",
+        target_id=str(credential.id),
+        workspace=workspace,
+        user=actor,
+        payload={
+            "provider": credential.provider,
+            "key_last4": credential.key_last4,
+            "created": created,
+        },
+        request=request,
+    )
+    return credential
+
+
+def resolve_workspace_credential(
+    *,
+    user,
+    workspace: Workspace,
+    provider: str,
+    request=None,
+) -> tuple[str, str]:
+    resolved_provider = _normalise_provider(provider)
+    credential = WorkspaceCredential.objects.filter(
+        workspace=workspace,
+        user=user,
+        provider=resolved_provider,
+    ).first()
+    if credential is None:
+        raise WorkspaceCredentialValidationError(
+            f"No saved {resolved_provider} API key for this workspace."
+        )
+
+    try:
+        api_key = decrypt_secret(credential.encrypted_api_key)
+    except WorkspaceCredentialError as exc:
+        raise WorkspaceCredentialValidationError(str(exc)) from exc
+
+    credential.last_used_at = timezone.now()
+    credential.save(update_fields=["last_used_at", "updated_at"])
+    log_audit_event(
+        action_type="workspace.credential_used",
+        target_type="workspace_credential",
+        target_id=str(credential.id),
+        workspace=workspace,
+        user=user if user and getattr(user, "is_authenticated", False) else None,
+        payload={"provider": credential.provider, "key_last4": credential.key_last4},
+        request=request,
+    )
+    return api_key, credential.base_url
+
+
+def has_workspace_credential(*, user, workspace: Workspace, provider: str) -> bool:
+    resolved_provider = _normalise_provider(provider)
+    return WorkspaceCredential.objects.filter(
+        workspace=workspace,
+        user=user,
+        provider=resolved_provider,
+    ).exists()

@@ -66,10 +66,10 @@ If a run sets `execution_mode=simulate`, staged simulation is used for testing r
 8. `artifact_dir` (optional filesystem override for run outputs)
 9. `execution_mode` (`real` or `simulate`)
 
-Environment keys used by real adapter:
+Credential source used by real adapter:
 
-1. `OPENAI_API_KEY` for `provider=openai`
-2. `OPENROUTER_API_KEY` for `provider=openrouter`
+1. API keys are resolved from encrypted workspace credentials (`wb_workspaces.WorkspaceCredential`) for the run requester.
+2. Runs fail with adapter-configuration error if no matching credential exists for the selected provider.
 
 Artifact persistence keys:
 
@@ -175,6 +175,7 @@ Recommended services:
 Optional later:
 
 1. Redis-backed queue and push progress transport
+2. Dedicated credential KMS integration for key wrapping/rotation beyond app-level encryption key
 
 ## 9. Artifact Download Endpoint
 

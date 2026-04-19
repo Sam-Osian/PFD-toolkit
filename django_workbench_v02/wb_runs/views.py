@@ -8,6 +8,11 @@ from django.views.decorators.http import require_GET, require_POST
 from wb_investigations.models import Investigation
 from wb_notifications.services import NotificationRequestError, create_notification_request
 from wb_workspaces.permissions import can_view_workspace
+from wb_workspaces.services import (
+    WorkspaceCredentialValidationError,
+    has_workspace_credential,
+    upsert_workspace_credential,
+)
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
 from .forms import RunCancelForm, RunQueueForm
@@ -38,16 +43,44 @@ def queue_investigation_run(request, workspace_id, investigation_id):
         )
 
     try:
+        run_config = form.cleaned_data["input_config_json"] or {}
+        execution_mode = str(run_config.get("execution_mode", "real")).strip().lower()
+        provider = str(form.cleaned_data.get("provider") or "openai").strip().lower()
+        api_key = str(form.cleaned_data.get("api_key") or "").strip()
+        save_api_key = bool(form.cleaned_data.get("save_api_key", True))
+        base_url = str(form.cleaned_data.get("base_url") or "").strip()
+
+        if execution_mode != "simulate":
+            if api_key:
+                if save_api_key:
+                    upsert_workspace_credential(
+                        actor=request.user,
+                        workspace=investigation.workspace,
+                        provider=provider,
+                        api_key=api_key,
+                        base_url=base_url,
+                        request=request,
+                    )
+            else:
+                if not has_workspace_credential(
+                    user=request.user,
+                    workspace=investigation.workspace,
+                    provider=provider,
+                ):
+                    raise WorkspaceCredentialValidationError(
+                        f"No saved {provider} API key for this workspace."
+                    )
+
         run = queue_run(
             actor=request.user,
             investigation=investigation,
             run_type=form.cleaned_data["run_type"],
-            input_config_json=form.cleaned_data["input_config_json"],
+            input_config_json=run_config,
             query_start_date=form.cleaned_data["query_start_date"],
             query_end_date=form.cleaned_data["query_end_date"],
             request=request,
         )
-    except (PermissionDenied, ValidationError) as exc:
+    except (PermissionDenied, ValidationError, WorkspaceCredentialValidationError) as exc:
         messages.error(request, str(exc))
     else:
         request_completion_email = bool(form.cleaned_data.get("request_completion_email"))

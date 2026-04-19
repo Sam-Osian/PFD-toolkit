@@ -48,6 +48,9 @@ This file started as a "starting points" brief. It now also tracks delivery stat
    - `docs/adr/ADR-0001-export-bundle-architecture.md`
    - `docs/adr/ADR-0002-artifact-storage-strategy.md`
    - `docs/adr/ADR-0003-run-retry-policy.md`
+17. Encrypted workspace-scoped provider credentials for async real runs:
+   - `wb_workspaces.WorkspaceCredential`
+   - `docs/internal/WORKSPACE_CREDENTIALS.md`
 
 ### 0.3 Major Open Items For Phase 4 Close
 
@@ -151,17 +154,16 @@ See internal docs for full schema rationale and constraints.
 
 Confirmed direction for beta:
 
-1. Do not store user API keys by default.
+1. Store provider API keys only as encrypted, workspace-scoped credentials.
 2. Snapshot sharing as default mode.
 3. Public links may be viewable without login when explicitly configured.
 4. Keep strict object-level permission checks across workspace-bound resources.
 5. Keep audit logging on critical state transitions.
 
-Future if live/shared-key mode is enabled:
+Still required hardening:
 
-1. encrypted credential storage
-2. key-rotation policy
-3. breach response playbook
+1. key-rotation policy for credential encryption
+2. breach response playbook
 
 ## 7. Infrastructure Recommendations (Railway + Postgres)
 
@@ -249,6 +251,7 @@ Delivered:
 6. artifact storage abstraction with local and S3-compatible object storage backends
 7. lifecycle maintenance scheduler command and inactivity enforcement service
 8. human-view-only keepalive updates for workspace/share/investigation/run paths
+9. encrypted workspace credential storage + queue-time validation for real runs
 
 Remaining:
 

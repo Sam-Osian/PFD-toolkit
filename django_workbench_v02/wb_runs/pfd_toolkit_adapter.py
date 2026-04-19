@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import zipfile
 from contextlib import closing
 from datetime import date
@@ -14,6 +13,7 @@ from django.utils import timezone
 import pandas as pd
 from pydantic import BaseModel, Field, create_model
 from pfd_toolkit import Extractor, LLM, Screener, load_reports
+from wb_workspaces.services import WorkspaceCredentialValidationError, resolve_workspace_credential
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
 
@@ -54,27 +54,29 @@ def _normalise_parallel_workers(raw_value) -> int:
     return min(32, max(1, requested))
 
 
-def _build_llm_kwargs(config: dict) -> dict:
+def _build_llm_kwargs(*, run, config: dict) -> dict:
     provider = str(config.get("provider", "openai")).strip().lower()
     model_name = (config.get("model_name") or "gpt-4.1-mini").strip() or "gpt-4.1-mini"
     timeout = int(config.get("llm_timeout_seconds") or LLM_REQUEST_TIMEOUT_SECONDS)
+    try:
+        api_key, saved_base_url = resolve_workspace_credential(
+            user=run.requested_by,
+            workspace=run.workspace,
+            provider=provider,
+        )
+    except WorkspaceCredentialValidationError as exc:
+        raise AdapterConfigurationError(str(exc)) from exc
 
     if provider == "openrouter":
-        api_key = (os.getenv("OPENROUTER_API_KEY") or "").strip()
-        if not api_key:
-            raise AdapterConfigurationError("OPENROUTER_API_KEY is required for provider=openrouter.")
         base_url = (
             (config.get("openrouter_base_url") or "").strip()
-            or (os.getenv("OPENROUTER_BASE_URL") or "").strip()
+            or (saved_base_url or "").strip()
             or OPENROUTER_API_BASE
         )
     else:
-        api_key = (os.getenv("OPENAI_API_KEY") or "").strip()
-        if not api_key:
-            raise AdapterConfigurationError("OPENAI_API_KEY is required for provider=openai.")
         base_url = (
             (config.get("openai_base_url") or "").strip()
-            or (os.getenv("OPENAI_BASE_URL") or "").strip()
+            or (saved_base_url or "").strip()
             or None
         )
 
@@ -322,7 +324,7 @@ def execute_filter_workflow(
     if progress_callback:
         progress_callback(20, f"Loaded {total_reports:,} reports.")
 
-    llm_client = LLM(**_build_llm_kwargs(config))
+    llm_client = LLM(**_build_llm_kwargs(run=run, config=config))
     llm_client = _patch_generate_with_progress(
         llm_client=llm_client,
         progress_start=20,
@@ -416,7 +418,7 @@ def execute_themes_workflow(
     if progress_callback:
         progress_callback(18, f"Loaded {total_reports:,} reports.")
 
-    llm_client = LLM(**_build_llm_kwargs(config))
+    llm_client = LLM(**_build_llm_kwargs(run=run, config=config))
     llm_client = _patch_generate_with_progress(
         llm_client=llm_client,
         progress_start=18,
@@ -551,7 +553,7 @@ def execute_extract_workflow(
     if progress_callback:
         progress_callback(20, f"Loaded {total_reports:,} reports.")
 
-    llm_client = LLM(**_build_llm_kwargs(config))
+    llm_client = LLM(**_build_llm_kwargs(run=run, config=config))
     llm_client = _patch_generate_with_progress(
         llm_client=llm_client,
         progress_start=20,

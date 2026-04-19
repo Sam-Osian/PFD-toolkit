@@ -11,7 +11,12 @@ from wb_auditlog.models import AuditEvent
 from wb_investigations.models import InvestigationStatus
 from wb_investigations.services import create_investigation
 from wb_notifications.models import NotificationRequest, NotificationTrigger
-from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership
+from wb_workspaces.models import (
+    MembershipAccessMode,
+    MembershipRole,
+    WorkspaceCredential,
+    WorkspaceMembership,
+)
 from wb_workspaces.services import create_workspace_for_user
 
 from .artifact_storage import StoredArtifactFile
@@ -168,7 +173,7 @@ class RunViewTests(TestCase):
             ),
             data={
                 "run_type": RunType.EXPORT,
-                "input_config_json": '{"export": true}',
+                "input_config_json": '{"export": true, "execution_mode": "simulate"}',
                 "query_start_date": "",
                 "query_end_date": "",
             },
@@ -176,6 +181,63 @@ class RunViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             self.investigation.runs.filter(run_type=RunType.EXPORT).exists()
+        )
+
+    def test_queue_real_run_requires_saved_or_submitted_key(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "run-queue",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "run_type": RunType.FILTER,
+                "provider": "openai",
+                "model_name": "gpt-4.1-mini",
+                "api_key": "",
+                "input_config_json": '{"execution_mode": "real"}',
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No saved openai API key for this workspace.")
+        self.assertFalse(
+            self.investigation.runs.filter(
+                run_type=RunType.FILTER,
+                input_config_json__execution_mode="real",
+            ).exists()
+        )
+
+    def test_queue_real_run_saves_workspace_credential(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "run-queue",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "run_type": RunType.FILTER,
+                "provider": "openai",
+                "model_name": "gpt-4.1-mini",
+                "api_key": "sk-test-secret-1234",
+                "save_api_key": "on",
+                "input_config_json": '{"execution_mode": "real"}',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
+            WorkspaceCredential.objects.filter(
+                workspace=self.workspace,
+                user=self.owner,
+                provider="openai",
+                key_last4="1234",
+            ).exists()
         )
 
     def test_owner_can_queue_run_with_completion_notification(self):
@@ -190,7 +252,7 @@ class RunViewTests(TestCase):
             ),
             data={
                 "run_type": RunType.EXTRACT,
-                "input_config_json": '{"extract": true}',
+                "input_config_json": '{"extract": true, "execution_mode": "simulate"}',
                 "query_start_date": "",
                 "query_end_date": "",
                 "request_completion_email": "on",
@@ -219,7 +281,7 @@ class RunViewTests(TestCase):
             ),
             data={
                 "run_type": RunType.EXPORT,
-                "input_config_json": '{"export": true}',
+                "input_config_json": '{"export": true, "execution_mode": "simulate"}',
             },
         )
         self.assertEqual(response.status_code, 302)

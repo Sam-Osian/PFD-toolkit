@@ -29,6 +29,11 @@ class RevisionChangeType(models.TextChoices):
     SYSTEM = "system", "System"
 
 
+class WorkspaceLLMProvider(models.TextChoices):
+    OPENAI = "openai", "OpenAI"
+    OPENROUTER = "openrouter", "OpenRouter"
+
+
 class Workspace(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     created_by = models.ForeignKey(
@@ -162,3 +167,39 @@ class WorkspaceRevision(models.Model):
 
     def __str__(self) -> str:
         return f"{self.workspace} r{self.revision_number}"
+
+
+class WorkspaceCredential(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "wb_workspaces.Workspace",
+        on_delete=models.CASCADE,
+        related_name="credentials",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workspace_credentials",
+    )
+    provider = models.CharField(max_length=16, choices=WorkspaceLLMProvider.choices)
+    encrypted_api_key = models.TextField()
+    base_url = models.URLField(blank=True)
+    key_last4 = models.CharField(max_length=4)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "user", "provider"],
+                name="uniq_workspace_credential_scope",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["workspace", "user"], name="idx_ws_cred_scope"),
+            models.Index(fields=["provider"], name="idx_ws_cred_provider"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.workspace} {self.user} {self.provider}"

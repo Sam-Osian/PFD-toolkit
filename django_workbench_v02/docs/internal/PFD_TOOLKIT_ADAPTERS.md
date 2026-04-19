@@ -45,11 +45,11 @@ The export adapter is file-bundling focused and does not call LLM APIs.
 7. `start_date` / `end_date`
 8. `artifact_dir`
 
-Environment keys:
+Credential source:
 
-1. `OPENAI_API_KEY` when `provider=openai`
-2. `OPENROUTER_API_KEY` when `provider=openrouter`
-3. Optional `OPENAI_BASE_URL` / `OPENROUTER_BASE_URL` overrides
+1. Real runs resolve provider keys from encrypted `WorkspaceCredential` records scoped to `(workspace, user, provider)`.
+2. Optional `openai_base_url` / `openrouter_base_url` in `input_config_json` override saved provider base URLs.
+3. No global provider API key env vars are required for normal run execution.
 
 ### 3.2 Filter
 

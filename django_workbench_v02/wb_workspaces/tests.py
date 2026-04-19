@@ -21,6 +21,8 @@ from .services import (
     add_workspace_member,
     create_workspace_for_user,
     remove_workspace_member,
+    resolve_workspace_credential,
+    upsert_workspace_credential,
     update_workspace_member,
 )
 
@@ -215,6 +217,65 @@ class WorkspaceServiceTests(TestCase):
                 action_type="workspace.member_removed",
             ).exists()
         )
+
+
+class WorkspaceCredentialTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner-cred@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Credential Workspace",
+            slug="credential-workspace",
+            description="Credential Desc",
+        )
+
+    def test_upsert_and_resolve_workspace_credential(self):
+        upsert_workspace_credential(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+            api_key="sk-live-example-1234",
+            base_url="",
+        )
+        api_key, base_url = resolve_workspace_credential(
+            user=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+        )
+        self.assertEqual(api_key, "sk-live-example-1234")
+        self.assertEqual(base_url, "")
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                workspace=self.workspace,
+                action_type="workspace.credential_saved",
+            ).exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                workspace=self.workspace,
+                action_type="workspace.credential_used",
+            ).exists()
+        )
+
+    def test_upsert_replaces_existing_key(self):
+        upsert_workspace_credential(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+            api_key="sk-live-example-1234",
+        )
+        upsert_workspace_credential(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+            api_key="sk-live-example-9876",
+        )
+        api_key, _ = resolve_workspace_credential(
+            user=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+        )
+        self.assertEqual(api_key, "sk-live-example-9876")
 
 
 class WorkspaceMemberViewsTests(TestCase):

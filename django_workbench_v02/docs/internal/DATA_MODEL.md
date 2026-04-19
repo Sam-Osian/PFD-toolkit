@@ -2,7 +2,7 @@
 
 Status: Draft for implementation
 Owner: v0.2 rewrite
-Last updated: 2026-04-18
+Last updated: 2026-04-19
 
 ## 1. Purpose
 
@@ -25,7 +25,7 @@ It is designed to support:
 2. Workspace editability is per user-workspace relation, not global on workspace.
 3. Public workspace visibility can be no-login view access.
 4. Share links default to `snapshot` mode; `live` mode is supported.
-5. API keys are not stored server-side in baseline v0.2.
+5. API keys are stored server-side only as encrypted workspace-scoped credentials.
 6. Async runs are first-class domain objects with cancellation.
 7. Expiration uses sliding inactivity windows, not fixed-from-creation TTL.
 
@@ -214,7 +214,7 @@ Defaults:
 
 Notes:
 
-- Live mode is enabled in schema but API credential handling is deferred.
+- Live mode is enabled and uses encrypted workspace credentials for server-side async execution.
 
 ## 3.10 AuditEvent
 
@@ -482,7 +482,7 @@ erDiagram
 
 ## 9. Open Items Pinned for Later
 
-1. Secure server-side API key storage policy (if live mode ever needs autonomous reruns).
+1. Credential encryption key-rotation runbook and backward-compatibility migration plan.
 2. Full compliance policy (GDPR deletion/export obligations).
 3. Notification channel expansion beyond email.
 4. Public workspace discovery and listing policy moderation.
