@@ -1,9 +1,10 @@
+import io
 from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from wb_auditlog.models import AuditEvent
@@ -12,6 +13,7 @@ from wb_investigations.services import create_investigation
 from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership
 from wb_workspaces.services import create_workspace_for_user
 
+from .artifact_storage import StoredArtifactFile
 from .models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact, RunStatus, RunType
 from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run
@@ -310,6 +312,37 @@ class RunViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_owner_can_download_object_storage_artifact(self):
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.OBJECT_STORAGE,
+            storage_uri="s3://fake-bucket/path/to/file.csv",
+            metadata_json={},
+            size_bytes=7,
+        )
+        self.client.force_login(self.owner)
+        with patch(
+            "wb_runs.views.open_artifact_for_download",
+            return_value=(io.BytesIO(b"id,x\n1,2"), "file.csv"),
+        ) as mocked:
+            response = self.client.get(
+                reverse(
+                    "run-artifact-download",
+                    kwargs={
+                        "workspace_id": self.workspace.id,
+                        "run_id": self.run.id,
+                        "artifact_id": artifact.id,
+                    },
+                )
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment;", response.headers.get("Content-Disposition", ""))
+        self.assertEqual(response.headers.get("Content-Length"), "7")
+        mocked.assert_called_once()
+
 
 class RunWorkerTests(TestCase):
     def setUp(self):
@@ -559,3 +592,48 @@ class RunWorkerTests(TestCase):
         )
         self.assertIn("Packaged 2 files", run.events.latest("created_at").message)
         mocked.assert_called_once()
+
+    @override_settings(ARTIFACT_STORAGE_BACKEND="object_storage")
+    def test_worker_persists_output_using_object_storage_backend(self):
+        output_path = Path("/tmp/test-run-object-storage-output.csv")
+        output_path.write_text("id,matches_query\n1,True\n", encoding="utf-8")
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "real", "search_query": "medication safety"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_filter_workflow",
+            return_value={
+                "output_path": str(output_path),
+                "total_reports": 10,
+                "matched_reports": 3,
+                "output_reports": 3,
+                "search_query": "medication safety",
+                "filter_df": True,
+                "produce_spans": False,
+                "drop_spans": False,
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "report_limit": None,
+            },
+        ), patch(
+            "wb_runs.worker.store_artifact_file",
+            return_value=StoredArtifactFile(
+                storage_backend=ArtifactStorageBackend.OBJECT_STORAGE,
+                storage_uri="s3://fake-bucket/path/filter.csv",
+                size_bytes=123,
+            ),
+        ) as mocked_store:
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        artifact = run.artifacts.latest("created_at")
+        self.assertEqual(artifact.storage_backend, ArtifactStorageBackend.OBJECT_STORAGE)
+        self.assertEqual(artifact.storage_uri, "s3://fake-bucket/path/filter.csv")
+        self.assertEqual(artifact.size_bytes, 123)
+        mocked_store.assert_called_once()

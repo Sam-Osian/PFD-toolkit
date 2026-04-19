@@ -95,6 +95,7 @@ Worker behavior:
 2. Persists additional adapter return values into artifact metadata.
 3. For theme runs, creates an additional `theme_assignments` artifact when present.
 4. For export runs, stores a `bundle_export` artifact pointing to the generated zip.
+5. Applies configured artifact storage backend (`file` or `object_storage`) before persisting artifact records.
 
 ## 5. Error and Cancellation Contract
 

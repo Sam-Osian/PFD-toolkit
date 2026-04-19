@@ -43,7 +43,7 @@
         {% for artifact in artifacts %}
             <li>
                 {{ artifact.artifact_type }} | {{ artifact.status }} | {{ artifact.storage_uri|default:"-" }}
-                {% if artifact.status == "ready" and artifact.storage_backend == "file" and artifact.storage_uri %}
+                {% if artifact.status == "ready" and artifact.storage_backend != "db" and artifact.storage_uri %}
                     | <a href="{% url 'run-artifact-download' workspace_id=workspace.id run_id=run.id artifact_id=artifact.id %}">Download</a>
                 {% endif %}
             </li>

@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -10,8 +8,9 @@ from django.views.decorators.http import require_GET, require_POST
 from wb_investigations.models import Investigation
 from wb_workspaces.permissions import can_view_workspace
 
+from .artifact_storage import ArtifactStorageError, open_artifact_for_download
 from .forms import RunCancelForm, RunQueueForm
-from .models import ArtifactStatus, ArtifactStorageBackend, InvestigationRun, RunArtifact
+from .models import ArtifactStatus, InvestigationRun, RunArtifact
 from .services import (
     queue_run,
     request_run_cancellation,
@@ -128,15 +127,13 @@ def download_run_artifact(request, workspace_id, run_id, artifact_id):
     if artifact.status != ArtifactStatus.READY:
         raise Http404("Artifact is not ready.")
 
-    if artifact.storage_backend != ArtifactStorageBackend.FILE:
-        raise Http404("Artifact backend is not yet downloadable.")
-    if not artifact.storage_uri:
-        raise Http404("Artifact file is unavailable.")
-
-    source_path = Path(artifact.storage_uri)
-    if not source_path.is_file():
-        raise Http404("Artifact file was not found.")
+    try:
+        file_obj, download_name = open_artifact_for_download(artifact)
+    except ArtifactStorageError as exc:
+        raise Http404(str(exc)) from exc
 
     record_artifact_download(artifact=artifact, user=request.user, request=request)
-    download_name = source_path.name
-    return FileResponse(source_path.open("rb"), as_attachment=True, filename=download_name)
+    response = FileResponse(file_obj, as_attachment=True, filename=download_name)
+    if artifact.size_bytes is not None:
+        response["Content-Length"] = str(artifact.size_bytes)
+    return response

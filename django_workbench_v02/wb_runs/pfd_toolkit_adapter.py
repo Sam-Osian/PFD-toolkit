@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import zipfile
+from contextlib import closing
 from datetime import date
 from pathlib import Path
 from typing import Callable
@@ -13,6 +14,8 @@ from django.utils import timezone
 import pandas as pd
 from pydantic import BaseModel, Field, create_model
 from pfd_toolkit import Extractor, LLM, Screener, load_reports
+
+from .artifact_storage import ArtifactStorageError, open_artifact_for_download
 
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -613,7 +616,7 @@ def execute_export_workflow(
     progress_callback: Callable[[int, str], None] | None = None,
     cancellation_check: Callable[[], bool] | None = None,
 ) -> dict:
-    from .models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact
+    from .models import ArtifactStatus, ArtifactType, RunArtifact
 
     config = run.input_config_json or {}
     if cancellation_check and cancellation_check():
@@ -702,25 +705,22 @@ def execute_export_workflow(
                 "created_at": artifact.created_at.isoformat(),
             }
 
-            if artifact.storage_backend == ArtifactStorageBackend.FILE and artifact.storage_uri:
-                source_path = Path(artifact.storage_uri)
-                if source_path.is_file():
+            try:
+                stream, source_name = open_artifact_for_download(artifact)
+            except ArtifactStorageError as exc:
+                entry["included"] = False
+                entry["skip_reason"] = str(exc)
+                skipped_count += 1
+            else:
+                with closing(stream):
                     archive_name = (
                         f"{artifact.run.run_type}/"
-                        f"{artifact.artifact_type}_{artifact.run_id}_{source_path.name}"
+                        f"{artifact.artifact_type}_{artifact.run_id}_{source_name}"
                     )
-                    archive.write(source_path, arcname=archive_name)
-                    entry["bundle_path"] = archive_name
-                    entry["included"] = True
-                    included_files += 1
-                else:
-                    entry["included"] = False
-                    entry["skip_reason"] = "file_missing"
-                    skipped_count += 1
-            else:
-                entry["included"] = False
-                entry["skip_reason"] = "unsupported_storage_backend"
-                skipped_count += 1
+                    archive.writestr(archive_name, stream.read())
+                entry["bundle_path"] = archive_name
+                entry["included"] = True
+                included_files += 1
 
             manifest["artifacts"].append(entry)
 

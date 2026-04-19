@@ -9,6 +9,7 @@ from pathlib import Path
 from django.db import transaction
 from django.utils import timezone
 
+from .artifact_storage import ArtifactStorageError, store_artifact_file
 from .models import (
     ArtifactStatus,
     ArtifactStorageBackend,
@@ -110,17 +111,18 @@ def _create_success_artifact(
     artifact_type: str | None = None,
     storage_backend: str = ArtifactStorageBackend.DB,
     storage_uri: str | None = None,
+    size_bytes: int | None = None,
     metadata: dict | None = None,
 ) -> None:
     selected_artifact_type = artifact_type or ARTIFACT_TYPE_BY_RUN_TYPE.get(
         run.run_type, ArtifactType.PREVIEW
     )
-    size_bytes = None
-    if storage_backend == ArtifactStorageBackend.FILE and storage_uri:
+    resolved_size_bytes = size_bytes
+    if resolved_size_bytes is None and storage_backend == ArtifactStorageBackend.FILE and storage_uri:
         try:
-            size_bytes = Path(storage_uri).stat().st_size
+            resolved_size_bytes = Path(storage_uri).stat().st_size
         except OSError:
-            size_bytes = None
+            resolved_size_bytes = None
 
     RunArtifact.objects.create(
         run=run,
@@ -129,7 +131,7 @@ def _create_success_artifact(
         status=ArtifactStatus.READY,
         storage_backend=storage_backend,
         storage_uri=storage_uri or f"db://run-artifacts/{run.id}",
-        size_bytes=size_bytes,
+        size_bytes=resolved_size_bytes,
         metadata_json={
             "generated_by_worker": run.worker_id or "",
             "run_type": run.run_type,
@@ -265,7 +267,30 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
         )
 
     output_path = result.get("output_path")
-    storage_backend = ArtifactStorageBackend.FILE if output_path else ArtifactStorageBackend.DB
+    storage_backend = ArtifactStorageBackend.DB
+    storage_uri = output_path
+    size_bytes = None
+    if output_path:
+        selected_artifact_type = ARTIFACT_TYPE_BY_RUN_TYPE.get(run.run_type)
+        try:
+            stored_file = store_artifact_file(
+                source_path=Path(output_path),
+                run=current,
+                artifact_type=selected_artifact_type or ArtifactType.PREVIEW,
+            )
+        except ArtifactStorageError as exc:
+            return set_run_status(
+                run=current,
+                status=RunStatus.FAILED,
+                message="Run failed while persisting output artifact.",
+                progress_percent=current.progress_percent or 95,
+                error_code="ARTIFACT_STORAGE_ERROR",
+                error_message=str(exc),
+            )
+        storage_backend = stored_file.storage_backend
+        storage_uri = stored_file.storage_uri
+        size_bytes = stored_file.size_bytes
+
     metadata = {"adapter_workflow": run_label}
     metadata.update({key: value for key, value in result.items() if key != "output_path"})
 
@@ -273,16 +298,41 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
         current,
         artifact_type=ARTIFACT_TYPE_BY_RUN_TYPE.get(run.run_type),
         storage_backend=storage_backend,
-        storage_uri=output_path,
+        storage_uri=storage_uri,
+        size_bytes=size_bytes,
         metadata=metadata,
     )
 
     if run.run_type == RunType.THEMES and result.get("theme_assignments_path"):
+        assignments_backend = ArtifactStorageBackend.FILE
+        assignments_uri = result.get("theme_assignments_path")
+        assignments_size_bytes = None
+        if assignments_uri:
+            try:
+                stored_assignments = store_artifact_file(
+                    source_path=Path(assignments_uri),
+                    run=current,
+                    artifact_type=ArtifactType.THEME_ASSIGNMENTS,
+                )
+            except ArtifactStorageError as exc:
+                return set_run_status(
+                    run=current,
+                    status=RunStatus.FAILED,
+                    message="Run failed while persisting theme assignment artifact.",
+                    progress_percent=current.progress_percent or 95,
+                    error_code="ARTIFACT_STORAGE_ERROR",
+                    error_message=str(exc),
+                )
+            assignments_backend = stored_assignments.storage_backend
+            assignments_uri = stored_assignments.storage_uri
+            assignments_size_bytes = stored_assignments.size_bytes
+
         _create_success_artifact(
             current,
             artifact_type=ArtifactType.THEME_ASSIGNMENTS,
-            storage_backend=ArtifactStorageBackend.FILE,
-            storage_uri=result.get("theme_assignments_path"),
+            storage_backend=assignments_backend,
+            storage_uri=assignments_uri,
+            size_bytes=assignments_size_bytes,
             metadata={
                 "adapter_workflow": run_label,
                 "source": "theme_assignments",

@@ -36,6 +36,13 @@ _load_env_file(PROJECT_ROOT / "api.env")
 _load_env_file(BASE_DIR / ".env")
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -194,6 +201,24 @@ AUTH0_POST_LOGOUT_REDIRECT_URI = os.getenv(
     "http://127.0.0.1:8000/",
 )
 PFD_ADMIN_EMAIL = os.getenv("PFD_ADMIN_EMAIL", "sam.osian@oreliandata.co.uk").lower()
+
+# Artifact storage configuration
+# `file` keeps artifact paths on local disk.
+# `object_storage` uploads artifact files to S3-compatible object storage.
+ARTIFACT_STORAGE_BACKEND = os.getenv("ARTIFACT_STORAGE_BACKEND", "file").strip().lower()
+ARTIFACT_OBJECT_STORAGE_BUCKET = os.getenv("ARTIFACT_OBJECT_STORAGE_BUCKET", "").strip()
+ARTIFACT_OBJECT_STORAGE_REGION = os.getenv("ARTIFACT_OBJECT_STORAGE_REGION", "").strip()
+ARTIFACT_OBJECT_STORAGE_ENDPOINT_URL = os.getenv("ARTIFACT_OBJECT_STORAGE_ENDPOINT_URL", "").strip()
+ARTIFACT_OBJECT_STORAGE_ACCESS_KEY_ID = os.getenv("ARTIFACT_OBJECT_STORAGE_ACCESS_KEY_ID", "").strip()
+ARTIFACT_OBJECT_STORAGE_SECRET_ACCESS_KEY = os.getenv(
+    "ARTIFACT_OBJECT_STORAGE_SECRET_ACCESS_KEY",
+    "",
+).strip()
+ARTIFACT_OBJECT_STORAGE_PREFIX = os.getenv("ARTIFACT_OBJECT_STORAGE_PREFIX", "workbench-artifacts").strip()
+ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD = _env_bool(
+    "ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD",
+    True,
+)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

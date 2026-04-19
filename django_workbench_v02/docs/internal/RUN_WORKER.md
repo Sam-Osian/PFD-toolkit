@@ -71,6 +71,17 @@ Environment keys used by real adapter:
 1. `OPENAI_API_KEY` for `provider=openai`
 2. `OPENROUTER_API_KEY` for `provider=openrouter`
 
+Artifact persistence keys:
+
+1. `ARTIFACT_STORAGE_BACKEND` (`file` or `object_storage`)
+2. `ARTIFACT_OBJECT_STORAGE_BUCKET` (required for object storage mode)
+3. `ARTIFACT_OBJECT_STORAGE_REGION` (optional)
+4. `ARTIFACT_OBJECT_STORAGE_ENDPOINT_URL` (optional, for S3-compatible providers)
+5. `ARTIFACT_OBJECT_STORAGE_ACCESS_KEY_ID` (optional; falls back to environment/instance auth)
+6. `ARTIFACT_OBJECT_STORAGE_SECRET_ACCESS_KEY` (optional; falls back to environment/instance auth)
+7. `ARTIFACT_OBJECT_STORAGE_PREFIX` (optional object key prefix)
+8. `ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD` (default `true`)
+
 ### 5.2 Filter-specific keys
 
 1. `search_query` (optional; defaults to investigation question text)
@@ -166,14 +177,14 @@ Optional later:
 
 ## 9. Artifact Download Endpoint
 
-Run artifacts with `storage_backend=file` and `status=ready` can be downloaded via:
+Run artifacts with `status=ready` can be downloaded via:
 
 `/workspaces/<workspace_id>/runs/<run_id>/artifacts/<artifact_id>/download/`
 
 Behavior:
 
 1. Uses workspace-level view permissions.
-2. Returns file attachment response.
+2. Supports both local-file and object-storage backends.
 3. Emits `run.artifact_downloaded` audit events.
 4. Updates `last_viewed_at` keepalive timestamps for artifact/workspace/investigation only for likely human user-agents.
 

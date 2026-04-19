@@ -12,7 +12,7 @@ This file started as a "starting points" brief. It now also tracks delivery stat
 2. Phase 1 (Auth + Workspace Core): Completed
 3. Phase 2 (Investigation + Run Backbone): Completed
 4. Phase 3 (First AI Vertical Slice): Completed at backend level
-5. Phase 4 (Themes + Extract + Sharing): In progress (storage and lifecycle hardening pending)
+5. Phase 4 (Themes + Extract + Sharing): In progress (lifecycle/scheduler hardening pending)
 6. Phase 5 (Design System Port + Hardening): Not started
 7. Phase 6 (Migration + Cutover): Not started
 
@@ -35,12 +35,13 @@ This file started as a "starting points" brief. It now also tracks delivery stat
    - `docs/internal/AUTH_PERMISSION_SPINE.md`
    - `docs/internal/RUN_WORKER.md`
    - `docs/internal/PFD_TOOLKIT_ADAPTERS.md`
+   - `docs/internal/ARTIFACT_STORAGE.md`
 
 ### 0.3 Major Open Items For Phase 4 Close
 
 1. Artifact delivery/storage strategy for production:
-   - stable download endpoints
-   - move from local filesystem artifacts to object storage
+   - object storage backend implemented; rollout validation on Railway still needed
+   - stable download endpoints now support file and object-storage artifacts
 2. Complete "human-view-only" keepalive/expiry lifecycle logic for artifacts/workspaces (baseline now implemented for artifact downloads).
 3. Optional completion notifications (email path later, per your plan).
 
@@ -234,11 +235,11 @@ Delivered:
 3. real export workflow adapter path (zip bundle + manifest)
 4. share link lifecycle (create/update/revoke/public/private)
 5. artifact download endpoint with permission checks + download audit events
+6. artifact storage abstraction with local and S3-compatible object storage backends
 
 Remaining:
 
-1. object-storage-backed artifact backend for production
-2. wider keepalive/expiry policy enforcement job (scheduler path)
+1. wider keepalive/expiry policy enforcement job (scheduler path)
 
 ## Phase 5: Design System Port + Hardening
 
@@ -263,9 +264,8 @@ Planned:
 
 ## 10. Next 1-2 Week Plan (Updated)
 
-1. Introduce object-storage-backed artifact backend (keep local backend for development).
-2. Implement wider human-view keepalive/expiry enforcement jobs (scheduler path).
-3. Add ADRs for:
+1. Implement wider human-view keepalive/expiry enforcement jobs (scheduler path).
+2. Add ADRs for:
    - export architecture
    - artifact storage strategy
    - run retry policy
