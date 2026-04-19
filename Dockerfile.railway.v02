@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir uv
+
+COPY pyproject.toml uv.lock README.md ./
+COPY src ./src
+COPY django_workbench_v02 ./django_workbench_v02
+
+RUN uv sync --frozen --no-dev
+
+ENV PATH="/app/.venv/bin:${PATH}"
+
+WORKDIR /app/django_workbench_v02
+
+CMD ["sh", "-lc", "${START_CMD:-uv run gunicorn pfd_workbench_v02.wsgi:application --bind 0.0.0.0:${PORT} --workers 2 --timeout 180}"]

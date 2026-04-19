@@ -1,0 +1,28 @@
+# Keep deployment snapshot lean for Railway.
+.git/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Large local/runtime artifacts
+media/
+outputs/
+reports/
+build/
+dist/
+
+# Research datasets/notebooks not needed for web runtime
+ons_replication/
+tutorials/
+scripts/data/
+2025/
+claude_design/
+
+# Legacy deployment not used by v0.2 runtime
+django_workbench/
