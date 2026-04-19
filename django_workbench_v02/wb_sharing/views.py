@@ -1,8 +1,8 @@
 from django.contrib import messages
-from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
@@ -13,6 +13,7 @@ from .forms import ShareLinkCreateForm, ShareLinkUpdateForm
 from .models import WorkspaceShareLink
 from .services import (
     WorkspaceShareLinkError,
+    copy_share_link_to_workbook,
     create_share_link,
     record_share_link_view,
     revoke_share_link,
@@ -27,9 +28,10 @@ def _raise_if_inactive_or_expired(share_link: WorkspaceShareLink) -> None:
         raise Http404("This share link has expired.")
 
 
-@login_required
 @require_POST
 def create_workspace_share(request, workbook_id):
+    if not request.user.is_authenticated:
+        return redirect("accounts-login")
     workspace = get_object_or_404(Workspace, id=workbook_id)
     form = ShareLinkCreateForm(request.POST)
     if not form.is_valid():
@@ -52,9 +54,10 @@ def create_workspace_share(request, workbook_id):
     return redirect("workbook-detail", workbook_id=workbook_id)
 
 
-@login_required
 @require_POST
 def update_workspace_share(request, workbook_id, share_id):
+    if not request.user.is_authenticated:
+        return redirect("accounts-login")
     share_link = get_object_or_404(
         WorkspaceShareLink.objects.select_related("workspace"),
         id=share_id,
@@ -82,9 +85,10 @@ def update_workspace_share(request, workbook_id, share_id):
     return redirect("workbook-detail", workbook_id=workbook_id)
 
 
-@login_required
 @require_POST
 def revoke_workspace_share(request, workbook_id, share_id):
+    if not request.user.is_authenticated:
+        return redirect("accounts-login")
     share_link = get_object_or_404(
         WorkspaceShareLink.objects.select_related("workspace"),
         id=share_id,
@@ -116,3 +120,28 @@ def view_share_link(request, share_id):
         "wb_sharing/share_link_detail.html",
         {"share_link": share_link, "workspace": share_link.workspace},
     )
+
+
+@require_POST
+def copy_share_link_to_workbook_view(request, share_id):
+    share_link = get_object_or_404(
+        WorkspaceShareLink.objects.select_related("workspace", "snapshot_revision"),
+        id=share_id,
+    )
+    _raise_if_inactive_or_expired(share_link)
+
+    if not request.user.is_authenticated:
+        messages.info(request, "Log in to make an editable workbook copy.")
+        next_url = reverse("share-link-detail", kwargs={"share_id": share_id})
+        return redirect(f"{reverse('accounts-login')}?next={next_url}")
+
+    if not share_link.is_public and not can_view_workspace(request.user, share_link.workspace):
+        return redirect("accounts-login")
+
+    copied_workspace = copy_share_link_to_workbook(
+        actor=request.user,
+        share_link=share_link,
+        request=request,
+    )
+    messages.success(request, "Editable workbook copy created.")
+    return redirect("workbook-detail", workbook_id=copied_workspace.id)

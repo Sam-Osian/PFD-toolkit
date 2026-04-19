@@ -7,16 +7,30 @@ from django.urls import reverse
 from django.utils import timezone
 
 from wb_auditlog.models import AuditEvent
+from wb_investigations.models import Investigation, InvestigationStatus
+from wb_runs.models import (
+    ArtifactStatus,
+    ArtifactStorageBackend,
+    ArtifactType,
+    InvestigationRun,
+    RunArtifact,
+    RunEvent,
+    RunEventType,
+    RunStatus,
+    RunType,
+)
 from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
     WorkspaceMembership,
     WorkspaceRevision,
+    WorkspaceVisibility,
 )
 from wb_workspaces.services import create_workspace_for_user
 
 from .models import ShareMode, WorkspaceShareLink
 from .services import (
+    copy_share_link_to_workbook,
     create_share_link,
     revoke_share_link,
     update_share_link,
@@ -112,6 +126,75 @@ class ShareLinkServiceTests(TestCase):
                 workspace=self.workspace,
                 action_type="sharing.link_revoked",
                 target_id=str(share_link.id),
+            ).exists()
+        )
+
+    def test_copy_share_to_workbook_clones_history_and_sets_private_defaults(self):
+        investigation = Investigation.objects.create(
+            workspace=self.workspace,
+            created_by=self.owner,
+            title="Source Investigation",
+            question_text="Question",
+            scope_json={"scope": "all"},
+            method_json={"method": "filter"},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = InvestigationRun.objects.create(
+            investigation=investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.SUCCEEDED,
+            input_config_json={"provider": "openai"},
+        )
+        RunEvent.objects.create(
+            run=run,
+            event_type=RunEventType.INFO,
+            message="Source event",
+            payload_json={"k": "v"},
+        )
+        RunArtifact.objects.create(
+            run=run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri="/tmp/source-artifact.csv",
+            metadata_json={"origin": "source"},
+        )
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.SNAPSHOT,
+            is_public=True,
+        )
+
+        copied = copy_share_link_to_workbook(
+            actor=self.editor,
+            share_link=share_link,
+        )
+
+        self.assertEqual(copied.visibility, WorkspaceVisibility.PRIVATE)
+        self.assertFalse(copied.is_listed)
+        self.assertTrue(copied.title.endswith("(Copy)"))
+        copied_investigation = Investigation.objects.get(workspace=copied)
+        self.assertEqual(copied_investigation.title, investigation.title)
+        copied_run = InvestigationRun.objects.get(workspace=copied, investigation=copied_investigation)
+        self.assertEqual(copied_run.status, run.status)
+        self.assertEqual(copied_run.run_type, run.run_type)
+        self.assertEqual(copied_run.input_config_json, run.input_config_json)
+        self.assertTrue(RunEvent.objects.filter(run=copied_run, message="Source event").exists())
+        self.assertTrue(
+            RunArtifact.objects.filter(
+                run=copied_run,
+                workspace=copied,
+                storage_uri="/tmp/source-artifact.csv",
+            ).exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                workspace=copied,
+                action_type="sharing.workbook_copied",
             ).exists()
         )
 
@@ -215,3 +298,44 @@ class ShareLinkViewTests(TestCase):
         self.workspace.refresh_from_db()
         self.assertIsNotNone(share_link.last_viewed_at)
         self.assertIsNotNone(self.workspace.last_viewed_at)
+
+    def test_anonymous_user_copy_redirects_to_login(self):
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.SNAPSHOT,
+            is_public=True,
+        )
+        response = self.client.post(
+            reverse("share-link-copy", kwargs={"share_id": share_link.id}),
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/auth/login/", response.url)
+
+    def test_authenticated_user_can_create_editable_copy_from_share(self):
+        Investigation.objects.create(
+            workspace=self.workspace,
+            created_by=self.owner,
+            title="Source Investigation 2",
+            question_text="Question",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.SNAPSHOT,
+            is_public=True,
+        )
+        self.client.force_login(self.viewer)
+        response = self.client.post(
+            reverse("share-link-copy", kwargs={"share_id": share_link.id}),
+        )
+        self.assertEqual(response.status_code, 302)
+        copied_workspace = (
+            self.viewer.created_workspaces.exclude(id=self.workspace.id).order_by("-created_at").first()
+        )
+        self.assertIsNotNone(copied_workspace)
+        self.assertEqual(copied_workspace.visibility, WorkspaceVisibility.PRIVATE)
+        self.assertFalse(copied_workspace.is_listed)

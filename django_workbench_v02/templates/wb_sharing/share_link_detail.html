@@ -8,10 +8,20 @@
 <p>Public: {{ share_link.is_public }}</p>
 <p>Active: {{ share_link.is_active }}</p>
 <p>Expires: {{ share_link.expires_at|default:"Never" }}</p>
+<p>This shared view is read-only.</p>
 {% if share_link.snapshot_revision %}
     <p>Snapshot revision: {{ share_link.snapshot_revision.revision_number }}</p>
 {% endif %}
 {% if workspace.description %}
     <p>Description: {{ workspace.description }}</p>
+{% endif %}
+
+{% if request.user.is_authenticated %}
+<form method="post" action="{% url 'share-link-copy' share_id=share_link.id %}">
+    {% csrf_token %}
+    <button type="submit">Make editable copy</button>
+</form>
+{% else %}
+<p><a href="{% url 'accounts-login' %}?next={% url 'share-link-detail' share_id=share_link.id %}">Log in</a> to make an editable copy.</p>
 {% endif %}
 {% endblock %}

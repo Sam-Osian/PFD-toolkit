@@ -19,6 +19,7 @@ urlpatterns = [
         views.revoke_workspace_share,
         name="workbook-share-revoke",
     ),
+    path("s/<uuid:share_id>/copy/", views.copy_share_link_to_workbook_view, name="share-link-copy"),
 
     path(
         "workspaces/<uuid:workbook_id>/shares/create/",
