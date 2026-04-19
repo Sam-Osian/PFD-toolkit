@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from wb_auditlog.services import log_audit_event
+from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
 from wb_workspaces.permissions import can_edit_workspace
 
 from .models import Investigation
@@ -111,14 +112,32 @@ def update_investigation(
 
 
 def record_investigation_view(*, investigation: Investigation, user=None, request=None) -> None:
-    investigation.last_viewed_at = timezone.now()
-    investigation.save(update_fields=["last_viewed_at"])
+    now = timezone.now()
+    is_human_view = is_human_view_request(request=request)
+    if is_human_view and should_update_last_viewed(
+        existing_last_viewed_at=investigation.last_viewed_at,
+        now=now,
+    ):
+        investigation.last_viewed_at = now
+        investigation.save(update_fields=["last_viewed_at"])
+
+    workspace = investigation.workspace
+    if is_human_view and should_update_last_viewed(
+        existing_last_viewed_at=workspace.last_viewed_at,
+        now=now,
+    ):
+        workspace.last_viewed_at = now
+        workspace.save(update_fields=["last_viewed_at"])
+
     log_audit_event(
         action_type="investigation.viewed",
         target_type="investigation",
         target_id=str(investigation.id),
         workspace=investigation.workspace,
         user=user if user and user.is_authenticated else None,
-        payload={"status": investigation.status},
+        payload={
+            "status": investigation.status,
+            "is_human_view": is_human_view,
+        },
         request=request,
     )

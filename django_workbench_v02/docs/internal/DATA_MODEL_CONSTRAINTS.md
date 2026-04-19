@@ -339,7 +339,8 @@ Implementation guidance:
 1. Maintain `last_viewed_at` on Workspace, WorkspaceShareLink, and RunArtifact.
 2. Use bot filtering by user-agent + optional reverse-DNS/known crawler list.
 3. Debounce writes (e.g., no more than once per 12-24h per viewer/resource).
-4. Scheduled task marks stale artifacts `expired` when inactivity exceeds 365 days.
+4. Scheduled task (`run_lifecycle_maintenance`) marks stale artifacts `expired` when inactivity exceeds 365 days.
+5. Scheduled task may archive stale workspaces when inactivity exceeds 365 days.
 
 ## 8. Migrations and Rollout Advice
 

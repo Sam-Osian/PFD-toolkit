@@ -10,6 +10,7 @@ from wb_investigations.models import Investigation
 from wb_sharing.forms import ShareLinkCreateForm
 from wb_sharing.models import ShareMode, WorkspaceShareLink
 
+from .activity import is_human_view_request, should_update_last_viewed
 from .forms import WorkspaceCreateForm, WorkspaceMemberAddForm, WorkspaceMemberUpdateForm
 from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceVisibility
 from .permissions import can_manage_members, can_manage_shares, can_view_workspace
@@ -68,8 +69,13 @@ def workspace_detail(request, workspace_id):
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
 
-    workspace.last_viewed_at = timezone.now()
-    workspace.save(update_fields=["last_viewed_at"])
+    now = timezone.now()
+    if is_human_view_request(request=request) and should_update_last_viewed(
+        existing_last_viewed_at=workspace.last_viewed_at,
+        now=now,
+    ):
+        workspace.last_viewed_at = now
+        workspace.save(update_fields=["last_viewed_at"])
 
     membership = None
     if request.user.is_authenticated:

@@ -220,6 +220,12 @@ ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD = _env_bool(
     True,
 )
 
+# Lifecycle maintenance
+# Sliding inactivity window for keepalive/expiry policies.
+LIFECYCLE_INACTIVITY_DAYS = int(os.getenv("LIFECYCLE_INACTIVITY_DAYS", "365"))
+# Debounce interval to reduce write amplification from repeated view refreshes.
+LIFECYCLE_VIEW_DEBOUNCE_SECONDS = int(os.getenv("LIFECYCLE_VIEW_DEBOUNCE_SECONDS", "0"))
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

@@ -120,7 +120,7 @@ Sharing changes are now service-layer operations too:
 
 1. Only owners with `can_manage_shares=True` can create/update/revoke links.
 2. Snapshot links require an existing workspace revision.
-3. Share link views update `last_viewed_at` and write audit events.
+3. Likely human share-link views update `last_viewed_at` and write audit events.
 
 Investigation + run lifecycle rules:
 

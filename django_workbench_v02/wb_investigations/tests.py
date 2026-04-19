@@ -148,3 +148,41 @@ class InvestigationViewTests(TestCase):
             reverse("investigation-list", kwargs={"workspace_id": self.workspace.id})
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_bot_investigation_detail_view_does_not_update_last_viewed(self):
+        self.workspace.visibility = WorkspaceVisibility.PUBLIC
+        self.workspace.save(update_fields=["visibility"])
+
+        self.client.get(
+            reverse(
+                "investigation-detail",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            HTTP_USER_AGENT="Googlebot/2.1",
+        )
+        self.workspace.refresh_from_db()
+        self.investigation.refresh_from_db()
+        self.assertIsNone(self.workspace.last_viewed_at)
+        self.assertIsNone(self.investigation.last_viewed_at)
+
+    def test_human_investigation_detail_view_updates_last_viewed(self):
+        self.workspace.visibility = WorkspaceVisibility.PUBLIC
+        self.workspace.save(update_fields=["visibility"])
+
+        self.client.get(
+            reverse(
+                "investigation-detail",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            HTTP_USER_AGENT="Mozilla/5.0",
+        )
+        self.workspace.refresh_from_db()
+        self.investigation.refresh_from_db()
+        self.assertIsNotNone(self.workspace.last_viewed_at)
+        self.assertIsNotNone(self.investigation.last_viewed_at)

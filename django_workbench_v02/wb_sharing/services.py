@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from wb_auditlog.services import log_audit_event
+from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
 from wb_workspaces.permissions import can_manage_shares
 
 from .models import ShareMode, WorkspaceShareLink
@@ -165,11 +166,21 @@ def revoke_share_link(*, actor, share_link: WorkspaceShareLink, request=None) ->
 
 def record_share_link_view(*, share_link: WorkspaceShareLink, user=None, request=None) -> None:
     now = timezone.now()
-    share_link.last_viewed_at = now
-    share_link.save(update_fields=["last_viewed_at"])
+    is_human_view = is_human_view_request(request=request)
+    if is_human_view and should_update_last_viewed(
+        existing_last_viewed_at=share_link.last_viewed_at,
+        now=now,
+    ):
+        share_link.last_viewed_at = now
+        share_link.save(update_fields=["last_viewed_at"])
+
     workspace = share_link.workspace
-    workspace.last_viewed_at = now
-    workspace.save(update_fields=["last_viewed_at"])
+    if is_human_view and should_update_last_viewed(
+        existing_last_viewed_at=workspace.last_viewed_at,
+        now=now,
+    ):
+        workspace.last_viewed_at = now
+        workspace.save(update_fields=["last_viewed_at"])
 
     log_audit_event(
         action_type="sharing.link_viewed",
@@ -177,6 +188,10 @@ def record_share_link_view(*, share_link: WorkspaceShareLink, user=None, request
         target_id=str(share_link.id),
         workspace=workspace,
         user=user if user and user.is_authenticated else None,
-        payload={"is_public": share_link.is_public, "mode": share_link.mode},
+        payload={
+            "is_public": share_link.is_public,
+            "mode": share_link.mode,
+            "is_human_view": is_human_view,
+        },
         request=request,
     )

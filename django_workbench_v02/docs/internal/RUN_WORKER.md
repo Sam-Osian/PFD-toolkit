@@ -169,11 +169,11 @@ Recommended services:
 
 1. `web`: Django HTTP app
 2. `worker`: command `uv run python manage.py run_runs_worker --worker-id railway-worker-1 --poll-seconds 3`
+3. `scheduler` (or cron): command `uv run python manage.py run_lifecycle_maintenance`
 
 Optional later:
 
 1. Redis-backed queue and push progress transport
-2. Dedicated scheduler service for expiry/maintenance tasks
 
 ## 9. Artifact Download Endpoint
 
@@ -193,4 +193,4 @@ Behavior:
 1. Add retry policy for transient provider failures (network/rate limit classes).
 2. Add run-attempt model if multiple attempts per run are required.
 3. Add metrics (queue depth, processing duration, failure rates) and Sentry instrumentation.
-4. Move artifact files from local filesystem to managed object storage for production durability.
+4. Validate lifecycle scheduler cadence and alerting in Railway production.

@@ -1,10 +1,20 @@
+from datetime import timedelta
+import io
+
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.management import call_command
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from wb_auditlog.models import AuditEvent
+from wb_investigations.models import InvestigationStatus
+from wb_investigations.services import create_investigation
+from wb_runs.models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact, RunType
+from wb_runs.services import queue_run
 
+from .lifecycle import run_lifecycle_maintenance
 from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceVisibility
 from .permissions import can_edit_workspace, can_manage_members, can_run_workflows, can_view_workspace
 from .services import (
@@ -269,3 +279,176 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(response.status_code, 302)
         target_membership.refresh_from_db()
         self.assertEqual(target_membership.role, MembershipRole.EDITOR)
+
+
+class WorkspaceViewActivityTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner4@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Activity Workspace",
+            slug="activity-workspace",
+            description="Activity Desc",
+        )
+
+    def test_workspace_detail_bot_view_does_not_update_last_viewed(self):
+        self.client.force_login(self.owner)
+        self.client.get(
+            reverse("workspace-detail", kwargs={"workspace_id": self.workspace.id}),
+            HTTP_USER_AGENT="Googlebot/2.1",
+        )
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.last_viewed_at)
+
+    def test_workspace_detail_human_view_updates_last_viewed(self):
+        self.client.force_login(self.owner)
+        self.client.get(
+            reverse("workspace-detail", kwargs={"workspace_id": self.workspace.id}),
+            HTTP_USER_AGENT="Mozilla/5.0",
+        )
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.last_viewed_at)
+
+
+class LifecycleMaintenanceTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner5@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Lifecycle Workspace",
+            slug="lifecycle-workspace",
+            description="Lifecycle Desc",
+        )
+        self.investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Lifecycle Investigation",
+            question_text="Question",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        self.run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={},
+        )
+
+    def test_lifecycle_job_expires_stale_artifacts(self):
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri="/tmp/lifecycle-stale.csv",
+            metadata_json={},
+        )
+        old_seen_at = timezone.now() - timedelta(days=400)
+        RunArtifact.objects.filter(id=artifact.id).update(
+            created_at=old_seen_at,
+            last_viewed_at=old_seen_at,
+        )
+
+        result = run_lifecycle_maintenance(inactivity_days=365, archive_workspaces=False)
+        artifact.refresh_from_db()
+
+        self.assertEqual(result.artifacts_expired, 1)
+        self.assertEqual(artifact.status, ArtifactStatus.EXPIRED)
+        self.assertIsNotNone(artifact.expires_at)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action_type="run.artifact_expired_inactive",
+                target_id=str(artifact.id),
+            ).exists()
+        )
+
+    def test_lifecycle_job_refreshes_expiry_for_recently_viewed_artifacts(self):
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri="/tmp/lifecycle-recent.csv",
+            metadata_json={},
+        )
+        created_at = timezone.now() - timedelta(days=500)
+        recently_viewed_at = timezone.now() - timedelta(days=2)
+        RunArtifact.objects.filter(id=artifact.id).update(
+            created_at=created_at,
+            last_viewed_at=recently_viewed_at,
+            expires_at=timezone.now() - timedelta(days=100),
+        )
+
+        result = run_lifecycle_maintenance(inactivity_days=365, archive_workspaces=False)
+        artifact.refresh_from_db()
+        expected_expires_at = recently_viewed_at + timedelta(days=365)
+
+        self.assertEqual(result.artifacts_expired, 0)
+        self.assertEqual(result.artifacts_expiry_refreshed, 1)
+        self.assertEqual(artifact.status, ArtifactStatus.READY)
+        self.assertEqual(artifact.expires_at, expected_expires_at)
+
+    def test_lifecycle_job_archives_stale_workspaces(self):
+        stale_at = timezone.now() - timedelta(days=500)
+        Workspace.objects.filter(id=self.workspace.id).update(
+            created_at=stale_at,
+            last_viewed_at=None,
+            archived_at=None,
+        )
+
+        result = run_lifecycle_maintenance(inactivity_days=365)
+        self.workspace.refresh_from_db()
+
+        self.assertEqual(result.workspaces_archived, 1)
+        self.assertIsNotNone(self.workspace.archived_at)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action_type="workspace.auto_archived_inactive",
+                target_id=str(self.workspace.id),
+            ).exists()
+        )
+
+    def test_lifecycle_job_dry_run_does_not_write(self):
+        stale_at = timezone.now() - timedelta(days=500)
+        Workspace.objects.filter(id=self.workspace.id).update(
+            created_at=stale_at,
+            last_viewed_at=None,
+            archived_at=None,
+        )
+        artifact = RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri="/tmp/lifecycle-dry-run.csv",
+            metadata_json={},
+        )
+        RunArtifact.objects.filter(id=artifact.id).update(
+            created_at=stale_at,
+            last_viewed_at=stale_at,
+        )
+
+        result = run_lifecycle_maintenance(inactivity_days=365, dry_run=True)
+        self.workspace.refresh_from_db()
+        artifact.refresh_from_db()
+
+        self.assertEqual(result.artifacts_expired, 1)
+        self.assertEqual(result.workspaces_archived, 1)
+        self.assertEqual(artifact.status, ArtifactStatus.READY)
+        self.assertIsNone(self.workspace.archived_at)
+
+    def test_lifecycle_management_command_runs(self):
+        out = io.StringIO()
+        call_command(
+            "run_lifecycle_maintenance",
+            "--dry-run",
+            "--skip-workspace-archive",
+            stdout=out,
+        )
+        joined = out.getvalue()
+        self.assertIn("DRY RUN", joined)
+        self.assertIn("Artifacts scanned", joined)

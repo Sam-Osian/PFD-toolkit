@@ -183,3 +183,35 @@ class ShareLinkViewTests(TestCase):
             reverse("share-link-detail", kwargs={"share_id": share_link.id})
         )
         self.assertEqual(response_member.status_code, 200)
+
+    def test_bot_share_view_does_not_update_last_viewed(self):
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.SNAPSHOT,
+            is_public=True,
+        )
+        self.client.get(
+            reverse("share-link-detail", kwargs={"share_id": share_link.id}),
+            HTTP_USER_AGENT="Googlebot/2.1",
+        )
+        share_link.refresh_from_db()
+        self.workspace.refresh_from_db()
+        self.assertIsNone(share_link.last_viewed_at)
+        self.assertIsNone(self.workspace.last_viewed_at)
+
+    def test_human_share_view_updates_last_viewed(self):
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.SNAPSHOT,
+            is_public=True,
+        )
+        self.client.get(
+            reverse("share-link-detail", kwargs={"share_id": share_link.id}),
+            HTTP_USER_AGENT="Mozilla/5.0",
+        )
+        share_link.refresh_from_db()
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(share_link.last_viewed_at)
+        self.assertIsNotNone(self.workspace.last_viewed_at)

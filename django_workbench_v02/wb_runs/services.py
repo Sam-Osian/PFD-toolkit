@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from wb_auditlog.services import log_audit_event
+from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
 from wb_workspaces.permissions import can_run_workflows, can_view_workspace
 
 from .models import InvestigationRun, RunArtifact, RunEvent, RunEventType, RunStatus
@@ -51,30 +52,8 @@ ALLOWED_STATUS_TRANSITIONS = {
     },
 }
 
-BOT_USER_AGENT_MARKERS = {
-    "bot",
-    "crawler",
-    "spider",
-    "slurp",
-    "headless",
-    "curl",
-    "wget",
-    "python-requests",
-}
-
-
 def is_terminal_status(status: str) -> bool:
     return status in TERMINAL_STATUSES
-
-
-def is_human_view_request(*, request=None) -> bool:
-    if request is None:
-        return True
-    user_agent = (request.META.get("HTTP_USER_AGENT") or "").strip().lower()
-    if not user_agent:
-        # Empty user-agent commonly comes from tests and some browser privacy setups.
-        return True
-    return not any(marker in user_agent for marker in BOT_USER_AGENT_MARKERS)
 
 
 def _validate_status_transition(current_status: str, next_status: str) -> None:
@@ -240,13 +219,35 @@ def request_run_cancellation(
 def record_run_view(*, run: InvestigationRun, user=None, request=None) -> None:
     if not can_view_workspace(user, run.workspace):
         raise PermissionDenied("You do not have permission to view this run.")
+
+    now = timezone.now()
+    is_human_view = is_human_view_request(request=request)
+    if is_human_view and should_update_last_viewed(
+        existing_last_viewed_at=run.workspace.last_viewed_at,
+        now=now,
+    ):
+        run.workspace.last_viewed_at = now
+        run.workspace.save(update_fields=["last_viewed_at", "updated_at"])
+
+    investigation = run.investigation
+    if is_human_view and should_update_last_viewed(
+        existing_last_viewed_at=investigation.last_viewed_at,
+        now=now,
+    ):
+        investigation.last_viewed_at = now
+        investigation.save(update_fields=["last_viewed_at", "updated_at"])
+
     log_audit_event(
         action_type="run.viewed",
         target_type="investigation_run",
         target_id=str(run.id),
         workspace=run.workspace,
         user=user if user and user.is_authenticated else None,
-        payload={"status": run.status, "run_type": run.run_type},
+        payload={
+            "status": run.status,
+            "run_type": run.run_type,
+            "is_human_view": is_human_view,
+        },
         request=request,
     )
 
@@ -258,15 +259,27 @@ def record_artifact_download(*, artifact: RunArtifact, user=None, request=None) 
     now = timezone.now()
     is_human_view = is_human_view_request(request=request)
     if is_human_view:
-        artifact.last_viewed_at = now
-        artifact.save(update_fields=["last_viewed_at", "updated_at"])
+        if should_update_last_viewed(
+            existing_last_viewed_at=artifact.last_viewed_at,
+            now=now,
+        ):
+            artifact.last_viewed_at = now
+            artifact.save(update_fields=["last_viewed_at", "updated_at"])
         workspace = artifact.workspace
-        workspace.last_viewed_at = now
-        workspace.save(update_fields=["last_viewed_at", "updated_at"])
+        if should_update_last_viewed(
+            existing_last_viewed_at=workspace.last_viewed_at,
+            now=now,
+        ):
+            workspace.last_viewed_at = now
+            workspace.save(update_fields=["last_viewed_at", "updated_at"])
 
         investigation = artifact.run.investigation
-        investigation.last_viewed_at = now
-        investigation.save(update_fields=["last_viewed_at", "updated_at"])
+        if should_update_last_viewed(
+            existing_last_viewed_at=investigation.last_viewed_at,
+            now=now,
+        ):
+            investigation.last_viewed_at = now
+            investigation.save(update_fields=["last_viewed_at", "updated_at"])
 
     log_audit_event(
         action_type="run.artifact_downloaded",
