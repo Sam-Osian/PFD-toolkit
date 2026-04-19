@@ -52,4 +52,19 @@
 {% else %}
     <p>No artifacts yet.</p>
 {% endif %}
+
+<h3>Completion Notifications</h3>
+{% if notifications %}
+    <ul>
+        {% for notification in notifications %}
+            <li>
+                {{ notification.channel }} | {{ notification.notify_on }} | {{ notification.status }} | {{ notification.user.email }}
+                {% if notification.sent_at %} | sent {{ notification.sent_at }}{% endif %}
+                {% if notification.error_message %} | error: {{ notification.error_message }}{% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No completion notifications requested.</p>
+{% endif %}
 {% endblock %}

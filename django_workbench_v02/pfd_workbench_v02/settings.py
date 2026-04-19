@@ -201,6 +201,7 @@ AUTH0_POST_LOGOUT_REDIRECT_URI = os.getenv(
     "http://127.0.0.1:8000/",
 )
 PFD_ADMIN_EMAIL = os.getenv("PFD_ADMIN_EMAIL", "sam.osian@oreliandata.co.uk").lower()
+WORKBENCH_BASE_URL = os.getenv("WORKBENCH_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 # Artifact storage configuration
 # `file` keeps artifact paths on local disk.
@@ -225,6 +226,18 @@ ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD = _env_bool(
 LIFECYCLE_INACTIVITY_DAYS = int(os.getenv("LIFECYCLE_INACTIVITY_DAYS", "365"))
 # Debounce interval to reduce write amplification from repeated view refreshes.
 LIFECYCLE_VIEW_DEBOUNCE_SECONDS = int(os.getenv("LIFECYCLE_VIEW_DEBOUNCE_SECONDS", "0"))
+
+# Notification/email delivery
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "25"))
+EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", False)
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@pfdtoolkit.org")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

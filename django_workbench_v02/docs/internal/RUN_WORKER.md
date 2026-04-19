@@ -170,6 +170,7 @@ Recommended services:
 1. `web`: Django HTTP app
 2. `worker`: command `uv run python manage.py run_runs_worker --worker-id railway-worker-1 --poll-seconds 3`
 3. `scheduler` (or cron): command `uv run python manage.py run_lifecycle_maintenance`
+4. `notification-dispatcher`: command `uv run python manage.py run_notification_dispatcher --poll-seconds 5 --max-items 50`
 
 Optional later:
 

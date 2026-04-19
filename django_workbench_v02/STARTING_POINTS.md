@@ -12,7 +12,7 @@ This file started as a "starting points" brief. It now also tracks delivery stat
 2. Phase 1 (Auth + Workspace Core): Completed
 3. Phase 2 (Investigation + Run Backbone): Completed
 4. Phase 3 (First AI Vertical Slice): Completed at backend level
-5. Phase 4 (Themes + Extract + Sharing): In progress (completion notifications pending)
+5. Phase 4 (Themes + Extract + Sharing): In progress (Railway object-storage rollout validation pending)
 6. Phase 5 (Design System Port + Hardening): Not started
 7. Phase 6 (Migration + Cutover): Not started
 
@@ -32,7 +32,10 @@ This file started as a "starting points" brief. It now also tracks delivery stat
 12. Human-view-only keepalive tracking across workspace/share/investigation/run views.
 13. Lifecycle scheduler command for inactivity expiry/archival:
    - `uv run python manage.py run_lifecycle_maintenance`
-14. Internal architecture docs:
+14. Completion email notifications:
+   - queue-time notification requests
+   - dispatcher command `uv run python manage.py run_notification_dispatcher`
+15. Internal architecture docs:
    - `docs/internal/DATA_MODEL.md`
    - `docs/internal/DATA_MODEL_CONSTRAINTS.md`
    - `docs/internal/AUTH_PERMISSION_SPINE.md`
@@ -40,13 +43,18 @@ This file started as a "starting points" brief. It now also tracks delivery stat
    - `docs/internal/PFD_TOOLKIT_ADAPTERS.md`
    - `docs/internal/ARTIFACT_STORAGE.md`
    - `docs/internal/LIFECYCLE_MAINTENANCE.md`
+   - `docs/internal/NOTIFICATIONS.md`
+16. ADR set:
+   - `docs/adr/ADR-0001-export-bundle-architecture.md`
+   - `docs/adr/ADR-0002-artifact-storage-strategy.md`
+   - `docs/adr/ADR-0003-run-retry-policy.md`
 
 ### 0.3 Major Open Items For Phase 4 Close
 
 1. Artifact delivery/storage strategy for production:
    - object storage backend implemented; rollout validation on Railway still needed
    - stable download endpoints now support file and object-storage artifacts
-2. Optional completion notifications (email path later, per your plan).
+2. Notification deliverability and sender configuration validation on Railway.
 
 ## 1. Objective
 
@@ -89,7 +97,7 @@ Current app split (with `wb_` prefixes) follows the intended boundaries:
 4. `wb_runs`: runs, events, artifacts, async worker
 5. `wb_sharing`: share links and public/private access behavior
 6. `wb_auditlog`: audit trail
-7. `wb_notifications`: notification request scaffolding
+7. `wb_notifications`: notification requests and email dispatching
 
 ## 4.2 Service Layer + Adapters
 
@@ -244,7 +252,7 @@ Delivered:
 
 Remaining:
 
-1. completion notification worker path (email)
+1. Railway object-storage rollout validation and operational checks
 
 ## Phase 5: Design System Port + Hardening
 
@@ -270,11 +278,8 @@ Planned:
 ## 10. Next 1-2 Week Plan (Updated)
 
 1. Operationalize lifecycle scheduler cadence in Railway production.
-2. Add ADRs for:
-   - export architecture
-   - artifact storage strategy
-   - run retry policy
-3. Implement completion notification delivery flow.
+2. Operationalize notification dispatcher cadence in Railway production.
+3. Validate SMTP/provider configuration and sender identity for production.
 
 ## 11. Confirmed Decision Log (Current)
 

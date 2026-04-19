@@ -10,6 +10,7 @@ from django.urls import reverse
 from wb_auditlog.models import AuditEvent
 from wb_investigations.models import InvestigationStatus
 from wb_investigations.services import create_investigation
+from wb_notifications.models import NotificationRequest, NotificationTrigger
 from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership
 from wb_workspaces.services import create_workspace_for_user
 
@@ -175,6 +176,35 @@ class RunViewTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(
             self.investigation.runs.filter(run_type=RunType.EXPORT).exists()
+        )
+
+    def test_owner_can_queue_run_with_completion_notification(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "run-queue",
+                kwargs={
+                    "workspace_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "run_type": RunType.EXTRACT,
+                "input_config_json": '{"extract": true}',
+                "query_start_date": "",
+                "query_end_date": "",
+                "request_completion_email": "on",
+                "notify_on": NotificationTrigger.ANY,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        created_run = self.investigation.runs.filter(run_type=RunType.EXTRACT).latest("created_at")
+        self.assertTrue(
+            NotificationRequest.objects.filter(
+                run=created_run,
+                user=self.owner,
+                notify_on=NotificationTrigger.ANY,
+            ).exists()
         )
 
     def test_viewer_cannot_queue_run_via_view(self):

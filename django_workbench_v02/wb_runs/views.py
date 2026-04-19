@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
 from wb_investigations.models import Investigation
+from wb_notifications.services import NotificationRequestError, create_notification_request
 from wb_workspaces.permissions import can_view_workspace
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
@@ -37,7 +38,7 @@ def queue_investigation_run(request, workspace_id, investigation_id):
         )
 
     try:
-        queue_run(
+        run = queue_run(
             actor=request.user,
             investigation=investigation,
             run_type=form.cleaned_data["run_type"],
@@ -49,7 +50,25 @@ def queue_investigation_run(request, workspace_id, investigation_id):
     except (PermissionDenied, ValidationError) as exc:
         messages.error(request, str(exc))
     else:
-        messages.success(request, "Run queued.")
+        request_completion_email = bool(form.cleaned_data.get("request_completion_email"))
+        if request_completion_email:
+            notify_on = form.cleaned_data.get("notify_on") or "any"
+            try:
+                create_notification_request(
+                    run=run,
+                    user=request.user,
+                    notify_on=notify_on,
+                    request=request,
+                )
+            except (NotificationRequestError, ValidationError) as exc:
+                messages.warning(
+                    request,
+                    f"Run queued, but completion notification could not be created: {exc}",
+                )
+            else:
+                messages.success(request, "Run queued. Completion email notification requested.")
+        else:
+            messages.success(request, "Run queued.")
 
     return redirect(
         "investigation-detail",
@@ -80,6 +99,7 @@ def run_detail(request, workspace_id, run_id):
             "cancel_form": cancel_form,
             "events": run.events.order_by("-created_at"),
             "artifacts": run.artifacts.order_by("-created_at"),
+            "notifications": run.notification_requests.select_related("user").order_by("-created_at"),
         },
     )
 
