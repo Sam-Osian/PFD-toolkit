@@ -26,6 +26,14 @@ class WorkspaceCredentialValidationError(ValidationError):
     pass
 
 
+def _ensure_admin_for_owner_assignment(*, actor, current_role: str | None, target_role: str) -> None:
+    promoting_to_owner = target_role == MembershipRole.OWNER and current_role != MembershipRole.OWNER
+    if promoting_to_owner and not getattr(actor, "is_superuser", False):
+        raise WorkspaceMembershipError(
+            "Only the site admin can grant owner role to another user."
+        )
+
+
 def _owner_memberships_queryset(workspace: Workspace):
     return WorkspaceMembership.objects.filter(
         workspace=workspace,
@@ -100,6 +108,11 @@ def add_workspace_member(
 ) -> WorkspaceMembership:
     if not can_manage_members(actor, workspace):
         raise PermissionDenied("Only owners with member-management access can add members.")
+    _ensure_admin_for_owner_assignment(
+        actor=actor,
+        current_role=None,
+        target_role=role,
+    )
 
     if WorkspaceMembership.objects.filter(workspace=workspace, user=target_user).exists():
         raise WorkspaceMembershipError("User is already a member of this workspace.")
@@ -151,6 +164,11 @@ def update_workspace_member(
         raise WorkspaceMembershipError("Membership does not belong to this workspace.")
     if not can_manage_members(actor, workspace):
         raise PermissionDenied("Only owners with member-management access can update members.")
+    _ensure_admin_for_owner_assignment(
+        actor=actor,
+        current_role=membership.role,
+        target_role=role,
+    )
 
     previous = {
         "role": membership.role,
@@ -319,7 +337,7 @@ def resolve_workspace_credential(
     ).first()
     if credential is None:
         raise WorkspaceCredentialValidationError(
-            f"No saved {resolved_provider} API key for this workspace."
+            f"No saved {resolved_provider} API key for this workbook."
         )
 
     try:

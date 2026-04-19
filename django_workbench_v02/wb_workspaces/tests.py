@@ -111,6 +111,7 @@ class WorkspaceServiceTests(TestCase):
         self.owner = User.objects.create_user(email="owner2@example.com", password="x")
         self.editor = User.objects.create_user(email="editor2@example.com", password="x")
         self.viewer = User.objects.create_user(email="viewer2@example.com", password="x")
+        self.admin = User.objects.create_superuser(email="admin@example.com", password="x")
         self.workspace = create_workspace_for_user(
             user=self.owner,
             title="Service Workspace",
@@ -147,6 +148,78 @@ class WorkspaceServiceTests(TestCase):
                 workspace=self.workspace, action_type="workspace.member_added"
             ).exists()
         )
+
+    def test_non_admin_cannot_grant_owner_role_when_adding_member(self):
+        with self.assertRaises(ValidationError):
+            add_workspace_member(
+                actor=self.owner,
+                workspace=self.workspace,
+                target_user=self.editor,
+                role=MembershipRole.OWNER,
+                access_mode=MembershipAccessMode.EDIT,
+                can_run_workflows=True,
+                can_manage_members_flag=True,
+                can_manage_shares_flag=True,
+            )
+
+    def test_admin_can_grant_owner_role_when_adding_member(self):
+        membership = add_workspace_member(
+            actor=self.admin,
+            workspace=self.workspace,
+            target_user=self.editor,
+            role=MembershipRole.OWNER,
+            access_mode=MembershipAccessMode.EDIT,
+            can_run_workflows=True,
+            can_manage_members_flag=True,
+            can_manage_shares_flag=True,
+        )
+        self.assertEqual(membership.role, MembershipRole.OWNER)
+
+    def test_non_admin_cannot_promote_member_to_owner(self):
+        membership = add_workspace_member(
+            actor=self.owner,
+            workspace=self.workspace,
+            target_user=self.editor,
+            role=MembershipRole.EDITOR,
+            access_mode=MembershipAccessMode.EDIT,
+            can_run_workflows=True,
+            can_manage_members_flag=False,
+            can_manage_shares_flag=False,
+        )
+        with self.assertRaises(ValidationError):
+            update_workspace_member(
+                actor=self.owner,
+                workspace=self.workspace,
+                membership=membership,
+                role=MembershipRole.OWNER,
+                access_mode=MembershipAccessMode.EDIT,
+                can_run_workflows=True,
+                can_manage_members_flag=True,
+                can_manage_shares_flag=True,
+            )
+
+    def test_admin_can_promote_member_to_owner(self):
+        membership = add_workspace_member(
+            actor=self.owner,
+            workspace=self.workspace,
+            target_user=self.editor,
+            role=MembershipRole.EDITOR,
+            access_mode=MembershipAccessMode.EDIT,
+            can_run_workflows=True,
+            can_manage_members_flag=False,
+            can_manage_shares_flag=False,
+        )
+        updated = update_workspace_member(
+            actor=self.admin,
+            workspace=self.workspace,
+            membership=membership,
+            role=MembershipRole.OWNER,
+            access_mode=MembershipAccessMode.EDIT,
+            can_run_workflows=True,
+            can_manage_members_flag=True,
+            can_manage_shares_flag=True,
+        )
+        self.assertEqual(updated.role, MembershipRole.OWNER)
 
     def test_non_owner_cannot_add_workspace_member(self):
         add_workspace_member(
@@ -310,7 +383,7 @@ class WorkspaceMemberViewsTests(TestCase):
     def test_owner_can_add_member_via_view(self):
         self.client.force_login(self.owner)
         response = self.client.post(
-            reverse("workspace-member-add", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-member-add", kwargs={"workbook_id": self.workspace.id}),
             data={
                 "email": self.editor.email,
                 "role": MembershipRole.EDITOR,
@@ -341,9 +414,9 @@ class WorkspaceMemberViewsTests(TestCase):
         self.client.force_login(self.editor)
         response = self.client.post(
             reverse(
-                "workspace-member-update",
+                "workbook-member-update",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "membership_id": target_membership.id,
                 },
             ),
@@ -362,7 +435,7 @@ class WorkspaceMemberViewsTests(TestCase):
     def test_owner_can_save_workspace_credential_via_view(self):
         self.client.force_login(self.owner)
         response = self.client.post(
-            reverse("workspace-credential-save", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-credential-save", kwargs={"workbook_id": self.workspace.id}),
             data={
                 "provider": "openai",
                 "api_key": "sk-test-owner-1234",
@@ -390,7 +463,7 @@ class WorkspaceMemberViewsTests(TestCase):
         )
         self.client.force_login(self.owner)
         response = self.client.post(
-            reverse("workspace-credential-remove", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-credential-remove", kwargs={"workbook_id": self.workspace.id}),
             data={"provider": "openai"},
             follow=True,
         )
@@ -407,7 +480,7 @@ class WorkspaceMemberViewsTests(TestCase):
     def test_viewer_without_run_permission_cannot_save_workspace_credential(self):
         self.client.force_login(self.viewer)
         response = self.client.post(
-            reverse("workspace-credential-save", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-credential-save", kwargs={"workbook_id": self.workspace.id}),
             data={
                 "provider": "openai",
                 "api_key": "sk-test-viewer-1234",
@@ -430,7 +503,7 @@ class WorkspaceViewActivityTests(TestCase):
     def test_workspace_detail_bot_view_does_not_update_last_viewed(self):
         self.client.force_login(self.owner)
         self.client.get(
-            reverse("workspace-detail", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-detail", kwargs={"workbook_id": self.workspace.id}),
             HTTP_USER_AGENT="Googlebot/2.1",
         )
         self.workspace.refresh_from_db()
@@ -439,7 +512,7 @@ class WorkspaceViewActivityTests(TestCase):
     def test_workspace_detail_human_view_updates_last_viewed(self):
         self.client.force_login(self.owner)
         self.client.get(
-            reverse("workspace-detail", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-detail", kwargs={"workbook_id": self.workspace.id}),
             HTTP_USER_AGENT="Mozilla/5.0",
         )
         self.workspace.refresh_from_db()

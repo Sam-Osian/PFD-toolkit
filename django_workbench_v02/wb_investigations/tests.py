@@ -8,7 +8,7 @@ from wb_workspaces.models import MembershipAccessMode, MembershipRole, Workspace
 from wb_workspaces.services import create_workspace_for_user
 
 from .models import Investigation, InvestigationStatus
-from .services import create_investigation, update_investigation
+from .services import InvestigationServiceError, create_investigation, update_investigation
 
 
 User = get_user_model()
@@ -93,6 +93,27 @@ class InvestigationServiceTests(TestCase):
             ).exists()
         )
 
+    def test_workspace_allows_only_one_investigation(self):
+        create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Primary",
+            question_text="Q1",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        with self.assertRaises(InvestigationServiceError):
+            create_investigation(
+                actor=self.owner,
+                workspace=self.workspace,
+                title="Secondary",
+                question_text="Q2",
+                scope_json={},
+                method_json={},
+                status=InvestigationStatus.DRAFT,
+            )
+
 
 class InvestigationViewTests(TestCase):
     def setUp(self):
@@ -114,10 +135,10 @@ class InvestigationViewTests(TestCase):
             status=InvestigationStatus.DRAFT,
         )
 
-    def test_owner_can_create_investigation_via_view(self):
+    def test_second_investigation_create_redirects_to_existing(self):
         self.client.force_login(self.owner)
         response = self.client.post(
-            reverse("investigation-list", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-investigation-list", kwargs={"workbook_id": self.workspace.id}),
             data={
                 "title": "Created by view",
                 "question_text": "A question",
@@ -127,16 +148,15 @@ class InvestigationViewTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(
-            Investigation.objects.filter(
-                workspace=self.workspace, title="Created by view"
-            ).exists()
+        self.assertEqual(
+            Investigation.objects.filter(workspace=self.workspace).count(),
+            1,
         )
 
     def test_stranger_cannot_view_private_workspace_investigations(self):
         self.client.force_login(self.stranger)
         response = self.client.get(
-            reverse("investigation-list", kwargs={"workspace_id": self.workspace.id})
+            reverse("workbook-investigation-list", kwargs={"workbook_id": self.workspace.id})
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn("/auth/login/", response.url)
@@ -145,7 +165,7 @@ class InvestigationViewTests(TestCase):
         self.workspace.visibility = WorkspaceVisibility.PUBLIC
         self.workspace.save(update_fields=["visibility"])
         response = self.client.get(
-            reverse("investigation-list", kwargs={"workspace_id": self.workspace.id})
+            reverse("workbook-investigation-list", kwargs={"workbook_id": self.workspace.id})
         )
         self.assertEqual(response.status_code, 200)
 
@@ -155,9 +175,9 @@ class InvestigationViewTests(TestCase):
 
         self.client.get(
             reverse(
-                "investigation-detail",
+                "workbook-investigation-detail",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),
@@ -174,9 +194,9 @@ class InvestigationViewTests(TestCase):
 
         self.client.get(
             reverse(
-                "investigation-detail",
+                "workbook-investigation-detail",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),

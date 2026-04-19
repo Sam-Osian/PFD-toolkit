@@ -165,9 +165,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse(
-                "run-queue",
+                "workbook-run-queue",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),
@@ -187,9 +187,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse(
-                "run-queue",
+                "workbook-run-queue",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),
@@ -203,7 +203,7 @@ class RunViewTests(TestCase):
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "No saved openai API key for this workspace.")
+        self.assertContains(response, "No saved openai API key for this workbook.")
         self.assertFalse(
             self.investigation.runs.filter(
                 run_type=RunType.FILTER,
@@ -215,9 +215,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse(
-                "run-queue",
+                "workbook-run-queue",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),
@@ -244,9 +244,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse(
-                "run-queue",
+                "workbook-run-queue",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),
@@ -273,9 +273,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.viewer)
         response = self.client.post(
             reverse(
-                "run-queue",
+                "workbook-run-queue",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "investigation_id": self.investigation.id,
                 },
             ),
@@ -294,8 +294,8 @@ class RunViewTests(TestCase):
         self.client.force_login(stranger)
         response = self.client.get(
             reverse(
-                "run-detail",
-                kwargs={"workspace_id": self.workspace.id, "run_id": self.run.id},
+                "workbook-run-detail",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
             )
         )
         self.assertEqual(response.status_code, 302)
@@ -305,8 +305,8 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse(
-                "run-cancel",
-                kwargs={"workspace_id": self.workspace.id, "run_id": self.run.id},
+                "workbook-run-cancel",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
             ),
             data={"cancel_reason": "Stop now"},
         )
@@ -330,9 +330,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.get(
             reverse(
-                "run-artifact-download",
+                "workbook-run-artifact-download",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "run_id": self.run.id,
                     "artifact_id": artifact.id,
                 },
@@ -365,9 +365,9 @@ class RunViewTests(TestCase):
         self.client.force_login(self.owner)
         response = self.client.get(
             reverse(
-                "run-artifact-download",
+                "workbook-run-artifact-download",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "run_id": self.run.id,
                     "artifact_id": artifact.id,
                 },
@@ -394,9 +394,9 @@ class RunViewTests(TestCase):
         self.client.force_login(stranger)
         response = self.client.get(
             reverse(
-                "run-artifact-download",
+                "workbook-run-artifact-download",
                 kwargs={
-                    "workspace_id": self.workspace.id,
+                    "workbook_id": self.workspace.id,
                     "run_id": self.run.id,
                     "artifact_id": artifact.id,
                 },
@@ -422,9 +422,9 @@ class RunViewTests(TestCase):
         ) as mocked:
             response = self.client.get(
                 reverse(
-                    "run-artifact-download",
+                    "workbook-run-artifact-download",
                     kwargs={
-                        "workspace_id": self.workspace.id,
+                        "workbook_id": self.workspace.id,
                         "run_id": self.run.id,
                         "artifact_id": artifact.id,
                     },

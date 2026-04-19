@@ -4,7 +4,7 @@
 <h2>Auth + Permission Spine (v0.2)</h2>
 {% if request.user.is_authenticated %}
     <p>Signed in as <strong>{{ request.user.email }}</strong>.</p>
-    <p>Use the dashboard to view your workspaces.</p>
+    <p>Use the dashboard to view your workbooks.</p>
 {% else %}
     <p>You are signed out.</p>
     <p><a href="{% url 'accounts-login' %}">Continue with Auth0</a></p>

@@ -5,17 +5,33 @@ from . import views
 
 urlpatterns = [
     path(
-        "workspaces/<uuid:workspace_id>/shares/create/",
+        "workbooks/<uuid:workbook_id>/shares/create/",
+        views.create_workspace_share,
+        name="workbook-share-create",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/shares/<uuid:share_id>/update/",
+        views.update_workspace_share,
+        name="workbook-share-update",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/shares/<uuid:share_id>/revoke/",
+        views.revoke_workspace_share,
+        name="workbook-share-revoke",
+    ),
+
+    path(
+        "workspaces/<uuid:workbook_id>/shares/create/",
         views.create_workspace_share,
         name="workspace-share-create",
     ),
     path(
-        "workspaces/<uuid:workspace_id>/shares/<uuid:share_id>/update/",
+        "workspaces/<uuid:workbook_id>/shares/<uuid:share_id>/update/",
         views.update_workspace_share,
         name="workspace-share-update",
     ),
     path(
-        "workspaces/<uuid:workspace_id>/shares/<uuid:share_id>/revoke/",
+        "workspaces/<uuid:workbook_id>/shares/<uuid:share_id>/revoke/",
         views.revoke_workspace_share,
         name="workspace-share-revoke",
     ),

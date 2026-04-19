@@ -83,7 +83,7 @@ def workspace_permission_required(
             workspace_id = kwargs.get(workspace_kwarg)
             workspace = get_object_or_404(Workspace, id=workspace_id)
             if not permission_check(request.user, workspace):
-                raise PermissionDenied("You do not have access to this workspace.")
+                raise PermissionDenied("You do not have access to this workbook.")
             request.workspace = workspace
             return view_func(request, *args, **kwargs)
 

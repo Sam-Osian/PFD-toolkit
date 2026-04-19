@@ -15,22 +15,33 @@ from .services import create_investigation, record_investigation_view, update_in
 
 
 @require_http_methods(["GET", "POST"])
-def investigation_list(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def investigation_list(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
 
     can_edit = bool(request.user.is_authenticated and can_edit_workspace(request.user, workspace))
+    existing_investigation = Investigation.objects.filter(workspace=workspace).first()
     if request.method == "POST":
         if not request.user.is_authenticated:
             return redirect("accounts-login")
         form = InvestigationCreateForm(request.POST)
         if not can_edit:
             messages.error(request, "You do not have permission to create investigations.")
-            return redirect("investigation-list", workspace_id=workspace.id)
+            return redirect("workbook-investigation-list", workbook_id=workspace.id)
+        if existing_investigation is not None:
+            messages.info(
+                request,
+                "This workbook already has an investigation. Opening it now.",
+            )
+            return redirect(
+                "workbook-investigation-detail",
+                workbook_id=workspace.id,
+                investigation_id=existing_investigation.id,
+            )
         if form.is_valid():
             try:
-                create_investigation(
+                investigation = create_investigation(
                     actor=request.user,
                     workspace=workspace,
                     title=form.cleaned_data["title"],
@@ -44,7 +55,12 @@ def investigation_list(request, workspace_id):
                 messages.error(request, str(exc))
             else:
                 messages.success(request, "Investigation created.")
-            return redirect("investigation-list", workspace_id=workspace.id)
+                return redirect(
+                    "workbook-investigation-detail",
+                    workbook_id=workspace.id,
+                    investigation_id=investigation.id,
+                )
+            return redirect("workbook-investigation-list", workbook_id=workspace.id)
     else:
         form = InvestigationCreateForm()
 
@@ -55,6 +71,7 @@ def investigation_list(request, workspace_id):
         {
             "workspace": workspace,
             "investigations": investigations,
+            "has_investigation": investigations.exists(),
             "can_edit": can_edit,
             "create_form": form,
         },
@@ -62,11 +79,11 @@ def investigation_list(request, workspace_id):
 
 
 @require_GET
-def investigation_detail(request, workspace_id, investigation_id):
+def investigation_detail(request, workbook_id, investigation_id):
     investigation = get_object_or_404(
         Investigation.objects.select_related("workspace", "created_by"),
         id=investigation_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     if not can_view_workspace(request.user, investigation.workspace):
         return redirect("accounts-login")
@@ -104,18 +121,18 @@ def investigation_detail(request, workspace_id, investigation_id):
 
 @login_required
 @require_POST
-def investigation_update(request, workspace_id, investigation_id):
+def investigation_update(request, workbook_id, investigation_id):
     investigation = get_object_or_404(
         Investigation.objects.select_related("workspace"),
         id=investigation_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     form = InvestigationUpdateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid investigation update form.")
         return redirect(
-            "investigation-detail",
-            workspace_id=workspace_id,
+            "workbook-investigation-detail",
+            workbook_id=workbook_id,
             investigation_id=investigation_id,
         )
 
@@ -136,7 +153,7 @@ def investigation_update(request, workspace_id, investigation_id):
         messages.success(request, "Investigation updated.")
 
     return redirect(
-        "investigation-detail",
-        workspace_id=workspace_id,
+        "workbook-investigation-detail",
+        workbook_id=workbook_id,
         investigation_id=investigation_id,
     )

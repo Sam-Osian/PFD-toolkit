@@ -37,6 +37,12 @@ class Investigation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace"],
+                name="uniq_investigation_per_workspace",
+            ),
+        ]
         indexes = [
             models.Index(fields=["workspace", "status"], name="idx_inv_workspace_status"),
             models.Index(fields=["updated_at"], name="idx_inv_updated_at"),

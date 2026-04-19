@@ -31,7 +31,7 @@ class RunQueueForm(forms.Form):
     save_api_key = forms.BooleanField(
         required=False,
         initial=True,
-        help_text="Save key for this workspace and provider.",
+        help_text="Save key for this workbook and provider.",
     )
     input_config_json = forms.JSONField(required=False, initial=dict)
     query_start_date = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))

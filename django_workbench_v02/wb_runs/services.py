@@ -77,7 +77,7 @@ def queue_run(
 ) -> InvestigationRun:
     workspace = investigation.workspace
     if not can_run_workflows(actor, workspace):
-        raise PermissionDenied("You do not have permission to run workflows in this workspace.")
+        raise PermissionDenied("You do not have permission to run workflows in this workbook.")
 
     run = InvestigationRun.objects.create(
         investigation=investigation,

@@ -29,12 +29,12 @@ def _raise_if_inactive_or_expired(share_link: WorkspaceShareLink) -> None:
 
 @login_required
 @require_POST
-def create_workspace_share(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def create_workspace_share(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     form = ShareLinkCreateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid share link form submission.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     try:
         create_share_link(
@@ -49,21 +49,21 @@ def create_workspace_share(request, workspace_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Share link created.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @login_required
 @require_POST
-def update_workspace_share(request, workspace_id, share_id):
+def update_workspace_share(request, workbook_id, share_id):
     share_link = get_object_or_404(
         WorkspaceShareLink.objects.select_related("workspace"),
         id=share_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     form = ShareLinkUpdateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid share update form submission.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     try:
         update_share_link(
@@ -79,16 +79,16 @@ def update_workspace_share(request, workspace_id, share_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Share link updated.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @login_required
 @require_POST
-def revoke_workspace_share(request, workspace_id, share_id):
+def revoke_workspace_share(request, workbook_id, share_id):
     share_link = get_object_or_404(
         WorkspaceShareLink.objects.select_related("workspace"),
         id=share_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     try:
         revoke_share_link(actor=request.user, share_link=share_link, request=request)
@@ -96,7 +96,7 @@ def revoke_workspace_share(request, workspace_id, share_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Share link revoked.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @require_GET

@@ -23,18 +23,18 @@ def _require_auth0_settings() -> bool:
 @require_GET
 def auth_login(request: HttpRequest) -> HttpResponse:
     if request.user.is_authenticated:
-        return redirect("workspace-dashboard")
+        return redirect("workbook-dashboard")
 
     if not _require_auth0_settings():
         return HttpResponseBadRequest("Auth0 is not configured on this environment.")
 
-    next_url = request.GET.get("next", reverse("workspace-dashboard"))
+    next_url = request.GET.get("next", reverse("workbook-dashboard"))
     if not url_has_allowed_host_and_scheme(
         url=next_url,
         allowed_hosts={request.get_host()},
         require_https=request.is_secure(),
     ):
-        next_url = reverse("workspace-dashboard")
+        next_url = reverse("workbook-dashboard")
 
     state = secrets.token_urlsafe(32)
     request.session["auth0_oauth_state"] = state
@@ -107,13 +107,13 @@ def auth_callback(request: HttpRequest) -> HttpResponse:
         return HttpResponseBadRequest("Account is inactive. Contact the administrator.")
 
     login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-    next_url = request.session.pop("auth0_next", reverse("workspace-dashboard"))
+    next_url = request.session.pop("auth0_next", reverse("workbook-dashboard"))
     if not url_has_allowed_host_and_scheme(
         url=next_url,
         allowed_hosts={request.get_host()},
         require_https=request.is_secure(),
     ):
-        next_url = reverse("workspace-dashboard")
+        next_url = reverse("workbook-dashboard")
     return redirect(next_url)
 
 

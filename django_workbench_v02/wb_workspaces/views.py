@@ -58,8 +58,8 @@ def dashboard(request):
             workspace.visibility = form.cleaned_data["visibility"]
             workspace.is_listed = form.cleaned_data["is_listed"]
             workspace.save(update_fields=["visibility", "is_listed", "updated_at"])
-            messages.success(request, f"Workspace '{workspace.title}' created.")
-            return redirect("workspace-detail", workspace_id=workspace.id)
+            messages.success(request, f"Workbook '{workspace.title}' created.")
+            return redirect("workbook-detail", workbook_id=workspace.id)
     else:
         form = WorkspaceCreateForm()
 
@@ -80,8 +80,8 @@ def dashboard(request):
 
 
 @require_GET
-def workspace_detail(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def workspace_detail(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
 
@@ -162,18 +162,18 @@ def public_workspace_list(request):
 
 @login_required
 @require_POST
-def add_member(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def add_member(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     form = WorkspaceMemberAddForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid member form submission.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     target_email = form.cleaned_data["email"].strip().lower()
     target_user = User.objects.filter(email__iexact=target_email).first()
     if target_user is None:
         messages.error(request, f"No account exists for {target_email}.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     try:
         add_workspace_member(
@@ -190,14 +190,14 @@ def add_member(request, workspace_id):
     except (WorkspaceMembershipError, ValidationError, PermissionDenied) as exc:
         messages.error(request, str(exc))
     else:
-        messages.success(request, f"{target_user.email} added to workspace.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+        messages.success(request, f"{target_user.email} added to workbook.")
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @login_required
 @require_POST
-def update_member(request, workspace_id, membership_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def update_member(request, workbook_id, membership_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     membership = get_object_or_404(
         WorkspaceMembership,
         id=membership_id,
@@ -206,7 +206,7 @@ def update_member(request, workspace_id, membership_id):
     form = WorkspaceMemberUpdateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid member update form submission.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     try:
         update_workspace_member(
@@ -224,13 +224,13 @@ def update_member(request, workspace_id, membership_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, f"{membership.user.email} membership updated.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @login_required
 @require_POST
-def remove_member(request, workspace_id, membership_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def remove_member(request, workbook_id, membership_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     membership = get_object_or_404(
         WorkspaceMembership,
         id=membership_id,
@@ -246,27 +246,27 @@ def remove_member(request, workspace_id, membership_id):
     except (WorkspaceMembershipError, ValidationError, PermissionDenied) as exc:
         messages.error(request, str(exc))
     else:
-        messages.success(request, "Workspace membership removed.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+        messages.success(request, "Workbook membership removed.")
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @login_required
 @require_POST
-def save_credential(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def save_credential(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
-        raise PermissionDenied("You do not have access to this workspace.")
+        raise PermissionDenied("You do not have access to this workbook.")
     membership = WorkspaceMembership.objects.filter(
         workspace=workspace,
         user=request.user,
     ).first()
     if not request.user.is_superuser and (membership is None or not membership.can_run_workflows):
-        raise PermissionDenied("You do not have permission to manage credentials in this workspace.")
+        raise PermissionDenied("You do not have permission to manage credentials in this workbook.")
 
     form = WorkspaceCredentialUpsertForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid credential submission.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     try:
         credential = upsert_workspace_credential(
@@ -284,26 +284,26 @@ def save_credential(request, workspace_id):
             request,
             f"Saved {credential.provider} credential ending in {credential.key_last4}.",
         )
-    return redirect("workspace-detail", workspace_id=workspace_id)
+    return redirect("workbook-detail", workbook_id=workbook_id)
 
 
 @login_required
 @require_POST
-def remove_credential(request, workspace_id):
-    workspace = get_object_or_404(Workspace, id=workspace_id)
+def remove_credential(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
-        raise PermissionDenied("You do not have access to this workspace.")
+        raise PermissionDenied("You do not have access to this workbook.")
     membership = WorkspaceMembership.objects.filter(
         workspace=workspace,
         user=request.user,
     ).first()
     if not request.user.is_superuser and (membership is None or not membership.can_run_workflows):
-        raise PermissionDenied("You do not have permission to manage credentials in this workspace.")
+        raise PermissionDenied("You do not have permission to manage credentials in this workbook.")
 
     form = WorkspaceCredentialDeleteForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid credential delete submission.")
-        return redirect("workspace-detail", workspace_id=workspace_id)
+        return redirect("workbook-detail", workbook_id=workbook_id)
 
     deleted = delete_workspace_credential(
         actor=request.user,
@@ -315,4 +315,4 @@ def remove_credential(request, workspace_id):
         messages.success(request, f"Deleted {form.cleaned_data['provider']} credential.")
     else:
         messages.warning(request, f"No {form.cleaned_data['provider']} credential found.")
-    return redirect("workspace-detail", workspace_id=workspace_id)
+    return redirect("workbook-detail", workbook_id=workbook_id)

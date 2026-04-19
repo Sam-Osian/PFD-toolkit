@@ -145,7 +145,7 @@ class ShareLinkViewTests(TestCase):
     def test_owner_can_create_share_via_view(self):
         self.client.force_login(self.owner)
         response = self.client.post(
-            reverse("workspace-share-create", kwargs={"workspace_id": self.workspace.id}),
+            reverse("workbook-share-create", kwargs={"workbook_id": self.workspace.id}),
             data={"mode": ShareMode.SNAPSHOT, "is_public": "on"},
         )
         self.assertEqual(response.status_code, 302)

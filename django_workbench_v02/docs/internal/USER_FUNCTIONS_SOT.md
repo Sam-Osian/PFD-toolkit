@@ -1,0 +1,184 @@
+# PFD Toolkit Workbench - User Function Source of Truth
+
+Last updated: 2026-04-19
+Scope: authoritative user/admin function inventory across v0.1 (`django_workbench`) and v0.2 (`django_workbench_v02`).
+
+## Product Contract (Agreed)
+- `Workbook` is the product term. (Current code still uses `Workspace` model/URLs; rename pending.)
+- One workbook has exactly one investigation bundle (filter/themes/extract).
+- Every workflow run is anchored to a workbook.
+- Shared links are always read-only for viewers.
+- Viewers can create their own editable copy.
+- Only admin can assign owner role to additional users.
+- All significant actions must be persistently logged (query text, options, run config, state changes).
+- Excluded-report suite must exist in v0.2.
+- Collections must exist in v0.2.
+
+## Legend
+- `[NEW]`: introduced in v0.2.
+- Access levels:
+  - `Public`: no login required.
+  - `User`: authenticated non-owner member.
+  - `Owner`: workbook owner (non-admin).
+  - `Admin`: site admin (superuser).
+
+## Role Boundary Matrix (Current Intended Policy)
+
+| Capability | Public | User | Owner | Admin |
+|---|---|---|---|---|
+| View public share link (read-only) | Yes | Yes | Yes | Yes |
+| Create workbook | No | Yes | Yes | Yes |
+| Edit workbook contents | No | If edit access | Yes | Yes |
+| Add/update/remove non-owner members | No | No | Yes (if owner has member management) | Yes |
+| Grant owner role to another user | No | No | No | Yes |
+| Create/revoke share links | No | No | Yes (if owner has share management) | Yes |
+| Queue/cancel workflow runs | No | If run permission | Yes | Yes |
+| Download artifacts (authorized scope) | Public share only | Yes (if can view workbook) | Yes | Yes |
+| Django admin data management | No | No | No | Yes |
+
+## Categorized Function Inventory
+
+### 1) Access and Identity
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Landing/home page | Public | Yes | Yes | v0.1 `/`, `/home/`; v0.2 `/` |
+| [NEW] Auth0 login/callback/logout | Public->User | No | Yes | `/auth/login/`, `/auth/callback/`, `/auth/logout/` |
+| [NEW] Admin login proxy via Auth0 | Admin | No | Yes | `/admin/login/` |
+
+### 2) Workbook Lifecycle
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Create workbook container | User | Session-only implicit | Yes | POST `/workspaces/` |
+| List my workbooks | User | No | Yes | GET `/workspaces/` |
+| Workbook detail page | Public/User/Owner/Admin (permissioned) | Explore page only | Yes | GET `/workspaces/<id>/` |
+| [NEW] Public workbook listing | Public | No | Yes | GET `/workspaces/public/` |
+
+### 3) Membership and Permissions
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Add member by email | Owner/Admin | No | Yes | POST `/workspaces/<id>/members/add/` |
+| Update member flags and access mode | Owner/Admin | No | Yes | POST `/workspaces/<id>/members/<id>/update/` |
+| Remove member | Owner/Admin | No | Yes | POST `/workspaces/<id>/members/<id>/remove/` |
+| Grant owner role to another user | Admin only | No | [NEW] Enforced in service layer | `add_workspace_member`, `update_workspace_member` |
+| Per-member read-only/edit mode | Owner/Admin | No | Yes | membership forms |
+| Per-member run permission | Owner/Admin | No | Yes | membership forms |
+
+### 4) Credentials (Per-user in Workbook Scope)
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Save encrypted OpenAI/OpenRouter key | User/Owner/Admin with run permission | Session key only | Yes | POST `/workspaces/<id>/credentials/save/` |
+| Delete saved key | User/Owner/Admin with run permission | No | Yes | POST `/workspaces/<id>/credentials/remove/` |
+| Optional custom base URL | User/Owner/Admin | No | Yes | credential form |
+
+### 5) Investigation Bundle
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Create investigation | Owner/Admin or edit member | No | Yes | POST `/workspaces/<id>/investigations/` |
+| Update investigation | Owner/Admin or edit member | No | Yes | POST `/workspaces/<id>/investigations/<id>/update/` |
+| View investigation detail and runs | permissioned viewers | No | Yes | GET `/workspaces/<id>/investigations/<id>/` |
+| Constraint target: exactly one investigation per workbook | n/a | n/a | Pending schema tightening | (currently many investigations per workspace) |
+
+### 6) Workflow Runs (Async)
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Queue filter run | User/Owner/Admin with run permission | SSE in-page | Yes | POST `.../runs/queue/` (`run_type=filter`) |
+| Queue themes run | User/Owner/Admin with run permission | SSE in-page | Yes | POST `.../runs/queue/` (`run_type=themes`) |
+| Queue extract run | User/Owner/Admin with run permission | SSE in-page | Yes | POST `.../runs/queue/` (`run_type=extract`) |
+| [NEW] Queue export run | User/Owner/Admin with run permission | No dedicated run type | Yes | POST `.../runs/queue/` (`run_type=export`) |
+| [NEW] Run status timeline/events | permissioned viewers | Partial/SSE only | Yes | GET `/workspaces/<id>/runs/<id>/` |
+| [NEW] Cancel run | requester/authorized member/admin | No | Yes | POST `/workspaces/<id>/runs/<id>/cancel/` |
+
+### 7) Artifacts and Exports
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Download run artifact | permissioned viewers | Bundle export | Yes | GET `/workspaces/<id>/runs/<id>/artifacts/<id>/download/` |
+| Download multi-file dataset bundle | User/Owner | Yes | Partially (export run path) | v0.1 `download_bundle`; v0.2 export artifacts |
+| [NEW] Artifact lifecycle states and expiry | system + viewers | No | Yes | artifact model + lifecycle job |
+
+### 8) Sharing and Read-Only Access
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Create share link | Owner/Admin with share permission | Yes | Yes | POST `/workspaces/<id>/shares/create/` |
+| Update/revoke share link | Owner/Admin with share permission | Limited | Yes | POST `/shares/<id>/update/`, `/revoke/` |
+| Public share viewing | Public (if share public) | Yes | Yes | v0.1 workbook public URL; v0.2 `/s/<share_id>/` |
+| Share link expiry and active toggle | Owner/Admin | No | Yes | share forms |
+| Share mode live/snapshot setting | Owner/Admin | No | Yes (exists) |
+| Policy target: all shared views read-only | Public/User | Yes | Enforce as core rule |
+| Editable copy from shared view | User/Owner/Admin | Yes | Pending parity completion | v0.1 `workbook_clone`/collection clone |
+
+### 9) Collections and Browsing
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Browse curated collections | Public/User | Yes | Pending | v0.1 `/browse/` |
+| Browse collection detail + dashboard | Public/User | Yes | Pending | v0.1 `/browse/<slug>/` |
+| Custom search collection | Public/User | Yes | Pending | v0.1 custom-search flow |
+| Clone collection into editable copy | User | Yes | Pending | v0.1 `/browse/<slug>/clone/` |
+
+### 10) Dataset Curation and State History
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Load dataset/date/report bounds | User | Yes | Partial via run config | v0.1 `load_reports` |
+| Exclude report from active set | User/Owner | Yes | Pending parity | v0.1 `exclude_report` |
+| Restore excluded report | User/Owner | Yes | Pending parity | v0.1 `restore_excluded_report` |
+| Revert/start-over/undo/redo | User/Owner | Yes | Partial model groundwork | v0.1 actions |
+| Persisted revision history | system/user action logging | No | [NEW] model exists; UX pending | `WorkspaceRevision` |
+| Full action logging incl. queries/options | system | Partial | [NEW] audit foundation exists; deeper action cache still to complete |
+
+### 11) Notifications
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| [NEW] Request completion email at queue time | User/Owner/Admin | No | Yes | run queue form |
+| [NEW] Trigger policy (`success`/`failure`/`any`) | User/Owner/Admin | No | Yes | `notify_on` |
+| [NEW] Dispatcher sends terminal-state email | system | No | Yes | notification dispatcher command/service |
+
+### 12) Keepalive and Expiry
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| [NEW] Human-view keepalive (bot-filtered) | system | No | Yes | view tracking services |
+| [NEW] Auto-expire inactive artifacts | system | No | Yes | lifecycle maintenance |
+| [NEW] Auto-archive inactive workbooks | system | No | Yes | lifecycle maintenance |
+
+### 13) Admin-Only Operations
+| Function | Access | v0.1 | v0.2 | Entry points |
+|---|---|---|---|---|
+| Manage users and permissions | Admin | Basic | [NEW] custom user admin | Django admin |
+| Manage workbooks, memberships, investigations | Admin | No | Yes | Django admin |
+| Manage runs, artifacts, shares, notifications | Admin | No | Yes | Django admin |
+| Inspect audit events | Admin | No | [NEW] Yes | Django admin |
+| Ensure admin account | Admin/ops | No | [NEW] Yes | `manage.py ensure_admin_user` |
+
+## v0.1 Explicit Action Surface (for parity tracking)
+- `load_reports`
+- `set_active_action`
+- `filter_reports`
+- `discover_themes`
+- `accept_themes`
+- `discard_themes`
+- `extract_features`
+- `undo`
+- `redo`
+- `start_over`
+- `revert_reports`
+- `exclude_report`
+- `restore_excluded_report`
+- `refresh_collections_cache`
+- `download_bundle`
+- `set_ui_theme`
+- `save_settings`
+
+SSE endpoints in v0.1:
+- `POST /sse/filter/`
+- `POST /sse/themes/`
+- `POST /sse/extract/`
+
+## Immediate Enforcement Notes (implemented now)
+- Non-admin owners can manage members but cannot promote anyone to owner.
+- Admin retains ability to assign owner role.
+
+## Next Contract Locks to Implement
+1. Rename `Workspace` -> `Workbook` in models/routes/UI.
+2. Enforce exactly one investigation per workbook in schema.
+3. Enforce read-only semantics in share-view endpoints/UI and complete editable-copy flow.
+4. Port excluded-report suite into v0.2 pages and run contracts.
+5. Implement collections in v0.2 using Claude mock-up and existing v0.1 behavior.
+6. Expand persisted action-cache beyond current audit events (query/options payload level).

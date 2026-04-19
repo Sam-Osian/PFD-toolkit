@@ -4,7 +4,7 @@
 <h2>Run {{ run.id }}</h2>
 <p>
     Investigation:
-    <a href="{% url 'investigation-detail' workspace_id=workspace.id investigation_id=investigation.id %}">
+    <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">
         {{ investigation.title }}
     </a>
 </p>
@@ -20,7 +20,7 @@
 {% endif %}
 
 <h3>Request Cancellation</h3>
-<form method="post" action="{% url 'run-cancel' workspace_id=workspace.id run_id=run.id %}">
+<form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}">
     {% csrf_token %}
     {{ cancel_form.as_p }}
     <button type="submit">Cancel run</button>
@@ -44,7 +44,7 @@
             <li>
                 {{ artifact.artifact_type }} | {{ artifact.status }} | {{ artifact.storage_uri|default:"-" }}
                 {% if artifact.status == "ready" and artifact.storage_backend != "db" and artifact.storage_uri %}
-                    | <a href="{% url 'run-artifact-download' workspace_id=workspace.id run_id=run.id artifact_id=artifact.id %}">Download</a>
+                    | <a href="{% url 'workbook-run-artifact-download' workbook_id=workspace.id run_id=run.id artifact_id=artifact.id %}">Download</a>
                 {% endif %}
             </li>
         {% endfor %}

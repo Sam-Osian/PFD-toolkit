@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Public Workspaces</h2>
+<h2>Public Workbooks</h2>
 {% if workspaces %}
     <ul>
         {% for workspace in workspaces %}
             <li>
-                <a href="{% url 'workspace-detail' workspace_id=workspace.id %}">
+                <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">
                     {{ workspace.title }}
                 </a>
             </li>
         {% endfor %}
     </ul>
 {% else %}
-    <p>No listed public workspaces are available.</p>
+    <p>No listed public workbooks are available.</p>
 {% endif %}
 {% endblock %}

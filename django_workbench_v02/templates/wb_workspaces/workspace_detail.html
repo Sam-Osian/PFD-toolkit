@@ -7,16 +7,16 @@
 {% if membership %}
     <p>Your role: {{ membership.role }} | Access: {{ membership.access_mode }}</p>
 {% else %}
-    <p>You are viewing this workspace as a guest.</p>
+    <p>You are viewing this workbook as a guest.</p>
 {% endif %}
-<p><a href="{% url 'investigation-list' workspace_id=workspace.id %}">Open investigations</a></p>
+<p><a href="{% url 'workbook-investigation-list' workbook_id=workspace.id %}">Open investigation</a></p>
 
-<h3>Investigations</h3>
+<h3>Investigation</h3>
 {% if investigations %}
     <ul>
         {% for inv in investigations %}
             <li>
-                <a href="{% url 'investigation-detail' workspace_id=workspace.id investigation_id=inv.id %}">
+                <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=inv.id %}">
                     {{ inv.title }}
                 </a>
                 ({{ inv.status }})
@@ -24,7 +24,7 @@
         {% endfor %}
     </ul>
 {% else %}
-    <p>No investigations yet.</p>
+    <p>No investigation yet.</p>
 {% endif %}
 
 <h3>Members</h3>
@@ -54,7 +54,7 @@
                 <td>{{ row.can_manage_shares }}</td>
                 {% if manage_members_allowed %}
                     <td>
-                        <form method="post" action="{% url 'workspace-member-update' workspace_id=workspace.id membership_id=row.id %}">
+                        <form method="post" action="{% url 'workbook-member-update' workbook_id=workspace.id membership_id=row.id %}">
                             {% csrf_token %}
                             <label>Role</label>
                             <select name="role">
@@ -82,7 +82,7 @@
                             </label>
                             <button type="submit">Update</button>
                         </form>
-                        <form method="post" action="{% url 'workspace-member-remove' workspace_id=workspace.id membership_id=row.id %}">
+                        <form method="post" action="{% url 'workbook-member-remove' workbook_id=workspace.id membership_id=row.id %}">
                             {% csrf_token %}
                             <button type="submit">Remove</button>
                         </form>
@@ -98,7 +98,7 @@
 
 {% if manage_members_allowed %}
     <h3>Add Member</h3>
-    <form method="post" action="{% url 'workspace-member-add' workspace_id=workspace.id %}">
+    <form method="post" action="{% url 'workbook-member-add' workbook_id=workspace.id %}">
         {% csrf_token %}
         {{ add_form.as_p }}
         <button type="submit">Add member</button>
@@ -129,28 +129,28 @@
             </tbody>
         </table>
     {% else %}
-        <p>No saved credentials for your account in this workspace.</p>
+        <p>No saved credentials for your account in this workbook.</p>
     {% endif %}
 
     {% if can_manage_credentials %}
         <h4>Save / Update Credential</h4>
-        <form method="post" action="{% url 'workspace-credential-save' workspace_id=workspace.id %}">
+        <form method="post" action="{% url 'workbook-credential-save' workbook_id=workspace.id %}">
             {% csrf_token %}
             {{ credential_form.as_p }}
             <button type="submit">Save credential</button>
         </form>
 
         <h4>Delete Credential</h4>
-        <form method="post" action="{% url 'workspace-credential-remove' workspace_id=workspace.id %}">
+        <form method="post" action="{% url 'workbook-credential-remove' workbook_id=workspace.id %}">
             {% csrf_token %}
             {{ credential_delete_form.as_p }}
             <button type="submit">Delete credential</button>
         </form>
     {% else %}
-        <p>You do not currently have workflow permission in this workspace, so credential changes are disabled.</p>
+        <p>You do not currently have workflow permission in this workbook, so credential changes are disabled.</p>
     {% endif %}
 {% else %}
-    <p>Log in to manage workspace credentials.</p>
+    <p>Log in to manage workbook credentials.</p>
 {% endif %}
 
 <h3>Share Links</h3>
@@ -180,7 +180,7 @@
                 <td>{{ share.last_viewed_at|default:"-" }}</td>
                 {% if manage_shares_allowed %}
                     <td>
-                        <form method="post" action="{% url 'workspace-share-update' workspace_id=workspace.id share_id=share.id %}">
+                        <form method="post" action="{% url 'workbook-share-update' workbook_id=workspace.id share_id=share.id %}">
                             {% csrf_token %}
                             <label>Mode</label>
                             <select name="mode">
@@ -200,7 +200,7 @@
                             <input type="datetime-local" name="expires_at" value="{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d\\TH:i' }}{% endif %}">
                             <button type="submit">Update</button>
                         </form>
-                        <form method="post" action="{% url 'workspace-share-revoke' workspace_id=workspace.id share_id=share.id %}">
+                        <form method="post" action="{% url 'workbook-share-revoke' workbook_id=workspace.id share_id=share.id %}">
                             {% csrf_token %}
                             <button type="submit">Revoke</button>
                         </form>
@@ -216,7 +216,7 @@
 
 {% if manage_shares_allowed %}
     <h3>Create Share Link</h3>
-    <form method="post" action="{% url 'workspace-share-create' workspace_id=workspace.id %}">
+    <form method="post" action="{% url 'workbook-share-create' workbook_id=workspace.id %}">
         {% csrf_token %}
         {{ share_create_form.as_p }}
         <button type="submit">Create share link</button>

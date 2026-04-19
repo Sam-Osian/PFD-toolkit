@@ -27,18 +27,18 @@ from .services import (
 
 @login_required
 @require_POST
-def queue_investigation_run(request, workspace_id, investigation_id):
+def queue_investigation_run(request, workbook_id, investigation_id):
     investigation = get_object_or_404(
         Investigation.objects.select_related("workspace"),
         id=investigation_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     form = RunQueueForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid run configuration.")
         return redirect(
-            "investigation-detail",
-            workspace_id=workspace_id,
+            "workbook-investigation-detail",
+            workbook_id=workbook_id,
             investigation_id=investigation_id,
         )
 
@@ -68,7 +68,7 @@ def queue_investigation_run(request, workspace_id, investigation_id):
                     provider=provider,
                 ):
                     raise WorkspaceCredentialValidationError(
-                        f"No saved {provider} API key for this workspace."
+                        f"No saved {provider} API key for this workbook."
                     )
 
         run = queue_run(
@@ -104,18 +104,18 @@ def queue_investigation_run(request, workspace_id, investigation_id):
             messages.success(request, "Run queued.")
 
     return redirect(
-        "investigation-detail",
-        workspace_id=workspace_id,
+        "workbook-investigation-detail",
+        workbook_id=workbook_id,
         investigation_id=investigation_id,
     )
 
 
 @require_GET
-def run_detail(request, workspace_id, run_id):
+def run_detail(request, workbook_id, run_id):
     run = get_object_or_404(
         InvestigationRun.objects.select_related("workspace", "investigation", "requested_by"),
         id=run_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     if not can_view_workspace(request.user, run.workspace):
         return redirect("accounts-login")
@@ -139,16 +139,16 @@ def run_detail(request, workspace_id, run_id):
 
 @login_required
 @require_POST
-def cancel_run(request, workspace_id, run_id):
+def cancel_run(request, workbook_id, run_id):
     run = get_object_or_404(
         InvestigationRun.objects.select_related("workspace", "investigation"),
         id=run_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     form = RunCancelForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid cancellation payload.")
-        return redirect("run-detail", workspace_id=workspace_id, run_id=run_id)
+        return redirect("workbook-run-detail", workbook_id=workbook_id, run_id=run_id)
 
     try:
         request_run_cancellation(
@@ -161,16 +161,16 @@ def cancel_run(request, workspace_id, run_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Run cancellation requested.")
-    return redirect("run-detail", workspace_id=workspace_id, run_id=run_id)
+    return redirect("workbook-run-detail", workbook_id=workbook_id, run_id=run_id)
 
 
 @require_GET
-def download_run_artifact(request, workspace_id, run_id, artifact_id):
+def download_run_artifact(request, workbook_id, run_id, artifact_id):
     artifact = get_object_or_404(
         RunArtifact.objects.select_related("workspace", "run", "run__investigation"),
         id=artifact_id,
         run_id=run_id,
-        workspace_id=workspace_id,
+        workspace_id=workbook_id,
     )
     if not can_view_workspace(request.user, artifact.workspace):
         if request.user.is_authenticated:

@@ -28,7 +28,9 @@ def create_investigation(
     request=None,
 ) -> Investigation:
     if not can_edit_workspace(actor, workspace):
-        raise PermissionDenied("You do not have permission to create investigations.")
+        raise PermissionDenied("You do not have permission to create investigations in this workbook.")
+    if Investigation.objects.filter(workspace=workspace).exists():
+        raise InvestigationServiceError("This workbook already has an investigation.")
 
     investigation = Investigation.objects.create(
         workspace=workspace,
