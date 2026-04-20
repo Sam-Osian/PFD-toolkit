@@ -1,7 +1,7 @@
 # Run Worker Execution (v0.2)
 
-Status: Implemented adapter-backed execution  
-Last updated: 2026-04-19
+Status: Implemented adapter-backed execution + guardrails/retries  
+Last updated: 2026-04-20
 
 ## 1. Purpose
 
@@ -27,14 +27,23 @@ Core processing module:
 ## 3. Worker Behavior
 
 1. Claims queued/cancelling runs using DB row locks (`select_for_update(skip_locked=True)`).
-2. Assigns `worker_id`.
-3. Transitions statuses via `wb_runs.services.set_run_status`:
+2. Only claims queued runs where `queued_at <= now` (supports retry backoff windows).
+3. Reconciles stale in-flight runs to `timed_out` before claiming new runs.
+4. Assigns `worker_id`.
+5. Transitions statuses via `wb_runs.services.set_run_status`:
    - `queued -> starting -> running -> succeeded`
+   - `running -> queued` (transient auto-retry path)
    - `cancelling -> cancelled`
    - failure path: `running -> failed`
    - timeout path: `running -> timed_out`
-4. Writes `RunEvent` + `AuditEvent` on lifecycle transitions.
-5. Creates a ready `RunArtifact` on success.
+6. Writes `RunEvent` + `AuditEvent` on lifecycle transitions.
+7. Creates a ready `RunArtifact` on success.
+
+Run launch guardrails are enforced at queue time:
+
+1. Daily caps (`MAX_RUNS_PER_USER_PER_DAY`, `MAX_RUNS_PER_WORKBOOK_PER_DAY`)
+2. Concurrency caps (`MAX_CONCURRENT_RUNS_PER_USER`, `MAX_CONCURRENT_RUNS_GLOBAL`)
+3. Rate limits (`RUN_LAUNCH_RATE_LIMIT_USER_PER_MINUTE`, `RUN_LAUNCH_RATE_LIMIT_IP_PER_MINUTE`)
 
 ## 4. Execution Modes
 
@@ -81,6 +90,8 @@ Artifact persistence keys:
 6. `ARTIFACT_OBJECT_STORAGE_SECRET_ACCESS_KEY` (optional; falls back to environment/instance auth)
 7. `ARTIFACT_OBJECT_STORAGE_PREFIX` (optional object key prefix)
 8. `ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD` (default `true`)
+9. `ARTIFACT_ENFORCE_OBJECT_STORAGE_IN_PRODUCTION` (default `true`)
+10. `ARTIFACT_RETENTION_DAYS` (default `365`)
 
 ### 5.2 Filter-specific keys
 
@@ -163,6 +174,12 @@ Process only cancellations reconciliation:
 uv run python manage.py run_runs_worker --finalize-cancelling-only
 ```
 
+Process only timeout reconciliation:
+
+```bash
+uv run python manage.py run_runs_worker --reconcile-timeouts-only
+```
+
 ## 8. Railway Deployment Shape
 
 Recommended services:
@@ -192,7 +209,6 @@ Behavior:
 
 ## 10. Next Upgrade Path
 
-1. Add retry policy for transient provider failures (network/rate limit classes).
-2. Add run-attempt model if multiple attempts per run are required.
-3. Add metrics (queue depth, processing duration, failure rates) and Sentry instrumentation.
-4. Validate lifecycle scheduler cadence and alerting in Railway production.
+1. Add run-attempt model if per-attempt analytics become a requirement.
+2. Add metrics (queue depth, processing duration, failure rates) and Sentry instrumentation.
+3. Validate scheduler cadence and alerting thresholds in Railway production.

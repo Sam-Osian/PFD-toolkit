@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, time as dt_time
+
+from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -33,6 +37,7 @@ ALLOWED_STATUS_TRANSITIONS = {
     },
     RunStatus.STARTING: {
         RunStatus.RUNNING,
+        RunStatus.QUEUED,  # allows automatic transient retry requeue
         RunStatus.CANCELLING,
         RunStatus.CANCELLED,
         RunStatus.FAILED,
@@ -40,6 +45,7 @@ ALLOWED_STATUS_TRANSITIONS = {
     },
     RunStatus.RUNNING: {
         RunStatus.RUNNING,  # allows progress updates while running
+        RunStatus.QUEUED,  # allows automatic transient retry requeue
         RunStatus.CANCELLING,
         RunStatus.CANCELLED,
         RunStatus.SUCCEEDED,
@@ -52,6 +58,119 @@ ALLOWED_STATUS_TRANSITIONS = {
         RunStatus.TIMED_OUT,
     },
 }
+
+
+ACTIVE_RUN_STATUSES = {
+    RunStatus.STARTING,
+    RunStatus.RUNNING,
+    RunStatus.CANCELLING,
+}
+
+
+def _extract_client_ip(request) -> str:
+    if request is None:
+        return ""
+    forwarded_for = str(request.META.get("HTTP_X_FORWARDED_FOR", "")).strip()
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return str(request.META.get("REMOTE_ADDR", "")).strip()
+
+
+def _rate_limit_key(*, scope: str, identifier: str) -> str:
+    return f"run_launch_rate_limit:{scope}:{identifier}"
+
+
+def _check_rate_limit(*, scope: str, identifier: str, limit_per_minute: int) -> bool:
+    if limit_per_minute <= 0 or not identifier:
+        return False
+    key = _rate_limit_key(scope=scope, identifier=identifier)
+    timeout_seconds = 60
+    if cache.add(key, 1, timeout=timeout_seconds):
+        return False
+    try:
+        count = cache.incr(key)
+    except ValueError:
+        cache.set(key, 1, timeout=timeout_seconds)
+        return False
+    return count > limit_per_minute
+
+
+def _enforce_launch_rate_limits(*, actor, request=None) -> None:
+    if not bool(getattr(settings, "RUN_GUARDRAILS_ENABLED", True)):
+        return
+    if request is None:
+        return
+    user_limit = int(getattr(settings, "RUN_LAUNCH_RATE_LIMIT_USER_PER_MINUTE", 0))
+    if actor is not None and getattr(actor, "is_authenticated", False):
+        if _check_rate_limit(
+            scope="user",
+            identifier=str(actor.id),
+            limit_per_minute=user_limit,
+        ):
+            raise RunServiceError("Rate limit reached for run launches. Try again in about one minute.")
+
+    ip_limit = int(getattr(settings, "RUN_LAUNCH_RATE_LIMIT_IP_PER_MINUTE", 0))
+    client_ip = _extract_client_ip(request=request)
+    if _check_rate_limit(
+        scope="ip",
+        identifier=client_ip,
+        limit_per_minute=ip_limit,
+    ):
+        raise RunServiceError("Too many run launch requests from this IP. Try again in about one minute.")
+
+
+def _enforce_run_caps(*, actor, workspace) -> None:
+    if not bool(getattr(settings, "RUN_GUARDRAILS_ENABLED", True)):
+        return
+
+    now = timezone.now()
+    local_day_start = timezone.make_aware(
+        datetime.combine(timezone.localdate(now), dt_time.min),
+        timezone.get_current_timezone(),
+    )
+
+    if actor is not None and getattr(actor, "is_authenticated", False):
+        max_runs_per_user_per_day = int(getattr(settings, "MAX_RUNS_PER_USER_PER_DAY", 0))
+        if max_runs_per_user_per_day > 0:
+            user_daily_count = InvestigationRun.objects.filter(
+                requested_by=actor,
+                created_at__gte=local_day_start,
+            ).count()
+            if user_daily_count >= max_runs_per_user_per_day:
+                raise RunServiceError(
+                    f"You reached the daily run cap ({max_runs_per_user_per_day} runs per day)."
+                )
+
+        max_concurrent_user = int(getattr(settings, "MAX_CONCURRENT_RUNS_PER_USER", 0))
+        if max_concurrent_user > 0:
+            user_inflight_count = InvestigationRun.objects.filter(
+                requested_by=actor,
+                status__in=ACTIVE_RUN_STATUSES,
+            ).count()
+            if user_inflight_count >= max_concurrent_user:
+                raise RunServiceError(
+                    f"You reached the concurrent run cap ({max_concurrent_user} in-flight runs)."
+                )
+
+    max_runs_per_workbook_per_day = int(getattr(settings, "MAX_RUNS_PER_WORKBOOK_PER_DAY", 0))
+    if max_runs_per_workbook_per_day > 0:
+        workbook_daily_count = InvestigationRun.objects.filter(
+            workspace=workspace,
+            created_at__gte=local_day_start,
+        ).count()
+        if workbook_daily_count >= max_runs_per_workbook_per_day:
+            raise RunServiceError(
+                f"This workbook reached its daily run cap ({max_runs_per_workbook_per_day} runs per day)."
+            )
+
+    max_concurrent_global = int(getattr(settings, "MAX_CONCURRENT_RUNS_GLOBAL", 0))
+    if max_concurrent_global > 0:
+        global_inflight_count = InvestigationRun.objects.filter(
+            status__in=ACTIVE_RUN_STATUSES,
+        ).count()
+        if global_inflight_count >= max_concurrent_global:
+            raise RunServiceError("Run queue is currently at global concurrency capacity. Try again shortly.")
+
 
 def is_terminal_status(status: str) -> bool:
     return status in TERMINAL_STATUSES
@@ -79,6 +198,8 @@ def queue_run(
     workspace = investigation.workspace
     if not can_run_workflows(actor, workspace):
         raise PermissionDenied("You do not have permission to run workflows in this workbook.")
+    _enforce_launch_rate_limits(actor=actor, request=request)
+    _enforce_run_caps(actor=actor, workspace=workspace)
 
     resolved_config = resolve_run_scope_config(
         investigation=investigation,

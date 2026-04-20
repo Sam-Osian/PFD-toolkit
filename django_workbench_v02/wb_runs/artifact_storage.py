@@ -45,6 +45,19 @@ def _configured_artifact_backend() -> str:
         ArtifactStorageBackend.OBJECT_STORAGE,
     }:
         raise ArtifactStorageError(f"Unsupported ARTIFACT_STORAGE_BACKEND={raw!r}.")
+    enforce_object_storage = _as_bool(
+        getattr(settings, "ARTIFACT_ENFORCE_OBJECT_STORAGE_IN_PRODUCTION", True),
+        default=True,
+    )
+    if (
+        enforce_object_storage
+        and not bool(getattr(settings, "DEBUG", False))
+        and not bool(getattr(settings, "TESTING", False))
+    ):
+        if raw != ArtifactStorageBackend.OBJECT_STORAGE:
+            raise ArtifactStorageError(
+                "Production requires ARTIFACT_STORAGE_BACKEND=object_storage."
+            )
     return raw
 
 

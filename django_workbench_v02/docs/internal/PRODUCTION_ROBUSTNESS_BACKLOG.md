@@ -1,17 +1,21 @@
 # Production Robustness Backlog
 
-Status: Planned  
-Last updated: 2026-04-19
+Status: In progress  
+Last updated: 2026-04-20
 
 This file captures architecture decisions to return to after immediate release tasks.
 
 ## 1. Queue Reliability Policy
 
-Decide and implement:
+Implemented baseline:
 
-1. Retry rules by failure class (network/transient vs validation/configuration).
-2. Max retry count and backoff profile.
-3. Idempotent artifact write strategy so retries cannot duplicate results.
+1. Retry rules by failure class (transient failures only).
+2. Max retry count and backoff profile (env-configurable).
+3. Requeue-on-retry uses the same run record, avoiding duplicate run records.
+
+Remaining:
+
+1. Optional dedicated run-attempt model for richer retry analytics.
 
 ## 2. Observability Baseline
 
@@ -23,11 +27,15 @@ Define minimum production telemetry:
 
 ## 3. Artifact Durability Standard
 
-Lock production storage policy:
+Implemented baseline:
 
 1. Object storage as default backend for artifacts.
-2. Retention and cleanup policy for expired artifacts.
-3. Recovery process for missing/corrupted artifact pointers.
+2. Retention policy for run artifacts (`ARTIFACT_RETENTION_DAYS`).
+
+Remaining:
+
+1. Recovery process for missing/corrupted artifact pointers.
+2. Optional checksum verification/enforcement pipeline.
 
 ## 4. Credential Lifecycle Policy
 
@@ -47,8 +55,8 @@ Define operations controls:
 
 ## 6. Abuse and Cost Controls
 
-Introduce guardrails:
+Implemented baseline guardrails:
 
 1. Per-user and per-workspace run limits.
-2. Concurrency caps per workspace.
-3. Endpoint rate limits for queueing/auth-sensitive routes.
+2. Concurrency caps per user and global.
+3. Endpoint rate limits for queueing routes (user and IP).

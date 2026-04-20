@@ -1,10 +1,11 @@
 import io
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -24,7 +25,7 @@ from wb_workspaces.services import create_workspace_for_user
 from .artifact_storage import StoredArtifactFile
 from .models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact, RunStatus, RunType
 from .services import queue_run, request_run_cancellation, set_run_status
-from .worker import process_single_available_run
+from .worker import process_single_available_run, reconcile_timed_out_runs
 
 
 User = get_user_model()
@@ -34,6 +35,7 @@ class RunServiceTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="run-owner@example.com", password="x")
         self.viewer = User.objects.create_user(email="run-viewer@example.com", password="x")
+        self.request_factory = RequestFactory()
         self.workspace = create_workspace_for_user(
             user=self.owner,
             title="Run Workspace",
@@ -204,6 +206,122 @@ class RunServiceTests(TestCase):
             run.input_config_json.get("excluded_report_identities"),
             ["https://example.com/excluded-2"],
         )
+
+    @override_settings(MAX_RUNS_PER_USER_PER_DAY=1)
+    def test_queue_run_enforces_user_daily_limit(self):
+        queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+        )
+        with self.assertRaisesMessage(ValidationError, "daily run cap"):
+            queue_run(
+                actor=self.owner,
+                investigation=self.investigation,
+                run_type=RunType.FILTER,
+                input_config_json={"execution_mode": "simulate"},
+            )
+
+    @override_settings(MAX_RUNS_PER_WORKBOOK_PER_DAY=1)
+    def test_queue_run_enforces_workbook_daily_limit(self):
+        queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+        )
+        another_user = User.objects.create_user(email="run-owner-2@example.com", password="x")
+        WorkspaceMembership.objects.create(
+            workspace=self.workspace,
+            user=another_user,
+            role=MembershipRole.EDITOR,
+            access_mode=MembershipAccessMode.EDIT,
+            can_manage_members=False,
+            can_manage_shares=False,
+            can_run_workflows=True,
+        )
+        with self.assertRaisesMessage(ValidationError, "workbook reached its daily run cap"):
+            queue_run(
+                actor=another_user,
+                investigation=self.investigation,
+                run_type=RunType.THEMES,
+                input_config_json={"execution_mode": "simulate"},
+            )
+
+    @override_settings(MAX_CONCURRENT_RUNS_PER_USER=1)
+    def test_queue_run_enforces_user_concurrent_limit(self):
+        active_run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+        )
+        active_run.status = RunStatus.RUNNING
+        active_run.started_at = timezone.now()
+        active_run.save(update_fields=["status", "started_at", "updated_at"])
+        with self.assertRaisesMessage(ValidationError, "concurrent run cap"):
+            queue_run(
+                actor=self.owner,
+                investigation=self.investigation,
+                run_type=RunType.EXTRACT,
+                input_config_json={"execution_mode": "simulate"},
+            )
+
+    @override_settings(MAX_CONCURRENT_RUNS_GLOBAL=1)
+    def test_queue_run_enforces_global_concurrent_limit(self):
+        first_run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+        )
+        first_run.status = RunStatus.RUNNING
+        first_run.started_at = timezone.now()
+        first_run.save(update_fields=["status", "started_at", "updated_at"])
+        second_workspace = create_workspace_for_user(
+            user=self.viewer,
+            title="Global Limit Workspace",
+            slug="global-limit-workspace",
+            description="desc",
+        )
+        second_investigation = create_investigation(
+            actor=self.viewer,
+            workspace=second_workspace,
+            title="Second investigation",
+            question_text="Question",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        with self.assertRaisesMessage(ValidationError, "global concurrency capacity"):
+            queue_run(
+                actor=self.viewer,
+                investigation=second_investigation,
+                run_type=RunType.FILTER,
+                input_config_json={"execution_mode": "simulate"},
+            )
+
+    @override_settings(RUN_LAUNCH_RATE_LIMIT_USER_PER_MINUTE=1)
+    def test_queue_run_enforces_user_rate_limit(self):
+        request = self.request_factory.post("/fake")
+        request.user = self.owner
+        request.META["REMOTE_ADDR"] = "203.0.113.10"
+        queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+            request=request,
+        )
+        with self.assertRaisesMessage(ValidationError, "Rate limit reached for run launches"):
+            queue_run(
+                actor=self.owner,
+                investigation=self.investigation,
+                run_type=RunType.THEMES,
+                input_config_json={"execution_mode": "simulate"},
+                request=request,
+            )
 
 
 class RunViewTests(TestCase):
@@ -1022,3 +1140,73 @@ class RunWorkerTests(TestCase):
         self.assertEqual(artifact.storage_uri, "s3://fake-bucket/path/filter.csv")
         self.assertEqual(artifact.size_bytes, 123)
         mocked_store.assert_called_once()
+
+    @override_settings(
+        RUN_RETRY_ENABLED=True,
+        RUN_RETRY_MAX_ATTEMPTS=3,
+        RUN_RETRY_BACKOFF_SECONDS=(1, 1, 1),
+        RUN_RETRY_JITTER_PCT=0,
+    )
+    def test_transient_real_adapter_failure_requeues_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "real", "search_query": "medication safety"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_filter_workflow",
+            side_effect=TimeoutError("upstream timeout"),
+        ):
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.QUEUED)
+        self.assertEqual(run.input_config_json.get("_retry_attempt"), 1)
+        self.assertGreater(run.queued_at, timezone.now() - timedelta(seconds=1))
+        self.assertFalse(run.artifacts.exists())
+
+    @override_settings(
+        RUN_RETRY_ENABLED=True,
+        RUN_RETRY_MAX_ATTEMPTS=2,
+        RUN_RETRY_BACKOFF_SECONDS=(0, 0),
+        RUN_RETRY_JITTER_PCT=0,
+    )
+    def test_transient_failure_exhausts_retries_then_fails(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "real", "search_query": "medication safety"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_filter_workflow",
+            side_effect=TimeoutError("upstream timeout"),
+        ):
+            process_single_available_run(worker_id="test-worker")
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.FAILED)
+        self.assertEqual(run.error_code, "FILTER_EXECUTION_ERROR")
+
+    @override_settings(RUN_TOTAL_TIMEOUT_SECONDS=1)
+    def test_reconcile_timed_out_runs_marks_stale_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+        )
+        stale_time = timezone.now() - timedelta(seconds=5)
+        run.status = RunStatus.RUNNING
+        run.started_at = stale_time
+        run.save(update_fields=["status", "started_at", "updated_at"])
+
+        count = reconcile_timed_out_runs(worker_id="test-worker")
+        self.assertEqual(count, 1)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.TIMED_OUT)
+        self.assertEqual(run.error_code, "RUN_TOTAL_TIMEOUT")

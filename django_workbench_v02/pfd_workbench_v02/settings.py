@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -45,6 +46,32 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw.strip())
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int_list(name: str, default: tuple[int, ...]) -> tuple[int, ...]:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    values: list[int] = []
+    for part in raw.split(","):
+        stripped = part.strip()
+        if not stripped:
+            continue
+        try:
+            values.append(int(stripped))
+        except ValueError:
+            continue
+    return tuple(values or default)
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -56,6 +83,7 @@ SECRET_KEY = os.getenv(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+TESTING = "test" in sys.argv
 
 ALLOWED_HOSTS = [
     host.strip()
@@ -236,6 +264,13 @@ ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD = _env_bool(
     "ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD",
     True,
 )
+ARTIFACT_ENFORCE_OBJECT_STORAGE_IN_PRODUCTION = _env_bool(
+    "ARTIFACT_ENFORCE_OBJECT_STORAGE_IN_PRODUCTION",
+    True,
+)
+ARTIFACT_RETENTION_DAYS = _env_int("ARTIFACT_RETENTION_DAYS", 365)
+ARTIFACT_SOFT_DELETE_DAYS = _env_int("ARTIFACT_SOFT_DELETE_DAYS", 30)
+ARTIFACT_VERIFY_CHECKSUM = _env_bool("ARTIFACT_VERIFY_CHECKSUM", True)
 
 # Lifecycle maintenance
 # Sliding inactivity window for keepalive/expiry policies.
@@ -255,6 +290,24 @@ EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", False)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@pfdtoolkit.org")
+
+# Run guardrails and reliability controls
+RUN_GUARDRAILS_ENABLED = _env_bool("RUN_GUARDRAILS_ENABLED", True)
+MAX_RUNS_PER_USER_PER_DAY = _env_int("MAX_RUNS_PER_USER_PER_DAY", 20)
+MAX_RUNS_PER_WORKBOOK_PER_DAY = _env_int("MAX_RUNS_PER_WORKBOOK_PER_DAY", 40)
+MAX_CONCURRENT_RUNS_PER_USER = _env_int("MAX_CONCURRENT_RUNS_PER_USER", 2)
+MAX_CONCURRENT_RUNS_GLOBAL = _env_int("MAX_CONCURRENT_RUNS_GLOBAL", 12)
+RUN_LAUNCH_RATE_LIMIT_USER_PER_MINUTE = _env_int("RUN_LAUNCH_RATE_LIMIT_USER_PER_MINUTE", 10)
+RUN_LAUNCH_RATE_LIMIT_IP_PER_MINUTE = _env_int("RUN_LAUNCH_RATE_LIMIT_IP_PER_MINUTE", 30)
+
+RUN_RETRY_ENABLED = _env_bool("RUN_RETRY_ENABLED", True)
+RUN_RETRY_MAX_ATTEMPTS = _env_int("RUN_RETRY_MAX_ATTEMPTS", 3)
+RUN_RETRY_BACKOFF_SECONDS = _env_int_list("RUN_RETRY_BACKOFF_SECONDS", (30, 120, 600))
+RUN_RETRY_JITTER_PCT = _env_int("RUN_RETRY_JITTER_PCT", 20)
+RUN_STAGE_TIMEOUT_SECONDS = _env_int("RUN_STAGE_TIMEOUT_SECONDS", 1800)
+RUN_TOTAL_TIMEOUT_SECONDS = _env_int("RUN_TOTAL_TIMEOUT_SECONDS", 7200)
+RUN_STUCK_THRESHOLD_SECONDS = _env_int("RUN_STUCK_THRESHOLD_SECONDS", 1800)
+WORKER_HEARTBEAT_STALE_SECONDS = _env_int("WORKER_HEARTBEAT_STALE_SECONDS", 120)
 
 # Performance instrumentation (MVP baseline)
 # Logs warnings for slow requests/queries via standard Django logging handlers.

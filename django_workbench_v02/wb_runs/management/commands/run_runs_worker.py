@@ -5,6 +5,7 @@ from django.core.management.base import BaseCommand
 from wb_runs.worker import (
     finalize_stuck_cancellations,
     process_single_available_run,
+    reconcile_timed_out_runs,
     run_worker_loop,
 )
 
@@ -32,6 +33,11 @@ class Command(BaseCommand):
             action="store_true",
             help="Only reconcile cancelling runs into cancelled terminal state.",
         )
+        parser.add_argument(
+            "--reconcile-timeouts-only",
+            action="store_true",
+            help="Only reconcile stale in-flight runs into timed_out state.",
+        )
 
     def handle(self, *args, **options):
         worker_id = options["worker_id"] or f"worker-{uuid.uuid4()}"
@@ -40,12 +46,22 @@ class Command(BaseCommand):
         once = options["once"]
         sleep_between_stages_seconds = options["sleep_between_stages_seconds"]
         finalize_cancelling_only = options["finalize_cancelling_only"]
+        reconcile_timeouts_only = options["reconcile_timeouts_only"]
 
         if finalize_cancelling_only:
             count = finalize_stuck_cancellations(worker_id=worker_id)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"[{worker_id}] Finalized {count} cancelling run(s)."
+                )
+            )
+            return
+
+        if reconcile_timeouts_only:
+            count = reconcile_timed_out_runs(worker_id=worker_id)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"[{worker_id}] Reconciled {count} timed-out run(s)."
                 )
             )
             return

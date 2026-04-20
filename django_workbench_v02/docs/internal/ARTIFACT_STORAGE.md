@@ -1,7 +1,7 @@
 # Artifact Storage Backend (v0.2)
 
 Status: Implemented  
-Last updated: 2026-04-19
+Last updated: 2026-04-20
 
 ## 1. Purpose
 
@@ -22,6 +22,8 @@ Supported backends:
 6. `ARTIFACT_OBJECT_STORAGE_SECRET_ACCESS_KEY` (optional)
 7. `ARTIFACT_OBJECT_STORAGE_PREFIX` (default `workbench-artifacts`)
 8. `ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD` (default `true`)
+9. `ARTIFACT_ENFORCE_OBJECT_STORAGE_IN_PRODUCTION` (default `true`)
+10. `ARTIFACT_RETENTION_DAYS` (default `365`)
 
 ## 3. Runtime Behavior
 
@@ -39,4 +41,4 @@ Supported backends:
 
 1. Downloads are proxied through Django for object storage artifacts.
 2. Pre-signed direct-download URLs are not implemented yet.
-3. Retention cleanup jobs are not yet implemented (handled in next phase step).
+3. Recovery workflow for missing/corrupted storage pointers is not automated yet.

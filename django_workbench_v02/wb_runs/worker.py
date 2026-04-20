@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
 import uuid
 from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
 
+from django.conf import settings
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .artifact_storage import ArtifactStorageError, store_artifact_file
@@ -88,9 +91,170 @@ PIPELINE_TERMINAL_CONTINUE_STATUSES = {
     RunStatus.TIMED_OUT,
 }
 
+TRANSIENT_ERROR_SNIPPETS = (
+    "timeout",
+    "timed out",
+    "temporary",
+    "temporarily",
+    "rate limit",
+    "too many requests",
+    "service unavailable",
+    "bad gateway",
+    "gateway timeout",
+    "connection reset",
+    "connection aborted",
+    "connection refused",
+    "network is unreachable",
+)
+
 
 def _reload_run(run_id):
     return InvestigationRun.objects.select_related("workspace", "investigation").get(id=run_id)
+
+
+def _retry_enabled() -> bool:
+    return bool(getattr(settings, "RUN_RETRY_ENABLED", True))
+
+
+def _retry_max_attempts() -> int:
+    return max(1, int(getattr(settings, "RUN_RETRY_MAX_ATTEMPTS", 3)))
+
+
+def _retry_backoff_seconds() -> list[int]:
+    raw = getattr(settings, "RUN_RETRY_BACKOFF_SECONDS", (30, 120, 600))
+    if isinstance(raw, (list, tuple)):
+        values = []
+        for item in raw:
+            try:
+                values.append(max(0, int(item)))
+            except (TypeError, ValueError):
+                continue
+        if values:
+            return values
+    return [30, 120, 600]
+
+
+def _retry_jitter_pct() -> int:
+    return max(0, int(getattr(settings, "RUN_RETRY_JITTER_PCT", 20)))
+
+
+def _artifact_retention_days() -> int:
+    return max(1, int(getattr(settings, "ARTIFACT_RETENTION_DAYS", 365)))
+
+
+def _stage_timeout_seconds() -> int:
+    return max(0, int(getattr(settings, "RUN_STAGE_TIMEOUT_SECONDS", 1800)))
+
+
+def _total_timeout_seconds() -> int:
+    return max(0, int(getattr(settings, "RUN_TOTAL_TIMEOUT_SECONDS", 7200)))
+
+
+def _is_transient_exception(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, ConnectionError)):
+        return True
+    message = str(exc).strip().lower()
+    if not message:
+        return False
+    return any(snippet in message for snippet in TRANSIENT_ERROR_SNIPPETS)
+
+
+def _run_exceeded_timeouts(run: InvestigationRun) -> tuple[bool, str, str]:
+    if run.status in {RunStatus.CANCELLED, RunStatus.SUCCEEDED, RunStatus.FAILED, RunStatus.TIMED_OUT}:
+        return False, "", ""
+
+    now = timezone.now()
+    total_timeout = _total_timeout_seconds()
+    if total_timeout > 0 and run.started_at:
+        if now - run.started_at >= timedelta(seconds=total_timeout):
+            return True, "RUN_TOTAL_TIMEOUT", "Run timed out after exceeding total runtime limit."
+
+    stage_timeout = _stage_timeout_seconds()
+    if stage_timeout > 0 and run.status in {RunStatus.STARTING, RunStatus.RUNNING}:
+        if now - run.updated_at >= timedelta(seconds=stage_timeout):
+            return True, "RUN_STAGE_TIMEOUT", "Run timed out due to stage inactivity."
+    return False, "", ""
+
+
+def _apply_timeout_if_needed(run: InvestigationRun) -> InvestigationRun:
+    refreshed = _reload_run(run.id)
+    exceeded, error_code, message = _run_exceeded_timeouts(refreshed)
+    if not exceeded:
+        return refreshed
+    return set_run_status(
+        run=refreshed,
+        status=RunStatus.TIMED_OUT,
+        message=message,
+        progress_percent=refreshed.progress_percent or 0,
+        error_code=error_code,
+        error_message=message,
+    )
+
+
+def _schedule_transient_retry(*, run: InvestigationRun, exc: Exception) -> InvestigationRun | None:
+    if not _retry_enabled():
+        return None
+
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    current_attempt = int(config.get("_retry_attempt", 0) or 0)
+    max_attempts = _retry_max_attempts()
+    next_attempt = current_attempt + 1
+    if next_attempt >= max_attempts:
+        return None
+
+    backoff_values = _retry_backoff_seconds()
+    backoff_seconds = backoff_values[min(current_attempt, len(backoff_values) - 1)]
+    jitter_pct = _retry_jitter_pct()
+    jitter_window = (backoff_seconds * jitter_pct) / 100.0
+    jitter_offset = random.uniform(-jitter_window, jitter_window) if jitter_window else 0.0
+    wait_seconds = max(0, int(round(backoff_seconds + jitter_offset)))
+    retry_at = timezone.now() + timedelta(seconds=wait_seconds)
+
+    updated_config = deepcopy(config)
+    updated_config["_retry_attempt"] = next_attempt
+    updated_config["_retry_max_attempts"] = max_attempts
+    updated_config["_retry_backoff_seconds"] = backoff_values
+    updated_config["_retry_last_error"] = str(exc)[:512]
+
+    retry_run = set_run_status(
+        run=run,
+        status=RunStatus.QUEUED,
+        message=(
+            f"Transient error detected. Auto-retrying in {wait_seconds}s "
+            f"(attempt {next_attempt + 1}/{max_attempts})."
+        ),
+        event_type=RunEventType.WARNING,
+        progress_percent=run.progress_percent or 0,
+        error_code="TRANSIENT_RETRY_SCHEDULED",
+        error_message=str(exc),
+    )
+    retry_run.input_config_json = updated_config
+    retry_run.queued_at = retry_at
+    retry_run.worker_id = ""
+    retry_run.error_code = ""
+    retry_run.error_message = ""
+    retry_run.save(
+        update_fields=[
+            "input_config_json",
+            "queued_at",
+            "worker_id",
+            "error_code",
+            "error_message",
+            "updated_at",
+        ]
+    )
+    RunEvent.objects.create(
+        run=retry_run,
+        event_type=RunEventType.INFO,
+        message="Run re-queued after transient failure.",
+        payload_json={
+            "retry_attempt": next_attempt,
+            "retry_max_attempts": max_attempts,
+            "retry_at": retry_at.isoformat(),
+            "retry_backoff_seconds": wait_seconds,
+        },
+    )
+    return retry_run
 
 
 def _normalise_pipeline_plan(raw_plan) -> list[str]:
@@ -225,9 +389,13 @@ def _cancel_requested(run) -> bool:
 
 @transaction.atomic
 def claim_next_runnable_run(worker_id: str) -> InvestigationRun | None:
+    now = timezone.now()
     run = (
         InvestigationRun.objects.select_for_update(skip_locked=True)
-        .filter(status__in=[RunStatus.QUEUED, RunStatus.CANCELLING])
+        .filter(
+            Q(status=RunStatus.CANCELLING)
+            | Q(status=RunStatus.QUEUED, queued_at__lte=now)
+        )
         .order_by("queued_at", "created_at")
         .first()
     )
@@ -273,7 +441,7 @@ def _create_success_artifact(
             "completed_at": timezone.now().isoformat(),
             **(metadata or {}),
         },
-        expires_at=timezone.now() + timedelta(days=365),
+        expires_at=timezone.now() + timedelta(days=_artifact_retention_days()),
     )
 
 
@@ -339,10 +507,16 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
 
     def _cancellation_check() -> bool:
         current = _reload_run(run.id)
+        current = _apply_timeout_if_needed(current)
+        if current.status == RunStatus.TIMED_OUT:
+            raise AdapterCancelledError("Run timed out during cancellation checks.")
         return current.status == RunStatus.CANCELLING or current.cancel_requested_at is not None
 
     def _progress_update(progress_percent: int, message: str) -> None:
         current = _reload_run(run.id)
+        current = _apply_timeout_if_needed(current)
+        if current.status == RunStatus.TIMED_OUT:
+            raise AdapterCancelledError("Run timed out during progress updates.")
         if current.status in {RunStatus.CANCELLING, RunStatus.CANCELLED}:
             raise AdapterCancelledError("Run cancelled during worker progress updates.")
         if is_terminal_status(current.status):
@@ -382,6 +556,15 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
         )
     except Exception as exc:  # pragma: no cover - defensive fail-safe path
         current = _reload_run(run.id)
+        logger.exception(
+            "Run %s failed during %s workflow execution.",
+            run.id,
+            run_label,
+        )
+        if _is_transient_exception(exc):
+            retried = _schedule_transient_retry(run=current, exc=exc)
+            if retried is not None:
+                return retried
         return set_run_status(
             run=current,
             status=RunStatus.FAILED,
@@ -392,6 +575,9 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
         )
 
     current = _reload_run(run.id)
+    current = _apply_timeout_if_needed(current)
+    if current.status == RunStatus.TIMED_OUT:
+        return current
     if _cancellation_check():
         return set_run_status(
             run=current,
@@ -486,6 +672,9 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
 
 def _execute_run_simulated(run: InvestigationRun, sleep_between_stages_seconds: float = 0.0) -> InvestigationRun:
     run = _reload_run(run.id)
+    run = _apply_timeout_if_needed(run)
+    if run.status == RunStatus.TIMED_OUT:
+        return run
 
     if run.status == RunStatus.CANCELLING:
         return set_run_status(
@@ -513,6 +702,9 @@ def _execute_run_simulated(run: InvestigationRun, sleep_between_stages_seconds: 
 
     for index, (message, progress) in enumerate(stages, start=1):
         run = _reload_run(run.id)
+        run = _apply_timeout_if_needed(run)
+        if run.status == RunStatus.TIMED_OUT:
+            return run
         if _cancel_requested(run):
             return set_run_status(
                 run=run,
@@ -562,6 +754,9 @@ def _execute_run_simulated(run: InvestigationRun, sleep_between_stages_seconds: 
 
 def _execute_run(run: InvestigationRun, sleep_between_stages_seconds: float = 0.0) -> InvestigationRun:
     run = _reload_run(run.id)
+    run = _apply_timeout_if_needed(run)
+    if run.status == RunStatus.TIMED_OUT:
+        return run
     if run.status == RunStatus.CANCELLING:
         return set_run_status(
             run=run,
@@ -584,12 +779,39 @@ def _execute_run(run: InvestigationRun, sleep_between_stages_seconds: float = 0.
     )
 
 
+def reconcile_timed_out_runs(*, worker_id: str | None = None) -> int:
+    effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    count = 0
+    runs = InvestigationRun.objects.filter(
+        status__in=[RunStatus.STARTING, RunStatus.RUNNING],
+        finished_at__isnull=True,
+    ).order_by("queued_at")
+    for run in runs:
+        run.worker_id = run.worker_id or effective_worker_id
+        run.save(update_fields=["worker_id", "updated_at"])
+        refreshed = _reload_run(run.id)
+        exceeded, error_code, message = _run_exceeded_timeouts(refreshed)
+        if not exceeded:
+            continue
+        set_run_status(
+            run=refreshed,
+            status=RunStatus.TIMED_OUT,
+            message=message,
+            progress_percent=refreshed.progress_percent or 0,
+            error_code=error_code,
+            error_message=message,
+        )
+        count += 1
+    return count
+
+
 def process_single_available_run(
     *,
     worker_id: str | None = None,
     sleep_between_stages_seconds: float = 0.0,
 ) -> InvestigationRun | None:
     effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    reconcile_timed_out_runs(worker_id=effective_worker_id)
     run = claim_next_runnable_run(effective_worker_id)
     if run is None:
         return None
