@@ -1,10 +1,13 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block page_title %}PFD Toolkit Workbench v0.2{% endblock %}</title>
-    <style>{% include "includes/shell_css.html" %}</style>
+    <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'css/components.css' %}">
     {% block extra_head %}{% endblock %}
 </head>
 <body class="app-body">

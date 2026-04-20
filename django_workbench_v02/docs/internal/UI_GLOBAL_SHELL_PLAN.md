@@ -5,6 +5,11 @@ Build a single, reusable site shell for v0.2 (layout, navigation, design tokens,
 
 This stage is visual-only. It must not change business logic, permissions, run orchestration, or URLs.
 
+## Status
+- Stage 1 (global shell): complete.
+- Stage 2 (page-by-page port): in progress (Dashboard started).
+- Stage 3 (static asset plumbing): complete for web runtime.
+
 ## Constraints
 - Keep backend contracts locked per `docs/internal/BACKEND_CONTRACTS_UI_PORT.md`.
 - Preserve all existing routes and form actions.

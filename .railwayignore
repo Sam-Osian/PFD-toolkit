@@ -17,6 +17,7 @@ outputs/
 reports/
 build/
 dist/
+django_workbench_v02/staticfiles/
 node_modules/
 all_reports.csv
 
