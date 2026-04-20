@@ -6,7 +6,13 @@ from datetime import date
 
 from wb_auditlog.models import AuditEvent
 from wb_runs.models import InvestigationRun, RunEvent, RunEventType, RunStatus, RunType
-from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership, WorkspaceVisibility
+from wb_workspaces.models import (
+    MembershipAccessMode,
+    MembershipRole,
+    WorkspaceMembership,
+    WorkspaceReportExclusion,
+    WorkspaceVisibility,
+)
 from wb_workspaces.services import create_workspace_for_user
 
 from .forms import (
@@ -286,6 +292,18 @@ class InvestigationViewTests(TestCase):
         self.assertNotContains(response, "Queue Run")
 
     def test_queue_export_bundle_from_investigation_detail(self):
+        self.investigation.scope_json = {
+            "collection_slug": "local-gov",
+            "collection_query": "medication",
+            "selected_filters": {"coroner": ["Area 1"], "area": [], "receiver": []},
+            "report_identity_allowlist": ["https://example.com/r1"],
+        }
+        self.investigation.save(update_fields=["scope_json", "updated_at"])
+        WorkspaceReportExclusion.objects.create(
+            workspace=self.workspace,
+            report_identity="https://example.com/r2",
+            reason="Out of scope",
+        )
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse(
@@ -315,6 +333,20 @@ class InvestigationViewTests(TestCase):
         self.assertTrue(run.input_config_json.get("download_include_dataset"))
         self.assertTrue(run.input_config_json.get("download_include_excluded"))
         self.assertTrue(run.input_config_json.get("download_include_script"))
+        self.assertEqual(run.input_config_json.get("collection_slug"), "local-gov")
+        self.assertEqual(run.input_config_json.get("collection_query"), "medication")
+        self.assertEqual(
+            run.input_config_json.get("selected_filters"),
+            {"coroner": ["Area 1"], "area": [], "receiver": []},
+        )
+        self.assertEqual(
+            run.input_config_json.get("report_identity_allowlist"),
+            ["https://example.com/r1"],
+        )
+        self.assertEqual(
+            run.input_config_json.get("excluded_report_identities"),
+            ["https://example.com/r2"],
+        )
 
     def test_queue_export_bundle_requires_one_component(self):
         self.client.force_login(self.owner)

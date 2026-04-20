@@ -9,6 +9,7 @@ from wb_workspaces.activity import is_human_view_request, should_update_last_vie
 from wb_workspaces.permissions import can_run_workflows, can_view_workspace
 
 from .models import InvestigationRun, RunArtifact, RunEvent, RunEventType, RunStatus
+from .scope import resolve_run_scope_config
 
 
 class RunServiceError(ValidationError):
@@ -79,13 +80,18 @@ def queue_run(
     if not can_run_workflows(actor, workspace):
         raise PermissionDenied("You do not have permission to run workflows in this workbook.")
 
+    resolved_config = resolve_run_scope_config(
+        investigation=investigation,
+        input_config_json=input_config_json,
+    )
+
     run = InvestigationRun.objects.create(
         investigation=investigation,
         workspace=workspace,
         requested_by=actor,
         run_type=run_type,
         status=RunStatus.QUEUED,
-        input_config_json=input_config_json or {},
+        input_config_json=resolved_config,
         query_start_date=query_start_date,
         query_end_date=query_end_date,
     )
@@ -120,7 +126,7 @@ def queue_run(
         },
         options={
             "run_type": run_type,
-            "input_config_json": input_config_json or {},
+            "input_config_json": resolved_config,
         },
         state_before={},
         state_after={"status": run.status},

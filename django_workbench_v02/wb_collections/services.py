@@ -150,25 +150,31 @@ def _theme_collection_slug(theme_name: str) -> str:
     return f"{THEME_COLLECTION_SLUG_PREFIX}-{slugify(str(theme_name or '')).replace('-', '_')}"
 
 
-def _approved_theme_columns() -> set[str]:
+def _approved_theme_columns_with_status() -> tuple[list[str], bool]:
+    """
+    Return approved theme columns and whether schema parse/load was valid.
+
+    valid=False means schema was unavailable or unreadable; callers may apply
+    safe fallback behavior.
+    """
     global _APPROVED_THEME_COLUMNS_CACHE, _APPROVED_THEME_COLUMNS_MTIME_NS
     try:
         stat = APPROVED_THEME_SCHEMA_PATH.stat()
     except FileNotFoundError:
-        return set()
+        return [], False
 
     mtime_ns = int(stat.st_mtime_ns)
     if _APPROVED_THEME_COLUMNS_CACHE is not None and _APPROVED_THEME_COLUMNS_MTIME_NS == mtime_ns:
-        return set(_APPROVED_THEME_COLUMNS_CACHE)
+        return sorted(_APPROVED_THEME_COLUMNS_CACHE), True
 
     try:
         payload = json.loads(APPROVED_THEME_SCHEMA_PATH.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        return set()
+        return [], False
 
     raw_themes = payload.get("themes")
     if not isinstance(raw_themes, dict):
-        return set()
+        return [], False
 
     columns: set[str] = set()
     for key in raw_themes.keys():
@@ -181,7 +187,14 @@ def _approved_theme_columns() -> set[str]:
 
     _APPROVED_THEME_COLUMNS_CACHE = set(columns)
     _APPROVED_THEME_COLUMNS_MTIME_NS = mtime_ns
-    return columns
+    return sorted(columns), True
+
+
+def _approved_theme_columns() -> set[str]:
+    columns, valid = _approved_theme_columns_with_status()
+    if not valid:
+        return set()
+    return set(columns)
 
 
 def _theme_collection_title(theme_name: str) -> str:
@@ -193,16 +206,29 @@ def _theme_collection_title(theme_name: str) -> str:
 
 def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, dict[str, str]]:
     receiver_collection_columns = set(COLLECTION_COLUMNS.values())
-    approved_theme_columns = _approved_theme_columns()
+    approved_theme_columns, schema_valid = _approved_theme_columns_with_status()
     discovered_theme_columns = sorted(
         str(column)
         for column in reports_df.columns
         if str(column).startswith("theme_") and str(column) not in receiver_collection_columns
     )
-    whitelisted_theme_columns = [
-        column for column in discovered_theme_columns if column in approved_theme_columns
-    ]
-    theme_columns = sorted(whitelisted_theme_columns or discovered_theme_columns)
+    discovered_set = set(discovered_theme_columns)
+
+    theme_columns: list[str] = []
+    if approved_theme_columns:
+        # Lock thematic collections to approved schema order.
+        theme_columns = [column for column in approved_theme_columns if column in discovered_set]
+    elif schema_valid:
+        # Valid schema with no approved themes: intentionally show none.
+        theme_columns = []
+    else:
+        # Safe fallback when schema cannot be read/parsed.
+        if discovered_theme_columns:
+            logger.warning(
+                "approved theme schema unavailable or invalid; using discovered theme columns fallback"
+            )
+        theme_columns = discovered_theme_columns
+
     collections: dict[str, dict[str, str]] = {}
 
     for column in theme_columns:
@@ -420,6 +446,48 @@ def copy_collection_to_workbook(
             collection_slug=collection_slug,
         ),
         description=f"Created from collection '{collection_title}'.",
+        request=request,
+    )
+
+    from wb_investigations.models import InvestigationStatus
+    from wb_investigations.services import create_investigation
+
+    report_identity_allowlist: list[str] = []
+    if REPORT_IDENTITY_COLUMN in reports_df.columns:
+        seen_report_identities: set[str] = set()
+        for value in reports_df[REPORT_IDENTITY_COLUMN].tolist():
+            report_identity = str(value or "").strip()
+            if not report_identity:
+                continue
+            if report_identity in seen_report_identities:
+                continue
+            seen_report_identities.add(report_identity)
+            report_identity_allowlist.append(report_identity)
+
+    scope_json = {
+        "collection_slug": str(collection_slug or "").strip(),
+        "collection_query": str(collection_query or "").strip(),
+        "selected_filters": {
+            "coroner": [str(value).strip() for value in selected_filters.get("coroner", []) if str(value).strip()],
+            "area": [str(value).strip() for value in selected_filters.get("area", []) if str(value).strip()],
+            "receiver": [str(value).strip() for value in selected_filters.get("receiver", []) if str(value).strip()],
+        },
+        "report_identity_allowlist": report_identity_allowlist,
+    }
+    method_json = {
+        "run_filter": True,
+        "run_themes": False,
+        "run_extract": False,
+        "pipeline_plan": [],
+    }
+    create_investigation(
+        actor=actor,
+        workspace=workspace,
+        title=f"{collection_title} investigation",
+        question_text=str(collection_query or "").strip(),
+        scope_json=scope_json,
+        method_json=method_json,
+        status=InvestigationStatus.DRAFT,
         request=request,
     )
 

@@ -9,7 +9,6 @@ from django.views.decorators.http import require_GET, require_POST
 
 from wb_investigations.models import Investigation
 from wb_notifications.services import NotificationRequestError, create_notification_request
-from wb_workspaces.models import WorkspaceReportExclusion
 from wb_workspaces.permissions import can_view_workspace
 from wb_workspaces.services import (
     WorkspaceCredentialValidationError,
@@ -289,28 +288,6 @@ def queue_investigation_run(request, workbook_id, investigation_id):
 
     try:
         run_config = form.cleaned_data["input_config_json"] or {}
-        scope_json = investigation.scope_json if isinstance(investigation.scope_json, dict) else {}
-        if scope_json.get("collection_slug"):
-            run_config.setdefault("collection_slug", scope_json.get("collection_slug"))
-        if scope_json.get("collection_query"):
-            run_config.setdefault("collection_query", scope_json.get("collection_query"))
-        if isinstance(scope_json.get("selected_filters"), dict):
-            run_config.setdefault("selected_filters", scope_json.get("selected_filters"))
-        if isinstance(scope_json.get("report_identity_allowlist"), list):
-            run_config.setdefault(
-                "report_identity_allowlist",
-                [str(item) for item in scope_json.get("report_identity_allowlist") if str(item).strip()],
-            )
-
-        excluded_identities = [
-            str(item)
-            for item in WorkspaceReportExclusion.objects.filter(workspace=investigation.workspace)
-            .values_list("report_identity", flat=True)
-            if str(item).strip()
-        ]
-        if excluded_identities:
-            run_config["excluded_report_identities"] = excluded_identities
-            run_config["excluded_report_count"] = len(excluded_identities)
 
         execution_mode = str(run_config.get("execution_mode", "real")).strip().lower()
         provider = str(form.cleaned_data.get("provider") or "openai").strip().lower()

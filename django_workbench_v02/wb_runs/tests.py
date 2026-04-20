@@ -127,6 +127,84 @@ class RunServiceTests(TestCase):
                 message="Invalid direct success from queued",
             )
 
+    def test_queue_run_backfills_scope_from_investigation_and_enforces_exclusions(self):
+        self.investigation.scope_json = {
+            "collection_slug": "local-gov",
+            "collection_query": "medication safety",
+            "selected_filters": {"coroner": ["A"], "area": ["B"], "receiver": ["C"]},
+            "report_identity_allowlist": ["https://example.com/r1"],
+        }
+        self.investigation.save(update_fields=["scope_json", "updated_at"])
+        WorkspaceReportExclusion.objects.create(
+            workspace=self.workspace,
+            report_identity="https://example.com/excluded-1",
+            reason="Out of scope",
+        )
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "simulate"},
+        )
+        self.assertEqual(run.input_config_json.get("collection_slug"), "local-gov")
+        self.assertEqual(run.input_config_json.get("collection_query"), "medication safety")
+        self.assertEqual(
+            run.input_config_json.get("selected_filters"),
+            {"coroner": ["A"], "area": ["B"], "receiver": ["C"]},
+        )
+        self.assertEqual(
+            run.input_config_json.get("report_identity_allowlist"),
+            ["https://example.com/r1"],
+        )
+        self.assertEqual(
+            run.input_config_json.get("excluded_report_identities"),
+            ["https://example.com/excluded-1"],
+        )
+        self.assertEqual(run.input_config_json.get("excluded_report_count"), 1)
+
+    def test_queue_run_respects_explicit_scope_over_investigation_scope(self):
+        self.investigation.scope_json = {
+            "collection_slug": "local-gov",
+            "collection_query": "scope query",
+            "selected_filters": {"coroner": ["Scope"], "area": [], "receiver": []},
+            "report_identity_allowlist": ["https://example.com/scope"],
+        }
+        self.investigation.save(update_fields=["scope_json", "updated_at"])
+        WorkspaceReportExclusion.objects.create(
+            workspace=self.workspace,
+            report_identity="https://example.com/excluded-2",
+            reason="Out of scope",
+        )
+
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "collection_slug": "custom-search",
+                "collection_query": "explicit query",
+                "selected_filters": {"coroner": ["Explicit"], "area": [], "receiver": []},
+                "report_identity_allowlist": ["https://example.com/explicit"],
+                "excluded_report_identities": ["https://example.com/ignored-manual-value"],
+            },
+        )
+        self.assertEqual(run.input_config_json.get("collection_slug"), "custom-search")
+        self.assertEqual(run.input_config_json.get("collection_query"), "explicit query")
+        self.assertEqual(
+            run.input_config_json.get("selected_filters"),
+            {"coroner": ["Explicit"], "area": [], "receiver": []},
+        )
+        self.assertEqual(
+            run.input_config_json.get("report_identity_allowlist"),
+            ["https://example.com/explicit"],
+        )
+        self.assertEqual(
+            run.input_config_json.get("excluded_report_identities"),
+            ["https://example.com/excluded-2"],
+        )
+
 
 class RunViewTests(TestCase):
     def setUp(self):
