@@ -1,29 +1,44 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>Shared Workbook View</h2>
-<p>Workbook: <strong>{{ workspace.title }}</strong></p>
-<p>Share link ID: {{ share_link.id }}</p>
-<p>Mode: {{ share_link.mode }}</p>
-<p>Public: {{ share_link.is_public }}</p>
-<p>Active: {{ share_link.is_active }}</p>
-<p>Expires: {{ share_link.expires_at|default:"Never" }}</p>
-<p>This shared view is read-only.</p>
-{% if share_link.snapshot_revision %}
-    <p>Snapshot revision: {{ share_link.snapshot_revision.revision_number }}</p>
-{% endif %}
-{% if workspace.description %}
-    <p>Description: {{ workspace.description }}</p>
-{% endif %}
+{% block page_title %}Shared Workbook View · PFD Toolkit Workbench v0.2{% endblock %}
 
-{% if request.user.is_authenticated %}
-<form method="post" action="{% url 'share-link-copy' share_id=share_link.id %}">
-    {% csrf_token %}
-    <label for="workbook_title">Workbook name</label>
-    <input id="workbook_title" name="workbook_title" required value="{{ copy_form.workbook_title.value }}">
-    <button type="submit">Make editable copy</button>
-</form>
-{% else %}
-<p><a href="{% url 'accounts-login' %}?next={% url 'share-link-detail' share_id=share_link.id %}">Log in</a> to make an editable copy.</p>
-{% endif %}
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Shared Workbook View</h2>
+    <p class="page-subtitle">Read-only access to a shared workbook snapshot or live link.</p>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="stack-md">
+    <section class="card">
+        <p>Workbook: <strong>{{ workspace.title }}</strong></p>
+        <p>Share link ID: {{ share_link.id }}</p>
+        <p>Mode: {{ share_link.mode }}</p>
+        <p>Public: {{ share_link.is_public }}</p>
+        <p>Active: {{ share_link.is_active }}</p>
+        <p>Expires: {{ share_link.expires_at|default:"Never" }}</p>
+        <p>This shared view is read-only.</p>
+        {% if share_link.snapshot_revision %}
+            <p>Snapshot revision: {{ share_link.snapshot_revision.revision_number }}</p>
+        {% endif %}
+        {% if workspace.description %}
+            <p>Description: {{ workspace.description }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        {% if request.user.is_authenticated %}
+            <h3>Create Your Editable Copy</h3>
+            <form method="post" action="{% url 'share-link-copy' share_id=share_link.id %}" class="stack-sm">
+                {% csrf_token %}
+                <label for="workbook_title">Workbook name</label>
+                <input id="workbook_title" name="workbook_title" required value="{{ copy_form.workbook_title.value }}">
+                <div><button type="submit" class="btn btn-primary">Make editable copy</button></div>
+            </form>
+        {% else %}
+            <p><a href="{% url 'accounts-login' %}?next={% url 'share-link-detail' share_id=share_link.id %}">Log in</a> to make an editable copy.</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}

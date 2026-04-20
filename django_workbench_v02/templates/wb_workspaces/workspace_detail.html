@@ -1,359 +1,400 @@
 {% extends "base.html" %}
 
+{% block page_title %}{{ workspace.title }} · Workbook · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">{{ workspace.title }}</h2>
+    <p class="page-subtitle">Workbook detail, membership, state history, sharing, credentials, and exclusions.</p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>{{ workspace.title }}</h2>
-<p>{{ workspace.description }}</p>
-<p>Visibility: {{ workspace.visibility }}</p>
-{% if workspace.archived_at %}
-    <p>Status: archived at {{ workspace.archived_at }}</p>
-{% else %}
-    <p>Status: active</p>
-{% endif %}
-{% if membership %}
-    <p>Your role: {{ membership.role }} | Access: {{ membership.access_mode }}</p>
-{% else %}
-    <p>You are viewing this workbook as a guest.</p>
-{% endif %}
-{% if not workspace.archived_at %}
-    <p><a href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a></p>
-{% endif %}
+<div class="stack-md ws-detail-stack">
+    <section class="card ws-summary-card">
+        <p>{{ workspace.description|default:"No description." }}</p>
+        <p>Visibility: {{ workspace.visibility }}</p>
+        {% if workspace.archived_at %}
+            <p>Status: archived at {{ workspace.archived_at }}</p>
+        {% else %}
+            <p>Status: active</p>
+        {% endif %}
+        {% if membership %}
+            <p>Your role: {{ membership.role }} | Access: {{ membership.access_mode }}</p>
+        {% else %}
+            <p>You are viewing this workbook as a guest.</p>
+        {% endif %}
+        {% if not workspace.archived_at %}
+            <p><a class="btn btn-secondary" href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a></p>
+        {% endif %}
+    </section>
 
-{% if request.user.is_authenticated %}
-<h3>Workbook Lifecycle</h3>
-{% if workspace.archived_at %}
-    {% if manage_members_allowed %}
-        <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" style="display:inline">
-            {% csrf_token %}
-            <button type="submit">Restore workbook</button>
-        </form>
-    {% endif %}
-{% else %}
-    {% if manage_members_allowed %}
-        <form method="post" action="{% url 'workbook-archive' workbook_id=workspace.id %}" style="display:inline">
-            {% csrf_token %}
-            <button type="submit">Archive workbook</button>
-        </form>
-    {% endif %}
-{% endif %}
-{% if request.user.is_superuser %}
-    <form method="post" action="{% url 'workbook-delete' workbook_id=workspace.id %}" style="display:inline">
-        {% csrf_token %}
-        <input type="text" name="reason" placeholder="Reason (optional)">
-        <button type="submit">Admin hard-delete</button>
-    </form>
-{% endif %}
-{% endif %}
-
-{% if request.user.is_authenticated %}
-    {% if manage_members_allowed or request.user.is_superuser %}
-        <p><a href="{% url 'workbook-action-cache' workbook_id=workspace.id %}">Inspect workbook action cache</a></p>
-    {% endif %}
-{% endif %}
-
-{% if request.user.is_authenticated %}
-<h3>Workbook State</h3>
-{% if current_revision %}
-    <p>Current revision: #{{ current_revision.revision_number }} ({{ current_revision.change_type }})</p>
-{% else %}
-    <p>No revision captured yet.</p>
-{% endif %}
-{% if can_edit_state %}
-    <form method="post" action="{% url 'workbook-state-undo' workbook_id=workspace.id %}" style="display:inline">
-        {% csrf_token %}
-        <button type="submit">Undo</button>
-    </form>
-    <form method="post" action="{% url 'workbook-state-redo' workbook_id=workspace.id %}" style="display:inline">
-        {% csrf_token %}
-        <button type="submit">Redo</button>
-    </form>
-    <form method="post" action="{% url 'workbook-state-start-over' workbook_id=workspace.id %}" style="display:inline">
-        {% csrf_token %}
-        <button type="submit">Start Over</button>
-    </form>
-    <form method="post" action="{% url 'workbook-state-revert-reports' workbook_id=workspace.id %}" style="display:inline">
-        {% csrf_token %}
-        <button type="submit">Revert Reports</button>
-    </form>
-{% else %}
-    <p>You do not have edit access to modify workbook state history.</p>
-{% endif %}
-{% endif %}
-
-{% if request.user.is_authenticated %}
-<h3>Your Workbooks</h3>
-{% if user_workbook_memberships %}
-    <ul>
-        {% for row in user_workbook_memberships %}
-            <li>
-                <a href="{% url 'workbook-detail' workbook_id=row.workspace.id %}">{{ row.workspace.title }}</a>
-                {% if active_workspace_id and active_workspace_id == row.workspace.id|stringformat:"s" %}
-                    (active)
-                {% endif %}
-                {% if row.workspace.archived_at %}
-                    (archived)
-                {% elif not active_workspace_id or active_workspace_id != row.workspace.id|stringformat:"s" %}
-                    <form method="post" action="{% url 'workbook-activate' workbook_id=row.workspace.id %}" style="display:inline">
-                        {% csrf_token %}
-                        <input type="hidden" name="next_url" value="{% url 'workbook-detail' workbook_id=row.workspace.id %}">
-                        <button type="submit">Switch to this workbook</button>
-                    </form>
-                {% endif %}
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No workbooks yet.</p>
-{% endif %}
-{% endif %}
-
-<h3>Investigation In This Workbook</h3>
-{% if investigations %}
-    <ul>
-        {% for inv in investigations %}
-            <li>
-                <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=inv.id %}">
-                    {{ inv.title }}
-                </a>
-                ({{ inv.status }})
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No investigation yet.</p>
-{% endif %}
-
-<h3>Members</h3>
-{% if memberships %}
-    <table>
-        <thead>
-            <tr>
-                <th>Email</th>
-                <th>Role</th>
-                <th>Access</th>
-                <th>Run Workflows</th>
-                <th>Manage Members</th>
-                <th>Manage Shares</th>
-                {% if manage_members_allowed %}
-                    <th>Actions</th>
-                {% endif %}
-            </tr>
-        </thead>
-        <tbody>
-        {% for row in memberships %}
-            <tr>
-                <td>{{ row.user.email }}</td>
-                <td>{{ row.role }}</td>
-                <td>{{ row.access_mode }}</td>
-                <td>{{ row.can_run_workflows }}</td>
-                <td>{{ row.can_manage_members }}</td>
-                <td>{{ row.can_manage_shares }}</td>
-                {% if manage_members_allowed %}
-                    <td>
-                        <form method="post" action="{% url 'workbook-member-update' workbook_id=workspace.id membership_id=row.id %}">
+    {% if request.user.is_authenticated %}
+        <section class="card ws-actions-card">
+            <h3>Workbook Lifecycle</h3>
+            <div class="ws-inline-actions">
+                {% if workspace.archived_at %}
+                    {% if manage_members_allowed %}
+                        <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" class="inline-form">
                             {% csrf_token %}
-                            <label>Role</label>
-                            <select name="role">
-                                {% for value, label in role_choices %}
-                                    <option value="{{ value }}" {% if row.role == value %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                            <label>Access</label>
-                            <select name="access_mode">
-                                {% for value, label in access_mode_choices %}
-                                    <option value="{{ value }}" {% if row.access_mode == value %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                            <label>
-                                <input type="checkbox" name="can_run_workflows" {% if row.can_run_workflows %}checked{% endif %}>
-                                Run
-                            </label>
-                            <label>
-                                <input type="checkbox" name="can_manage_members" {% if row.can_manage_members %}checked{% endif %}>
-                                Manage Members
-                            </label>
-                            <label>
-                                <input type="checkbox" name="can_manage_shares" {% if row.can_manage_shares %}checked{% endif %}>
-                                Manage Shares
-                            </label>
-                            <button type="submit">Update</button>
+                            <button type="submit" class="btn btn-secondary">Restore workbook</button>
                         </form>
-                        <form method="post" action="{% url 'workbook-member-remove' workbook_id=workspace.id membership_id=row.id %}">
-                            {% csrf_token %}
-                            <button type="submit">Remove</button>
-                        </form>
-                    </td>
-                {% endif %}
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-{% else %}
-    <p>No members found.</p>
-{% endif %}
-
-{% if manage_members_allowed %}
-    <h3>Add Member</h3>
-    <form method="post" action="{% url 'workbook-member-add' workbook_id=workspace.id %}">
-        {% csrf_token %}
-        {{ add_form.as_p }}
-        <button type="submit">Add member</button>
-    </form>
-{% endif %}
-
-<h3>LLM Credentials</h3>
-{% if request.user.is_authenticated %}
-    {% if user_credentials %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Provider</th>
-                    <th>Key Suffix</th>
-                    <th>Base URL</th>
-                    <th>Last Used</th>
-                </tr>
-            </thead>
-            <tbody>
-            {% for cred in user_credentials %}
-                <tr>
-                    <td>{{ cred.provider }}</td>
-                    <td>****{{ cred.key_last4 }}</td>
-                    <td>{{ cred.base_url|default:"-" }}</td>
-                    <td>{{ cred.last_used_at|default:"-" }}</td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>No saved credentials for your account in this workbook.</p>
-    {% endif %}
-
-    {% if can_manage_credentials %}
-        <h4>Save / Update Credential</h4>
-        <form method="post" action="{% url 'workbook-credential-save' workbook_id=workspace.id %}">
-            {% csrf_token %}
-            {{ credential_form.as_p }}
-            <button type="submit">Save credential</button>
-        </form>
-
-        <h4>Delete Credential</h4>
-        <form method="post" action="{% url 'workbook-credential-remove' workbook_id=workspace.id %}">
-            {% csrf_token %}
-            {{ credential_delete_form.as_p }}
-            <button type="submit">Delete credential</button>
-        </form>
-    {% else %}
-        <p>You do not currently have workflow permission in this workbook, so credential changes are disabled.</p>
-    {% endif %}
-{% else %}
-    <p>Log in to manage workbook credentials.</p>
-{% endif %}
-
-<h3>Excluded Reports</h3>
-{% if report_exclusions %}
-    <table>
-        <thead>
-            <tr>
-                <th>Report</th>
-                <th>Date</th>
-                <th>Reason</th>
-                <th>Excluded By</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for exclusion in report_exclusions %}
-            <tr>
-                <td>
-                    {% if exclusion.report_url %}
-                        <a href="{{ exclusion.report_url }}" target="_blank" rel="noopener">{{ exclusion.report_title|default:exclusion.report_identity }}</a>
-                    {% else %}
-                        {{ exclusion.report_title|default:exclusion.report_identity }}
                     {% endif %}
-                </td>
-                <td>{{ exclusion.report_date|default:"-" }}</td>
-                <td>{{ exclusion.reason|default:"-" }}</td>
-                <td>{% if exclusion.excluded_by %}{{ exclusion.excluded_by.email }}{% else %}-{% endif %}</td>
-                <td>
-                    <form method="post" action="{% url 'workbook-excluded-report-restore' workbook_id=workspace.id exclusion_id=exclusion.id %}">
+                {% else %}
+                    {% if manage_members_allowed %}
+                        <form method="post" action="{% url 'workbook-archive' workbook_id=workspace.id %}" class="inline-form">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-ghost">Archive workbook</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+                {% if request.user.is_superuser %}
+                    <form method="post" action="{% url 'workbook-delete' workbook_id=workspace.id %}" class="inline-form">
                         {% csrf_token %}
-                        <button type="submit">Restore</button>
+                        <input type="text" name="reason" placeholder="Reason (optional)">
+                        <button type="submit" class="btn btn-ghost">Admin hard-delete</button>
                     </form>
-                </td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-{% else %}
-    <p>No excluded reports yet.</p>
-{% endif %}
-
-<h3>Share Links</h3>
-{% if share_links %}
-    <table>
-        <thead>
-            <tr>
-                <th>Link</th>
-                <th>Mode</th>
-                <th>Public</th>
-                <th>Active</th>
-                <th>Expires</th>
-                <th>Last Viewed</th>
-                {% if manage_shares_allowed %}
-                    <th>Actions</th>
                 {% endif %}
-            </tr>
-        </thead>
-        <tbody>
-        {% for share in share_links %}
-            <tr>
-                <td><a href="{% url 'share-link-detail' share_id=share.id %}">{{ share.id }}</a></td>
-                <td>{{ share.mode }}</td>
-                <td>{{ share.is_public }}</td>
-                <td>{{ share.is_active }}</td>
-                <td>{{ share.expires_at|default:"-" }}</td>
-                <td>{{ share.last_viewed_at|default:"-" }}</td>
-                {% if manage_shares_allowed %}
-                    <td>
-                        <form method="post" action="{% url 'workbook-share-update' workbook_id=workspace.id share_id=share.id %}">
-                            {% csrf_token %}
-                            <label>Mode</label>
-                            <select name="mode">
-                                {% for value, label in share_mode_choices %}
-                                    <option value="{{ value }}" {% if share.mode == value %}selected{% endif %}>{{ label }}</option>
-                                {% endfor %}
-                            </select>
-                            <label>
-                                <input type="checkbox" name="is_public" {% if share.is_public %}checked{% endif %}>
-                                Public
-                            </label>
-                            <label>
-                                <input type="checkbox" name="is_active" {% if share.is_active %}checked{% endif %}>
-                                Active
-                            </label>
-                            <label>Expires At</label>
-                            <input type="datetime-local" name="expires_at" value="{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d\\TH:i' }}{% endif %}">
-                            <button type="submit">Update</button>
-                        </form>
-                        <form method="post" action="{% url 'workbook-share-revoke' workbook_id=workspace.id share_id=share.id %}">
-                            {% csrf_token %}
-                            <button type="submit">Revoke</button>
-                        </form>
-                    </td>
-                {% endif %}
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-{% else %}
-    <p>No share links yet.</p>
-{% endif %}
+            </div>
+            {% if manage_members_allowed or request.user.is_superuser %}
+                <p><a href="{% url 'workbook-action-cache' workbook_id=workspace.id %}">Inspect workbook action cache</a></p>
+            {% endif %}
+        </section>
+    {% endif %}
 
-{% if manage_shares_allowed %}
-    <h3>Create Share Link</h3>
-    <form method="post" action="{% url 'workbook-share-create' workbook_id=workspace.id %}">
-        {% csrf_token %}
-        {{ share_create_form.as_p }}
-        <button type="submit">Create share link</button>
-    </form>
-{% endif %}
+    {% if request.user.is_authenticated %}
+        <section class="card ws-state-card">
+            <h3>Workbook State</h3>
+            {% if current_revision %}
+                <p>Current revision: #{{ current_revision.revision_number }} ({{ current_revision.change_type }})</p>
+            {% else %}
+                <p>No revision captured yet.</p>
+            {% endif %}
+            {% if can_edit_state %}
+                <div class="ws-inline-actions">
+                    <form method="post" action="{% url 'workbook-state-undo' workbook_id=workspace.id %}" class="inline-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost">Undo</button>
+                    </form>
+                    <form method="post" action="{% url 'workbook-state-redo' workbook_id=workspace.id %}" class="inline-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost">Redo</button>
+                    </form>
+                    <form method="post" action="{% url 'workbook-state-start-over' workbook_id=workspace.id %}" class="inline-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost">Start Over</button>
+                    </form>
+                    <form method="post" action="{% url 'workbook-state-revert-reports' workbook_id=workspace.id %}" class="inline-form">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-ghost">Revert Reports</button>
+                    </form>
+                </div>
+            {% else %}
+                <p>You do not have edit access to modify workbook state history.</p>
+            {% endif %}
+        </section>
+    {% endif %}
+
+    {% if request.user.is_authenticated %}
+        <section class="card ws-workbooks-card">
+            <h3>Your Workbooks</h3>
+            {% if user_workbook_memberships %}
+                <ul class="ws-list">
+                    {% for row in user_workbook_memberships %}
+                        <li>
+                            <a href="{% url 'workbook-detail' workbook_id=row.workspace.id %}">{{ row.workspace.title }}</a>
+                            {% if active_workspace_id and active_workspace_id == row.workspace.id|stringformat:"s" %}
+                                (active)
+                            {% endif %}
+                            {% if row.workspace.archived_at %}
+                                (archived)
+                            {% elif not active_workspace_id or active_workspace_id != row.workspace.id|stringformat:"s" %}
+                                <form method="post" action="{% url 'workbook-activate' workbook_id=row.workspace.id %}" class="inline-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next_url" value="{% url 'workbook-detail' workbook_id=row.workspace.id %}">
+                                    <button type="submit" class="btn btn-ghost">Switch to this workbook</button>
+                                </form>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No workbooks yet.</p>
+            {% endif %}
+        </section>
+    {% endif %}
+
+    <section class="card ws-investigation-card">
+        <h3>Investigation In This Workbook</h3>
+        {% if investigations %}
+            <ul class="ws-list">
+                {% for inv in investigations %}
+                    <li>
+                        <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=inv.id %}">
+                            {{ inv.title }}
+                        </a>
+                        ({{ inv.status }})
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No investigation yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="card ws-members-card">
+        <h3>Members</h3>
+        {% if memberships %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th>Role</th>
+                            <th>Access</th>
+                            <th>Run Workflows</th>
+                            <th>Manage Members</th>
+                            <th>Manage Shares</th>
+                            {% if manage_members_allowed %}
+                                <th>Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for row in memberships %}
+                        <tr>
+                            <td>{{ row.user.email }}</td>
+                            <td>{{ row.role }}</td>
+                            <td>{{ row.access_mode }}</td>
+                            <td>{{ row.can_run_workflows }}</td>
+                            <td>{{ row.can_manage_members }}</td>
+                            <td>{{ row.can_manage_shares }}</td>
+                            {% if manage_members_allowed %}
+                                <td>
+                                    <form method="post" action="{% url 'workbook-member-update' workbook_id=workspace.id membership_id=row.id %}" class="stack-sm">
+                                        {% csrf_token %}
+                                        <label>Role</label>
+                                        <select name="role">
+                                            {% for value, label in role_choices %}
+                                                <option value="{{ value }}" {% if row.role == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <label>Access</label>
+                                        <select name="access_mode">
+                                            {% for value, label in access_mode_choices %}
+                                                <option value="{{ value }}" {% if row.access_mode == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <label class="checkbox-row">
+                                            <input type="checkbox" name="can_run_workflows" {% if row.can_run_workflows %}checked{% endif %}>
+                                            Run
+                                        </label>
+                                        <label class="checkbox-row">
+                                            <input type="checkbox" name="can_manage_members" {% if row.can_manage_members %}checked{% endif %}>
+                                            Manage Members
+                                        </label>
+                                        <label class="checkbox-row">
+                                            <input type="checkbox" name="can_manage_shares" {% if row.can_manage_shares %}checked{% endif %}>
+                                            Manage Shares
+                                        </label>
+                                        <button type="submit" class="btn btn-ghost">Update</button>
+                                    </form>
+                                    <form method="post" action="{% url 'workbook-member-remove' workbook_id=workspace.id membership_id=row.id %}" class="inline-form">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-ghost">Remove</button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No members found.</p>
+        {% endif %}
+    </section>
+
+    {% if manage_members_allowed %}
+        <section class="card ws-add-member-card">
+            <h3>Add Member</h3>
+            <form method="post" action="{% url 'workbook-member-add' workbook_id=workspace.id %}" class="stack-sm">
+                {% csrf_token %}
+                {{ add_form.as_p }}
+                <button type="submit" class="btn btn-primary">Add member</button>
+            </form>
+        </section>
+    {% endif %}
+
+    <section class="card ws-credentials-card">
+        <h3>LLM Credentials</h3>
+        {% if request.user.is_authenticated %}
+            {% if user_credentials %}
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Provider</th>
+                                <th>Key Suffix</th>
+                                <th>Base URL</th>
+                                <th>Last Used</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        {% for cred in user_credentials %}
+                            <tr>
+                                <td>{{ cred.provider }}</td>
+                                <td>****{{ cred.key_last4 }}</td>
+                                <td>{{ cred.base_url|default:"-" }}</td>
+                                <td>{{ cred.last_used_at|default:"-" }}</td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p>No saved credentials for your account in this workbook.</p>
+            {% endif %}
+
+            {% if can_manage_credentials %}
+                <h4>Save / Update Credential</h4>
+                <form method="post" action="{% url 'workbook-credential-save' workbook_id=workspace.id %}" class="stack-sm">
+                    {% csrf_token %}
+                    {{ credential_form.as_p }}
+                    <button type="submit" class="btn btn-primary">Save credential</button>
+                </form>
+
+                <h4>Delete Credential</h4>
+                <form method="post" action="{% url 'workbook-credential-remove' workbook_id=workspace.id %}" class="stack-sm">
+                    {% csrf_token %}
+                    {{ credential_delete_form.as_p }}
+                    <button type="submit" class="btn btn-ghost">Delete credential</button>
+                </form>
+            {% else %}
+                <p>You do not currently have workflow permission in this workbook, so credential changes are disabled.</p>
+            {% endif %}
+        {% else %}
+            <p>Log in to manage workbook credentials.</p>
+        {% endif %}
+    </section>
+
+    <section class="card ws-exclusions-card">
+        <h3>Excluded Reports</h3>
+        {% if report_exclusions %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Report</th>
+                            <th>Date</th>
+                            <th>Reason</th>
+                            <th>Excluded By</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for exclusion in report_exclusions %}
+                        <tr>
+                            <td>
+                                {% if exclusion.report_url %}
+                                    <a href="{{ exclusion.report_url }}" target="_blank" rel="noopener">{{ exclusion.report_title|default:exclusion.report_identity }}</a>
+                                {% else %}
+                                    {{ exclusion.report_title|default:exclusion.report_identity }}
+                                {% endif %}
+                            </td>
+                            <td>{{ exclusion.report_date|default:"-" }}</td>
+                            <td>{{ exclusion.reason|default:"-" }}</td>
+                            <td>{% if exclusion.excluded_by %}{{ exclusion.excluded_by.email }}{% else %}-{% endif %}</td>
+                            <td>
+                                <form method="post" action="{% url 'workbook-excluded-report-restore' workbook_id=workspace.id exclusion_id=exclusion.id %}" class="inline-form">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-ghost">Restore</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No excluded reports yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="card ws-shares-card">
+        <h3>Share Links</h3>
+        {% if share_links %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Link</th>
+                            <th>Mode</th>
+                            <th>Public</th>
+                            <th>Active</th>
+                            <th>Expires</th>
+                            <th>Last Viewed</th>
+                            {% if manage_shares_allowed %}
+                                <th>Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for share in share_links %}
+                        <tr>
+                            <td><a href="{% url 'share-link-detail' share_id=share.id %}">{{ share.id }}</a></td>
+                            <td>{{ share.mode }}</td>
+                            <td>{{ share.is_public }}</td>
+                            <td>{{ share.is_active }}</td>
+                            <td>{{ share.expires_at|default:"-" }}</td>
+                            <td>{{ share.last_viewed_at|default:"-" }}</td>
+                            {% if manage_shares_allowed %}
+                                <td>
+                                    <form method="post" action="{% url 'workbook-share-update' workbook_id=workspace.id share_id=share.id %}" class="stack-sm">
+                                        {% csrf_token %}
+                                        <label>Mode</label>
+                                        <select name="mode">
+                                            {% for value, label in share_mode_choices %}
+                                                <option value="{{ value }}" {% if share.mode == value %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <label class="checkbox-row">
+                                            <input type="checkbox" name="is_public" {% if share.is_public %}checked{% endif %}>
+                                            Public
+                                        </label>
+                                        <label class="checkbox-row">
+                                            <input type="checkbox" name="is_active" {% if share.is_active %}checked{% endif %}>
+                                            Active
+                                        </label>
+                                        <label>Expires At</label>
+                                        <input type="datetime-local" name="expires_at" value="{% if share.expires_at %}{{ share.expires_at|date:'Y-m-d\\TH:i' }}{% endif %}">
+                                        <button type="submit" class="btn btn-ghost">Update</button>
+                                    </form>
+                                    <form method="post" action="{% url 'workbook-share-revoke' workbook_id=workspace.id share_id=share.id %}" class="inline-form">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-ghost">Revoke</button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No share links yet.</p>
+        {% endif %}
+    </section>
+
+    {% if manage_shares_allowed %}
+        <section class="card ws-create-share-card">
+            <h3>Create Share Link</h3>
+            <form method="post" action="{% url 'workbook-share-create' workbook_id=workspace.id %}" class="stack-sm">
+                {% csrf_token %}
+                {{ share_create_form.as_p }}
+                <button type="submit" class="btn btn-primary">Create share link</button>
+            </form>
+        </section>
+    {% endif %}
+</div>
 {% endblock %}

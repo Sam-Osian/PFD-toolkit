@@ -1,18 +1,35 @@
 {% extends "base.html" %}
 
+{% block page_title %}Public Workbooks · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Public Workbooks</h2>
+    <p class="page-subtitle">Browse listed workbooks that are viewable without login.</p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>Public Workbooks</h2>
-{% if workspaces %}
-    <ul>
-        {% for workspace in workspaces %}
-            <li>
-                <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">
-                    {{ workspace.title }}
-                </a>
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No listed public workbooks are available.</p>
-{% endif %}
+<section class="public-workspaces">
+    {% if workspaces %}
+        <div class="collection-grid">
+            {% for workspace in workspaces %}
+                <article class="card collection-card">
+                    <h3>
+                        <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">
+                            {{ workspace.title }}
+                        </a>
+                    </h3>
+                    {% if workspace.description %}
+                        <p class="collection-desc">{{ workspace.description }}</p>
+                    {% endif %}
+                </article>
+            {% endfor %}
+        </div>
+    {% else %}
+        <section class="card">
+            <p>No listed public workbooks are available.</p>
+        </section>
+    {% endif %}
+</section>
 {% endblock %}

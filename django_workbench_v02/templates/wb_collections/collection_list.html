@@ -1,20 +1,32 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>Collections</h2>
-<p>Browse curated and custom collections, then copy one into an editable workbook.</p>
-{% if snapshot_available %}
-    <p>Counter snapshot updated: {{ snapshot_generated_at|date:"Y-m-d H:i:s" }}</p>
-{% else %}
-    <p>Counter snapshot not available yet. Counts will appear after the refresh job runs.</p>
-{% endif %}
+{% block page_title %}Collections · PFD Toolkit Workbench v0.2{% endblock %}
 
-<ul>
-    {% for item in collections %}
-        <li>
-            <a href="{% url 'collection-detail' collection_slug=item.slug %}">{{ item.title }}</a>
-            - {{ item.description }} ({{ item.count }})
-        </li>
-    {% endfor %}
-</ul>
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Collections</h2>
+    <p class="page-subtitle">Browse curated and custom collections, then copy one into an editable workbook.</p>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="stack-md">
+    <section class="card">
+        {% if snapshot_available %}
+            <p class="empty-note">Counter snapshot updated: {{ snapshot_generated_at|date:"Y-m-d H:i:s" }}</p>
+        {% else %}
+            <p class="empty-note">Counter snapshot not available yet. Counts will appear after the refresh job runs.</p>
+        {% endif %}
+    </section>
+
+    <section class="collection-grid">
+        {% for item in collections %}
+            <article class="card collection-card">
+                <h3><a href="{% url 'collection-detail' collection_slug=item.slug %}">{{ item.title }}</a></h3>
+                <p class="collection-desc">{{ item.description }}</p>
+                <p class="collection-meta">{{ item.count }} reports</p>
+            </article>
+        {% endfor %}
+    </section>
+</div>
 {% endblock %}

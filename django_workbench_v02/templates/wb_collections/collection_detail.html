@@ -1,83 +1,104 @@
 {% extends "base.html" %}
 
+{% block page_title %}{{ collection.title }} · Collections · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">{{ collection.title }}</h2>
+    <p class="page-subtitle">{{ collection.description }}</p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>{{ collection.title }}</h2>
-<p>{{ collection.description }}</p>
-<p>Matching reports: {{ reports_count }}</p>
+<div class="stack-md">
+    <section class="card">
+        <p><strong>Matching reports: {{ reports_count }}</strong></p>
+    </section>
 
-{% if collection_slug == "custom-search" %}
-    <form method="get">
-        <label for="q">Search</label>
-        <input id="q" name="q" value="{{ query }}">
-        <button type="submit">Apply</button>
-    </form>
-{% endif %}
+    {% if collection_slug == "custom-search" %}
+        <section class="card">
+            <h3>Custom Search</h3>
+            <form method="get" class="stack-sm">
+                <label for="q">Search</label>
+                <input id="q" name="q" value="{{ query }}">
+                <div><button type="submit" class="btn btn-secondary">Apply</button></div>
+            </form>
+        </section>
+    {% endif %}
 
-{% if request.user.is_authenticated %}
-    <form method="post" action="{% url 'collection-copy' collection_slug=collection_slug %}">
-        {% csrf_token %}
-        <label for="workbook_title">Workbook name</label>
-        <input id="workbook_title" name="workbook_title" required value="{{ collection.title }} workbook">
-        <input type="hidden" name="q" value="{{ query }}">
-        {% for value in selected_filters.coroner %}
-            <input type="hidden" name="coroner" value="{{ value }}">
-        {% endfor %}
-        {% for value in selected_filters.area %}
-            <input type="hidden" name="area" value="{{ value }}">
-        {% endfor %}
-        {% for value in selected_filters.receiver %}
-            <input type="hidden" name="receiver" value="{{ value }}">
-        {% endfor %}
-        <button type="submit">Make editable copy</button>
-    </form>
-{% else %}
-    <p><a href="{% url 'accounts-login' %}?next={{ request.path }}">Log in</a> to make an editable copy.</p>
-{% endif %}
-
-<h3>Report Preview</h3>
-{% if preview_rows %}
-    <table>
-        <thead>
-            <tr>
-                {% for column in preview_columns %}
-                    <th>{{ column|title }}</th>
+    <section class="card">
+        {% if request.user.is_authenticated %}
+            <h3>Create Workbook Copy</h3>
+            <form method="post" action="{% url 'collection-copy' collection_slug=collection_slug %}" class="stack-sm">
+                {% csrf_token %}
+                <label for="workbook_title">Workbook name</label>
+                <input id="workbook_title" name="workbook_title" required value="{{ collection.title }} workbook">
+                <input type="hidden" name="q" value="{{ query }}">
+                {% for value in selected_filters.coroner %}
+                    <input type="hidden" name="coroner" value="{{ value }}">
                 {% endfor %}
-                <th>Workbook Action</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in preview_rows %}
-                <tr>
-                    {% for cell in row.cells %}
-                        <td>
-                            {% if cell.link_href %}
-                                <a href="{{ cell.link_href }}" target="_blank" rel="noopener">{{ cell.value|default:cell.link_href }}</a>
-                            {% else %}
-                                {{ cell.value|default:"-" }}
-                            {% endif %}
-                        </td>
-                    {% endfor %}
-                    <td>
-                        {% if workbook_edit_allowed %}
-                            <form method="post" action="{% url 'workbook-excluded-report-add' workbook_id=workbook.id %}">
-                                {% csrf_token %}
-                                <input type="hidden" name="report_identity" value="{{ row.report_identity }}">
-                                <input type="hidden" name="report_title" value="{{ row.title|default:'' }}">
-                                <input type="hidden" name="report_date" value="{{ row.date|default:'' }}">
-                                <input type="hidden" name="report_url" value="{{ row.url|default:'' }}">
-                                <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
-                                <input type="text" name="reason" placeholder="Reason (optional)">
-                                <button type="submit">Exclude in workbook</button>
-                            </form>
-                        {% else %}
-                            -
-                        {% endif %}
-                    </td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-{% else %}
-    <p>No reports matched this collection.</p>
-{% endif %}
+                {% for value in selected_filters.area %}
+                    <input type="hidden" name="area" value="{{ value }}">
+                {% endfor %}
+                {% for value in selected_filters.receiver %}
+                    <input type="hidden" name="receiver" value="{{ value }}">
+                {% endfor %}
+                <div><button type="submit" class="btn btn-primary">Make editable copy</button></div>
+            </form>
+        {% else %}
+            <p><a href="{% url 'accounts-login' %}?next={{ request.path }}">Log in</a> to make an editable copy.</p>
+        {% endif %}
+    </section>
+
+    <section class="card">
+        <h3>Report Preview</h3>
+        {% if preview_rows %}
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            {% for column in preview_columns %}
+                                <th>{{ column|title }}</th>
+                            {% endfor %}
+                            <th>Workbook Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in preview_rows %}
+                            <tr>
+                                {% for cell in row.cells %}
+                                    <td>
+                                        {% if cell.link_href %}
+                                            <a href="{{ cell.link_href }}" target="_blank" rel="noopener">{{ cell.value|default:cell.link_href }}</a>
+                                        {% else %}
+                                            {{ cell.value|default:"-" }}
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                                <td>
+                                    {% if workbook_edit_allowed %}
+                                        <form method="post" action="{% url 'workbook-excluded-report-add' workbook_id=workbook.id %}" class="stack-sm">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="report_identity" value="{{ row.report_identity }}">
+                                            <input type="hidden" name="report_title" value="{{ row.title|default:'' }}">
+                                            <input type="hidden" name="report_date" value="{{ row.date|default:'' }}">
+                                            <input type="hidden" name="report_url" value="{{ row.url|default:'' }}">
+                                            <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
+                                            <input type="text" name="reason" placeholder="Reason (optional)">
+                                            <button type="submit" class="btn btn-ghost">Exclude in workbook</button>
+                                        </form>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No reports matched this collection.</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}

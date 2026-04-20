@@ -7,7 +7,7 @@ This stage is visual-only. It must not change business logic, permissions, run o
 
 ## Status
 - Stage 1 (global shell): complete.
-- Stage 2 (page-by-page port): in progress (Dashboard + Investigation Wizard ported).
+- Stage 2 (page-by-page port): complete (Dashboard, Investigation Wizard, Investigation Detail + Run Detail, Collections, Auth, and Shared/Public pages ported).
 - Stage 3 (static asset plumbing): complete for web runtime.
 - Stage 4 (shared includes for nav/messages): complete.
 
