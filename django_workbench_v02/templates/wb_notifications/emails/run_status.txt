@@ -1,0 +1,15 @@
+{{ headline }}
+
+Investigation: {{ investigation_title }}
+Run ID: {{ run_id }}
+Run type: {{ run_type }}
+Status: {{ run_status }}
+
+{{ summary }}
+
+Queued at: {{ queued_at }}
+Started at: {{ started_at }}
+Finished at: {{ finished_at }}
+
+View run details: {{ run_detail_url }}
+Manage notification preferences: {{ notification_preferences_url }}

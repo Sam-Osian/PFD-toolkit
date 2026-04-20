@@ -1,7 +1,7 @@
 # Completion Notifications (v0.2)
 
 Status: Implemented  
-Last updated: 2026-04-19
+Last updated: 2026-04-20
 
 ## 1. Purpose
 
@@ -67,7 +67,25 @@ Configured in `pfd_workbench_v02/settings.py`:
 7. `DEFAULT_FROM_EMAIL`
 8. `WORKBENCH_BASE_URL`
 
-## 6. Audit Events
+## 6. Email Template Design
+
+Notification emails are now sent as multipart messages:
+
+1. Plain text fallback template:
+   - `templates/wb_notifications/emails/run_status.txt`
+2. HTML template:
+   - `templates/wb_notifications/emails/run_status.html`
+
+Status-specific variants are rendered from one template context:
+
+1. `succeeded` -> "Run complete"
+2. `failed` -> "Run failed"
+3. `timed_out` -> "Run timed out"
+4. `cancelled` -> "Run cancelled"
+
+This keeps design consistency while adapting headline/color/copy to outcome.
+
+## 7. Audit Events
 
 Notification flow emits audit events:
 

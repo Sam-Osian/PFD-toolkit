@@ -5,7 +5,8 @@ from time import sleep
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 from django.utils import timezone
 
 from wb_auditlog.services import log_audit_event
@@ -55,23 +56,98 @@ def _run_detail_url(run) -> str:
     )
 
 
+def _workspace_detail_url(run) -> str:
+    return f"{settings.WORKBENCH_BASE_URL}/workbooks/{run.workspace_id}/"
+
+
+def _status_presentation(run_status: str) -> dict[str, str]:
+    if run_status == RunStatus.SUCCEEDED:
+        return {
+            "subject_label": "Run complete",
+            "headline": "Run complete",
+            "status_label": "RUN COMPLETED",
+            "status_color": "#78D98B",
+            "summary": "Your results are ready to view and download.",
+            "button_label": "View results",
+            "variant": "success",
+        }
+    if run_status == RunStatus.FAILED:
+        return {
+            "subject_label": "Run failed",
+            "headline": "Run failed",
+            "status_label": "RUN FAILED",
+            "status_color": "#FF7A7A",
+            "summary": "The run failed before completion. Review details and retry when ready.",
+            "button_label": "Review run",
+            "variant": "failure",
+        }
+    if run_status == RunStatus.TIMED_OUT:
+        return {
+            "subject_label": "Run timed out",
+            "headline": "Run timed out",
+            "status_label": "RUN TIMED OUT",
+            "status_color": "#F6BE5A",
+            "summary": "The run timed out. Review details and relaunch if needed.",
+            "button_label": "Review run",
+            "variant": "warning",
+        }
+    if run_status == RunStatus.CANCELLED:
+        return {
+            "subject_label": "Run cancelled",
+            "headline": "Run cancelled",
+            "status_label": "RUN CANCELLED",
+            "status_color": "#A8AEC6",
+            "summary": "This run was cancelled before completion.",
+            "button_label": "Review run",
+            "variant": "neutral",
+        }
+    return {
+        "subject_label": f"Run {run_status}",
+        "headline": f"Run {run_status}",
+        "status_label": f"RUN {str(run_status).upper()}",
+        "status_color": "#A8AEC6",
+        "summary": "Run reached a terminal state.",
+        "button_label": "View run",
+        "variant": "neutral",
+    }
+
+
+def _email_context(notification: NotificationRequest) -> dict[str, str]:
+    run = notification.run
+    status_ui = _status_presentation(run.status)
+    return {
+        "subject": _build_subject(notification),
+        "investigation_title": run.investigation.title,
+        "run_id": str(run.id),
+        "run_type": str(run.run_type),
+        "run_status": str(run.status),
+        "queued_at": str(run.queued_at),
+        "started_at": str(run.started_at),
+        "finished_at": str(run.finished_at),
+        "run_detail_url": _run_detail_url(run),
+        "notification_preferences_url": _workspace_detail_url(run),
+        "workbench_base_url": settings.WORKBENCH_BASE_URL,
+        **status_ui,
+    }
+
+
 def _build_subject(notification: NotificationRequest) -> str:
     run = notification.run
-    return f"[PFD Toolkit] Run {run.status}: {run.investigation.title}"
+    status_ui = _status_presentation(run.status)
+    return f"[PFD Toolkit] {status_ui['subject_label']}: {run.investigation.title}"
 
 
 def _build_body(notification: NotificationRequest) -> str:
-    run = notification.run
-    return (
-        "Your run has completed.\n\n"
-        f"Investigation: {run.investigation.title}\n"
-        f"Run ID: {run.id}\n"
-        f"Run type: {run.run_type}\n"
-        f"Status: {run.status}\n"
-        f"Queued at: {run.queued_at}\n"
-        f"Started at: {run.started_at}\n"
-        f"Finished at: {run.finished_at}\n\n"
-        f"View run details: {_run_detail_url(run)}\n"
+    return render_to_string(
+        "wb_notifications/emails/run_status.txt",
+        _email_context(notification),
+    )
+
+
+def _build_html_body(notification: NotificationRequest) -> str:
+    return render_to_string(
+        "wb_notifications/emails/run_status.html",
+        _email_context(notification),
     )
 
 
@@ -167,13 +243,14 @@ def process_pending_notification(notification: NotificationRequest) -> str:
         return notification.status
 
     try:
-        send_mail(
+        message = EmailMultiAlternatives(
             subject=_build_subject(notification),
-            message=_build_body(notification),
+            body=_build_body(notification),
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[notification.user.email],
-            fail_silently=False,
+            to=[notification.user.email],
         )
+        message.attach_alternative(_build_html_body(notification), "text/html")
+        message.send(fail_silently=False)
     except Exception as exc:  # pragma: no cover - defensive external dependency path
         notification.status = NotificationStatus.FAILED
         notification.error_message = str(exc)

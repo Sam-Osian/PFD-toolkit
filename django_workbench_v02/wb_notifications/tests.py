@@ -82,8 +82,11 @@ class NotificationDispatchTests(TestCase):
         self.assertEqual(result.sent, 1)
         self.assertEqual(notification.status, NotificationStatus.SENT)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn("Run succeeded", mail.outbox[0].subject)
+        self.assertIn("Run complete", mail.outbox[0].subject)
         self.assertIn(str(self.run.id), mail.outbox[0].body)
+        self.assertEqual(len(mail.outbox[0].alternatives), 1)
+        self.assertIn("text/html", mail.outbox[0].alternatives[0][1])
+        self.assertIn("PFD Toolkit", mail.outbox[0].alternatives[0][0])
         self.assertTrue(
             AuditEvent.objects.filter(
                 action_type="notification.sent",
@@ -119,7 +122,7 @@ class NotificationDispatchTests(TestCase):
             notify_on=NotificationTrigger.ANY,
         )
 
-        with patch("wb_notifications.services.send_mail", side_effect=RuntimeError("smtp down")):
+        with patch("wb_notifications.services.EmailMultiAlternatives.send", side_effect=RuntimeError("smtp down")):
             result = dispatch_pending_notifications(max_items=10)
 
         notification.refresh_from_db()
@@ -127,6 +130,22 @@ class NotificationDispatchTests(TestCase):
         self.assertEqual(result.failed, 1)
         self.assertEqual(notification.status, NotificationStatus.FAILED)
         self.assertIn("smtp down", notification.error_message)
+
+    def test_dispatch_uses_failed_subject_for_failed_runs(self):
+        self.run.status = RunStatus.FAILED
+        self.run.finished_at = timezone.now()
+        self.run.error_message = "Adapter error"
+        self.run.save(update_fields=["status", "finished_at", "error_message", "updated_at"])
+        create_notification_request(
+            run=self.run,
+            user=self.owner,
+            notify_on=NotificationTrigger.ANY,
+        )
+        result = dispatch_pending_notifications(max_items=10)
+        self.assertEqual(result.sent, 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Run failed", mail.outbox[0].subject)
+        self.assertIn("Run failed", mail.outbox[0].body)
 
     def test_dispatch_command_once(self):
         self.run.status = RunStatus.SUCCEEDED

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background:#09071f;color:#1f2030;font-family:Segoe UI,Tahoma,Arial,sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background:#09071f;padding:30px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="680" style="width:680px;max-width:680px;background:#f2f2f6;border-radius:18px;overflow:hidden;">
+          <tr>
+            <td style="background:#0d0b2b;padding:28px 34px;border-bottom:2px solid #6a52db;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="left" style="color:#f3f4ff;font-size:18px;font-weight:700;">PFD Toolkit</td>
+                  <td align="right" style="color:#6f7398;font-size:12px;letter-spacing:2px;">WORKBENCH V0.2</td>
+                </tr>
+              </table>
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;">
+                <tr>
+                  <td style="color:{{ status_color }};font-size:14px;letter-spacing:3px;font-weight:700;">{{ status_label }}</td>
+                </tr>
+                <tr>
+                  <td style="color:{{ status_color }};font-size:36px;line-height:42px;font-weight:700;padding-top:6px;">{{ headline }}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:34px 34px 28px 34px;">
+              <div style="font-size:13px;color:#8c8fae;letter-spacing:3px;font-weight:600;">INVESTIGATION</div>
+              <div style="font-size:44px;line-height:50px;font-weight:700;color:#202336;padding-top:8px;">{{ investigation_title }}</div>
+              <div style="font-size:27px;line-height:36px;color:#4b4f70;padding-top:20px;">{{ summary }}</div>
+
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin-top:26px;">
+                <tr>
+                  <td bgcolor="#6b49d8" style="border-radius:12px;">
+                    <a href="{{ run_detail_url }}" style="display:inline-block;padding:15px 28px;color:#ffffff;font-size:17px;font-weight:700;text-decoration:none;">{{ button_label }} →</a>
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="margin-top:26px;border-top:1px solid #d9daeb;padding-top:18px;">
+                <tr>
+                  <td style="font-size:12px;line-height:19px;color:#6a6d88;">
+                    Run ID: {{ run_id }}<br>
+                    Run type: {{ run_type }}<br>
+                    Status: {{ run_status }}<br>
+                    Queued: {{ queued_at }}<br>
+                    Started: {{ started_at }}<br>
+                    Finished: {{ finished_at }}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ececf4;padding:18px 34px;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td style="font-size:12px;color:#7e829f;line-height:19px;">
+                    You requested this notification when launching the run.<br>
+                    <a href="{{ notification_preferences_url }}" style="color:#5f48cf;text-decoration:none;font-weight:600;">Manage notification preferences</a>
+                  </td>
+                  <td align="right" style="font-size:12px;letter-spacing:2px;color:#a4a8be;">pfdtoolkit.org</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
