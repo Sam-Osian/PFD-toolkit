@@ -29,6 +29,11 @@ urlpatterns = [
         views.investigation_wizard,
         name="workbook-investigation-wizard",
     ),
+    path(
+        "workbooks/<uuid:workbook_id>/investigations/<uuid:investigation_id>/export/queue/",
+        views.queue_export_bundle,
+        name="workbook-investigation-export-queue",
+    ),
 
     path(
         "workspaces/<uuid:workbook_id>/investigation/",
@@ -54,5 +59,10 @@ urlpatterns = [
         "workspaces/<uuid:workbook_id>/investigations/<uuid:investigation_id>/wizard/",
         views.investigation_wizard,
         name="investigation-wizard",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/investigations/<uuid:investigation_id>/export/queue/",
+        views.queue_export_bundle,
+        name="investigation-export-queue",
     ),
 ]

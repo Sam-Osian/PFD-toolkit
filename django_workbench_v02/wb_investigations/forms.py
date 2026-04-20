@@ -98,7 +98,12 @@ def temporal_scope_parameters(*, scope_option: str, today: date | None = None) -
     }
 
 
-def build_pipeline_plan(*, run_filter: bool, run_themes: bool, run_extract: bool) -> list[str]:
+def build_pipeline_plan(
+    *,
+    run_filter: bool,
+    run_themes: bool,
+    run_extract: bool,
+) -> list[str]:
     plan: list[str] = []
     if run_filter:
         plan.append(RunType.FILTER)
@@ -339,3 +344,34 @@ class InvestigationWizardState:
             run_themes=bool(self.run_themes),
             run_extract=bool(self.run_extract),
         )
+
+
+class InvestigationExportForm(forms.Form):
+    bundle_name = forms.CharField(required=False, max_length=255)
+    download_include_dataset = forms.BooleanField(required=False, initial=True)
+    download_include_excluded = forms.BooleanField(required=False, initial=True)
+    download_include_theme = forms.BooleanField(required=False, initial=True)
+    download_include_feature_grid = forms.BooleanField(required=False, initial=True)
+    download_include_script = forms.BooleanField(required=False, initial=False)
+    latest_per_artifact_type = forms.BooleanField(required=False, initial=True)
+    max_artifacts = forms.IntegerField(required=False, min_value=1, max_value=500)
+    request_completion_email = forms.BooleanField(required=False, initial=False)
+    notify_on = forms.ChoiceField(
+        required=False,
+        choices=NotificationTrigger.choices,
+        initial=NotificationTrigger.ANY,
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        if not any(
+            [
+                bool(cleaned.get("download_include_dataset")),
+                bool(cleaned.get("download_include_excluded")),
+                bool(cleaned.get("download_include_theme")),
+                bool(cleaned.get("download_include_feature_grid")),
+                bool(cleaned.get("download_include_script")),
+            ]
+        ):
+            raise forms.ValidationError("Select at least one export component.")
+        return cleaned

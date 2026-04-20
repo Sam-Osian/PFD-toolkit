@@ -96,7 +96,7 @@ def _reload_run(run_id):
 def _normalise_pipeline_plan(raw_plan) -> list[str]:
     if not isinstance(raw_plan, list):
         return []
-    allowed = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT}
+    allowed = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT, RunType.EXPORT}
     result: list[str] = []
     for raw in raw_plan:
         value = str(raw or "").strip().lower()

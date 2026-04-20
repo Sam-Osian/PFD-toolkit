@@ -34,6 +34,7 @@
 
 {% if wizard_stage == "review" %}
     <h3>Review</h3>
+    <p><strong>Filter enabled:</strong> {{ wizard_state.run_filter|yesno:"yes,no" }}</p>
     <p><strong>Themes enabled:</strong> {{ wizard_state.run_themes|yesno:"yes,no" }}</p>
     <p><strong>Extract enabled:</strong> {{ wizard_state.run_extract|yesno:"yes,no" }}</p>
 {% endif %}

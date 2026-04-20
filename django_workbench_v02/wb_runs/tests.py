@@ -779,6 +779,26 @@ class RunWorkerTests(TestCase):
             self.investigation.runs.filter(run_type=RunType.THEMES).exclude(id=run.id).exists()
         )
 
+    def test_pipeline_queues_export_after_extract(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.EXTRACT,
+            input_config_json={
+                "execution_mode": "simulate",
+                "feature_fields": [{"name": "setting", "description": "Care setting", "type": "text"}],
+                "pipeline_plan": [RunType.EXTRACT, RunType.EXPORT],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        self.assertTrue(
+            self.investigation.runs.filter(run_type=RunType.EXPORT).exclude(id=run.id).exists()
+        )
+
     def test_pipeline_does_not_continue_after_cancellation(self):
         run = queue_run(
             actor=self.owner,

@@ -281,8 +281,63 @@ class InvestigationViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Open wizard")
         self.assertContains(response, "Configuration Snapshot")
+        self.assertContains(response, "Export Bundle")
         self.assertNotContains(response, "Scope JSON")
         self.assertNotContains(response, "Queue Run")
+
+    def test_queue_export_bundle_from_investigation_detail(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "workbook-investigation-export-queue",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "bundle_name": "my_bundle",
+                "download_include_dataset": "on",
+                "download_include_excluded": "on",
+                "download_include_theme": "",
+                "download_include_feature_grid": "",
+                "download_include_script": "on",
+                "latest_per_artifact_type": "on",
+                "max_artifacts": 50,
+                "request_completion_email": "",
+                "notify_on": "any",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        run = self.investigation.runs.latest("created_at")
+        self.assertEqual(run.run_type, RunType.EXPORT)
+        self.assertEqual(run.input_config_json.get("bundle_name"), "my_bundle")
+        self.assertTrue(run.input_config_json.get("download_include_dataset"))
+        self.assertTrue(run.input_config_json.get("download_include_excluded"))
+        self.assertTrue(run.input_config_json.get("download_include_script"))
+
+    def test_queue_export_bundle_requires_one_component(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "workbook-investigation-export-queue",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "bundle_name": "bad_bundle",
+                "download_include_dataset": "",
+                "download_include_excluded": "",
+                "download_include_theme": "",
+                "download_include_feature_grid": "",
+                "download_include_script": "",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Invalid export configuration.")
 
     def test_investigation_detail_shows_pipeline_timeline_when_pipeline_runs_exist(self):
         self.client.force_login(self.owner)
@@ -585,6 +640,7 @@ class InvestigationWizardViewTests(TestCase):
         self.assertEqual(run.input_config_json.get("min_themes"), 2)
         self.assertEqual(run.input_config_json.get("max_themes"), 8)
         self.assertTrue(isinstance(run.input_config_json.get("feature_fields"), list))
+
 
     def test_wizard_launch_filter_only_path(self):
         self.client.force_login(self.owner)

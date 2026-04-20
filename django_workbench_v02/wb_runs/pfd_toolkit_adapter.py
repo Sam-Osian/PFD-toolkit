@@ -14,11 +14,12 @@ import pandas as pd
 from pydantic import BaseModel, Field, create_model
 from pfd_toolkit import Extractor, LLM, Screener, load_reports
 from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
+from wb_workspaces.models import WorkspaceReportExclusion
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import WorkspaceCredentialValidationError, resolve_workspace_credential
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
-from .models import ArtifactStatus, RunArtifact
+from .models import ArtifactStatus, ArtifactType, RunArtifact
 
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -803,6 +804,21 @@ def execute_export_workflow(
     if progress_callback:
         progress_callback(8, "Collecting artifacts for export bundle...")
 
+    include_dataset = _as_bool(config.get("download_include_dataset"), default=True)
+    include_excluded = _as_bool(config.get("download_include_excluded"), default=True)
+    include_theme = _as_bool(config.get("download_include_theme"), default=True)
+    include_feature_grid = _as_bool(config.get("download_include_feature_grid"), default=True)
+    include_script = _as_bool(config.get("download_include_script"), default=False)
+
+    selected_artifact_types: set[str] = set()
+    if include_dataset:
+        selected_artifact_types.add(ArtifactType.FILTERED_DATASET)
+    if include_theme:
+        selected_artifact_types.add(ArtifactType.THEME_SUMMARY)
+        selected_artifact_types.add(ArtifactType.THEME_ASSIGNMENTS)
+    if include_feature_grid:
+        selected_artifact_types.add(ArtifactType.EXTRACTION_TABLE)
+
     include_types_raw = config.get("include_run_types")
     include_run_types = None
     if isinstance(include_types_raw, list):
@@ -827,6 +843,10 @@ def execute_export_workflow(
     )
     if include_run_types:
         artifacts_qs = artifacts_qs.filter(run__run_type__in=include_run_types)
+    if selected_artifact_types:
+        artifacts_qs = artifacts_qs.filter(artifact_type__in=list(selected_artifact_types))
+    else:
+        artifacts_qs = artifacts_qs.none()
 
     candidates = list(artifacts_qs)
     selected = []
@@ -855,6 +875,15 @@ def execute_export_workflow(
         "investigation_id": str(run.investigation_id),
         "export_run_id": str(run.id),
         "generated_at": timezone.now().isoformat(),
+        "options": {
+            "download_include_dataset": include_dataset,
+            "download_include_excluded": include_excluded,
+            "download_include_theme": include_theme,
+            "download_include_feature_grid": include_feature_grid,
+            "download_include_script": include_script,
+            "latest_per_artifact_type": latest_per_artifact_type,
+            "max_artifacts": max_artifacts,
+        },
         "selected_artifacts": len(selected),
         "artifacts": [],
     }
@@ -901,6 +930,40 @@ def execute_export_workflow(
                 included_files += 1
 
             manifest["artifacts"].append(entry)
+
+        if include_excluded:
+            excluded_rows = list(
+                WorkspaceReportExclusion.objects.filter(workspace=run.workspace)
+                .values(
+                    "report_identity",
+                    "report_title",
+                    "report_date",
+                    "report_url",
+                    "reason",
+                )
+            )
+            if excluded_rows:
+                excluded_df = pd.DataFrame(excluded_rows)
+                archive.writestr(
+                    "workspace/pfd_excluded_reports.csv",
+                    excluded_df.to_csv(index=False).encode("utf-8"),
+                )
+
+        if include_script:
+            script = f"""# Reproducible export scaffold for investigation {run.investigation_id}
+#
+# This script captures the run configuration used to create this export bundle.
+# You can adapt these values and call your normal PFD Toolkit pipeline entrypoints.
+
+RUN_CONFIG = {json.dumps(config, indent=2)}
+
+if __name__ == "__main__":
+    print("Export bundle scaffold")
+    print("Investigation:", "{run.investigation_id}")
+    print("Workspace:", "{run.workspace_id}")
+    print("Config keys:", ", ".join(sorted(RUN_CONFIG.keys())))
+"""
+            archive.writestr("workspace/reproducible_export.py", script)
 
         archive.writestr("manifest.json", json.dumps(manifest, indent=2))
 

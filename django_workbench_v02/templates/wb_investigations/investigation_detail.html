@@ -18,6 +18,16 @@
     <p>This investigation is read-only for your account.</p>
 {% endif %}
 
+{% if can_run %}
+    <h3>Export Bundle</h3>
+    <p>Package current investigation outputs for download, similar to v0.1 bundle export options.</p>
+    <form method="post" action="{% url 'workbook-investigation-export-queue' workbook_id=workspace.id investigation_id=investigation.id %}">
+        {% csrf_token %}
+        {{ export_form.as_p }}
+        <button type="submit">Queue export bundle</button>
+    </form>
+{% endif %}
+
 <h3>Pipeline Timeline</h3>
 {% if pipeline_timeline %}
     <p>

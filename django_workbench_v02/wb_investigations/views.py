@@ -5,11 +5,13 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from wb_runs.models import InvestigationRun, RunStatus, RunType
+from wb_runs.services import queue_run
 from wb_notifications.services import NotificationRequestError, create_notification_request
 from wb_workspaces.models import Workspace
-from wb_workspaces.permissions import can_edit_workspace, can_view_workspace
+from wb_workspaces.permissions import can_edit_workspace, can_run_workflows, can_view_workspace
 
 from .forms import (
+    InvestigationExportForm,
     InvestigationCreateForm,
     InvestigationUpdateForm,
     InvestigationWizardExtractConfigForm,
@@ -34,6 +36,7 @@ PIPELINE_STAGE_LABELS = {
     RunType.FILTER: "Screen and filter",
     RunType.THEMES: "Discover themes",
     RunType.EXTRACT: "Extract structured data",
+    RunType.EXPORT: "Export bundle",
 }
 
 TERMINAL_STATUSES = {
@@ -49,7 +52,7 @@ FAILED_STATUSES = {RunStatus.FAILED, RunStatus.TIMED_OUT}
 def _normalise_pipeline_plan(raw_plan) -> list[str]:
     if not isinstance(raw_plan, list):
         return []
-    allowed = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT}
+    allowed = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT, RunType.EXPORT}
     result: list[str] = []
     for raw in raw_plan:
         value = str(raw or "").strip().lower()
@@ -562,6 +565,10 @@ def investigation_detail(request, workbook_id, investigation_id):
         request.user.is_authenticated
         and can_edit_workspace(request.user, investigation.workspace)
     )
+    can_run = bool(
+        request.user.is_authenticated
+        and can_run_workflows(request.user, investigation.workspace)
+    )
     runs = InvestigationRun.objects.filter(investigation=investigation).order_by("-created_at")
     pipeline_timeline = _build_pipeline_timeline(investigation=investigation)
     return render(
@@ -571,9 +578,77 @@ def investigation_detail(request, workbook_id, investigation_id):
             "investigation": investigation,
             "workspace": investigation.workspace,
             "can_edit": can_edit,
+            "can_run": can_run,
             "runs": runs,
             "pipeline_timeline": pipeline_timeline,
+            "export_form": InvestigationExportForm(),
         },
+    )
+
+
+@login_required
+@require_POST
+def queue_export_bundle(request, workbook_id, investigation_id):
+    investigation = get_object_or_404(
+        Investigation.objects.select_related("workspace"),
+        id=investigation_id,
+        workspace_id=workbook_id,
+    )
+    form = InvestigationExportForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid export configuration.")
+        return redirect(
+            "workbook-investigation-detail",
+            workbook_id=workbook_id,
+            investigation_id=investigation_id,
+        )
+    try:
+        config = {
+            "bundle_name": form.cleaned_data.get("bundle_name") or "",
+            "download_include_dataset": bool(form.cleaned_data.get("download_include_dataset", True)),
+            "download_include_excluded": bool(form.cleaned_data.get("download_include_excluded", True)),
+            "download_include_theme": bool(form.cleaned_data.get("download_include_theme", True)),
+            "download_include_feature_grid": bool(
+                form.cleaned_data.get("download_include_feature_grid", True)
+            ),
+            "download_include_script": bool(form.cleaned_data.get("download_include_script", False)),
+            "latest_per_artifact_type": bool(form.cleaned_data.get("latest_per_artifact_type", True)),
+        }
+        if form.cleaned_data.get("max_artifacts") is not None:
+            config["max_artifacts"] = int(form.cleaned_data.get("max_artifacts"))
+        run = queue_run(
+            actor=request.user,
+            investigation=investigation,
+            run_type=RunType.EXPORT,
+            input_config_json=config,
+            request=request,
+        )
+    except (PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        request_completion_email = bool(form.cleaned_data.get("request_completion_email"))
+        if request_completion_email:
+            notify_on = form.cleaned_data.get("notify_on") or "any"
+            try:
+                create_notification_request(
+                    run=run,
+                    user=request.user,
+                    notify_on=notify_on,
+                    request=request,
+                )
+            except (NotificationRequestError, ValidationError) as exc:
+                messages.warning(
+                    request,
+                    f"Export queued, but completion notification could not be created: {exc}",
+                )
+            else:
+                messages.success(request, "Export queued. Completion email notification requested.")
+        else:
+            messages.success(request, "Export queued.")
+    return redirect(
+        "workbook-investigation-detail",
+        workbook_id=workbook_id,
+        investigation_id=investigation_id,
     )
 
 
