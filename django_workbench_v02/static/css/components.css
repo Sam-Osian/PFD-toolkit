@@ -400,6 +400,229 @@ main hr {
   border: 0;
 }
 
+.wizard-context {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+}
+
+.wizard-context p {
+  margin: 0;
+}
+
+.wizard-stage-rail {
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+}
+
+.wizard-stage-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-2);
+}
+
+.wizard-stage-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.65rem;
+  color: var(--text-3);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.wizard-stage-item.is-complete {
+  border-color: color-mix(in srgb, var(--good) 40%, var(--line));
+  color: var(--text-2);
+}
+
+.wizard-stage-item.is-current {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+  color: var(--text);
+}
+
+.wizard-stage-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-family: var(--ff-mono);
+  font-size: 0.73rem;
+}
+
+.wizard-stage-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.wizard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.wizard-main-card {
+  padding: var(--space-5);
+}
+
+.wizard-step-head {
+  margin-bottom: var(--space-4);
+}
+
+.wizard-kicker {
+  margin: 0 0 var(--space-2);
+  color: var(--text-3);
+  font-family: var(--ff-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wizard-step-head h3 {
+  margin: 0 0 var(--space-2);
+  font-size: clamp(1.28rem, 1.9vw, 1.7rem);
+}
+
+.wizard-step-desc {
+  margin: 0;
+  color: var(--text-2);
+}
+
+.wizard-form .form-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wizard-form textarea {
+  min-height: 120px;
+}
+
+.wizard-form select,
+.wizard-form input[type="text"],
+.wizard-form input[type="number"] {
+  width: 100%;
+}
+
+.wizard-method-grid {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.wizard-method-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.wizard-method-option input[type="checkbox"] {
+  margin-top: 0.22rem;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent);
+}
+
+.wizard-method-option strong {
+  display: block;
+  color: var(--text);
+  margin-bottom: 0.22rem;
+}
+
+.wizard-method-option small {
+  color: var(--text-3);
+}
+
+.wizard-split-row {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wizard-checkbox-grid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.field-help {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.86rem;
+}
+
+.wizard-review-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wizard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.wizard-side-card h4 {
+  margin: 0 0 var(--space-2);
+}
+
+.wizard-summary-list {
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.wizard-summary-list div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.wizard-summary-list dt {
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-family: var(--ff-mono);
+  color: var(--text-3);
+}
+
+.wizard-summary-list dd {
+  margin: 0.22rem 0 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+
+.wizard-review-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.wizard-review-list li + li {
+  margin-top: 0.35rem;
+}
+
+.wizard-flow {
+  margin: 0;
+  color: var(--text-3);
+  font-family: var(--ff-mono);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 768px) {
   .app-header-inner {
     width: calc(100% - 1rem);
@@ -426,5 +649,14 @@ main hr {
 
   .workbook-row__actions {
     justify-content: flex-start;
+  }
+
+  .wizard-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .wizard-review-grid,
+  .wizard-split-row {
+    grid-template-columns: 1fr;
   }
 }

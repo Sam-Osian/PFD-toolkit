@@ -1,62 +1,240 @@
 {% extends "base.html" %}
 
+{% block page_title %}Investigation Wizard · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Investigation Wizard</h2>
+    <p class="page-subtitle">Build and launch a staged investigation pipeline for this workbook.</p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>Investigation Wizard</h2>
-<p>
-    Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
-    · Investigation: <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">{{ investigation.title }}</a>
-</p>
+<div class="wizard-context card">
+    <p>
+        Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+        · Investigation: <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">{{ investigation.title }}</a>
+    </p>
+</div>
 
-<p>Stage {{ wizard_stage_index|add:1 }} of {{ wizard_stage_sequence|length }}: <strong>{{ wizard_stage|title }}</strong></p>
-<p>Flow: {{ wizard_stage_sequence|join:" -> " }}</p>
+<div class="wizard-stage-rail card">
+    <ol class="wizard-stage-list">
+        {% for stage_name in wizard_stage_sequence %}
+            <li class="wizard-stage-item{% if stage_name == wizard_stage %} is-current{% elif forloop.counter0 < wizard_stage_index %} is-complete{% endif %}">
+                <span class="wizard-stage-index">{{ forloop.counter }}</span>
+                <span class="wizard-stage-label">
+                    {% if stage_name == "question" %}Question{% elif stage_name == "scope" %}Scope{% elif stage_name == "method" %}Method{% elif stage_name == "themes" %}Themes{% elif stage_name == "extract" %}Extract{% elif stage_name == "review" %}Review{% else %}{{ stage_name|title }}{% endif %}
+                </span>
+            </li>
+        {% endfor %}
+    </ol>
+</div>
 
-{% if wizard_stage == "question" %}
-    <p>Set the research question and workbook investigation title.</p>
-{% elif wizard_stage == "scope" %}
-    <p>Choose how broad to cast the net. This controls report date range or recency limit.</p>
-{% elif wizard_stage == "method" %}
-    <p>Select which stages to run. They execute sequentially in the order shown in Pipeline.</p>
-{% elif wizard_stage == "themes" %}
-    <p>Configure theme discovery. If disabled, this stage is skipped at launch.</p>
-{% elif wizard_stage == "extract" %}
-    <p>Configure structured extraction fields. If disabled, this stage is skipped at launch.</p>
-{% elif wizard_stage == "review" %}
-    <p>Final check before launch.</p>
-{% endif %}
-
-<h3>Current Selection</h3>
-<ul>
-    <li>Title: {{ wizard_state.title|default:"-" }}</li>
-    <li>Question: {{ wizard_state.question_text|default:"-" }}</li>
-    <li>Scope: {{ wizard_state.scope_option }}</li>
-    <li>Pipeline: {{ wizard_state.pipeline_plan|join:" -> " }}</li>
-</ul>
-
-{% if wizard_stage == "review" %}
-    <h3>Review</h3>
-    <p><strong>Filter enabled:</strong> {{ wizard_state.run_filter|yesno:"yes,no" }}</p>
-    <p><strong>Themes enabled:</strong> {{ wizard_state.run_themes|yesno:"yes,no" }}</p>
-    <p><strong>Extract enabled:</strong> {{ wizard_state.run_extract|yesno:"yes,no" }}</p>
-{% endif %}
-
-<form method="post">
-    {% csrf_token %}
-    {% if wizard_form.non_field_errors %}
-        <div role="alert">
-            {{ wizard_form.non_field_errors }}
+<div class="wizard-layout">
+    <section class="card wizard-main-card">
+        <div class="wizard-step-head">
+            <p class="wizard-kicker">Step {{ wizard_stage_index|add:1 }} of {{ wizard_stage_sequence|length }}</p>
+            <h3>
+                {% if wizard_stage == "question" %}What do you want to know?
+                {% elif wizard_stage == "scope" %}How wide should we cast the net?
+                {% elif wizard_stage == "method" %}What should we do with the matches?
+                {% elif wizard_stage == "themes" %}Configure theme discovery
+                {% elif wizard_stage == "extract" %}Configure structured extraction
+                {% elif wizard_stage == "review" %}Review and launch
+                {% else %}{{ wizard_stage|title }}{% endif %}
+            </h3>
+            <p class="wizard-step-desc">
+                {% if wizard_stage == "question" %}
+                    Set the research question and workbook investigation title.
+                {% elif wizard_stage == "scope" %}
+                    Choose how broad to cast the net. This controls report date range or recency limit.
+                {% elif wizard_stage == "method" %}
+                    Select which stages to run. They execute sequentially in the order shown in Pipeline.
+                {% elif wizard_stage == "themes" %}
+                    Configure theme discovery. If disabled, this stage is skipped at launch.
+                {% elif wizard_stage == "extract" %}
+                    Configure structured extraction fields. If disabled, this stage is skipped at launch.
+                {% elif wizard_stage == "review" %}
+                    Final check before launch.
+                    <span class="sr-only">review</span>
+                {% endif %}
+            </p>
         </div>
-    {% endif %}
-    {{ wizard_form.as_p }}
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-        {% if can_go_back %}
-            <button type="submit" name="wizard_action" value="back">Back</button>
+
+        <form method="post" class="wizard-form stack-md">
+            {% csrf_token %}
+
+            {% if wizard_form.non_field_errors %}
+                <div role="alert" class="form-errors">{{ wizard_form.non_field_errors }}</div>
+            {% endif %}
+
+            {% if wizard_stage == "question" %}
+                <div class="form-row">
+                    <label for="{{ wizard_form.title.id_for_label }}">{{ wizard_form.title.label }}</label>
+                    {{ wizard_form.title }}
+                    {% if wizard_form.title.errors %}<div class="form-errors">{{ wizard_form.title.errors }}</div>{% endif %}
+                </div>
+                <div class="form-row">
+                    <label for="{{ wizard_form.question_text.id_for_label }}">{{ wizard_form.question_text.label }}</label>
+                    {{ wizard_form.question_text }}
+                    {% if wizard_form.question_text.errors %}<div class="form-errors">{{ wizard_form.question_text.errors }}</div>{% endif %}
+                </div>
+            {% elif wizard_stage == "scope" %}
+                <div class="form-row">
+                    <label for="{{ wizard_form.scope_option.id_for_label }}">{{ wizard_form.scope_option.label }}</label>
+                    {{ wizard_form.scope_option }}
+                    {% if wizard_form.scope_option.errors %}<div class="form-errors">{{ wizard_form.scope_option.errors }}</div>{% endif %}
+                </div>
+            {% elif wizard_stage == "method" %}
+                <fieldset class="wizard-method-grid">
+                    <legend class="sr-only">Select pipeline stages</legend>
+                    <label class="wizard-method-option">
+                        {{ wizard_form.run_filter }}
+                        <span>
+                            <strong>Screen and filter</strong>
+                            <small>Keep only matching reports.</small>
+                        </span>
+                    </label>
+                    <label class="wizard-method-option">
+                        {{ wizard_form.run_themes }}
+                        <span>
+                            <strong>Discover themes</strong>
+                            <small>Generate candidate themes across matches.</small>
+                        </span>
+                    </label>
+                    <label class="wizard-method-option">
+                        {{ wizard_form.run_extract }}
+                        <span>
+                            <strong>Extract structured data</strong>
+                            <small>Produce feature fields table rows.</small>
+                        </span>
+                    </label>
+                </fieldset>
+                {% if wizard_form.run_filter.errors %}<div class="form-errors">{{ wizard_form.run_filter.errors }}</div>{% endif %}
+                {% if wizard_form.run_themes.errors %}<div class="form-errors">{{ wizard_form.run_themes.errors }}</div>{% endif %}
+                {% if wizard_form.run_extract.errors %}<div class="form-errors">{{ wizard_form.run_extract.errors }}</div>{% endif %}
+            {% elif wizard_stage == "themes" %}
+                <label class="checkbox-row" for="{{ wizard_form.enabled.id_for_label }}">
+                    {{ wizard_form.enabled }}
+                    <span>Enable themes stage</span>
+                </label>
+                {% if wizard_form.enabled.errors %}<div class="form-errors">{{ wizard_form.enabled.errors }}</div>{% endif %}
+
+                <div class="form-row">
+                    <label for="{{ wizard_form.seed_topics.id_for_label }}">{{ wizard_form.seed_topics.label }}</label>
+                    {{ wizard_form.seed_topics }}
+                    {% if wizard_form.seed_topics.errors %}<div class="form-errors">{{ wizard_form.seed_topics.errors }}</div>{% endif %}
+                </div>
+                <div class="wizard-split-row">
+                    <div class="form-row">
+                        <label for="{{ wizard_form.min_themes.id_for_label }}">{{ wizard_form.min_themes.label }}</label>
+                        {{ wizard_form.min_themes }}
+                        {% if wizard_form.min_themes.errors %}<div class="form-errors">{{ wizard_form.min_themes.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-row">
+                        <label for="{{ wizard_form.max_themes.id_for_label }}">{{ wizard_form.max_themes.label }}</label>
+                        {{ wizard_form.max_themes }}
+                        {% if wizard_form.max_themes.errors %}<div class="form-errors">{{ wizard_form.max_themes.errors }}</div>{% endif %}
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label for="{{ wizard_form.extra_theme_instructions.id_for_label }}">{{ wizard_form.extra_theme_instructions.label }}</label>
+                    {{ wizard_form.extra_theme_instructions }}
+                    {% if wizard_form.extra_theme_instructions.errors %}<div class="form-errors">{{ wizard_form.extra_theme_instructions.errors }}</div>{% endif %}
+                </div>
+            {% elif wizard_stage == "extract" %}
+                <label class="checkbox-row" for="{{ wizard_form.enabled.id_for_label }}">
+                    {{ wizard_form.enabled }}
+                    <span>Enable extract stage</span>
+                </label>
+                {% if wizard_form.enabled.errors %}<div class="form-errors">{{ wizard_form.enabled.errors }}</div>{% endif %}
+
+                <div class="form-row">
+                    <label for="{{ wizard_form.feature_fields.id_for_label }}">{{ wizard_form.feature_fields.label }}</label>
+                    {{ wizard_form.feature_fields }}
+                    {% if wizard_form.feature_fields.help_text %}<p class="field-help">{{ wizard_form.feature_fields.help_text }}</p>{% endif %}
+                    {% if wizard_form.feature_fields.errors %}<div class="form-errors">{{ wizard_form.feature_fields.errors }}</div>{% endif %}
+                </div>
+                <div class="wizard-checkbox-grid">
+                    <label class="checkbox-row" for="{{ wizard_form.allow_multiple.id_for_label }}">{{ wizard_form.allow_multiple }} <span>Allow multiple values per report</span></label>
+                    <label class="checkbox-row" for="{{ wizard_form.force_assign.id_for_label }}">{{ wizard_form.force_assign }} <span>Force assignment even when uncertain</span></label>
+                    <label class="checkbox-row" for="{{ wizard_form.skip_if_present.id_for_label }}">{{ wizard_form.skip_if_present }} <span>Skip if field already exists</span></label>
+                </div>
+                {% if wizard_form.allow_multiple.errors %}<div class="form-errors">{{ wizard_form.allow_multiple.errors }}</div>{% endif %}
+                {% if wizard_form.force_assign.errors %}<div class="form-errors">{{ wizard_form.force_assign.errors }}</div>{% endif %}
+                {% if wizard_form.skip_if_present.errors %}<div class="form-errors">{{ wizard_form.skip_if_present.errors }}</div>{% endif %}
+            {% elif wizard_stage == "review" %}
+                <div class="wizard-review-grid">
+                    <div class="form-row">
+                        <label for="{{ wizard_form.execution_mode.id_for_label }}">{{ wizard_form.execution_mode.label }}</label>
+                        {{ wizard_form.execution_mode }}
+                        {% if wizard_form.execution_mode.errors %}<div class="form-errors">{{ wizard_form.execution_mode.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-row">
+                        <label for="{{ wizard_form.provider.id_for_label }}">{{ wizard_form.provider.label }}</label>
+                        {{ wizard_form.provider }}
+                        {% if wizard_form.provider.errors %}<div class="form-errors">{{ wizard_form.provider.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-row">
+                        <label for="{{ wizard_form.model_name.id_for_label }}">{{ wizard_form.model_name.label }}</label>
+                        {{ wizard_form.model_name }}
+                        {% if wizard_form.model_name.errors %}<div class="form-errors">{{ wizard_form.model_name.errors }}</div>{% endif %}
+                    </div>
+                    <div class="form-row">
+                        <label for="{{ wizard_form.notify_on.id_for_label }}">{{ wizard_form.notify_on.label }}</label>
+                        {{ wizard_form.notify_on }}
+                        {% if wizard_form.notify_on.errors %}<div class="form-errors">{{ wizard_form.notify_on.errors }}</div>{% endif %}
+                    </div>
+                </div>
+                <label class="checkbox-row" for="{{ wizard_form.request_completion_email.id_for_label }}">
+                    {{ wizard_form.request_completion_email }}
+                    <span>Email me when pipeline completes</span>
+                </label>
+                {% if wizard_form.request_completion_email.errors %}<div class="form-errors">{{ wizard_form.request_completion_email.errors }}</div>{% endif %}
+            {% else %}
+                {{ wizard_form.as_p }}
+            {% endif %}
+
+            <div class="wizard-actions">
+                {% if can_go_back %}
+                    <button type="submit" name="wizard_action" value="back" class="btn btn-ghost">Back</button>
+                {% endif %}
+                {% if is_last_stage %}
+                    <button type="submit" name="wizard_action" value="launch" class="btn btn-primary">Launch pipeline</button>
+                {% else %}
+                    <button type="submit" name="wizard_action" value="next" class="btn btn-primary">Next</button>
+                {% endif %}
+                <button type="submit" name="wizard_action" value="reset" class="btn btn-secondary">Reset wizard</button>
+            </div>
+        </form>
+    </section>
+
+    <aside class="card wizard-side-card stack-md">
+        <section>
+            <h4>Current Selection</h4>
+            <dl class="wizard-summary-list">
+                <div><dt>Title</dt><dd>{{ wizard_state.title|default:"-" }}</dd></div>
+                <div><dt>Question</dt><dd>{{ wizard_state.question_text|default:"-" }}</dd></div>
+                <div><dt>Scope</dt><dd>{{ wizard_state.scope_option }}</dd></div>
+                <div><dt>Pipeline</dt><dd>{{ wizard_state.pipeline_plan|join:" -> " }}</dd></div>
+            </dl>
+        </section>
+
+        {% if wizard_stage == "review" %}
+            <section>
+                <h4>Review</h4>
+                <ul class="wizard-review-list">
+                    <li><strong>Filter enabled:</strong> {{ wizard_state.run_filter|yesno:"yes,no" }}</li>
+                    <li><strong>Themes enabled:</strong> {{ wizard_state.run_themes|yesno:"yes,no" }}</li>
+                    <li><strong>Extract enabled:</strong> {{ wizard_state.run_extract|yesno:"yes,no" }}</li>
+                </ul>
+            </section>
         {% endif %}
-        {% if is_last_stage %}
-            <button type="submit" name="wizard_action" value="launch">Launch pipeline</button>
-        {% else %}
-            <button type="submit" name="wizard_action" value="next">Next</button>
-        {% endif %}
-        <button type="submit" name="wizard_action" value="reset">Reset wizard</button>
-    </div>
-</form>
+
+        <section>
+            <h4>Flow</h4>
+            <p class="wizard-flow">{{ wizard_stage_sequence|join:" -> " }}</p>
+        </section>
+    </aside>
+</div>
 {% endblock %}
