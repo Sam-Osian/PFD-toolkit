@@ -703,6 +703,20 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertContains(response, "Workspace Active B")
         self.assertContains(response, "(active)")
 
+    def test_dashboard_links_active_workbooks_to_investigation_entry(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Open investigation")
+        self.assertContains(
+            response,
+            reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace_a.id}),
+        )
+        self.assertContains(
+            response,
+            reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace_b.id}),
+        )
+
     def test_workspace_detail_shows_switcher_with_all_user_workbooks(self):
         self.client.force_login(self.owner)
         response = self.client.get(

@@ -128,12 +128,22 @@ class InvestigationServiceTests(TestCase):
 class InvestigationViewTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="inv-owner2@example.com", password="x")
+        self.viewer = User.objects.create_user(email="inv-viewer2@example.com", password="x")
         self.stranger = User.objects.create_user(email="inv-stranger2@example.com", password="x")
         self.workspace = create_workspace_for_user(
             user=self.owner,
             title="Inv Workspace2",
             slug="inv-workspace2",
             description="desc",
+        )
+        WorkspaceMembership.objects.create(
+            workspace=self.workspace,
+            user=self.viewer,
+            role=MembershipRole.VIEWER,
+            access_mode=MembershipAccessMode.READ_ONLY,
+            can_manage_members=False,
+            can_manage_shares=False,
+            can_run_workflows=False,
         )
         self.investigation = create_investigation(
             actor=self.owner,
@@ -178,6 +188,46 @@ class InvestigationViewTests(TestCase):
             reverse("workbook-investigation-list", kwargs={"workbook_id": self.workspace.id})
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_investigation_entry_redirects_editor_to_wizard(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace.id})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/wizard/", response.url)
+
+    def test_investigation_entry_redirects_read_only_user_to_detail(self):
+        self.client.force_login(self.viewer)
+        response = self.client.get(
+            reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace.id})
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/investigations/", response.url)
+        self.assertNotIn("/wizard/", response.url)
+
+    def test_investigation_entry_creates_investigation_for_editor_when_missing(self):
+        self.client.force_login(self.owner)
+        workspace_without_investigation = create_workspace_for_user(
+            user=self.owner,
+            title="No Investigation Yet",
+            slug="no-investigation-yet",
+            description="desc",
+        )
+        self.assertFalse(
+            Investigation.objects.filter(workspace=workspace_without_investigation).exists()
+        )
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-entry",
+                kwargs={"workbook_id": workspace_without_investigation.id},
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/wizard/", response.url)
+        self.assertTrue(
+            Investigation.objects.filter(workspace=workspace_without_investigation).exists()
+        )
 
     def test_bot_investigation_detail_view_does_not_update_last_viewed(self):
         self.workspace.visibility = WorkspaceVisibility.PUBLIC
@@ -361,10 +411,14 @@ class InvestigationWizardFormTests(TestCase):
 
     def test_method_form_pipeline_plan_fixed_order(self):
         form = InvestigationWizardMethodForm(
-            data={"run_themes": "on", "run_extract": "on"}
+            data={"run_filter": "on", "run_themes": "on", "run_extract": "on"}
         )
         self.assertTrue(form.is_valid())
         self.assertEqual(form.pipeline_plan(), ["filter", "themes", "extract"])
+
+    def test_method_form_requires_at_least_one_stage(self):
+        form = InvestigationWizardMethodForm(data={})
+        self.assertFalse(form.is_valid())
 
     def test_themes_config_rejects_invalid_min_max(self):
         form = InvestigationWizardThemesConfigForm(
@@ -382,10 +436,19 @@ class InvestigationWizardFormTests(TestCase):
         form = InvestigationWizardExtractConfigForm(
             data={
                 "enabled": "on",
-                "feature_fields": [
-                    {"name": "age", "type": "integer"},
-                    {"name": "setting", "type": "text"},
-                ],
+                "feature_fields": (
+                    '[{"name":"age","description":"Age in years","type":"integer"},'
+                    '{"name":"setting","description":"Care setting","type":"text"}]'
+                ),
+            }
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_extract_config_accepts_pipe_separated_lines(self):
+        form = InvestigationWizardExtractConfigForm(
+            data={
+                "enabled": "on",
+                "feature_fields": "age | Age in years | integer\nsetting | Care setting | text",
             }
         )
         self.assertTrue(form.is_valid())
@@ -397,12 +460,13 @@ class InvestigationWizardFormTests(TestCase):
                 "title": "T",
                 "question_text": "Q",
                 "scope_option": TemporalScopeOption.LAST_3_YEARS,
+                "run_filter": False,
                 "run_themes": True,
                 "run_extract": False,
                 "themes_config": {"min_themes": 3},
             }
         )
-        self.assertEqual(state.pipeline_plan(), ["filter", "themes"])
+        self.assertEqual(state.pipeline_plan(), ["themes"])
         payload = state.to_json()
         self.assertEqual(payload["stage"], "method")
         self.assertEqual(payload["scope_option"], TemporalScopeOption.LAST_3_YEARS)
@@ -469,7 +533,7 @@ class InvestigationWizardViewTests(TestCase):
     def _assert_latest_run_pipeline_plan(self, expected_plan: list[str]):
         self.investigation.refresh_from_db()
         run = self.investigation.runs.latest("created_at")
-        self.assertEqual(run.run_type, RunType.FILTER)
+        self.assertEqual(run.run_type, expected_plan[0])
         self.assertEqual(run.input_config_json.get("pipeline_plan"), expected_plan)
         self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
         self.assertEqual(run.input_config_json.get("execution_mode"), "simulate")
@@ -485,6 +549,7 @@ class InvestigationWizardViewTests(TestCase):
             wizard_url,
             data={
                 "wizard_action": "next",
+                "run_filter": "on",
                 "run_themes": "on",
                 "run_extract": "on",
             },
@@ -505,7 +570,10 @@ class InvestigationWizardViewTests(TestCase):
             data={
                 "wizard_action": "next",
                 "enabled": "on",
-                "feature_fields": '[{"name":"setting","type":"text"},{"name":"age","type":"integer"}]',
+                "feature_fields": (
+                    '[{"name":"setting","description":"Care setting","type":"text"},'
+                    '{"name":"age","description":"Age in years","type":"integer"}]'
+                ),
                 "allow_multiple": "on",
             },
         )
@@ -524,7 +592,7 @@ class InvestigationWizardViewTests(TestCase):
         self._advance_question_and_scope(wizard_url)
         review_response = self.client.post(
             wizard_url,
-            data={"wizard_action": "next"},
+            data={"wizard_action": "next", "run_filter": "on"},
             follow=True,
         )
         self.assertEqual(review_response.status_code, 200)
@@ -541,6 +609,7 @@ class InvestigationWizardViewTests(TestCase):
             wizard_url,
             data={
                 "wizard_action": "next",
+                "run_filter": "on",
                 "run_themes": "on",
             },
         )
@@ -569,6 +638,7 @@ class InvestigationWizardViewTests(TestCase):
             wizard_url,
             data={
                 "wizard_action": "next",
+                "run_filter": "on",
                 "run_extract": "on",
             },
         )
@@ -577,7 +647,9 @@ class InvestigationWizardViewTests(TestCase):
             data={
                 "wizard_action": "next",
                 "enabled": "on",
-                "feature_fields": '[{"name":"setting","type":"text"}]',
+                "feature_fields": (
+                    '[{"name":"setting","description":"Care setting","type":"text"}]'
+                ),
                 "allow_multiple": "on",
             },
         )
@@ -609,8 +681,45 @@ class InvestigationWizardViewTests(TestCase):
             wizard_url,
             data={
                 "wizard_action": "next",
+                "run_filter": "on",
             },
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "review")
+
+    def test_wizard_launch_themes_extract_without_filter(self):
+        self.client.force_login(self.owner)
+        wizard_url = self._wizard_url()
+        self._advance_question_and_scope(wizard_url)
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "run_themes": "on",
+                "run_extract": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "min_themes": 2,
+                "max_themes": 4,
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "feature_fields": (
+                    '[{"name":"setting","description":"Care setting","type":"text"}]'
+                ),
+            },
+        )
+        launch_response = self._launch_from_review(wizard_url)
+        self.assertEqual(launch_response.status_code, 302)
+        run = self._assert_latest_run_pipeline_plan(["themes", "extract"])
+        self.assertEqual(run.run_type, RunType.THEMES)

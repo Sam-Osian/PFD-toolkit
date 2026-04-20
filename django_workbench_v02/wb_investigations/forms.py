@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+import json
 
 from django import forms
 from django.db import models
@@ -97,8 +98,10 @@ def temporal_scope_parameters(*, scope_option: str, today: date | None = None) -
     }
 
 
-def build_pipeline_plan(*, run_themes: bool, run_extract: bool) -> list[str]:
-    plan = [RunType.FILTER]
+def build_pipeline_plan(*, run_filter: bool, run_themes: bool, run_extract: bool) -> list[str]:
+    plan: list[str] = []
+    if run_filter:
+        plan.append(RunType.FILTER)
     if run_themes:
         plan.append(RunType.THEMES)
     if run_extract:
@@ -129,17 +132,25 @@ class InvestigationWizardScopeForm(forms.Form):
 
 
 class InvestigationWizardMethodForm(forms.Form):
-    run_filter = forms.BooleanField(required=False, initial=True, disabled=True)
+    run_filter = forms.BooleanField(required=False, initial=True)
     run_themes = forms.BooleanField(required=False, initial=False)
     run_extract = forms.BooleanField(required=False, initial=False)
 
     def clean(self):
         cleaned = super().clean()
-        cleaned["run_filter"] = True
+        if not any(
+            [
+                bool(cleaned.get("run_filter")),
+                bool(cleaned.get("run_themes")),
+                bool(cleaned.get("run_extract")),
+            ]
+        ):
+            raise forms.ValidationError("Select at least one stage to run.")
         return cleaned
 
     def pipeline_plan(self) -> list[str]:
         return build_pipeline_plan(
+            run_filter=bool(self.cleaned_data.get("run_filter")),
             run_themes=bool(self.cleaned_data.get("run_themes")),
             run_extract=bool(self.cleaned_data.get("run_extract")),
         )
@@ -165,17 +176,75 @@ class InvestigationWizardThemesConfigForm(forms.Form):
 
 class InvestigationWizardExtractConfigForm(forms.Form):
     enabled = forms.BooleanField(required=False, initial=False)
-    feature_fields = forms.JSONField(required=False, initial=list)
+    feature_fields = forms.CharField(
+        required=False,
+        widget=forms.Textarea,
+        label="Feature fields (name | description | type)",
+        help_text=(
+            "One per line, e.g. age_at_death | Age at death in years | integer. "
+            "JSON list is also accepted for compatibility."
+        ),
+    )
     allow_multiple = forms.BooleanField(required=False, initial=False)
     force_assign = forms.BooleanField(required=False, initial=False)
     skip_if_present = forms.BooleanField(required=False, initial=True)
+
+    def _parse_feature_fields(self, raw_value) -> list[dict]:
+        if isinstance(raw_value, list):
+            return raw_value
+        text = str(raw_value or "").strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError as exc:
+                raise forms.ValidationError("Invalid JSON for feature fields.") from exc
+            if not isinstance(parsed, list):
+                raise forms.ValidationError("Feature fields JSON must be a list.")
+            return parsed
+
+        rows: list[dict] = []
+        for line in text.splitlines():
+            item = line.strip()
+            if not item:
+                continue
+            if "|" in item:
+                parts = [part.strip() for part in item.split("|")]
+                if len(parts) < 3:
+                    raise forms.ValidationError(
+                        "Each feature line must include name | description | type."
+                    )
+                name = parts[0]
+                description = parts[1]
+                field_type = parts[2]
+            elif ":" in item:
+                # Legacy shorthand: name:type
+                name, field_type = item.split(":", 1)
+                description = ""
+            elif "," in item:
+                # Legacy shorthand: name,type
+                name, field_type = item.split(",", 1)
+                description = ""
+            else:
+                raise forms.ValidationError(
+                    "Each feature line must be name | description | type."
+                )
+            rows.append(
+                {
+                    "name": name.strip(),
+                    "description": description.strip(),
+                    "type": field_type.strip(),
+                }
+            )
+        return rows
 
     def clean(self):
         cleaned = super().clean()
         if not bool(cleaned.get("enabled")):
             return cleaned
 
-        feature_fields = cleaned.get("feature_fields")
+        feature_fields = self._parse_feature_fields(cleaned.get("feature_fields"))
         if not isinstance(feature_fields, list) or not feature_fields:
             raise forms.ValidationError(
                 "Extract configuration requires at least one feature field."
@@ -184,11 +253,15 @@ class InvestigationWizardExtractConfigForm(forms.Form):
             if not isinstance(row, dict):
                 raise forms.ValidationError(f"Feature row {index} must be an object.")
             name = str(row.get("name") or row.get("field_name") or "").strip()
+            description = str(row.get("description") or "").strip()
             field_type = str(row.get("type") or "").strip()
             if not name:
                 raise forms.ValidationError(f"Feature row {index} is missing a field name.")
+            if not description:
+                raise forms.ValidationError(f"Feature row {index} is missing a description.")
             if not field_type:
                 raise forms.ValidationError(f"Feature row {index} is missing a type.")
+        cleaned["feature_fields"] = feature_fields
         return cleaned
 
 
@@ -236,7 +309,7 @@ class InvestigationWizardState:
             title=str(raw.get("title") or "").strip(),
             question_text=str(raw.get("question_text") or "").strip(),
             scope_option=str(raw.get("scope_option") or TemporalScopeOption.ALL_REPORTS).strip(),
-            run_filter=True,
+            run_filter=bool(raw.get("run_filter", True)),
             run_themes=bool(raw.get("run_themes")),
             run_extract=bool(raw.get("run_extract")),
             themes_config=raw.get("themes_config") if isinstance(raw.get("themes_config"), dict) else {},
@@ -252,7 +325,7 @@ class InvestigationWizardState:
             "title": self.title,
             "question_text": self.question_text,
             "scope_option": self.scope_option,
-            "run_filter": True,
+            "run_filter": self.run_filter,
             "run_themes": self.run_themes,
             "run_extract": self.run_extract,
             "themes_config": self.themes_config,
@@ -262,6 +335,7 @@ class InvestigationWizardState:
 
     def pipeline_plan(self) -> list[str]:
         return build_pipeline_plan(
+            run_filter=bool(self.run_filter),
             run_themes=bool(self.run_themes),
             run_extract=bool(self.run_extract),
         )

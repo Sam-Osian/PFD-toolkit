@@ -15,7 +15,7 @@
 {% elif wizard_stage == "scope" %}
     <p>Choose how broad to cast the net. This controls report date range or recency limit.</p>
 {% elif wizard_stage == "method" %}
-    <p>Filter runs first and is always required. Themes and extract are optional and run sequentially after filter.</p>
+    <p>Select which stages to run. They execute sequentially in the order shown in Pipeline.</p>
 {% elif wizard_stage == "themes" %}
     <p>Configure theme discovery. If disabled, this stage is skipped at launch.</p>
 {% elif wizard_stage == "extract" %}

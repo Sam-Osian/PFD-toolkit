@@ -5,6 +5,11 @@ from . import views
 
 urlpatterns = [
     path(
+        "workbooks/<uuid:workbook_id>/investigation/",
+        views.investigation_entry,
+        name="workbook-investigation-entry",
+    ),
+    path(
         "workbooks/<uuid:workbook_id>/investigations/",
         views.investigation_list,
         name="workbook-investigation-list",
@@ -25,6 +30,11 @@ urlpatterns = [
         name="workbook-investigation-wizard",
     ),
 
+    path(
+        "workspaces/<uuid:workbook_id>/investigation/",
+        views.investigation_entry,
+        name="investigation-entry",
+    ),
     path(
         "workspaces/<uuid:workbook_id>/investigations/",
         views.investigation_list,

@@ -61,8 +61,8 @@ def launch_investigation_wizard_pipeline(
 
     scope_params = temporal_scope_parameters(scope_option=wizard_state.scope_option)
     pipeline_plan = wizard_state.pipeline_plan()
-    if not pipeline_plan or pipeline_plan[0] != RunType.FILTER:
-        raise InvestigationServiceError("Wizard pipeline must start with filter stage.")
+    if not pipeline_plan:
+        raise InvestigationServiceError("Wizard pipeline must include at least one stage.")
 
     review = _normalise_review_config(wizard_state.review_config)
     if review["execution_mode"] == "real":
@@ -89,6 +89,7 @@ def launch_investigation_wizard_pipeline(
     method_json = {
         **method_json,
         "pipeline_plan": pipeline_plan,
+        "run_filter": bool(wizard_state.run_filter),
         "run_themes": bool(wizard_state.run_themes),
         "run_extract": bool(wizard_state.run_extract),
     }
@@ -138,7 +139,7 @@ def launch_investigation_wizard_pipeline(
     run = queue_run(
         actor=actor,
         investigation=investigation,
-        run_type=RunType.FILTER,
+        run_type=pipeline_plan[0],
         input_config_json=run_config,
         query_start_date=scope_params.get("query_start_date"),
         query_end_date=scope_params.get("query_end_date"),

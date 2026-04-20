@@ -8,9 +8,15 @@
         {% for row in active_rows %}
             {% with membership=row.membership %}
             <li>
-                <a href="{% url 'workbook-detail' workbook_id=membership.workspace.id %}">
-                    {{ membership.workspace.title }}
-                </a>
+                {% if not membership.workspace.archived_at %}
+                    <a href="{% url 'workbook-investigation-entry' workbook_id=membership.workspace.id %}">
+                        {{ membership.workspace.title }}
+                    </a>
+                {% else %}
+                    <a href="{% url 'workbook-detail' workbook_id=membership.workspace.id %}">
+                        {{ membership.workspace.title }}
+                    </a>
+                {% endif %}
                 {% if active_workspace_id and active_workspace_id == membership.workspace.id|stringformat:"s" %}
                     (active)
                 {% endif %}
@@ -19,6 +25,7 @@
                 {% endif %}
                 ({{ membership.role }}, {{ membership.access_mode }})
                 {% if not membership.workspace.archived_at %}
+                    <a href="{% url 'workbook-investigation-entry' workbook_id=membership.workspace.id %}">Open investigation</a>
                     {% if not active_workspace_id or active_workspace_id != membership.workspace.id|stringformat:"s" %}
                         <form method="post" action="{% url 'workbook-activate' workbook_id=membership.workspace.id %}" style="display:inline">
                             {% csrf_token %}

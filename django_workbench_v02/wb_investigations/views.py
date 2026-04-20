@@ -209,7 +209,7 @@ def _wizard_initial_state(*, investigation: Investigation) -> InvestigationWizar
         title=investigation.title or "",
         question_text=investigation.question_text or "",
         scope_option=str(scope_json.get("temporal_scope_option") or "all_reports"),
-        run_filter=True,
+        run_filter=bool(method_json.get("run_filter", True)),
         run_themes=bool(method_json.get("run_themes", False)),
         run_extract=bool(method_json.get("run_extract", False)),
         themes_config={},
@@ -233,7 +233,7 @@ def _wizard_form_for_stage(stage: str, *, state: InvestigationWizardState, post_
         return InvestigationWizardMethodForm(
             post_data,
             initial={
-                "run_filter": True,
+                "run_filter": state.run_filter,
                 "run_themes": state.run_themes,
                 "run_extract": state.run_extract,
             },
@@ -242,7 +242,27 @@ def _wizard_form_for_stage(stage: str, *, state: InvestigationWizardState, post_
         initial = {"enabled": True, **(state.themes_config or {})}
         return InvestigationWizardThemesConfigForm(post_data, initial=initial)
     if stage == "extract":
-        initial = {"enabled": True, **(state.extract_config or {})}
+        extract_config = state.extract_config or {}
+        feature_rows = (
+            extract_config.get("feature_fields")
+            if isinstance(extract_config.get("feature_fields"), list)
+            else []
+        )
+        feature_lines = []
+        for row in feature_rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("name") or row.get("field_name") or "").strip()
+            description = str(row.get("description") or "").strip()
+            field_type = str(row.get("type") or "").strip()
+            if not name:
+                continue
+            feature_lines.append(f"{name} | {description} | {field_type}")
+        initial = {
+            "enabled": True,
+            **extract_config,
+            "feature_fields": "\n".join(feature_lines),
+        }
         return InvestigationWizardExtractConfigForm(post_data, initial=initial)
     if stage == "review":
         return InvestigationWizardReviewForm(post_data, initial=state.review_config or {})
@@ -258,7 +278,7 @@ def _apply_stage_to_state(*, stage: str, state: InvestigationWizardState, cleane
         state.scope_option = str(cleaned_data.get("scope_option") or state.scope_option).strip()
         return
     if stage == "method":
-        state.run_filter = True
+        state.run_filter = bool(cleaned_data.get("run_filter", False))
         state.run_themes = bool(cleaned_data.get("run_themes"))
         state.run_extract = bool(cleaned_data.get("run_extract"))
         if not state.run_themes:
@@ -480,6 +500,49 @@ def investigation_list(request, workbook_id):
             "can_edit": can_edit,
             "create_form": form,
         },
+    )
+
+
+@require_GET
+def investigation_entry(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    if not can_view_workspace(request.user, workspace):
+        return redirect("accounts-login")
+
+    can_edit = bool(
+        request.user.is_authenticated and can_edit_workspace(request.user, workspace)
+    )
+    investigation = Investigation.objects.filter(workspace=workspace).first()
+
+    if investigation is None:
+        if not can_edit:
+            messages.info(request, "No investigation exists yet for this workbook.")
+            return redirect("workbook-detail", workbook_id=workspace.id)
+        try:
+            investigation = create_investigation(
+                actor=request.user,
+                workspace=workspace,
+                title=f"{workspace.title} investigation",
+                question_text="",
+                scope_json={},
+                method_json={},
+                status="draft",
+                request=request,
+            )
+        except (PermissionDenied, ValidationError, InvestigationServiceError) as exc:
+            messages.error(request, str(exc))
+            return redirect("workbook-detail", workbook_id=workspace.id)
+
+    if can_edit:
+        return redirect(
+            "workbook-investigation-wizard",
+            workbook_id=workspace.id,
+            investigation_id=investigation.id,
+        )
+    return redirect(
+        "workbook-investigation-detail",
+        workbook_id=workspace.id,
+        investigation_id=investigation.id,
     )
 
 

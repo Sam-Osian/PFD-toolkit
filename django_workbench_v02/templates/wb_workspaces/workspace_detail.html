@@ -15,7 +15,7 @@
     <p>You are viewing this workbook as a guest.</p>
 {% endif %}
 {% if not workspace.archived_at %}
-    <p><a href="{% url 'workbook-investigation-list' workbook_id=workspace.id %}">Open investigation</a></p>
+    <p><a href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a></p>
 {% endif %}
 
 {% if request.user.is_authenticated %}
