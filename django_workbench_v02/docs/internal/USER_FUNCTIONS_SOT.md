@@ -301,6 +301,10 @@ Acceptance check:
 ### Stage 6 - Workbook Naming Migration + Full UI Pass (After Behavior Lock)
 Goal: terminology and design polish after contracts are stable.
 
+Backend contract lock for this stage:
+
+1. `docs/internal/BACKEND_CONTRACTS_UI_PORT.md`
+
 Deliverables:
 1. User-facing terminology migration (`Workspace` label -> `Workbook` label).
 2. Claude design system port on stable backend contracts.

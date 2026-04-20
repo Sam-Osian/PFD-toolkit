@@ -1,0 +1,43 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  --ff-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --ff-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --bg: #07050f;
+  --bg-2: #0d0a1a;
+  --surface: #141127;
+  --surface-2: #1c1737;
+  --surface-3: #262048;
+
+  --line: rgba(255, 255, 255, 0.08);
+  --line-2: rgba(255, 255, 255, 0.14);
+
+  --text: #ecebf7;
+  --text-2: #b8b5d5;
+  --text-3: #817ba8;
+
+  --accent: #7556f5;
+  --accent-2: #945dff;
+  --accent-soft: rgba(117, 86, 245, 0.2);
+  --good: #5fd090;
+  --warn: #e9bf64;
+  --bad: #f07373;
+
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.02), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-2: 0 18px 60px rgba(0, 0, 0, 0.5);
+}

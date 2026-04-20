@@ -3,54 +3,31 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>PFD Toolkit Workbench v0.2</title>
-    <style>
-        body {
-            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-            margin: 2rem auto;
-            max-width: 960px;
-            line-height: 1.5;
-            padding: 0 1rem;
-        }
-        header, main {
-            margin-bottom: 1.5rem;
-        }
-        nav a {
-            margin-right: 0.75rem;
-        }
-        .messages {
-            margin: 1rem 0;
-            padding-left: 1rem;
-        }
-    </style>
+    <title>{% block page_title %}PFD Toolkit Workbench v0.2{% endblock %}</title>
+    <style>{% include "includes/shell_css.html" %}</style>
+    {% block extra_head %}{% endblock %}
 </head>
-<body>
-<header>
-    <h1>PFD Toolkit Workbench v0.2</h1>
-    <nav>
-        <a href="{% url 'landing' %}">Home</a>
-        {% if request.user.is_authenticated %}
-            <a href="{% url 'workbook-dashboard' %}">Dashboard</a>
-            <a href="{% url 'collection-list' %}">Collections</a>
-            <a href="{% url 'accounts-logout' %}">Log out</a>
-            {% if request.user.is_staff %}
-                <a href="/admin/">Admin</a>
-            {% endif %}
-        {% else %}
-            <a href="{% url 'accounts-login' %}">Log in</a>
-            <a href="{% url 'collection-list' %}">Collections</a>
-        {% endif %}
-    </nav>
-</header>
-<main>
-    {% if messages %}
-        <ul class="messages">
-            {% for message in messages %}
-                <li>{{ message }}</li>
-            {% endfor %}
-        </ul>
-    {% endif %}
-    {% block content %}{% endblock %}
-</main>
+<body class="app-body">
+<div class="app-shell">
+    <header class="app-header">
+        <div class="app-header-inner">
+            <div>
+                <h1 class="brand-title">PFD Toolkit Workbench v0.2</h1>
+                <p class="brand-subtitle">Research workflow beta</p>
+            </div>
+            {% include "includes/nav.html" %}
+        </div>
+    </header>
+
+    <main class="app-main stack-md">
+        {% include "includes/messages.html" %}
+        <div class="page-head">
+            <div>{% block page_header %}{% endblock %}</div>
+            <div class="page-actions">{% block page_actions %}{% endblock %}</div>
+        </div>
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% block extra_js %}{% endblock %}
 </body>
 </html>

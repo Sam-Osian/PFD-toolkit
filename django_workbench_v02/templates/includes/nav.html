@@ -1,0 +1,14 @@
+<nav class="site-nav" aria-label="Primary">
+    <a href="{% url 'landing' %}">Home</a>
+    {% if request.user.is_authenticated %}
+        <a href="{% url 'workbook-dashboard' %}">Dashboard</a>
+        <a href="{% url 'collection-list' %}">Collections</a>
+        <a href="{% url 'accounts-logout' %}">Log out</a>
+        {% if request.user.is_staff %}
+            <a href="/admin/">Admin</a>
+        {% endif %}
+    {% else %}
+        <a href="{% url 'accounts-login' %}">Log in</a>
+        <a href="{% url 'collection-list' %}">Collections</a>
+    {% endif %}
+</nav>
