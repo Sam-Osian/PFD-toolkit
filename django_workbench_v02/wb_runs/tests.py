@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from wb_auditlog.models import AuditEvent
 from wb_investigations.models import InvestigationStatus
@@ -346,6 +347,86 @@ class RunViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertIn("/auth/login/", response.url)
+
+    def test_run_detail_includes_journey_outcome_and_config_summary(self):
+        self.run.input_config_json = {
+            "execution_mode": "real",
+            "provider": "openai",
+            "model_name": "gpt-4.1-mini",
+            "pipeline_plan": ["filter", "themes", "extract"],
+            "pipeline_continue_on_fail": True,
+            "custom_flag": "x",
+        }
+        self.run.save(update_fields=["input_config_json", "updated_at"])
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "workbook-run-detail",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Run Journey")
+        self.assertContains(response, "Outcome")
+        self.assertContains(response, "Configuration Snapshot")
+        self.assertContains(response, "Raw configuration JSON")
+        self.assertContains(response, "Pipeline plan")
+        self.assertContains(response, "filter, themes, extract")
+        self.assertContains(response, "Custom flag")
+
+    def test_terminal_run_hides_cancellation_form(self):
+        self.run.status = RunStatus.SUCCEEDED
+        self.run.started_at = timezone.now()
+        self.run.finished_at = timezone.now()
+        self.run.save(update_fields=["status", "started_at", "finished_at", "updated_at"])
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "workbook-run-detail",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Run completed")
+        self.assertNotContains(response, "<button type=\"submit\">Cancel run</button>")
+
+    def test_cancelling_run_shows_cancellation_banner(self):
+        self.run.status = RunStatus.CANCELLING
+        self.run.cancel_requested_at = timezone.now()
+        self.run.save(update_fields=["status", "cancel_requested_at", "updated_at"])
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "workbook-run-detail",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cancellation has been requested")
+        self.assertContains(response, "Cancellation is not available in the current run status")
+
+    def test_artifacts_are_grouped_with_intent_labels(self):
+        output_path = Path("/tmp/test-run-detail-grouped-artifacts.csv")
+        output_path.write_text("id,value\n1,ok\n", encoding="utf-8")
+        RunArtifact.objects.create(
+            run=self.run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri=str(output_path),
+            metadata_json={},
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "workbook-run-detail",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Filtered dataset")
+        self.assertContains(response, "Matched report subset after filtering.")
 
     def test_owner_can_cancel_run_via_view(self):
         self.client.force_login(self.owner)

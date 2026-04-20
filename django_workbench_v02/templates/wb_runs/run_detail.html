@@ -11,20 +11,60 @@
 <p>Status: {{ run.status }}</p>
 <p>Type: {{ run.run_type }}</p>
 <p>Requested by: {{ run.requested_by.email }}</p>
-<p>Queued at: {{ run.queued_at }}</p>
-<p>Started at: {{ run.started_at|default:"-" }}</p>
-<p>Finished at: {{ run.finished_at|default:"-" }}</p>
 <p>Progress: {{ run.progress_percent|default:"-" }}</p>
+
+<h3>Run Journey</h3>
+<ul>
+    {% for step in run_journey %}
+        <li>
+            <strong>{{ step.label }}</strong>:
+            {{ step.state_label }}
+            {% if step.timestamp %}
+                ({{ step.timestamp|date:"Y-m-d H:i:s" }})
+            {% endif %}
+            - {{ step.note }}
+        </li>
+    {% endfor %}
+</ul>
+
+<h3>Outcome</h3>
+<p><strong>{{ outcome.title }}</strong></p>
+<p>{{ outcome.description }}</p>
+{% if outcome.next_step %}
+    <p>{{ outcome.next_step }}</p>
+{% endif %}
 {% if run.error_message %}
-    <p>Error: {{ run.error_message }}</p>
+    <p>Error detail: {{ run.error_message }}</p>
 {% endif %}
 
 <h3>Request Cancellation</h3>
-<form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}">
-    {% csrf_token %}
-    {{ cancel_form.as_p }}
-    <button type="submit">Cancel run</button>
-</form>
+{% if cancellation_message %}
+    <p>{{ cancellation_message }}</p>
+{% endif %}
+{% if can_request_cancellation %}
+    <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}">
+        {% csrf_token %}
+        {{ cancel_form.as_p }}
+        <button type="submit">Cancel run</button>
+    </form>
+{% else %}
+    <p>Cancellation is not available in the current run status.</p>
+{% endif %}
+
+<h3>Configuration Snapshot</h3>
+{% if config_summary_rows %}
+    <ul>
+        {% for row in config_summary_rows %}
+            <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No structured run configuration was recorded.</p>
+{% endif %}
+<details>
+    <summary>Raw configuration JSON</summary>
+    <pre>{{ raw_config_json }}</pre>
+</details>
 
 <h3>Events</h3>
 {% if events %}
@@ -38,15 +78,30 @@
 {% endif %}
 
 <h3>Artifacts</h3>
-{% if artifacts %}
+{% if artifact_groups %}
+    {% for group in artifact_groups %}
+        <h4>{{ group.label }}</h4>
+        {% if group.intent %}
+            <p>{{ group.intent }}</p>
+        {% endif %}
+        <ul>
+            {% for entry in group.entries %}
+                <li>
+                    {{ entry.artifact.status }}
+                    | created {{ entry.artifact.created_at|date:"Y-m-d H:i:s" }}
+                    | size {{ entry.size_display }}
+                    | {{ entry.artifact.storage_uri|default:"-" }}
+                    {% if entry.downloadable %}
+                        | <a href="{% url 'workbook-run-artifact-download' workbook_id=workspace.id run_id=run.id artifact_id=entry.artifact.id %}">Download</a>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    {% endfor %}
+{% elif artifacts %}
     <ul>
         {% for artifact in artifacts %}
-            <li>
-                {{ artifact.artifact_type }} | {{ artifact.status }} | {{ artifact.storage_uri|default:"-" }}
-                {% if artifact.status == "ready" and artifact.storage_backend != "db" and artifact.storage_uri %}
-                    | <a href="{% url 'workbook-run-artifact-download' workbook_id=workspace.id run_id=run.id artifact_id=artifact.id %}">Download</a>
-                {% endif %}
-            </li>
+            <li>{{ artifact.artifact_type }} | {{ artifact.status }}</li>
         {% endfor %}
     </ul>
 {% else %}

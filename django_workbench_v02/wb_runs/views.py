@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -17,13 +19,255 @@ from wb_workspaces.services import (
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
 from .forms import RunCancelForm, RunQueueForm
-from .models import ArtifactStatus, InvestigationRun, RunArtifact
+from .models import ArtifactStatus, InvestigationRun, RunArtifact, RunStatus
 from .services import (
     queue_run,
     request_run_cancellation,
     record_artifact_download,
     record_run_view,
 )
+
+TERMINAL_STATUSES = {
+    RunStatus.CANCELLED,
+    RunStatus.SUCCEEDED,
+    RunStatus.FAILED,
+    RunStatus.TIMED_OUT,
+}
+
+RUN_STATUS_LABELS = dict(RunStatus.choices)
+ARTIFACT_TYPE_LABELS = dict(RunArtifact._meta.get_field("artifact_type").choices)
+RUN_TYPE_LABELS = dict(InvestigationRun._meta.get_field("run_type").choices)
+
+ARTIFACT_INTENT_BY_TYPE = {
+    "filtered_dataset": "Matched report subset after filtering.",
+    "theme_summary": "Topline theme outputs from the theme workflow.",
+    "theme_assignments": "Per-report theme assignment table.",
+    "extraction_table": "Structured extract table generated from prompts.",
+    "bundle_export": "Packaged workbook export bundle.",
+    "preview": "Preview output produced during processing.",
+}
+
+CONFIG_SUMMARY_KEYS = [
+    ("execution_mode", "Execution mode"),
+    ("provider", "Provider"),
+    ("model_name", "Model"),
+    ("collection_slug", "Collection"),
+    ("collection_query", "Collection query"),
+    ("query_text", "Query text"),
+    ("search_query", "Search query"),
+    ("pipeline_plan", "Pipeline plan"),
+    ("pipeline_continue_on_fail", "Continue on fail"),
+    ("pipeline_index", "Pipeline index"),
+    ("input_artifact_id", "Upstream artifact"),
+]
+
+CONFIG_SKIP_KEYS = {
+    "report_identity_allowlist",
+    "excluded_report_identities",
+    "selected_filters",
+}
+
+
+def _format_size(size_bytes):
+    if size_bytes is None:
+        return "-"
+    units = ["B", "KB", "MB", "GB"]
+    value = float(size_bytes)
+    unit_index = 0
+    while value >= 1024 and unit_index < len(units) - 1:
+        value /= 1024
+        unit_index += 1
+    if unit_index == 0:
+        return f"{int(value)} {units[unit_index]}"
+    return f"{value:.1f} {units[unit_index]}"
+
+
+def _format_config_value(value):
+    if isinstance(value, bool):
+        return "yes" if value else "no"
+    if value is None:
+        return "-"
+    if isinstance(value, list):
+        if not value:
+            return "none"
+        if len(value) <= 4:
+            return ", ".join(str(item) for item in value)
+        return f"{len(value)} values"
+    if isinstance(value, dict):
+        if not value:
+            return "none"
+        keys = list(value.keys())
+        preview = ", ".join(str(item) for item in keys[:3])
+        if len(keys) > 3:
+            preview = f"{preview}, +{len(keys) - 3} more"
+        return f"{len(keys)} keys ({preview})"
+    return str(value)
+
+
+def _humanize_config_key(key):
+    return key.replace("_", " ").capitalize()
+
+
+def _build_run_journey(run):
+    steps = [
+        {
+            "label": "Queued",
+            "state": "done",
+            "state_label": "done",
+            "timestamp": run.queued_at,
+            "note": "Run entered the queue.",
+        },
+        {
+            "label": "Started",
+            "state": "pending",
+            "state_label": "pending",
+            "timestamp": run.started_at,
+            "note": "Worker started processing.",
+        },
+        {
+            "label": "Running",
+            "state": "pending",
+            "state_label": "pending",
+            "timestamp": run.started_at,
+            "note": "Workflow execution in progress.",
+        },
+        {
+            "label": "Terminal",
+            "state": "pending",
+            "state_label": "pending",
+            "timestamp": run.finished_at,
+            "note": "Final run status has been recorded.",
+        },
+    ]
+    status = run.status
+    if run.started_at:
+        steps[1]["state"] = "done"
+        steps[1]["state_label"] = "done"
+    elif status == RunStatus.STARTING:
+        steps[1]["state"] = "current"
+        steps[1]["state_label"] = "current"
+    elif status in TERMINAL_STATUSES or status in {RunStatus.RUNNING, RunStatus.CANCELLING}:
+        steps[1]["state"] = "skipped"
+        steps[1]["state_label"] = "skipped"
+        steps[1]["timestamp"] = None
+        steps[1]["note"] = "Run never reached an explicit start timestamp."
+
+    if status in {RunStatus.RUNNING, RunStatus.CANCELLING}:
+        steps[2]["state"] = "current"
+        steps[2]["state_label"] = "current"
+    elif status in TERMINAL_STATUSES:
+        steps[2]["state"] = "done" if run.started_at else "skipped"
+        steps[2]["state_label"] = "done" if run.started_at else "skipped"
+    elif status == RunStatus.STARTING:
+        steps[2]["state"] = "pending"
+        steps[2]["state_label"] = "pending"
+
+    if status in TERMINAL_STATUSES:
+        steps[3]["state"] = "done"
+        steps[3]["state_label"] = RUN_STATUS_LABELS.get(status, status)
+        steps[3]["note"] = f"Run finished with status: {RUN_STATUS_LABELS.get(status, status)}."
+    elif status == RunStatus.CANCELLING:
+        steps[3]["state"] = "current"
+        steps[3]["state_label"] = "waiting"
+        steps[3]["note"] = "Cancellation requested. Waiting for worker to finalize."
+    return steps
+
+
+def _build_artifact_groups(artifacts):
+    grouped = {}
+    for artifact in artifacts:
+        artifact_type = artifact.artifact_type
+        group = grouped.setdefault(
+            artifact_type,
+            {
+                "artifact_type": artifact_type,
+                "label": ARTIFACT_TYPE_LABELS.get(artifact_type, artifact_type),
+                "intent": ARTIFACT_INTENT_BY_TYPE.get(artifact_type, ""),
+                "entries": [],
+            },
+        )
+        group["entries"].append(
+            {
+                "artifact": artifact,
+                "downloadable": (
+                    artifact.status == ArtifactStatus.READY
+                    and artifact.storage_backend != "db"
+                    and bool(artifact.storage_uri)
+                ),
+                "size_display": _format_size(artifact.size_bytes),
+            }
+        )
+    return list(grouped.values())
+
+
+def _build_config_summary(run):
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    rows = []
+    captured_keys = set()
+    for key, label in CONFIG_SUMMARY_KEYS:
+        if key in config:
+            rows.append({"label": label, "value": _format_config_value(config.get(key))})
+            captured_keys.add(key)
+
+    if run.query_start_date or run.query_end_date:
+        rows.append(
+            {
+                "label": "Query date range",
+                "value": f"{run.query_start_date or '-'} to {run.query_end_date or '-'}",
+            }
+        )
+
+    for key in sorted(config.keys()):
+        if key in captured_keys or key in CONFIG_SKIP_KEYS:
+            continue
+        rows.append({"label": _humanize_config_key(key), "value": _format_config_value(config.get(key))})
+    return rows
+
+
+def _build_outcome_summary(run, artifact_count):
+    status_label = RUN_STATUS_LABELS.get(run.status, run.status)
+    if run.status == RunStatus.SUCCEEDED:
+        return {
+            "title": "Run completed",
+            "description": (
+                f"{RUN_TYPE_LABELS.get(run.run_type, run.run_type)} run finished successfully "
+                f"with {artifact_count} artifact(s)."
+            ),
+            "next_step": "Review artifacts and download outputs as needed.",
+        }
+    if run.status == RunStatus.CANCELLED:
+        reason = run.cancel_reason.strip() or "No cancellation reason provided."
+        return {
+            "title": "Run cancelled",
+            "description": f"Run was cancelled. Reason: {reason}",
+            "next_step": "Re-launch the run when you are ready.",
+        }
+    if run.status == RunStatus.CANCELLING:
+        return {
+            "title": "Cancellation in progress",
+            "description": "A cancellation request is queued with the worker.",
+            "next_step": "This page updates once cancellation reaches terminal state.",
+        }
+    if run.status in {RunStatus.FAILED, RunStatus.TIMED_OUT}:
+        error = run.error_message.strip() or "No explicit error details were recorded."
+        return {
+            "title": f"Run {status_label.lower()}",
+            "description": error,
+            "next_step": "Check events below, adjust configuration, and retry.",
+        }
+    return {
+        "title": "Run in progress",
+        "description": f"Current status: {status_label}.",
+        "next_step": "You can leave this page; server-side processing will continue.",
+    }
+
+
+def _build_cancellation_message(run):
+    if run.status == RunStatus.CANCELLING:
+        return "Cancellation has been requested and will be finalized by the worker."
+    if run.status == RunStatus.CANCELLED:
+        return "This run has been cancelled."
+    return ""
 
 
 @login_required
@@ -145,7 +389,10 @@ def run_detail(request, workbook_id, run_id):
         return redirect("accounts-login")
 
     record_run_view(run=run, user=request.user, request=request)
-    cancel_form = RunCancelForm()
+    can_request_cancellation = run.status not in TERMINAL_STATUSES and run.status != RunStatus.CANCELLING
+    cancel_form = RunCancelForm() if can_request_cancellation else None
+    artifacts = list(run.artifacts.order_by("-created_at"))
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
     return render(
         request,
         "wb_runs/run_detail.html",
@@ -154,8 +401,15 @@ def run_detail(request, workbook_id, run_id):
             "investigation": run.investigation,
             "workspace": run.workspace,
             "cancel_form": cancel_form,
+            "can_request_cancellation": can_request_cancellation,
+            "cancellation_message": _build_cancellation_message(run),
+            "run_journey": _build_run_journey(run),
+            "config_summary_rows": _build_config_summary(run),
+            "raw_config_json": json.dumps(config, indent=2, sort_keys=True),
+            "outcome": _build_outcome_summary(run, len(artifacts)),
             "events": run.events.order_by("-created_at"),
-            "artifacts": run.artifacts.order_by("-created_at"),
+            "artifacts": artifacts,
+            "artifact_groups": _build_artifact_groups(artifacts),
             "notifications": run.notification_requests.select_related("user").order_by("-created_at"),
         },
     )
