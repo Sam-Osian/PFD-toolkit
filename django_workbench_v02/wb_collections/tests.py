@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from wb_investigations.models import Investigation
+from wb_collections.services import refresh_collection_cards_snapshot
 from wb_workspaces.models import Workspace
 
 User = get_user_model()
@@ -50,6 +51,7 @@ class CollectionViewTests(TestCase):
     @patch("wb_collections.services.load_reports")
     def test_collection_list_renders(self, mock_load_reports):
         mock_load_reports.return_value = self.dataset.copy()
+        refresh_collection_cards_snapshot(force_refresh_dataset=False)
         response = self.client.get(reverse("collection-list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "All reports")
@@ -101,6 +103,7 @@ class CollectionViewTests(TestCase):
     @patch("wb_collections.services.load_reports")
     def test_collection_list_includes_theme_collection_cards(self, mock_load_reports):
         mock_load_reports.return_value = self.dataset.copy()
+        refresh_collection_cards_snapshot(force_refresh_dataset=False)
         response = self.client.get(reverse("collection-list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Medication Safety")
@@ -110,6 +113,7 @@ class CollectionViewTests(TestCase):
     def test_collection_list_locks_to_approved_theme_schema(self, mock_load_reports, mock_approved_columns):
         mock_load_reports.return_value = self.dataset.copy()
         mock_approved_columns.return_value = (["theme_medication_safety"], True)
+        refresh_collection_cards_snapshot(force_refresh_dataset=False)
         response = self.client.get(reverse("collection-list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Medication Safety")
@@ -124,10 +128,18 @@ class CollectionViewTests(TestCase):
     ):
         mock_load_reports.return_value = self.dataset.copy()
         mock_approved_columns.return_value = ([], False)
+        refresh_collection_cards_snapshot(force_refresh_dataset=False)
         response = self.client.get(reverse("collection-list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Medication Safety")
         self.assertContains(response, "Unapproved X")
+
+    @patch("wb_collections.views.load_collections_dataset")
+    def test_collection_list_does_not_load_dataset_on_request(self, mock_load_dataset):
+        response = self.client.get(reverse("collection-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Counter snapshot not available yet")
+        mock_load_dataset.assert_not_called()
 
     @patch("wb_collections.services.load_reports")
     def test_multiple_collection_copies_are_retained(self, mock_load_reports):

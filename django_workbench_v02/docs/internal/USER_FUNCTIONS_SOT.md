@@ -253,6 +253,8 @@ Acceptance check:
 ### Stage 3 - Collections and Exclusions Deep Parity (High)
 Goal: finish cross-flow parity between collections, workbook state, and exclusions.
 
+Status: Completed.
+
 Deliverables:
 1. Ensure collections/filters/exclusions interplay is deterministic in all run types.
 2. Lock expected thematic/rule collection behavior against approved schema updates.
@@ -260,6 +262,21 @@ Deliverables:
 
 Acceptance check:
 - Repeated copy/filter/exclude cycles produce predictable workbook state and run scope.
+
+### Stage 3 Contract Note - Collection Copy Scope
+When a user copies a collection into a new workbook, the destination workbook investigation must
+be created with persisted scope context so subsequent runs are deterministic without manual re-entry.
+
+Required persisted scope fields on copy:
+1. `scope_json.collection_slug`
+2. `scope_json.collection_query`
+3. `scope_json.selected_filters` (`coroner`/`area`/`receiver`)
+4. `scope_json.report_identity_allowlist` (copied subset identities)
+
+Run-time precedence contract remains:
+1. Explicit run input config wins for scope keys.
+2. Investigation `scope_json` backfills missing scope keys.
+3. Workbook exclusions are always enforced from current workbook exclusion state.
 
 ### Stage 4 - Settings and Preference Surface (Retired)
 Goal: retired for v0.2 to keep focus on workflow/investigation delivery.

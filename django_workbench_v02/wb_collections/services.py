@@ -9,6 +9,7 @@ import logging
 
 import pandas as pd
 from django.db import transaction
+from django.utils import timezone
 from django.utils.text import slugify
 from pfd_toolkit import load_reports
 from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
@@ -16,6 +17,7 @@ from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
 from wb_auditlog.services import log_audit_event
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import create_workspace_for_user
+from .models import CollectionCardSnapshot
 
 _COLLECTIONS_CACHE_LOCK = Lock()
 _COLLECTIONS_CACHE_DF: pd.DataFrame | None = None
@@ -70,6 +72,7 @@ APPROVED_THEME_SCHEMA_PATH = (
 )
 _APPROVED_THEME_COLUMNS_CACHE: set[str] | None = None
 _APPROVED_THEME_COLUMNS_MTIME_NS: int | None = None
+COLLECTION_SNAPSHOT_KEY = "default"
 
 
 def _cache_stale(now_utc: datetime) -> bool:
@@ -354,6 +357,63 @@ def collection_cards(reports_df: pd.DataFrame) -> list[dict[str, Any]]:
             }
         )
     return cards
+
+
+def _normalise_cards_payload(raw_cards) -> list[dict[str, Any]]:
+    if not isinstance(raw_cards, list):
+        return []
+    result: list[dict[str, Any]] = []
+    for item in raw_cards:
+        if not isinstance(item, dict):
+            continue
+        slug = str(item.get("slug") or "").strip()
+        if not slug:
+            continue
+        title = str(item.get("title") or slug.replace("_", " ").title()).strip()
+        description = str(item.get("description") or "").strip()
+        try:
+            count = int(item.get("count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        result.append(
+            {
+                "slug": slug,
+                "title": title,
+                "description": description,
+                "count": max(0, count),
+            }
+        )
+    return result
+
+
+def get_collection_cards_snapshot(*, key: str = COLLECTION_SNAPSHOT_KEY) -> CollectionCardSnapshot | None:
+    return CollectionCardSnapshot.objects.filter(key=key).first()
+
+
+def get_collection_cards_for_list(*, key: str = COLLECTION_SNAPSHOT_KEY) -> tuple[list[dict[str, Any]], datetime | None]:
+    snapshot = get_collection_cards_snapshot(key=key)
+    if snapshot is None:
+        return [], None
+    return _normalise_cards_payload(snapshot.cards_json), snapshot.generated_at
+
+
+@transaction.atomic
+def refresh_collection_cards_snapshot(
+    *,
+    key: str = COLLECTION_SNAPSHOT_KEY,
+    force_refresh_dataset: bool = True,
+) -> CollectionCardSnapshot:
+    reports_df = load_collections_dataset(force_refresh=force_refresh_dataset)
+    cards = collection_cards(reports_df)
+    snapshot, _ = CollectionCardSnapshot.objects.update_or_create(
+        key=key,
+        defaults={
+            "cards_json": cards,
+            "generated_at": timezone.now(),
+            "source_row_count": int(len(reports_df)),
+        },
+    )
+    return snapshot
 
 
 def _apply_collection_slug(reports_df: pd.DataFrame, collection_slug: str, query: str) -> pd.DataFrame:

@@ -3,6 +3,11 @@
 {% block content %}
 <h2>Collections</h2>
 <p>Browse curated and custom collections, then copy one into an editable workbook.</p>
+{% if snapshot_available %}
+    <p>Counter snapshot updated: {{ snapshot_generated_at|date:"Y-m-d H:i:s" }}</p>
+{% else %}
+    <p>Counter snapshot not available yet. Counts will appear after the refresh job runs.</p>
+{% endif %}
 
 <ul>
     {% for item in collections %}

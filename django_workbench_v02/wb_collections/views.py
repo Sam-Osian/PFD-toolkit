@@ -11,6 +11,7 @@ from wb_workspaces.permissions import can_edit_workspace
 from .services import (
     collection_cards,
     copy_collection_to_workbook,
+    get_collection_cards_for_list,
     load_collections_dataset,
     reports_for_collection,
 )
@@ -47,13 +48,14 @@ def _collection_meta(cards: list[dict], slug: str) -> dict:
 
 @require_GET
 def collection_list(request):
-    reports_df = load_collections_dataset(force_refresh=False)
-    cards = collection_cards(reports_df)
+    cards, generated_at = get_collection_cards_for_list()
     return render(
         request,
         "wb_collections/collection_list.html",
         {
             "collections": cards,
+            "snapshot_generated_at": generated_at,
+            "snapshot_available": bool(generated_at),
         },
     )
 
