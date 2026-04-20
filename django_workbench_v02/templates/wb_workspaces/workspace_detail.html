@@ -45,6 +45,12 @@
 {% endif %}
 
 {% if request.user.is_authenticated %}
+    {% if manage_members_allowed or request.user.is_superuser %}
+        <p><a href="{% url 'workbook-action-cache' workbook_id=workspace.id %}">Inspect workbook action cache</a></p>
+    {% endif %}
+{% endif %}
+
+{% if request.user.is_authenticated %}
 <h3>Workbook State</h3>
 {% if current_revision %}
     <p>Current revision: #{{ current_revision.revision_number }} ({{ current_revision.change_type }})</p>

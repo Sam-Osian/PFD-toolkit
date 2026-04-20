@@ -4,7 +4,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from wb_auditlog.services import log_audit_event
+from wb_auditlog.services import log_action_cache_event, log_audit_event
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
 from wb_workspaces.models import RevisionChangeType
 from wb_workspaces.permissions import can_edit_workspace
@@ -62,6 +62,25 @@ def create_investigation(
             "action": "investigation_created",
             "investigation_id": str(investigation.id),
         },
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="investigation.create",
+        entity_type="investigation",
+        entity_id=str(investigation.id),
+        options={
+            "status": investigation.status,
+        },
+        state_before={},
+        state_after={
+            "title": investigation.title,
+            "question_text": investigation.question_text,
+            "scope_json": investigation.scope_json,
+            "method_json": investigation.method_json,
+            "status": investigation.status,
+        },
+        context={"source": "service"},
     )
     return investigation
 
@@ -133,6 +152,23 @@ def update_investigation(
             "action": "investigation_updated",
             "investigation_id": str(investigation.id),
         },
+    )
+    log_action_cache_event(
+        workspace=investigation.workspace,
+        user=actor,
+        action_key="investigation.update",
+        entity_type="investigation",
+        entity_id=str(investigation.id),
+        options={"status": investigation.status},
+        state_before=before,
+        state_after={
+            "title": investigation.title,
+            "question_text": investigation.question_text,
+            "scope_json": investigation.scope_json,
+            "method_json": investigation.method_json,
+            "status": investigation.status,
+        },
+        context={"source": "service"},
     )
     return investigation
 

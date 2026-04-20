@@ -5,7 +5,7 @@ from copy import deepcopy
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
-from wb_auditlog.services import log_audit_event
+from wb_auditlog.services import log_action_cache_event, log_audit_event
 from wb_investigations.models import Investigation
 
 from .models import (
@@ -100,6 +100,20 @@ def write_workspace_revision(
             **(payload or {}),
         },
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor if actor and getattr(actor, "is_authenticated", False) else None,
+        action_key="revision.write",
+        entity_type="workspace_revision",
+        entity_id=str(revision.id),
+        options={"change_type": revision.change_type},
+        state_before={},
+        state_after={
+            "revision_number": revision.revision_number,
+            "parent_revision_id": str(parent_revision.id) if parent_revision else None,
+        },
+        context=payload or {},
     )
     return revision
 
@@ -208,6 +222,20 @@ def _move_cursor_to_revision(
             **(payload or {}),
         },
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor if actor and getattr(actor, "is_authenticated", False) else None,
+        action_key=action_type,
+        entity_type="workspace_revision",
+        entity_id=str(target_revision.id),
+        options={},
+        state_before={},
+        state_after={
+            "revision_number": target_revision.revision_number,
+            "change_type": target_revision.change_type,
+        },
+        context=payload or {},
     )
     return target_revision
 

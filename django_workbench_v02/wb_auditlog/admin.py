@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AuditEvent
+from .models import ActionCacheEvent, AuditEvent
 
 
 @admin.register(AuditEvent)
@@ -22,6 +22,28 @@ class AuditEventAdmin(admin.ModelAdmin):
         "user__email",
         "user__first_name",
         "user__last_name",
+    ]
+    autocomplete_fields = ["workspace", "user"]
+    readonly_fields = ["created_at"]
+
+
+@admin.register(ActionCacheEvent)
+class ActionCacheEventAdmin(admin.ModelAdmin):
+    list_display = [
+        "created_at",
+        "action_key",
+        "entity_type",
+        "entity_id",
+        "workspace",
+        "user",
+    ]
+    list_filter = ["action_key", "entity_type", "created_at"]
+    search_fields = [
+        "action_key",
+        "entity_type",
+        "entity_id",
+        "workspace__title",
+        "user__email",
     ]
     autocomplete_fields = ["workspace", "user"]
     readonly_fields = ["created_at"]

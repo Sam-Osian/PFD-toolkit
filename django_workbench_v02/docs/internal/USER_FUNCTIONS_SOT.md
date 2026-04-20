@@ -122,7 +122,7 @@ Scope: authoritative user/admin function inventory across v0.1 (`django_workbenc
 | Restore excluded report | User/Owner | Yes | Implemented | workbook excluded-report restore endpoint |
 | Revert/start-over/undo/redo | User/Owner | Yes | Implemented | `/workbooks/<id>/state/*` actions |
 | Persisted revision history | system/user action logging | No | [NEW] Implemented (baseline UX) | `WorkspaceRevision` + `Workspace.current_revision` |
-| Full action logging incl. queries/options | system | Partial | [NEW] audit foundation exists; deeper action cache still to complete |
+| Full action logging incl. queries/options | system | Partial | [NEW] Implemented (v1 baseline) | `ActionCacheEvent` + internal inspection view |
 
 ### 11) Notifications
 | Function | Access | v0.1 | v0.2 | Entry points |
@@ -194,6 +194,7 @@ This section tracks what is truly shipped in v0.2 right now (not just model scaf
 - Share links (snapshot/live), public read-only view, and editable copy flow.
 - Excluded reports (exclude + restore + permission enforcement).
 - Stateful workbook revision controls (`undo`, `redo`, `start_over`, `revert_reports`) with revision cursor semantics.
+- Action-cache v1 with query/options/state-before/state-after payloads and permissioned workbook inspection view.
 - Collections browsing and copy flow, including thematic collections and theme slug mapping.
 
 ### Implemented but UI/UX is Still Baseline
@@ -206,8 +207,6 @@ This section tracks what is truly shipped in v0.2 right now (not just model scaf
   - `set_ui_theme`
   - `save_settings`
   - No v0.2 equivalent user-facing settings surface yet.
-- Action-cache depth parity:
-  - Audit logs exist, but full replay-grade cache of query/options/state transitions is not yet complete as an explicit user-visible/history-capable system.
 
 ## v0.2 Execution Queue (Authoritative)
 
@@ -280,6 +279,8 @@ Acceptance check:
 
 ### Stage 5 - Action Cache / Transparency Layer (Medium)
 Goal: operational transparency and replay confidence.
+
+Status: Completed (v1 baseline).
 
 Deliverables:
 1. Formal action-cache schema for query/options/state deltas (beyond coarse audit events).

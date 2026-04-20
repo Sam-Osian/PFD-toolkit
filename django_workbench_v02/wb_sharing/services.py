@@ -7,7 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.text import slugify
 
-from wb_auditlog.services import log_audit_event
+from wb_auditlog.services import log_action_cache_event, log_audit_event
 from wb_investigations.models import Investigation
 from wb_runs.models import InvestigationRun, RunArtifact, RunEvent
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
@@ -177,6 +177,20 @@ def copy_share_link_to_workbook(*, actor, share_link: WorkspaceShareLink, target
         },
         request=request,
     )
+    log_action_cache_event(
+        workspace=copied_workspace,
+        user=actor,
+        action_key="sharing.copy_to_workbook",
+        entity_type="workspace",
+        entity_id=str(copied_workspace.id),
+        options={"target_title": copied_workspace.title},
+        state_before={"source_workspace_id": str(source_workspace.id)},
+        state_after={
+            "copied_investigation_id": str(copied_investigation.id) if copied_investigation else None,
+            "copied_run_count": len(run_map),
+        },
+        context={"share_link_id": str(share_link.id)},
+    )
     return copied_workspace
 
 
@@ -255,6 +269,26 @@ def create_share_link(
         },
         request=request,
     )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="sharing.link_create",
+        entity_type="workspace_share_link",
+        entity_id=str(share_link.id),
+        options={
+            "mode": share_link.mode,
+            "is_public": share_link.is_public,
+            "is_active": share_link.is_active,
+        },
+        state_before={},
+        state_after={
+            "snapshot_revision_id": str(share_link.snapshot_revision_id)
+            if share_link.snapshot_revision_id
+            else None,
+            "expires_at": share_link.expires_at.isoformat() if share_link.expires_at else None,
+        },
+        context={},
+    )
     return share_link
 
 
@@ -324,6 +358,29 @@ def update_share_link(
         },
         request=request,
     )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="sharing.link_update",
+        entity_type="workspace_share_link",
+        entity_id=str(share_link.id),
+        options={
+            "mode": share_link.mode,
+            "is_public": share_link.is_public,
+            "is_active": share_link.is_active,
+        },
+        state_before=before,
+        state_after={
+            "mode": share_link.mode,
+            "is_public": share_link.is_public,
+            "is_active": share_link.is_active,
+            "expires_at": share_link.expires_at.isoformat() if share_link.expires_at else None,
+            "snapshot_revision_id": str(share_link.snapshot_revision_id)
+            if share_link.snapshot_revision_id
+            else None,
+        },
+        context={},
+    )
     return share_link
 
 
@@ -345,6 +402,17 @@ def revoke_share_link(*, actor, share_link: WorkspaceShareLink, request=None) ->
         user=actor,
         payload={"is_public": share_link.is_public, "mode": share_link.mode},
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="sharing.link_revoke",
+        entity_type="workspace_share_link",
+        entity_id=str(share_link.id),
+        options={},
+        state_before={"is_active": True},
+        state_after={"is_active": False},
+        context={},
     )
     return share_link
 

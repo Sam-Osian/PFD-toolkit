@@ -4,7 +4,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from wb_auditlog.services import log_audit_event
+from wb_auditlog.services import log_action_cache_event, log_audit_event
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
 from wb_workspaces.permissions import can_run_workflows, can_view_workspace
 
@@ -108,6 +108,24 @@ def queue_run(
         },
         request=request,
     )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="run.queue",
+        entity_type="investigation_run",
+        entity_id=str(run.id),
+        query={
+            "query_start_date": query_start_date.isoformat() if query_start_date else None,
+            "query_end_date": query_end_date.isoformat() if query_end_date else None,
+        },
+        options={
+            "run_type": run_type,
+            "input_config_json": input_config_json or {},
+        },
+        state_before={},
+        state_after={"status": run.status},
+        context={"investigation_id": str(investigation.id)},
+    )
     return run
 
 
@@ -162,6 +180,22 @@ def set_run_status(
             "progress_percent": run.progress_percent,
         },
         request=request,
+    )
+    log_action_cache_event(
+        workspace=run.workspace,
+        user=actor,
+        action_key="run.cancel_request",
+        entity_type="investigation_run",
+        entity_id=str(run.id),
+        options={"reason": run.cancel_reason},
+        state_before={},
+        state_after={
+            "status": run.status,
+            "cancel_requested_at": run.cancel_requested_at.isoformat()
+            if run.cancel_requested_at
+            else None,
+        },
+        context={"investigation_id": str(run.investigation_id)},
     )
     return run
 

@@ -4,7 +4,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from wb_auditlog.services import log_audit_event
+from wb_auditlog.services import log_action_cache_event, log_audit_event
 
 from .credentials import WorkspaceCredentialError, decrypt_secret, encrypt_secret
 from .models import (
@@ -257,6 +257,22 @@ def create_workspace_for_user(
             request=request,
             payload={"action": "workspace_created"},
         )
+    log_action_cache_event(
+        workspace=workspace,
+        user=user,
+        action_key="workbook.create",
+        entity_type="workspace",
+        entity_id=str(workspace.id),
+        options={"slug": workspace.slug},
+        state_before={},
+        state_after={
+            "title": workspace.title,
+            "description": workspace.description,
+            "visibility": workspace.visibility,
+            "is_listed": workspace.is_listed,
+        },
+        context={"source": "service"},
+    )
     _ensure_owner_invariants(workspace)
     return workspace
 
@@ -311,6 +327,23 @@ def add_workspace_member(
             "can_run_workflows": can_run_workflows,
         },
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="membership.add",
+        entity_type="workspace_membership",
+        entity_id=str(membership.id),
+        options={
+            "role": role,
+            "access_mode": access_mode,
+            "can_manage_members": can_manage_members_flag,
+            "can_manage_shares": can_manage_shares_flag,
+            "can_run_workflows": can_run_workflows,
+        },
+        state_before={},
+        state_after={"member_user_id": str(target_user.id)},
+        context={"member_email": getattr(target_user, "email", "")},
     )
     return membership
 
@@ -382,6 +415,29 @@ def update_workspace_member(
         },
         request=request,
     )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="membership.update",
+        entity_type="workspace_membership",
+        entity_id=str(membership.id),
+        options={
+            "role": role,
+            "access_mode": access_mode,
+            "can_manage_members": can_manage_members_flag,
+            "can_manage_shares": can_manage_shares_flag,
+            "can_run_workflows": can_run_workflows,
+        },
+        state_before=previous,
+        state_after={
+            "role": membership.role,
+            "access_mode": membership.access_mode,
+            "can_run_workflows": membership.can_run_workflows,
+            "can_manage_members": membership.can_manage_members,
+            "can_manage_shares": membership.can_manage_shares,
+        },
+        context={"member_user_id": str(membership.user_id)},
+    )
     return membership
 
 
@@ -416,6 +472,17 @@ def remove_workspace_member(
         user=actor,
         payload=payload,
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="membership.remove",
+        entity_type="workspace_membership",
+        entity_id=str(membership_id),
+        options={},
+        state_before=payload,
+        state_after={},
+        context={},
     )
 
 
@@ -486,6 +553,21 @@ def upsert_workspace_credential(
             "created": created,
         },
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="credential.save",
+        entity_type="workspace_credential",
+        entity_id=str(credential.id),
+        options={"provider": credential.provider},
+        state_before={},
+        state_after={
+            "provider": credential.provider,
+            "key_last4": credential.key_last4,
+            "base_url": credential.base_url,
+        },
+        context={"created": created},
     )
     return credential
 
@@ -565,6 +647,17 @@ def delete_workspace_credential(
         payload={"provider": resolved_provider, "key_last4": key_last4},
         request=request,
     )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="credential.delete",
+        entity_type="workspace_credential",
+        entity_id=credential_id,
+        options={"provider": resolved_provider},
+        state_before={"key_last4": key_last4},
+        state_after={},
+        context={},
+    )
     return True
 
 
@@ -631,6 +724,22 @@ def upsert_workspace_report_exclusion(
         },
         request=request,
     )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="report.exclude",
+        entity_type="workspace_report_exclusion",
+        entity_id=str(exclusion.id),
+        options={"reason": exclusion.reason},
+        state_before={},
+        state_after={
+            "report_identity": exclusion.report_identity,
+            "report_title": exclusion.report_title,
+            "report_date": exclusion.report_date,
+            "report_url": exclusion.report_url,
+        },
+        context={"created": created},
+    )
     write_workspace_revision(
         workspace=workspace,
         actor=actor,
@@ -672,6 +781,17 @@ def restore_workspace_report_exclusion(
         user=actor,
         payload=payload,
         request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="report.restore",
+        entity_type="workspace_report_exclusion",
+        entity_id=str(exclusion_id),
+        options={},
+        state_before=payload,
+        state_after={},
+        context={},
     )
     write_workspace_revision(
         workspace=workspace,
