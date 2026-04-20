@@ -1,125 +1,155 @@
 {% extends "base.html" %}
 
+{% block page_title %}Run {{ run.id }} · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Run {{ run.id }}</h2>
+    <p class="page-subtitle">
+        Investigation:
+        <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">
+            {{ investigation.title }}
+        </a>
+    </p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>Run {{ run.id }}</h2>
-<p>
-    Investigation:
-    <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">
-        {{ investigation.title }}
-    </a>
-</p>
-<p>Status: {{ run.status }}</p>
-<p>Type: {{ run.run_type }}</p>
-<p>Requested by: {{ run.requested_by.email }}</p>
-<p>Progress: {{ run.progress_percent|default:"-" }}</p>
+<div class="stack-md">
+    <section class="card run-summary-card">
+        <div class="run-summary-grid">
+            <div><p class="run-kicker">Status</p><p class="run-value">{{ run.status }}</p></div>
+            <div><p class="run-kicker">Type</p><p class="run-value">{{ run.run_type }}</p></div>
+            <div><p class="run-kicker">Requested by</p><p class="run-value">{{ run.requested_by.email }}</p></div>
+            <div><p class="run-kicker">Progress</p><p class="run-value">{{ run.progress_percent|default:"-" }}</p></div>
+        </div>
+    </section>
 
-<h3>Run Journey</h3>
-<ul>
-    {% for step in run_journey %}
-        <li>
-            <strong>{{ step.label }}</strong>:
-            {{ step.state_label }}
-            {% if step.timestamp %}
-                ({{ step.timestamp|date:"Y-m-d H:i:s" }})
-            {% endif %}
-            - {{ step.note }}
-        </li>
-    {% endfor %}
-</ul>
-
-<h3>Outcome</h3>
-<p><strong>{{ outcome.title }}</strong></p>
-<p>{{ outcome.description }}</p>
-{% if outcome.next_step %}
-    <p>{{ outcome.next_step }}</p>
-{% endif %}
-{% if run.error_message %}
-    <p>Error detail: {{ run.error_message }}</p>
-{% endif %}
-
-<h3>Request Cancellation</h3>
-{% if cancellation_message %}
-    <p>{{ cancellation_message }}</p>
-{% endif %}
-{% if can_request_cancellation %}
-    <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}">
-        {% csrf_token %}
-        {{ cancel_form.as_p }}
-        <button type="submit">Cancel run</button>
-    </form>
-{% else %}
-    <p>Cancellation is not available in the current run status.</p>
-{% endif %}
-
-<h3>Configuration Snapshot</h3>
-{% if config_summary_rows %}
-    <ul>
-        {% for row in config_summary_rows %}
-            <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No structured run configuration was recorded.</p>
-{% endif %}
-<details>
-    <summary>Raw configuration JSON</summary>
-    <pre>{{ raw_config_json }}</pre>
-</details>
-
-<h3>Events</h3>
-{% if events %}
-    <ul>
-        {% for event in events %}
-            <li>{{ event.created_at }} | {{ event.event_type }} | {{ event.message }}</li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No events yet.</p>
-{% endif %}
-
-<h3>Artifacts</h3>
-{% if artifact_groups %}
-    {% for group in artifact_groups %}
-        <h4>{{ group.label }}</h4>
-        {% if group.intent %}
-            <p>{{ group.intent }}</p>
-        {% endif %}
-        <ul>
-            {% for entry in group.entries %}
-                <li>
-                    {{ entry.artifact.status }}
-                    | created {{ entry.artifact.created_at|date:"Y-m-d H:i:s" }}
-                    | size {{ entry.size_display }}
-                    | {{ entry.artifact.storage_uri|default:"-" }}
-                    {% if entry.downloadable %}
-                        | <a href="{% url 'workbook-run-artifact-download' workbook_id=workspace.id run_id=run.id artifact_id=entry.artifact.id %}">Download</a>
-                    {% endif %}
+    <section class="card run-journey-card">
+        <h3>Run Journey</h3>
+        <ul class="run-journey-list">
+            {% for step in run_journey %}
+                <li class="run-journey-item">
+                    <div>
+                        <strong>{{ step.label }}</strong>: {{ step.state_label }}
+                        {% if step.timestamp %}
+                            ({{ step.timestamp|date:"Y-m-d H:i:s" }})
+                        {% endif %}
+                    </div>
+                    <p>{{ step.note }}</p>
                 </li>
             {% endfor %}
         </ul>
-    {% endfor %}
-{% elif artifacts %}
-    <ul>
-        {% for artifact in artifacts %}
-            <li>{{ artifact.artifact_type }} | {{ artifact.status }}</li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No artifacts yet.</p>
-{% endif %}
+    </section>
 
-<h3>Completion Notifications</h3>
-{% if notifications %}
-    <ul>
-        {% for notification in notifications %}
-            <li>
-                {{ notification.channel }} | {{ notification.notify_on }} | {{ notification.status }} | {{ notification.user.email }}
-                {% if notification.sent_at %} | sent {{ notification.sent_at }}{% endif %}
-                {% if notification.error_message %} | error: {{ notification.error_message }}{% endif %}
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No completion notifications requested.</p>
-{% endif %}
+    <section class="card run-outcome-card">
+        <h3>Outcome</h3>
+        <p><strong>{{ outcome.title }}</strong></p>
+        <p>{{ outcome.description }}</p>
+        {% if outcome.next_step %}
+            <p>{{ outcome.next_step }}</p>
+        {% endif %}
+        {% if run.error_message %}
+            <p>Error detail: {{ run.error_message }}</p>
+        {% endif %}
+    </section>
+
+    <section class="card run-cancel-card">
+        <h3>Request Cancellation</h3>
+        {% if cancellation_message %}
+            <p>{{ cancellation_message }}</p>
+        {% endif %}
+        {% if can_request_cancellation %}
+            <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="stack-sm">
+                {% csrf_token %}
+                {{ cancel_form.as_p }}
+                <button type="submit">Cancel run</button>
+            </form>
+        {% else %}
+            <p>Cancellation is not available in the current run status.</p>
+        {% endif %}
+    </section>
+
+    <section class="card run-config-card">
+        <h3>Configuration Snapshot</h3>
+        {% if config_summary_rows %}
+            <ul class="run-config-list">
+                {% for row in config_summary_rows %}
+                    <li><strong>{{ row.label }}:</strong> {{ row.value }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No structured run configuration was recorded.</p>
+        {% endif %}
+        <details class="run-raw-config">
+            <summary>Raw configuration JSON</summary>
+            <pre>{{ raw_config_json }}</pre>
+        </details>
+    </section>
+
+    <section class="card run-events-card">
+        <h3>Events</h3>
+        {% if events %}
+            <ul class="run-events-list">
+                {% for event in events %}
+                    <li>{{ event.created_at }} | {{ event.event_type }} | {{ event.message }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No events yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="card run-artifacts-card">
+        <h3>Artifacts</h3>
+        {% if artifact_groups %}
+            {% for group in artifact_groups %}
+                <article class="run-artifact-group">
+                    <h4>{{ group.label }}</h4>
+                    {% if group.intent %}
+                        <p>{{ group.intent }}</p>
+                    {% endif %}
+                    <ul>
+                        {% for entry in group.entries %}
+                            <li>
+                                {{ entry.artifact.status }}
+                                | created {{ entry.artifact.created_at|date:"Y-m-d H:i:s" }}
+                                | size {{ entry.size_display }}
+                                | {{ entry.artifact.storage_uri|default:"-" }}
+                                {% if entry.downloadable %}
+                                    | <a href="{% url 'workbook-run-artifact-download' workbook_id=workspace.id run_id=run.id artifact_id=entry.artifact.id %}">Download</a>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+            {% endfor %}
+        {% elif artifacts %}
+            <ul>
+                {% for artifact in artifacts %}
+                    <li>{{ artifact.artifact_type }} | {{ artifact.status }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No artifacts yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="card run-notify-card">
+        <h3>Completion Notifications</h3>
+        {% if notifications %}
+            <ul class="run-notify-list">
+                {% for notification in notifications %}
+                    <li>
+                        {{ notification.channel }} | {{ notification.notify_on }} | {{ notification.status }} | {{ notification.user.email }}
+                        {% if notification.sent_at %} | sent {{ notification.sent_at }}{% endif %}
+                        {% if notification.error_message %} | error: {{ notification.error_message }}{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No completion notifications requested.</p>
+        {% endif %}
+    </section>
+</div>
 {% endblock %}

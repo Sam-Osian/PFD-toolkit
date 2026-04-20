@@ -623,6 +623,178 @@ main hr {
   font-size: 0.9rem;
 }
 
+.inv-summary-grid,
+.run-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.inv-summary-kicker,
+.run-kicker {
+  margin: 0 0 0.25rem;
+  color: var(--text-3);
+  font-family: var(--ff-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.inv-summary-value,
+.run-value {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.inv-summary-value a {
+  color: var(--text);
+  text-decoration: none;
+}
+
+.inv-summary-value a:hover {
+  color: #d2c9ff;
+}
+
+.inv-next-card h3,
+.inv-export-card h3,
+.inv-timeline-card h3,
+.inv-runs-card h3,
+.inv-config-card h3,
+.run-journey-card h3,
+.run-outcome-card h3,
+.run-cancel-card h3,
+.run-config-card h3,
+.run-events-card h3,
+.run-artifacts-card h3,
+.run-notify-card h3 {
+  margin-top: 0;
+}
+
+.inv-timeline-list,
+.inv-runs-list,
+.run-journey-list,
+.run-events-list,
+.run-notify-list,
+.run-config-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.inv-timeline-item + .inv-timeline-item,
+.inv-run-row + .inv-run-row,
+.run-journey-item + .run-journey-item,
+.run-events-list li + li,
+.run-notify-list li + li,
+.run-config-list li + li {
+  margin-top: 0.5rem;
+}
+
+.inv-timeline-item {
+  border-left: 2px solid var(--line);
+  padding-left: 0.75rem;
+}
+
+.inv-timeline-item.is-active {
+  border-left-color: var(--accent);
+}
+
+.inv-timeline-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.65rem;
+  align-items: center;
+}
+
+.inv-timeline-main strong {
+  color: var(--text);
+}
+
+.inv-timeline-note {
+  margin: 0.3rem 0 0;
+  color: var(--text-3);
+}
+
+.inv-runs-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.inv-run-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.02);
+  display: grid;
+  gap: 0.2rem;
+}
+
+.inv-run-row a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.inv-run-row a:hover {
+  color: #d2c9ff;
+}
+
+.inv-config-grid p {
+  margin: 0;
+}
+
+.inv-config-grid {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.run-journey-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.run-journey-item p {
+  margin: 0.35rem 0 0;
+  color: var(--text-3);
+}
+
+.run-raw-config {
+  margin-top: var(--space-3);
+}
+
+.run-raw-config pre {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: rgba(2, 2, 8, 0.55);
+  color: var(--text-2);
+  overflow-x: auto;
+}
+
+.run-artifact-group + .run-artifact-group {
+  margin-top: var(--space-3);
+}
+
+.run-artifact-group h4 {
+  margin: 0 0 0.4rem;
+}
+
+.run-artifact-group p {
+  margin: 0 0 0.45rem;
+  color: var(--text-3);
+}
+
+.run-artifact-group ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
 @media (max-width: 768px) {
   .app-header-inner {
     width: calc(100% - 1rem);
@@ -657,6 +829,11 @@ main hr {
 
   .wizard-review-grid,
   .wizard-split-row {
+    grid-template-columns: 1fr;
+  }
+
+  .inv-summary-grid,
+  .run-summary-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -1,85 +1,126 @@
 {% extends "base.html" %}
 
+{% block page_title %}{{ investigation.title }} · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">{{ investigation.title }}</h2>
+    <p class="page-subtitle">Investigation workspace with timeline, runs, and export controls.</p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>{{ investigation.title }}</h2>
-<p>Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a></p>
-<p>Status: {{ investigation.status }}</p>
-<p>Question: {{ investigation.question_text|default:"-" }}</p>
+<div class="stack-md">
+    <section class="card inv-summary-card">
+        <div class="inv-summary-grid">
+            <div>
+                <p class="inv-summary-kicker">Workbook</p>
+                <p class="inv-summary-value">
+                    <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+                </p>
+            </div>
+            <div>
+                <p class="inv-summary-kicker">Status</p>
+                <p class="inv-summary-value">{{ investigation.status }}</p>
+            </div>
+            <div>
+                <p class="inv-summary-kicker">Question</p>
+                <p class="inv-summary-value">{{ investigation.question_text|default:"-" }}</p>
+            </div>
+        </div>
+    </section>
 
-{% if can_edit %}
-    <h3>Next Action</h3>
-    <p>
-        <a href="{% url 'workbook-investigation-wizard' workbook_id=workspace.id investigation_id=investigation.id %}">
-            Open wizard
-        </a>
-        to configure scope and methods, then launch the sequential pipeline.
-    </p>
-{% else %}
-    <p>This investigation is read-only for your account.</p>
-{% endif %}
-
-{% if can_run %}
-    <h3>Export Bundle</h3>
-    <p>Package current investigation outputs for download, similar to v0.1 bundle export options.</p>
-    <form method="post" action="{% url 'workbook-investigation-export-queue' workbook_id=workspace.id investigation_id=investigation.id %}">
-        {% csrf_token %}
-        {{ export_form.as_p }}
-        <button type="submit">Queue export bundle</button>
-    </form>
-{% endif %}
-
-<h3>Pipeline Timeline</h3>
-{% if pipeline_timeline %}
-    <p>
-        Latest pipeline root run:
-        <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=pipeline_timeline.root_run.id %}">
-            {{ pipeline_timeline.root_run.id }}
-        </a>
-        · continue on fail: {{ pipeline_timeline.continue_on_fail|yesno:"yes,no" }}
-    </p>
-    <ol>
-        {% for entry in pipeline_timeline.entries %}
-            <li>
-                <strong>{{ entry.stage_label }}</strong>
-                · status: {{ entry.status }}
-                {% if entry.run %}
-                    ·
-                    <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=entry.run.id %}">
-                        run {{ entry.run.id }}
-                    </a>
-                    · queued {{ entry.run.queued_at|date:"Y-m-d H:i" }}
-                {% endif %}
-                {% if pipeline_timeline.active_stage_index == forloop.counter0 %}
-                    · (active)
-                {% endif %}
-                {% if entry.note %}
-                    <br>{{ entry.note }}
-                {% endif %}
-            </li>
-        {% endfor %}
-    </ol>
-{% else %}
-    <p>No wizard pipeline runs yet.</p>
-{% endif %}
-
-<h3>Runs</h3>
-{% if runs %}
-    <ul>
-        {% for run in runs %}
-            <li>
-                <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=run.id %}">
-                    {{ run.id }}
+    <section class="card inv-next-card">
+        {% if can_edit %}
+            <h3>Next Action</h3>
+            <p>
+                <a class="btn btn-primary" href="{% url 'workbook-investigation-wizard' workbook_id=workspace.id investigation_id=investigation.id %}">
+                    Open wizard
                 </a>
-                {{ run.run_type }} - {{ run.status }} - queued {{ run.queued_at|date:"Y-m-d H:i" }}
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No runs for this investigation yet.</p>
-{% endif %}
+                to configure scope and methods, then launch the sequential pipeline.
+            </p>
+        {% else %}
+            <h3>Next Action</h3>
+            <p>This investigation is read-only for your account.</p>
+        {% endif %}
+    </section>
 
-<h3>Configuration Snapshot</h3>
-<p>Scope setting: {{ investigation.scope_json.temporal_scope_option|default:"all_reports" }}</p>
-<p>Themes selected: {{ investigation.method_json.run_themes|yesno:"yes,no" }}</p>
-<p>Extract selected: {{ investigation.method_json.run_extract|yesno:"yes,no" }}</p>
+    {% if can_run %}
+        <section class="card inv-export-card">
+            <h3>Export Bundle</h3>
+            <p>Package current investigation outputs for download, similar to v0.1 bundle export options.</p>
+            <form method="post" action="{% url 'workbook-investigation-export-queue' workbook_id=workspace.id investigation_id=investigation.id %}" class="stack-sm">
+                {% csrf_token %}
+                {{ export_form.as_p }}
+                <button type="submit" class="btn btn-primary">Queue export bundle</button>
+            </form>
+        </section>
+    {% endif %}
+
+    <section class="card inv-timeline-card">
+        <h3>Pipeline Timeline</h3>
+        {% if pipeline_timeline %}
+            <p>
+                Latest pipeline root run:
+                <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=pipeline_timeline.root_run.id %}">
+                    {{ pipeline_timeline.root_run.id }}
+                </a>
+                · continue on fail: {{ pipeline_timeline.continue_on_fail|yesno:"yes,no" }}
+            </p>
+            <ol class="inv-timeline-list">
+                {% for entry in pipeline_timeline.entries %}
+                    <li class="inv-timeline-item{% if pipeline_timeline.active_stage_index == forloop.counter0 %} is-active{% endif %}">
+                        <div class="inv-timeline-main">
+                            <strong>{{ entry.stage_label }}</strong>
+                            <span>status: {{ entry.status }}</span>
+                            {% if entry.run %}
+                                <span>
+                                    <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=entry.run.id %}">
+                                        run {{ entry.run.id }}
+                                    </a>
+                                </span>
+                                <span>queued {{ entry.run.queued_at|date:"Y-m-d H:i" }}</span>
+                            {% endif %}
+                            {% if pipeline_timeline.active_stage_index == forloop.counter0 %}
+                                <span>(active)</span>
+                            {% endif %}
+                        </div>
+                        {% if entry.note %}
+                            <p class="inv-timeline-note">{{ entry.note }}</p>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ol>
+        {% else %}
+            <p>No wizard pipeline runs yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="card inv-runs-card">
+        <h3>Runs</h3>
+        {% if runs %}
+            <ul class="inv-runs-list">
+                {% for run in runs %}
+                    <li class="inv-run-row">
+                        <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=run.id %}">
+                            {{ run.id }}
+                        </a>
+                        <span>{{ run.run_type }} · {{ run.status }} · queued {{ run.queued_at|date:"Y-m-d H:i" }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No runs for this investigation yet.</p>
+        {% endif %}
+    </section>
+
+    <section class="card inv-config-card">
+        <h3>Configuration Snapshot</h3>
+        <div class="inv-config-grid">
+            <p><strong>Scope setting:</strong> {{ investigation.scope_json.temporal_scope_option|default:"all_reports" }}</p>
+            <p><strong>Themes selected:</strong> {{ investigation.method_json.run_themes|yesno:"yes,no" }}</p>
+            <p><strong>Extract selected:</strong> {{ investigation.method_json.run_extract|yesno:"yes,no" }}</p>
+        </div>
+    </section>
+</div>
 {% endblock %}
