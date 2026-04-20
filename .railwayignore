@@ -1,6 +1,7 @@
 # Keep deployment snapshot lean for Railway.
 .git/
 .venv/
+.uv-cache/
 __pycache__/
 *.pyc
 *.pyo
@@ -16,13 +17,18 @@ outputs/
 reports/
 build/
 dist/
+node_modules/
+all_reports.csv
 
 # Research datasets/notebooks not needed for web runtime
 ons_replication/
 tutorials/
 scripts/data/
+scripts/theme_collections/
 2025/
 claude_design/
+site/
+docs/assets/
 
 # Legacy deployment not used by v0.2 runtime
 django_workbench/
