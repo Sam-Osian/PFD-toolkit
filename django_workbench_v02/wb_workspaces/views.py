@@ -16,6 +16,7 @@ from .forms import (
     WorkspaceCredentialDeleteForm,
     WorkspaceCredentialUpsertForm,
     WorkspaceMemberAddForm,
+    WorkspaceReportExclusionCreateForm,
     WorkspaceMemberUpdateForm,
 )
 from .models import (
@@ -24,16 +25,20 @@ from .models import (
     Workspace,
     WorkspaceCredential,
     WorkspaceMembership,
+    WorkspaceReportExclusion,
     WorkspaceVisibility,
 )
 from .permissions import can_manage_members, can_manage_shares, can_view_workspace
 from .services import (
     WorkspaceCredentialValidationError,
     WorkspaceMembershipError,
+    WorkspaceReportExclusionError,
     add_workspace_member,
     create_workspace_for_user,
     delete_workspace_credential,
     remove_workspace_member,
+    restore_workspace_report_exclusion,
+    upsert_workspace_report_exclusion,
     upsert_workspace_credential,
     update_workspace_member,
 )
@@ -123,6 +128,7 @@ def workspace_detail(request, workbook_id):
     share_create_form = ShareLinkCreateForm(
         initial={"mode": ShareMode.SNAPSHOT, "is_public": True}
     )
+    report_exclusions = WorkspaceReportExclusion.objects.filter(workspace=workspace)
 
     return render(
         request,
@@ -141,6 +147,7 @@ def workspace_detail(request, workbook_id):
             "share_links": share_links,
             "investigations": investigations,
             "share_create_form": share_create_form,
+            "report_exclusions": report_exclusions,
             "role_choices": MembershipRole.choices,
             "access_mode_choices": MembershipAccessMode.choices,
             "share_mode_choices": ShareMode.choices,
@@ -315,4 +322,62 @@ def remove_credential(request, workbook_id):
         messages.success(request, f"Deleted {form.cleaned_data['provider']} credential.")
     else:
         messages.warning(request, f"No {form.cleaned_data['provider']} credential found.")
+    return redirect("workbook-detail", workbook_id=workbook_id)
+
+
+@login_required
+@require_POST
+def exclude_report(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    form = WorkspaceReportExclusionCreateForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid excluded-report submission.")
+        return redirect("workbook-detail", workbook_id=workbook_id)
+    next_url = str(form.cleaned_data.get("next_url") or "").strip()
+
+    try:
+        upsert_workspace_report_exclusion(
+            actor=request.user,
+            workspace=workspace,
+            report_identity=form.cleaned_data["report_identity"],
+            reason=form.cleaned_data["reason"],
+            report_title=form.cleaned_data["report_title"],
+            report_date=form.cleaned_data["report_date"],
+            report_url=form.cleaned_data["report_url"],
+            request=request,
+        )
+    except (WorkspaceReportExclusionError, PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Report excluded from this workbook.")
+
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("workbook-detail", workbook_id=workbook_id)
+
+
+@login_required
+@require_POST
+def restore_excluded_report(request, workbook_id, exclusion_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    exclusion = get_object_or_404(
+        WorkspaceReportExclusion,
+        id=exclusion_id,
+        workspace=workspace,
+    )
+    next_url = str(request.POST.get("next_url") or "").strip()
+    try:
+        restore_workspace_report_exclusion(
+            actor=request.user,
+            workspace=workspace,
+            exclusion=exclusion,
+            request=request,
+        )
+    except (WorkspaceReportExclusionError, PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Excluded report restored.")
+
+    if next_url.startswith("/"):
+        return redirect(next_url)
     return redirect("workbook-detail", workbook_id=workbook_id)

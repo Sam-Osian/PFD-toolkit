@@ -16,6 +16,7 @@ from wb_workspaces.models import (
     MembershipRole,
     WorkspaceCredential,
     WorkspaceMembership,
+    WorkspaceReportExclusion,
 )
 from wb_workspaces.services import create_workspace_for_user
 
@@ -238,6 +239,51 @@ class RunViewTests(TestCase):
                 provider="openai",
                 key_last4="1234",
             ).exists()
+        )
+
+    def test_queue_run_includes_scope_and_excluded_reports(self):
+        self.investigation.scope_json = {
+            "collection_slug": "custom-search",
+            "collection_query": "medication",
+            "selected_filters": {"coroner": ["A"], "area": [], "receiver": []},
+            "report_identity_allowlist": ["https://example.com/r1"],
+        }
+        self.investigation.save(update_fields=["scope_json", "updated_at"])
+        WorkspaceReportExclusion.objects.create(
+            workspace=self.workspace,
+            report_identity="https://example.com/r2",
+            reason="Out of scope",
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "workbook-run-queue",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "run_type": RunType.FILTER,
+                "provider": "openai",
+                "model_name": "gpt-4.1-mini",
+                "api_key": "sk-test-secret-1234",
+                "save_api_key": "on",
+                "input_config_json": '{"execution_mode": "real"}',
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        run = self.investigation.runs.latest("created_at")
+        self.assertEqual(run.input_config_json.get("collection_slug"), "custom-search")
+        self.assertEqual(run.input_config_json.get("collection_query"), "medication")
+        self.assertEqual(
+            run.input_config_json.get("report_identity_allowlist"),
+            ["https://example.com/r1"],
+        )
+        self.assertEqual(
+            run.input_config_json.get("excluded_report_identities"),
+            ["https://example.com/r2"],
         )
 
     def test_owner_can_queue_run_with_completion_notification(self):

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>{{ collection.title }}</h2>
+<p>{{ collection.description }}</p>
+<p>Matching reports: {{ reports_count }}</p>
+
+{% if collection_slug == "custom-search" %}
+    <form method="get">
+        <label for="q">Search</label>
+        <input id="q" name="q" value="{{ query }}">
+        <button type="submit">Apply</button>
+    </form>
+{% endif %}
+
+{% if request.user.is_authenticated %}
+    <form method="post" action="{% url 'collection-copy' collection_slug=collection_slug %}">
+        {% csrf_token %}
+        <input type="hidden" name="q" value="{{ query }}">
+        {% for value in selected_filters.coroner %}
+            <input type="hidden" name="coroner" value="{{ value }}">
+        {% endfor %}
+        {% for value in selected_filters.area %}
+            <input type="hidden" name="area" value="{{ value }}">
+        {% endfor %}
+        {% for value in selected_filters.receiver %}
+            <input type="hidden" name="receiver" value="{{ value }}">
+        {% endfor %}
+        <button type="submit">Make editable copy</button>
+    </form>
+{% else %}
+    <p><a href="{% url 'accounts-login' %}?next={{ request.path }}">Log in</a> to make an editable copy.</p>
+{% endif %}
+
+<h3>Report Preview</h3>
+{% if preview_records %}
+    <table>
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Coroner</th>
+                <th>Area</th>
+                <th>Receiver</th>
+                <th>Title</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in preview_records %}
+                <tr>
+                    <td>{{ row.date|default:"-" }}</td>
+                    <td>{{ row.coroner|default:"-" }}</td>
+                    <td>{{ row.area|default:"-" }}</td>
+                    <td>{{ row.receiver|default:"-" }}</td>
+                    <td>
+                        {% if row.url %}
+                            <a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.title|default:row.url }}</a>
+                        {% else %}
+                            {{ row.title|default:"-" }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if workbook_edit_allowed %}
+                            <form method="post" action="{% url 'workbook-excluded-report-add' workbook_id=workbook.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="report_identity" value="{{ row.__report_identity }}">
+                                <input type="hidden" name="report_title" value="{{ row.title|default:'' }}">
+                                <input type="hidden" name="report_date" value="{{ row.date|default:'' }}">
+                                <input type="hidden" name="report_url" value="{{ row.url|default:'' }}">
+                                <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
+                                <input type="text" name="reason" placeholder="Reason (optional)">
+                                <button type="submit">Exclude in workbook</button>
+                            </form>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No reports matched this collection.</p>
+{% endif %}
+{% endblock %}

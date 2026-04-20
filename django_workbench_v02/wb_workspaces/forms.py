@@ -39,3 +39,12 @@ class WorkspaceCredentialUpsertForm(forms.Form):
 
 class WorkspaceCredentialDeleteForm(forms.Form):
     provider = forms.ChoiceField(choices=WorkspaceLLMProvider.choices)
+
+
+class WorkspaceReportExclusionCreateForm(forms.Form):
+    report_identity = forms.CharField(max_length=512)
+    reason = forms.CharField(required=False)
+    report_title = forms.CharField(required=False)
+    report_date = forms.CharField(required=False, max_length=32)
+    report_url = forms.URLField(required=False)
+    next_url = forms.CharField(required=False)

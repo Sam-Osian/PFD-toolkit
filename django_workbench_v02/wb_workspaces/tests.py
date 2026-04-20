@@ -22,13 +22,16 @@ from .models import (
     WorkspaceCredential,
     WorkspaceMembership,
     WorkspaceVisibility,
+    WorkspaceReportExclusion,
 )
 from .permissions import can_edit_workspace, can_manage_members, can_run_workflows, can_view_workspace
 from .services import (
     add_workspace_member,
     create_workspace_for_user,
     remove_workspace_member,
+    restore_workspace_report_exclusion,
     resolve_workspace_credential,
+    upsert_workspace_report_exclusion,
     upsert_workspace_credential,
     update_workspace_member,
 )
@@ -356,6 +359,72 @@ class WorkspaceCredentialTests(TestCase):
             provider="openai",
         )
         self.assertEqual(api_key, "sk-live-example-9876")
+
+
+class WorkspaceReportExclusionTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner-excl@example.com", password="x")
+        self.viewer = User.objects.create_user(email="viewer-excl@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Exclusions",
+            slug="exclusions",
+            description="",
+        )
+        WorkspaceMembership.objects.create(
+            workspace=self.workspace,
+            user=self.viewer,
+            role=MembershipRole.VIEWER,
+            access_mode=MembershipAccessMode.READ_ONLY,
+            can_manage_members=False,
+            can_manage_shares=False,
+            can_run_workflows=False,
+        )
+
+    def test_owner_can_upsert_and_restore_exclusion(self):
+        exclusion = upsert_workspace_report_exclusion(
+            actor=self.owner,
+            workspace=self.workspace,
+            report_identity="https://example.com/reports/1",
+            reason="Out of scope",
+            report_title="Test report",
+        )
+        self.assertEqual(exclusion.reason, "Out of scope")
+        self.assertTrue(
+            WorkspaceReportExclusion.objects.filter(
+                workspace=self.workspace,
+                report_identity="https://example.com/reports/1",
+            ).exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                workspace=self.workspace,
+                action_type="workspace.report_excluded",
+            ).exists()
+        )
+
+        restore_workspace_report_exclusion(
+            actor=self.owner,
+            workspace=self.workspace,
+            exclusion=exclusion,
+        )
+        self.assertFalse(
+            WorkspaceReportExclusion.objects.filter(id=exclusion.id).exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                workspace=self.workspace,
+                action_type="workspace.report_restored",
+            ).exists()
+        )
+
+    def test_read_only_member_cannot_exclude_report(self):
+        with self.assertRaises(PermissionDenied):
+            upsert_workspace_report_exclusion(
+                actor=self.viewer,
+                workspace=self.workspace,
+                report_identity="rep-2",
+            )
 
 
 class WorkspaceMemberViewsTests(TestCase):

@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "wb_sharing",
     "wb_auditlog",
     "wb_notifications",
+    "wb_collections",
 ]
 
 MIDDLEWARE = [

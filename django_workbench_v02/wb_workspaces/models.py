@@ -203,3 +203,41 @@ class WorkspaceCredential(models.Model):
 
     def __str__(self) -> str:
         return f"{self.workspace} {self.user} {self.provider}"
+
+
+class WorkspaceReportExclusion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "wb_workspaces.Workspace",
+        on_delete=models.CASCADE,
+        related_name="report_exclusions",
+    )
+    report_identity = models.CharField(max_length=512)
+    reason = models.TextField(blank=True)
+    report_title = models.TextField(blank=True)
+    report_date = models.CharField(max_length=32, blank=True)
+    report_url = models.URLField(max_length=1024, blank=True)
+    excluded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="workspace_report_exclusions",
+    )
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "report_identity"],
+                name="uniq_workspace_report_exclusion",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["workspace", "created_at"], name="idx_wre_workspace_created"),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.workspace_id}:{self.report_identity}"

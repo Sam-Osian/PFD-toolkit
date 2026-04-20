@@ -13,6 +13,8 @@ from django.utils import timezone
 import pandas as pd
 from pydantic import BaseModel, Field, create_model
 from pfd_toolkit import Extractor, LLM, Screener, load_reports
+from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
+from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import WorkspaceCredentialValidationError, resolve_workspace_credential
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
@@ -146,6 +148,110 @@ def _resolve_output_dir(*, run, config: dict) -> Path:
     run_dir = base_dir / str(run.id)
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
+
+
+def _normalise_filter_values(raw_values) -> list[str]:
+    if not isinstance(raw_values, list):
+        return []
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        cleaned = str(raw or "").strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.casefold()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        values.append(cleaned)
+    return values
+
+
+def _normalise_selected_filters(config: dict) -> dict[str, list[str]]:
+    selected = config.get("selected_filters")
+    if not isinstance(selected, dict):
+        return {"coroner": [], "area": [], "receiver": []}
+    return {
+        "coroner": _normalise_filter_values(selected.get("coroner", [])),
+        "area": _normalise_filter_values(selected.get("area", [])),
+        "receiver": _normalise_filter_values(selected.get("receiver", [])),
+    }
+
+
+def _split_receivers(value) -> list[str]:
+    text = str(value or "").strip()
+    if not text:
+        return []
+    return [chunk.strip() for chunk in text.split(";") if chunk.strip()]
+
+
+def _apply_collection_and_workspace_scope(*, reports_df: pd.DataFrame, config: dict) -> tuple[pd.DataFrame, int]:
+    scoped_df = with_report_identities(reports_df)
+    initial_total = len(scoped_df)
+
+    if any(column in COLLECTION_COLUMNS.values() for column in [*scoped_df.columns]):
+        pass
+    else:
+        apply_collection_columns(scoped_df)
+
+    collection_slug = str(config.get("collection_slug") or "").strip()
+    if collection_slug and collection_slug not in {"custom", "custom-search"}:
+        column_name = COLLECTION_COLUMNS.get(collection_slug, "")
+        if column_name and column_name in scoped_df.columns:
+            scoped_df = scoped_df.loc[
+                scoped_df[column_name].fillna(False).astype(bool)
+            ].copy()
+
+    allowlist = {
+        str(item).strip()
+        for item in (config.get("report_identity_allowlist") or [])
+        if str(item).strip()
+    }
+    if allowlist:
+        scoped_df = scoped_df.loc[
+            scoped_df[REPORT_IDENTITY_COLUMN].astype(str).isin(allowlist)
+        ].copy()
+
+    selected_filters = _normalise_selected_filters(config)
+    selected_coroners = {value.casefold() for value in selected_filters["coroner"]}
+    selected_areas = {value.casefold() for value in selected_filters["area"]}
+    selected_receivers = {value.casefold() for value in selected_filters["receiver"]}
+
+    if selected_coroners:
+        scoped_df = scoped_df.loc[
+            scoped_df.get("coroner", pd.Series(dtype="object")).map(
+                lambda value: str(value or "").strip().casefold() in selected_coroners
+            )
+        ]
+    if selected_areas:
+        scoped_df = scoped_df.loc[
+            scoped_df.get("area", pd.Series(dtype="object")).map(
+                lambda value: str(value or "").strip().casefold() in selected_areas
+            )
+        ]
+    if selected_receivers:
+        scoped_df = scoped_df.loc[
+            scoped_df.get("receiver", pd.Series(dtype="object")).map(
+                lambda value: any(
+                    receiver.casefold() in selected_receivers
+                    for receiver in _split_receivers(value)
+                )
+            )
+        ]
+
+    excluded = {
+        str(item).strip()
+        for item in (config.get("excluded_report_identities") or [])
+        if str(item).strip()
+    }
+    if excluded:
+        scoped_df = scoped_df.loc[
+            ~scoped_df[REPORT_IDENTITY_COLUMN].astype(str).isin(excluded)
+        ].copy()
+
+    scoped_df = scoped_df.drop(columns=[REPORT_IDENTITY_COLUMN], errors="ignore").reset_index(drop=True)
+    removed = max(0, initial_total - len(scoped_df))
+    return scoped_df, removed
 
 
 def _patch_generate_with_progress(
@@ -316,6 +422,10 @@ def execute_filter_workflow(
         n_reports=n_reports,
         refresh=refresh,
     )
+    reports_df, excluded_count = _apply_collection_and_workspace_scope(
+        reports_df=reports_df,
+        config=config,
+    )
     total_reports = len(reports_df)
 
     if cancellation_check and cancellation_check():
@@ -383,6 +493,7 @@ def execute_filter_workflow(
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "report_limit": n_reports,
+        "excluded_reports_applied": excluded_count,
     }
 
 
@@ -411,6 +522,10 @@ def execute_themes_workflow(
         end_date=end_date.isoformat(),
         n_reports=n_reports,
         refresh=refresh,
+    )
+    reports_df, excluded_count = _apply_collection_and_workspace_scope(
+        reports_df=reports_df,
+        config=config,
     )
     total_reports = len(reports_df)
     if cancellation_check and cancellation_check():
@@ -518,6 +633,7 @@ def execute_themes_workflow(
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "report_limit": n_reports,
+        "excluded_reports_applied": excluded_count,
     }
 
 
@@ -546,6 +662,10 @@ def execute_extract_workflow(
         end_date=end_date.isoformat(),
         n_reports=n_reports,
         refresh=refresh,
+    )
+    reports_df, excluded_count = _apply_collection_and_workspace_scope(
+        reports_df=reports_df,
+        config=config,
     )
     total_reports = len(reports_df)
     if cancellation_check and cancellation_check():
@@ -609,6 +729,7 @@ def execute_extract_workflow(
         "force_assign": force_assign,
         "allow_multiple": allow_multiple,
         "skip_if_present": skip_if_present,
+        "excluded_reports_applied": excluded_count,
     }
 
 

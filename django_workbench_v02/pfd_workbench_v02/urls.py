@@ -27,4 +27,5 @@ urlpatterns = [
     path("", include("wb_sharing.urls")),
     path("", include("wb_investigations.urls")),
     path("", include("wb_runs.urls")),
+    path("", include("wb_collections.urls")),
 ]

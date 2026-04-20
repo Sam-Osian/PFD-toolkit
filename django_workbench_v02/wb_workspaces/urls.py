@@ -32,6 +32,16 @@ urlpatterns = [
         views.remove_credential,
         name="workbook-credential-remove",
     ),
+    path(
+        "workbooks/<uuid:workbook_id>/excluded-reports/add/",
+        views.exclude_report,
+        name="workbook-excluded-report-add",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/excluded-reports/<uuid:exclusion_id>/restore/",
+        views.restore_excluded_report,
+        name="workbook-excluded-report-restore",
+    ),
 
     path("workspaces/", views.dashboard, name="workspace-dashboard"),
     path("workspaces/public/", views.public_workspace_list, name="workspace-public-list"),
@@ -60,5 +70,15 @@ urlpatterns = [
         "workspaces/<uuid:workbook_id>/credentials/remove/",
         views.remove_credential,
         name="workspace-credential-remove",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/excluded-reports/add/",
+        views.exclude_report,
+        name="workspace-excluded-report-add",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/excluded-reports/<uuid:exclusion_id>/restore/",
+        views.restore_excluded_report,
+        name="workspace-excluded-report-restore",
     ),
 ]

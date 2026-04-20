@@ -1,0 +1,147 @@
+from __future__ import annotations
+
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.shortcuts import get_object_or_404, redirect, render
+from django.views.decorators.http import require_GET, require_POST
+
+from wb_workspaces.models import Workspace
+from wb_workspaces.permissions import can_edit_workspace
+
+from .services import (
+    collection_cards,
+    copy_collection_to_workbook,
+    load_collections_dataset,
+    reports_for_collection,
+)
+
+
+def _selected_filters_from_request(request) -> dict[str, list[str]]:
+    def _values(key: str) -> list[str]:
+        values: list[str] = []
+        seen: set[str] = set()
+        for raw in request.GET.getlist(key):
+            cleaned = str(raw or "").strip()
+            if not cleaned:
+                continue
+            lowered = cleaned.casefold()
+            if lowered in seen:
+                continue
+            seen.add(lowered)
+            values.append(cleaned)
+        return values
+
+    return {
+        "coroner": _values("coroner"),
+        "area": _values("area"),
+        "receiver": _values("receiver"),
+    }
+
+
+def _collection_meta(cards: list[dict], slug: str) -> dict:
+    for card in cards:
+        if card.get("slug") == slug:
+            return card
+    return {"slug": slug, "title": slug.replace("_", " ").title(), "description": "Collection"}
+
+
+@require_GET
+def collection_list(request):
+    reports_df = load_collections_dataset(force_refresh=False)
+    cards = collection_cards(reports_df)
+    return render(
+        request,
+        "wb_collections/collection_list.html",
+        {
+            "collections": cards,
+        },
+    )
+
+
+@require_GET
+def collection_detail(request, collection_slug):
+    reports_df = load_collections_dataset(force_refresh=False)
+    cards = collection_cards(reports_df)
+
+    query = str(request.GET.get("q") or "").strip()
+    selected_filters = _selected_filters_from_request(request)
+    filtered_reports = reports_for_collection(
+        reports_df=reports_df,
+        collection_slug=collection_slug,
+        query=query,
+        selected_filters=selected_filters,
+    )
+
+    workbook = None
+    workbook_id = str(request.GET.get("workbook") or "").strip()
+    workbook_edit_allowed = False
+    if workbook_id:
+        workspace = Workspace.objects.filter(id=workbook_id).first()
+        if workspace is not None and can_edit_workspace(request.user, workspace):
+            workbook = workspace
+            workbook_edit_allowed = True
+
+    preview_records = (
+        filtered_reports[[
+            "__report_identity",
+            *[c for c in ("date", "coroner", "area", "receiver", "title", "url") if c in filtered_reports.columns],
+        ]]
+        .head(200)
+        .to_dict(orient="records")
+    )
+
+    return render(
+        request,
+        "wb_collections/collection_detail.html",
+        {
+            "collection": _collection_meta(cards, collection_slug),
+            "collection_slug": collection_slug,
+            "query": query,
+            "selected_filters": selected_filters,
+            "reports_count": len(filtered_reports),
+            "preview_records": preview_records,
+            "workbook": workbook,
+            "workbook_edit_allowed": workbook_edit_allowed,
+        },
+    )
+
+
+@login_required
+@require_POST
+def collection_copy(request, collection_slug):
+    reports_df = load_collections_dataset(force_refresh=False)
+    cards = collection_cards(reports_df)
+    collection = _collection_meta(cards, collection_slug)
+
+    query = str(request.POST.get("q") or "").strip()
+    selected_filters = {
+        "coroner": [value for value in request.POST.getlist("coroner") if str(value).strip()],
+        "area": [value for value in request.POST.getlist("area") if str(value).strip()],
+        "receiver": [value for value in request.POST.getlist("receiver") if str(value).strip()],
+    }
+
+    filtered_reports = reports_for_collection(
+        reports_df=reports_df,
+        collection_slug=collection_slug,
+        query=query,
+        selected_filters=selected_filters,
+    )
+
+    workspace = copy_collection_to_workbook(
+        actor=request.user,
+        collection_slug=collection_slug,
+        collection_title=str(collection.get("title") or collection_slug),
+        collection_query=query,
+        selected_filters=selected_filters,
+        reports_df=filtered_reports,
+        request=request,
+    )
+    messages.success(request, "Collection copied into a new workbook.")
+    return redirect("workbook-detail", workbook_id=workspace.id)
+
+
+@login_required
+@require_POST
+def collection_copy_requires_auth(request, collection_slug):
+    # Explicit endpoint to keep login-required redirect behavior obvious in templates.
+    return collection_copy(request, collection_slug)

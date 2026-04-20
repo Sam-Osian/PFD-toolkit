@@ -153,6 +153,45 @@
     <p>Log in to manage workbook credentials.</p>
 {% endif %}
 
+<h3>Excluded Reports</h3>
+{% if report_exclusions %}
+    <table>
+        <thead>
+            <tr>
+                <th>Report</th>
+                <th>Date</th>
+                <th>Reason</th>
+                <th>Excluded By</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for exclusion in report_exclusions %}
+            <tr>
+                <td>
+                    {% if exclusion.report_url %}
+                        <a href="{{ exclusion.report_url }}" target="_blank" rel="noopener">{{ exclusion.report_title|default:exclusion.report_identity }}</a>
+                    {% else %}
+                        {{ exclusion.report_title|default:exclusion.report_identity }}
+                    {% endif %}
+                </td>
+                <td>{{ exclusion.report_date|default:"-" }}</td>
+                <td>{{ exclusion.reason|default:"-" }}</td>
+                <td>{% if exclusion.excluded_by %}{{ exclusion.excluded_by.email }}{% else %}-{% endif %}</td>
+                <td>
+                    <form method="post" action="{% url 'workbook-excluded-report-restore' workbook_id=workspace.id exclusion_id=exclusion.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Restore</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+{% else %}
+    <p>No excluded reports yet.</p>
+{% endif %}
+
 <h3>Share Links</h3>
 {% if share_links %}
     <table>

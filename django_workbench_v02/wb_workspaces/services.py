@@ -14,8 +14,9 @@ from .models import (
     WorkspaceCredential,
     WorkspaceLLMProvider,
     WorkspaceMembership,
+    WorkspaceReportExclusion,
 )
-from .permissions import can_manage_members
+from .permissions import can_edit_workspace, can_manage_members
 
 
 class WorkspaceMembershipError(ValidationError):
@@ -23,6 +24,10 @@ class WorkspaceMembershipError(ValidationError):
 
 
 class WorkspaceCredentialValidationError(ValidationError):
+    pass
+
+
+class WorkspaceReportExclusionError(ValidationError):
     pass
 
 
@@ -398,3 +403,99 @@ def delete_workspace_credential(
         request=request,
     )
     return True
+
+
+@transaction.atomic
+def upsert_workspace_report_exclusion(
+    *,
+    actor,
+    workspace: Workspace,
+    report_identity: str,
+    reason: str = "",
+    report_title: str = "",
+    report_date: str = "",
+    report_url: str = "",
+    request=None,
+) -> WorkspaceReportExclusion:
+    if not can_edit_workspace(actor, workspace):
+        raise PermissionDenied("You do not have permission to exclude reports in this workbook.")
+
+    identity = str(report_identity or "").strip()
+    if not identity:
+        raise WorkspaceReportExclusionError("Report identity is required.")
+
+    exclusion, created = WorkspaceReportExclusion.objects.get_or_create(
+        workspace=workspace,
+        report_identity=identity,
+        defaults={
+            "reason": str(reason or "").strip(),
+            "report_title": str(report_title or "").strip(),
+            "report_date": str(report_date or "").strip(),
+            "report_url": str(report_url or "").strip(),
+            "excluded_by": actor,
+        },
+    )
+    if not created:
+        exclusion.reason = str(reason or exclusion.reason or "").strip()
+        if report_title:
+            exclusion.report_title = str(report_title).strip()
+        if report_date:
+            exclusion.report_date = str(report_date).strip()
+        if report_url:
+            exclusion.report_url = str(report_url).strip()
+        exclusion.excluded_by = actor
+        exclusion.save(
+            update_fields=[
+                "reason",
+                "report_title",
+                "report_date",
+                "report_url",
+                "excluded_by",
+                "updated_at",
+            ]
+        )
+
+    log_audit_event(
+        action_type="workspace.report_excluded",
+        target_type="workspace_report_exclusion",
+        target_id=str(exclusion.id),
+        workspace=workspace,
+        user=actor,
+        payload={
+            "report_identity": identity,
+            "created": created,
+            "reason": exclusion.reason,
+        },
+        request=request,
+    )
+    return exclusion
+
+
+@transaction.atomic
+def restore_workspace_report_exclusion(
+    *,
+    actor,
+    workspace: Workspace,
+    exclusion: WorkspaceReportExclusion,
+    request=None,
+) -> None:
+    if exclusion.workspace_id != workspace.id:
+        raise WorkspaceReportExclusionError("Exclusion does not belong to this workspace.")
+    if not can_edit_workspace(actor, workspace):
+        raise PermissionDenied("You do not have permission to restore excluded reports in this workbook.")
+
+    payload = {
+        "report_identity": exclusion.report_identity,
+        "reason": exclusion.reason,
+    }
+    exclusion_id = exclusion.id
+    exclusion.delete()
+    log_audit_event(
+        action_type="workspace.report_restored",
+        target_type="workspace_report_exclusion",
+        target_id=str(exclusion_id),
+        workspace=workspace,
+        user=actor,
+        payload=payload,
+        request=request,
+    )

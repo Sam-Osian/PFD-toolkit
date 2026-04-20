@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Collections</h2>
+<p>Browse curated and custom collections, then copy one into an editable workbook.</p>
+
+<ul>
+    {% for item in collections %}
+        <li>
+            <a href="{% url 'collection-detail' collection_slug=item.slug %}">{{ item.title }}</a>
+            - {{ item.description }} ({{ item.count }})
+        </li>
+    {% endfor %}
+</ul>
+{% endblock %}
