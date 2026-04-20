@@ -14,8 +14,6 @@ from pfd_toolkit import load_reports
 from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
 
 from wb_auditlog.services import log_audit_event
-from wb_investigations.models import InvestigationStatus
-from wb_investigations.services import create_investigation
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import create_workspace_for_user
 
@@ -422,23 +420,6 @@ def copy_collection_to_workbook(
             collection_slug=collection_slug,
         ),
         description=f"Created from collection '{collection_title}'.",
-        request=request,
-    )
-    scope_json = {
-        "dataset_source": "collection",
-        "collection_slug": collection_slug,
-        "collection_query": collection_query,
-        "selected_filters": selected_filters,
-        "report_identity_allowlist": reports_df[REPORT_IDENTITY_COLUMN].astype(str).tolist(),
-    }
-    create_investigation(
-        actor=actor,
-        workspace=workspace,
-        title=f"{collection_title} investigation",
-        question_text="",
-        scope_json=scope_json,
-        method_json={},
-        status=InvestigationStatus.ACTIVE,
         request=request,
     )
 

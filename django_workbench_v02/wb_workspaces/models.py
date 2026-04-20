@@ -72,6 +72,30 @@ class Workspace(models.Model):
         return self.title
 
 
+class WorkspaceUserState(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workspace_state",
+    )
+    active_workspace = models.ForeignKey(
+        "wb_workspaces.Workspace",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="active_for_users",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["active_workspace"], name="idx_wus_active_workspace"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.active_workspace_id}"
+
+
 class WorkspaceMembership(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(

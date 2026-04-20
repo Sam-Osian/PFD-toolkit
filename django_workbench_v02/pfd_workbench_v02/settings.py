@@ -239,6 +239,7 @@ ARTIFACT_STORAGE_DELETE_LOCAL_AFTER_UPLOAD = _env_bool(
 # Lifecycle maintenance
 # Sliding inactivity window for keepalive/expiry policies.
 LIFECYCLE_INACTIVITY_DAYS = int(os.getenv("LIFECYCLE_INACTIVITY_DAYS", "365"))
+LIFECYCLE_ARCHIVE_RETENTION_DAYS = int(os.getenv("LIFECYCLE_ARCHIVE_RETENTION_DAYS", "60"))
 # Debounce interval to reduce write amplification from repeated view refreshes.
 LIFECYCLE_VIEW_DEBOUNCE_SECONDS = int(os.getenv("LIFECYCLE_VIEW_DEBOUNCE_SECONDS", "0"))
 

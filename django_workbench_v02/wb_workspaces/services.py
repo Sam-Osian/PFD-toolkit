@@ -15,8 +15,9 @@ from .models import (
     WorkspaceLLMProvider,
     WorkspaceMembership,
     WorkspaceReportExclusion,
+    WorkspaceUserState,
 )
-from .permissions import can_edit_workspace, can_manage_members
+from .permissions import can_edit_workspace, can_manage_members, can_view_workspace
 
 
 class WorkspaceMembershipError(ValidationError):
@@ -29,6 +30,152 @@ class WorkspaceCredentialValidationError(ValidationError):
 
 class WorkspaceReportExclusionError(ValidationError):
     pass
+
+
+class WorkspaceLifecycleError(ValidationError):
+    pass
+
+
+def get_active_workspace_for_user(*, user) -> Workspace | None:
+    if not user or not getattr(user, "is_authenticated", False):
+        return None
+    state = WorkspaceUserState.objects.select_related("active_workspace").filter(user=user).first()
+    if not state or state.active_workspace is None:
+        return None
+    if state.active_workspace.archived_at is not None:
+        return None
+    if not can_view_workspace(user, state.active_workspace):
+        return None
+    return state.active_workspace
+
+
+@transaction.atomic
+def set_active_workspace_for_user(*, user, workspace: Workspace, request=None) -> WorkspaceUserState:
+    if not user or not getattr(user, "is_authenticated", False):
+        raise WorkspaceMembershipError("Authenticated user is required to set an active workbook.")
+    if workspace.archived_at is not None:
+        raise WorkspaceLifecycleError("Cannot set an archived workbook as active.")
+    if not can_view_workspace(user, workspace):
+        raise PermissionDenied("You do not have access to this workbook.")
+
+    state, _ = WorkspaceUserState.objects.get_or_create(user=user)
+    previous_workspace_id = str(state.active_workspace_id) if state.active_workspace_id else None
+    state.active_workspace = workspace
+    state.save(update_fields=["active_workspace", "updated_at"])
+    log_audit_event(
+        action_type="workspace.active_changed",
+        target_type="workspace_user_state",
+        target_id=str(user.id),
+        workspace=workspace,
+        user=user,
+        payload={
+            "previous_workspace_id": previous_workspace_id,
+            "active_workspace_id": str(workspace.id),
+        },
+        request=request,
+    )
+    return state
+
+
+def _fallback_active_workspace_for_user(*, user, exclude_workspace_id=None) -> Workspace | None:
+    if not user:
+        return None
+    memberships = (
+        WorkspaceMembership.objects.select_related("workspace")
+        .filter(user=user, workspace__archived_at__isnull=True)
+        .order_by("-workspace__updated_at")
+    )
+    for membership in memberships:
+        workspace = membership.workspace
+        if exclude_workspace_id and str(workspace.id) == str(exclude_workspace_id):
+            continue
+        return workspace
+    return None
+
+
+@transaction.atomic
+def archive_workspace(*, actor, workspace: Workspace, request=None) -> Workspace:
+    if not can_manage_members(actor, workspace):
+        raise PermissionDenied("Only owners with member-management access can archive this workbook.")
+    if workspace.archived_at is not None:
+        return workspace
+
+    now = timezone.now()
+    workspace.archived_at = now
+    workspace.save(update_fields=["archived_at", "updated_at"])
+
+    affected_states = WorkspaceUserState.objects.select_related("user").filter(active_workspace=workspace)
+    for state in affected_states:
+        fallback = _fallback_active_workspace_for_user(
+            user=state.user,
+            exclude_workspace_id=workspace.id,
+        )
+        state.active_workspace = fallback
+        state.save(update_fields=["active_workspace", "updated_at"])
+
+    log_audit_event(
+        action_type="workspace.archived_manual",
+        target_type="workspace",
+        target_id=str(workspace.id),
+        workspace=workspace,
+        user=actor,
+        payload={
+            "archived_at": now.isoformat(),
+            "affected_active_users": affected_states.count(),
+        },
+        request=request,
+    )
+    return workspace
+
+
+@transaction.atomic
+def restore_workspace(*, actor, workspace: Workspace, request=None) -> Workspace:
+    if not can_manage_members(actor, workspace):
+        raise PermissionDenied("Only owners with member-management access can restore this workbook.")
+    if workspace.archived_at is None:
+        return workspace
+
+    archived_at = workspace.archived_at
+    workspace.archived_at = None
+    workspace.save(update_fields=["archived_at", "updated_at"])
+    set_active_workspace_for_user(user=actor, workspace=workspace, request=request)
+
+    log_audit_event(
+        action_type="workspace.restored_manual",
+        target_type="workspace",
+        target_id=str(workspace.id),
+        workspace=workspace,
+        user=actor,
+        payload={
+            "archived_at_before_restore": archived_at.isoformat() if archived_at else None,
+            "restored_at": timezone.now().isoformat(),
+        },
+        request=request,
+    )
+    return workspace
+
+
+@transaction.atomic
+def delete_workspace_immediately(*, actor, workspace: Workspace, reason: str = "", request=None) -> None:
+    if not actor or not getattr(actor, "is_superuser", False):
+        raise PermissionDenied("Only admin can permanently delete a workbook.")
+
+    workspace_id = str(workspace.id)
+    workspace_title = workspace.title
+    WorkspaceUserState.objects.filter(active_workspace=workspace).update(active_workspace=None)
+    workspace.delete()
+    log_audit_event(
+        action_type="workspace.deleted_manual_admin",
+        target_type="workspace",
+        target_id=workspace_id,
+        workspace=None,
+        user=actor,
+        payload={
+            "workspace_title": workspace_title,
+            "reason": str(reason or "").strip(),
+        },
+        request=request,
+    )
 
 
 def _ensure_admin_for_owner_assignment(*, actor, current_role: str | None, target_role: str) -> None:
@@ -85,6 +232,7 @@ def create_workspace_for_user(
         can_manage_shares=True,
         can_run_workflows=True,
     )
+    set_active_workspace_for_user(user=user, workspace=workspace, request=request)
     log_audit_event(
         action_type="workspace.created",
         target_type="workspace",

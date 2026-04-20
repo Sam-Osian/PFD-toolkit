@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from wb_investigations.models import Investigation
+from wb_workspaces.models import Workspace
 
 User = get_user_model()
 
@@ -65,18 +65,16 @@ class CollectionViewTests(TestCase):
         self.assertContains(response, "Circumstances")
 
     @patch("wb_collections.services.load_reports")
-    def test_collection_copy_creates_workspace_and_investigation(self, mock_load_reports):
+    def test_collection_copy_creates_workspace_only(self, mock_load_reports):
         mock_load_reports.return_value = self.dataset.copy()
         self.client.force_login(self.user)
         response = self.client.post(
             reverse("collection-copy", kwargs={"collection_slug": "custom-search"}),
-            data={"q": "medication"},
+            data={"q": "medication", "workbook_title": "Medication Copy"},
         )
         self.assertEqual(response.status_code, 302)
-        investigation = Investigation.objects.filter(created_by=self.user).latest("created_at")
-        self.assertEqual(investigation.scope_json.get("collection_slug"), "custom-search")
-        self.assertEqual(investigation.scope_json.get("collection_query"), "medication")
-        self.assertEqual(len(investigation.scope_json.get("report_identity_allowlist", [])), 1)
+        workspace = Workspace.objects.filter(created_by=self.user).latest("created_at")
+        self.assertEqual(workspace.title, "Medication Copy")
 
     @patch("wb_collections.services.load_reports")
     def test_collection_list_includes_theme_collection_cards(self, mock_load_reports):

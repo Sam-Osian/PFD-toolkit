@@ -2,19 +2,58 @@
 
 {% block content %}
 <h2>Your Workbooks</h2>
-{% if memberships %}
+{% if active_rows %}
+    <h3>Active Workbooks</h3>
     <ul>
-        {% for membership in memberships %}
+        {% for row in active_rows %}
+            {% with membership=row.membership %}
             <li>
                 <a href="{% url 'workbook-detail' workbook_id=membership.workspace.id %}">
                     {{ membership.workspace.title }}
                 </a>
+                {% if active_workspace_id and active_workspace_id == membership.workspace.id|stringformat:"s" %}
+                    (active)
+                {% endif %}
+                {% if membership.workspace.archived_at %}
+                    (archived)
+                {% endif %}
                 ({{ membership.role }}, {{ membership.access_mode }})
+                {% if not membership.workspace.archived_at %}
+                    {% if not active_workspace_id or active_workspace_id != membership.workspace.id|stringformat:"s" %}
+                        <form method="post" action="{% url 'workbook-activate' workbook_id=membership.workspace.id %}" style="display:inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="next_url" value="{% url 'workbook-dashboard' %}">
+                            <button type="submit">Set active</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
             </li>
+            {% endwith %}
         {% endfor %}
     </ul>
 {% else %}
-    <p>You are not currently a member of any workbooks.</p>
+    <p>You do not currently have any active workbooks.</p>
+{% endif %}
+
+{% if archived_rows %}
+    <h3>Archived Workbooks</h3>
+    <ul>
+        {% for row in archived_rows %}
+            {% with membership=row.membership workspace=row.workspace %}
+            <li>
+                <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+                (archived{% if workspace.archived_at %} {{ workspace.archived_at }}{% endif %})
+                ({{ membership.role }}, {{ membership.access_mode }})
+                {% if row.can_restore %}
+                    <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" style="display:inline">
+                        {% csrf_token %}
+                        <button type="submit">Restore</button>
+                    </form>
+                {% endif %}
+            </li>
+            {% endwith %}
+        {% endfor %}
+    </ul>
 {% endif %}
 
 <h3>Create Workbook</h3>

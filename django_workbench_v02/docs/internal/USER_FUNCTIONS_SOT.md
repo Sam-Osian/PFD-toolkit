@@ -180,3 +180,126 @@ SSE endpoints in v0.1:
 2. Enforce read-only semantics in share-view endpoints/UI and complete editable-copy flow polish.
 3. Expand collections from baseline parity to Claude mock-up UX/spec.
 4. Expand persisted action-cache beyond current audit events (query/options payload level).
+
+## Reality Check (Code vs SoT) - 2026-04-20
+
+This section tracks what is truly shipped in v0.2 right now (not just model scaffolding).
+
+### Confirmed Strongly Implemented
+- Auth spine (Auth0 login/callback/logout + admin proxy) and role boundary enforcement.
+- Workbook lifecycle (create/list/detail), membership permissions, and admin-owner-only promotion rule.
+- Async run engine for `filter`, `themes`, `extract`, `export` with queueing, worker processing, status transitions, cancellation, events, and artifact records.
+- Completion notifications (request + dispatcher flow).
+- Artifact download endpoints and storage abstraction.
+- Share links (snapshot/live), public read-only view, and editable copy flow.
+- Excluded reports (exclude + restore + permission enforcement).
+- Collections browsing and copy flow, including thematic collections and theme slug mapping.
+
+### Implemented but UI/UX is Still Baseline
+- Investigation detail and run queue UX are functional but raw (`form.as_p`/JSON-first workflow controls).
+- Run detail page exposes status/events/artifacts/notifications but lacks production-grade operator UX.
+- Workbook detail page is functionally complete for members/shares/credentials/exclusions, but still admin-style markup.
+
+### Gaps Blocking Full v0.1 Parity
+- Stateful action model parity:
+  - `undo`
+  - `redo`
+  - `start_over`
+  - `revert_reports`
+  - These are not yet first-class v0.2 user flows despite `WorkspaceRevision` model groundwork.
+- Session/workbook preference parity:
+  - `set_ui_theme`
+  - `save_settings`
+  - No v0.2 equivalent user-facing settings surface yet.
+- Action-cache depth parity:
+  - Audit logs exist, but full replay-grade cache of query/options/state transitions is not yet complete as an explicit user-visible/history-capable system.
+
+## v0.2 Execution Queue (Authoritative)
+
+Order is set to reduce churn: lock behavior first, then complete UI.
+
+### Stage 1 - Stateful Workbook Actions Parity (Critical)
+Goal: restore core v0.1 manipulation semantics in v0.2.
+
+Deliverables:
+1. Workbook revision writer service (append-only snapshots with clear `change_type`).
+2. User actions:
+   - `undo`
+   - `redo`
+   - `start_over`
+   - `revert_reports`
+3. Guardrails:
+   - per-workbook revision cursor semantics
+   - immutable history
+   - share snapshot compatibility with restored states
+4. Tests:
+   - service tests for branching and restore correctness
+   - view tests for permission and edge cases
+
+Acceptance check:
+- A user can move backward/forward in workbook state without data loss.
+- A "start over" reset is reversible via history.
+- Share snapshots consistently reflect the chosen revision.
+
+### Stage 2 - Investigation and Workflow UX Parity (Critical)
+Goal: make existing run engine fully usable and understandable to non-technical users.
+
+Deliverables:
+1. Replace raw JSON-heavy run queue UX with guided controls for filter/themes/extract/export.
+2. Investigation page improvements:
+   - clear run-type intent
+   - query date bounds controls
+   - provider/model inputs with safer defaults
+3. Run detail improvements:
+   - clearer status timeline
+   - artifact intent labels
+   - explicit cancellation states/messages
+
+Acceptance check:
+- A user can configure and launch each run type without editing raw JSON.
+- Run progress and artifacts are understandable without admin knowledge.
+
+### Stage 3 - Collections and Exclusions Deep Parity (High)
+Goal: finish cross-flow parity between collections, workbook state, and exclusions.
+
+Deliverables:
+1. Ensure collections/filters/exclusions interplay is deterministic in all run types.
+2. Lock expected thematic/rule collection behavior against approved schema updates.
+3. Preserve active filter context when copying collections.
+
+Acceptance check:
+- Repeated copy/filter/exclude cycles produce predictable workbook state and run scope.
+
+### Stage 4 - Settings and Preference Surface (Medium)
+Goal: close v0.1 `set_ui_theme`/`save_settings` gap and keep user state intentional.
+
+Deliverables:
+1. User settings model/surface (theme + workflow defaults as agreed).
+2. Persisted settings application in workbook/investigation/run pages.
+3. Audit trail for settings changes.
+
+Acceptance check:
+- User preference changes survive sessions and apply consistently.
+
+### Stage 5 - Action Cache / Transparency Layer (Medium)
+Goal: operational transparency and replay confidence.
+
+Deliverables:
+1. Formal action-cache schema for query/options/state deltas (beyond coarse audit events).
+2. Hook all major user actions and run submissions into this log.
+3. Internal inspection view/tooling for debug and support operations.
+
+Acceptance check:
+- For any workbook state, we can trace what changed, when, and by whom at option/query level.
+
+### Stage 6 - Workbook Naming Migration + Full UI Pass (After Behavior Lock)
+Goal: terminology and design polish after contracts are stable.
+
+Deliverables:
+1. User-facing terminology migration (`Workspace` label -> `Workbook` label).
+2. Claude design system port on stable backend contracts.
+3. Accessibility and responsive QA pass.
+
+Acceptance check:
+- UI improvements do not require behavior rewrites.
+- Terminology is consistent for end users.

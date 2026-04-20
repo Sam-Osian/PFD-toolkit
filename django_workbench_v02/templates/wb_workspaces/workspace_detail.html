@@ -4,14 +4,74 @@
 <h2>{{ workspace.title }}</h2>
 <p>{{ workspace.description }}</p>
 <p>Visibility: {{ workspace.visibility }}</p>
+{% if workspace.archived_at %}
+    <p>Status: archived at {{ workspace.archived_at }}</p>
+{% else %}
+    <p>Status: active</p>
+{% endif %}
 {% if membership %}
     <p>Your role: {{ membership.role }} | Access: {{ membership.access_mode }}</p>
 {% else %}
     <p>You are viewing this workbook as a guest.</p>
 {% endif %}
-<p><a href="{% url 'workbook-investigation-list' workbook_id=workspace.id %}">Open investigation</a></p>
+{% if not workspace.archived_at %}
+    <p><a href="{% url 'workbook-investigation-list' workbook_id=workspace.id %}">Open investigation</a></p>
+{% endif %}
 
-<h3>Investigation</h3>
+{% if request.user.is_authenticated %}
+<h3>Workbook Lifecycle</h3>
+{% if workspace.archived_at %}
+    {% if manage_members_allowed %}
+        <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" style="display:inline">
+            {% csrf_token %}
+            <button type="submit">Restore workbook</button>
+        </form>
+    {% endif %}
+{% else %}
+    {% if manage_members_allowed %}
+        <form method="post" action="{% url 'workbook-archive' workbook_id=workspace.id %}" style="display:inline">
+            {% csrf_token %}
+            <button type="submit">Archive workbook</button>
+        </form>
+    {% endif %}
+{% endif %}
+{% if request.user.is_superuser %}
+    <form method="post" action="{% url 'workbook-delete' workbook_id=workspace.id %}" style="display:inline">
+        {% csrf_token %}
+        <input type="text" name="reason" placeholder="Reason (optional)">
+        <button type="submit">Admin hard-delete</button>
+    </form>
+{% endif %}
+{% endif %}
+
+{% if request.user.is_authenticated %}
+<h3>Your Workbooks</h3>
+{% if user_workbook_memberships %}
+    <ul>
+        {% for row in user_workbook_memberships %}
+            <li>
+                <a href="{% url 'workbook-detail' workbook_id=row.workspace.id %}">{{ row.workspace.title }}</a>
+                {% if active_workspace_id and active_workspace_id == row.workspace.id|stringformat:"s" %}
+                    (active)
+                {% endif %}
+                {% if row.workspace.archived_at %}
+                    (archived)
+                {% elif not active_workspace_id or active_workspace_id != row.workspace.id|stringformat:"s" %}
+                    <form method="post" action="{% url 'workbook-activate' workbook_id=row.workspace.id %}" style="display:inline">
+                        {% csrf_token %}
+                        <input type="hidden" name="next_url" value="{% url 'workbook-detail' workbook_id=row.workspace.id %}">
+                        <button type="submit">Switch to this workbook</button>
+                    </form>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <p>No workbooks yet.</p>
+{% endif %}
+{% endif %}
+
+<h3>Investigation In This Workbook</h3>
 {% if investigations %}
     <ul>
         {% for inv in investigations %}

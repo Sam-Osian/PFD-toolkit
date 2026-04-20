@@ -23,12 +23,16 @@ from .models import (
     WorkspaceMembership,
     WorkspaceVisibility,
     WorkspaceReportExclusion,
+    WorkspaceUserState,
 )
 from .permissions import can_edit_workspace, can_manage_members, can_run_workflows, can_view_workspace
 from .services import (
     add_workspace_member,
+    archive_workspace,
     create_workspace_for_user,
+    delete_workspace_immediately,
     remove_workspace_member,
+    restore_workspace,
     restore_workspace_report_exclusion,
     resolve_workspace_credential,
     upsert_workspace_report_exclusion,
@@ -133,6 +137,8 @@ class WorkspaceServiceTests(TestCase):
                 workspace=self.workspace, action_type="workspace.created"
             ).exists()
         )
+        state = WorkspaceUserState.objects.get(user=self.owner)
+        self.assertEqual(state.active_workspace_id, self.workspace.id)
 
     def test_add_workspace_member_creates_membership_and_audit(self):
         membership = add_workspace_member(
@@ -559,6 +565,109 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
+class WorkspaceActiveStateViewTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner-active@example.com", password="x")
+        self.workspace_a = create_workspace_for_user(
+            user=self.owner,
+            title="Workspace Active A",
+            slug="workspace-active-a",
+            description="",
+        )
+        self.workspace_b = create_workspace_for_user(
+            user=self.owner,
+            title="Workspace Active B",
+            slug="workspace-active-b",
+            description="",
+        )
+
+    def test_latest_created_workspace_is_active_by_default(self):
+        state = WorkspaceUserState.objects.get(user=self.owner)
+        self.assertEqual(state.active_workspace_id, self.workspace_b.id)
+
+    def test_activate_endpoint_switches_active_workspace(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workbook-activate", kwargs={"workbook_id": self.workspace_a.id}),
+            data={"next_url": reverse("workbook-dashboard")},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        state = WorkspaceUserState.objects.get(user=self.owner)
+        self.assertEqual(state.active_workspace_id, self.workspace_a.id)
+        self.assertContains(response, "Active workbook set")
+
+    def test_dashboard_shows_active_indicator(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Workspace Active B")
+        self.assertContains(response, "(active)")
+
+    def test_workspace_detail_shows_switcher_with_all_user_workbooks(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse("workbook-detail", kwargs={"workbook_id": self.workspace_b.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Your Workbooks")
+        self.assertContains(response, "Workspace Active A")
+        self.assertContains(response, "Workspace Active B")
+        self.assertContains(response, "Switch to this workbook")
+
+
+class WorkspaceLifecycleControlTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner-lifecycle-ui@example.com", password="x")
+        self.admin = User.objects.create_superuser(email="admin-lifecycle-ui@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Lifecycle UI Workspace",
+            slug="lifecycle-ui-workspace",
+            description="",
+        )
+
+    def test_owner_can_archive_and_restore_via_views(self):
+        self.client.force_login(self.owner)
+        archive_response = self.client.post(
+            reverse("workbook-archive", kwargs={"workbook_id": self.workspace.id}),
+            follow=True,
+        )
+        self.assertEqual(archive_response.status_code, 200)
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.archived_at)
+        self.assertContains(archive_response, "Archived Workbooks")
+        self.assertContains(archive_response, "Restore")
+
+        restore_response = self.client.post(
+            reverse("workbook-restore", kwargs={"workbook_id": self.workspace.id}),
+            follow=True,
+        )
+        self.assertEqual(restore_response.status_code, 200)
+        self.workspace.refresh_from_db()
+        self.assertIsNone(self.workspace.archived_at)
+
+    def test_non_admin_cannot_hard_delete_via_view(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workbook-delete", kwargs={"workbook_id": self.workspace.id}),
+            data={"reason": "owner attempt"},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(Workspace.objects.filter(id=self.workspace.id).exists())
+
+    def test_admin_can_hard_delete_via_view(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("workbook-delete", kwargs={"workbook_id": self.workspace.id}),
+            data={"reason": "admin cleanup"},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Workspace.objects.filter(id=self.workspace.id).exists())
+
+
 class WorkspaceViewActivityTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="owner4@example.com", password="x")
@@ -718,6 +827,34 @@ class LifecycleMaintenanceTests(TestCase):
         self.assertEqual(result.workspaces_archived, 1)
         self.assertEqual(artifact.status, ArtifactStatus.READY)
         self.assertIsNone(self.workspace.archived_at)
+
+    def test_lifecycle_job_purges_archived_workspaces_past_retention(self):
+        archived_at = timezone.now() - timedelta(days=90)
+        Workspace.objects.filter(id=self.workspace.id).update(
+            archived_at=archived_at,
+            last_viewed_at=None,
+        )
+        state = WorkspaceUserState.objects.get(user=self.owner)
+        state.active_workspace = self.workspace
+        state.save(update_fields=["active_workspace", "updated_at"])
+
+        result = run_lifecycle_maintenance(
+            inactivity_days=365,
+            archive_retention_days=60,
+            archive_workspaces=False,
+            purge_archived_workspaces=True,
+        )
+
+        self.assertEqual(result.workspaces_purged, 1)
+        self.assertFalse(Workspace.objects.filter(id=self.workspace.id).exists())
+        state.refresh_from_db()
+        self.assertIsNone(state.active_workspace_id)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action_type="workspace.auto_purged_archived",
+                target_id=str(self.workspace.id),
+            ).exists()
+        )
 
     def test_lifecycle_management_command_runs(self):
         out = io.StringIO()

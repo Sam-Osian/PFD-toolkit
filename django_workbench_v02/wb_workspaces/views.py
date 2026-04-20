@@ -31,12 +31,18 @@ from .models import (
 from .permissions import can_manage_members, can_manage_shares, can_view_workspace
 from .services import (
     WorkspaceCredentialValidationError,
+    WorkspaceLifecycleError,
     WorkspaceMembershipError,
     WorkspaceReportExclusionError,
     add_workspace_member,
     create_workspace_for_user,
     delete_workspace_credential,
+    delete_workspace_immediately,
+    get_active_workspace_for_user,
     remove_workspace_member,
+    archive_workspace,
+    restore_workspace,
+    set_active_workspace_for_user,
     restore_workspace_report_exclusion,
     upsert_workspace_report_exclusion,
     upsert_workspace_credential,
@@ -73,15 +79,110 @@ def dashboard(request):
         .filter(user=request.user)
         .order_by("-workspace__updated_at")
     )
+    memberships_list = list(memberships)
+    dashboard_rows: list[dict] = []
+    for membership in memberships_list:
+        workspace = membership.workspace
+        can_restore = bool(request.user.is_superuser) or (
+            membership.role == MembershipRole.OWNER
+            and membership.access_mode == MembershipAccessMode.EDIT
+            and membership.can_manage_members
+        )
+        dashboard_rows.append(
+            {
+                "membership": membership,
+                "workspace": workspace,
+                "is_archived": workspace.archived_at is not None,
+                "can_restore": can_restore,
+            }
+        )
+    active_workspace = get_active_workspace_for_user(user=request.user)
+    if active_workspace is None and memberships_list:
+        for membership in memberships_list:
+            if membership.workspace.archived_at is None:
+                active_workspace = membership.workspace
+                set_active_workspace_for_user(
+                    user=request.user,
+                    workspace=active_workspace,
+                    request=request,
+                )
+                break
+    active_workspace_id = str(active_workspace.id) if active_workspace is not None else ""
 
     return render(
         request,
         "wb_workspaces/dashboard.html",
         {
-            "memberships": memberships,
+            "memberships": memberships_list,
+            "active_rows": [row for row in dashboard_rows if not row["is_archived"]],
+            "archived_rows": [row for row in dashboard_rows if row["is_archived"]],
             "form": form,
+            "active_workspace_id": active_workspace_id,
         },
     )
+
+
+@login_required
+@require_POST
+def activate_workspace(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    if not can_view_workspace(request.user, workspace):
+        raise PermissionDenied("You do not have access to this workbook.")
+    try:
+        set_active_workspace_for_user(user=request.user, workspace=workspace, request=request)
+    except WorkspaceLifecycleError as exc:
+        messages.error(request, str(exc))
+        return redirect("workbook-dashboard")
+    messages.success(request, f"Active workbook set to '{workspace.title}'.")
+    next_url = str(request.POST.get("next_url") or "").strip()
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("workbook-dashboard")
+
+
+@login_required
+@require_POST
+def archive_workspace_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    try:
+        archive_workspace(actor=request.user, workspace=workspace, request=request)
+    except (PermissionDenied, ValidationError, WorkspaceLifecycleError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Workbook archived. It will be auto-deleted after 60 days.")
+    return redirect("workbook-dashboard")
+
+
+@login_required
+@require_POST
+def restore_workspace_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    try:
+        restore_workspace(actor=request.user, workspace=workspace, request=request)
+    except (PermissionDenied, ValidationError, WorkspaceLifecycleError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Workbook restored.")
+    return redirect("workbook-detail", workbook_id=workspace.id)
+
+
+@login_required
+@require_POST
+def delete_workspace_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    reason = str(request.POST.get("reason") or "").strip()
+    try:
+        delete_workspace_immediately(
+            actor=request.user,
+            workspace=workspace,
+            reason=reason,
+            request=request,
+        )
+    except (PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+        return redirect("workbook-detail", workbook_id=workspace.id)
+    messages.success(request, "Workbook permanently deleted.")
+    return redirect("workbook-dashboard")
 
 
 @require_GET
@@ -89,6 +190,8 @@ def workspace_detail(request, workbook_id):
     workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
+    if request.user.is_authenticated and workspace.archived_at is None:
+        set_active_workspace_for_user(user=request.user, workspace=workspace, request=request)
 
     now = timezone.now()
     if is_human_view_request(request=request) and should_update_last_viewed(
@@ -111,6 +214,15 @@ def workspace_detail(request, workbook_id):
         request.user.is_authenticated and can_manage_shares(request.user, workspace)
     )
     memberships = WorkspaceMembership.objects.filter(workspace=workspace).select_related("user")
+    user_workbook_memberships = WorkspaceMembership.objects.none()
+    if request.user.is_authenticated:
+        user_workbook_memberships = (
+            WorkspaceMembership.objects.select_related("workspace")
+            .filter(user=request.user)
+            .order_by("-workspace__updated_at")
+        )
+    active_workspace = get_active_workspace_for_user(user=request.user) if request.user.is_authenticated else None
+    active_workspace_id = str(active_workspace.id) if active_workspace is not None else ""
     add_form = WorkspaceMemberAddForm(initial={"can_run_workflows": True})
     credential_form = WorkspaceCredentialUpsertForm()
     credential_delete_form = WorkspaceCredentialDeleteForm()
@@ -137,6 +249,8 @@ def workspace_detail(request, workbook_id):
             "workspace": workspace,
             "membership": membership,
             "memberships": memberships,
+            "user_workbook_memberships": user_workbook_memberships,
+            "active_workspace_id": active_workspace_id,
             "manage_members_allowed": manage_members_allowed,
             "manage_shares_allowed": manage_shares_allowed,
             "add_form": add_form,

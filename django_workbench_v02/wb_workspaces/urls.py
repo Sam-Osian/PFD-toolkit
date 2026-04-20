@@ -5,6 +5,26 @@ from . import views
 
 urlpatterns = [
     path("workbooks/", views.dashboard, name="workbook-dashboard"),
+    path(
+        "workbooks/<uuid:workbook_id>/activate/",
+        views.activate_workspace,
+        name="workbook-activate",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/archive/",
+        views.archive_workspace_view,
+        name="workbook-archive",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/restore/",
+        views.restore_workspace_view,
+        name="workbook-restore",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/delete/",
+        views.delete_workspace_view,
+        name="workbook-delete",
+    ),
     path("workbooks/public/", views.public_workspace_list, name="workbook-public-list"),
     path("workbooks/<uuid:workbook_id>/", views.workspace_detail, name="workbook-detail"),
     path(
@@ -44,6 +64,26 @@ urlpatterns = [
     ),
 
     path("workspaces/", views.dashboard, name="workspace-dashboard"),
+    path(
+        "workspaces/<uuid:workbook_id>/activate/",
+        views.activate_workspace,
+        name="workspace-activate",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/archive/",
+        views.archive_workspace_view,
+        name="workspace-archive",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/restore/",
+        views.restore_workspace_view,
+        name="workspace-restore",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/delete/",
+        views.delete_workspace_view,
+        name="workspace-delete",
+    ),
     path("workspaces/public/", views.public_workspace_list, name="workspace-public-list"),
     path("workspaces/<uuid:workbook_id>/", views.workspace_detail, name="workspace-detail"),
     path(

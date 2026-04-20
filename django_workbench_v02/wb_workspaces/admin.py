@@ -1,6 +1,12 @@
 from django.contrib import admin
 
-from .models import Workspace, WorkspaceCredential, WorkspaceMembership, WorkspaceRevision
+from .models import (
+    Workspace,
+    WorkspaceCredential,
+    WorkspaceMembership,
+    WorkspaceRevision,
+    WorkspaceUserState,
+)
 
 
 class WorkspaceMembershipInline(admin.TabularInline):
@@ -106,3 +112,16 @@ class WorkspaceCredentialAdmin(admin.ModelAdmin):
     ]
     autocomplete_fields = ["workspace", "user"]
     readonly_fields = ["key_last4", "last_used_at", "created_at", "updated_at"]
+
+
+@admin.register(WorkspaceUserState)
+class WorkspaceUserStateAdmin(admin.ModelAdmin):
+    list_display = ["user", "active_workspace", "updated_at"]
+    search_fields = [
+        "user__email",
+        "user__first_name",
+        "user__last_name",
+        "active_workspace__title",
+    ]
+    autocomplete_fields = ["user", "active_workspace"]
+    readonly_fields = ["updated_at"]
