@@ -18,6 +18,7 @@ from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_id
 from wb_workspaces.services import WorkspaceCredentialValidationError, resolve_workspace_credential
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
+from .models import ArtifactStatus, RunArtifact
 
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
@@ -148,6 +149,50 @@ def _resolve_output_dir(*, run, config: dict) -> Path:
     run_dir = base_dir / str(run.id)
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
+
+
+def _load_reports_from_upstream_artifact(*, run, config: dict) -> pd.DataFrame | None:
+    artifact_id = str(config.get("input_artifact_id") or "").strip()
+    require_upstream = _as_bool(config.get("pipeline_require_upstream_artifact"), default=False)
+    if not artifact_id:
+        if require_upstream:
+            raise AdapterConfigurationError(
+                "Pipeline configuration requires an upstream artifact, but none was provided."
+            )
+        return None
+
+    artifact = (
+        RunArtifact.objects.select_related("workspace", "run")
+        .filter(
+            id=artifact_id,
+            workspace=run.workspace,
+            status=ArtifactStatus.READY,
+        )
+        .first()
+    )
+    if artifact is None:
+        raise AdapterConfigurationError(
+            "Configured upstream artifact is missing or not ready for this workbook."
+        )
+
+    try:
+        file_obj, _ = open_artifact_for_download(artifact)
+    except ArtifactStorageError as exc:
+        raise AdapterConfigurationError(
+            f"Unable to load upstream artifact dataset: {exc}"
+        ) from exc
+
+    with closing(file_obj):
+        try:
+            dataset = pd.read_csv(file_obj)
+        except Exception as exc:  # pragma: no cover - defensive parser guard
+            raise AdapterConfigurationError(
+                f"Upstream artifact dataset is not a valid CSV: {exc}"
+            ) from exc
+
+    if dataset.empty:
+        return dataset
+    return dataset.copy()
 
 
 def _normalise_filter_values(raw_values) -> list[str]:
@@ -514,19 +559,24 @@ def execute_themes_workflow(
     else:
         n_reports = int(n_reports)
     refresh = _as_bool(config.get("refresh"), default=False)
-
-    if progress_callback:
-        progress_callback(8, "Loading report dataset...")
-    reports_df = load_reports(
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
-        n_reports=n_reports,
-        refresh=refresh,
-    )
-    reports_df, excluded_count = _apply_collection_and_workspace_scope(
-        reports_df=reports_df,
-        config=config,
-    )
+    reports_df = _load_reports_from_upstream_artifact(run=run, config=config)
+    if reports_df is None:
+        if progress_callback:
+            progress_callback(8, "Loading report dataset...")
+        reports_df = load_reports(
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            n_reports=n_reports,
+            refresh=refresh,
+        )
+        reports_df, excluded_count = _apply_collection_and_workspace_scope(
+            reports_df=reports_df,
+            config=config,
+        )
+    else:
+        excluded_count = 0
+        if progress_callback:
+            progress_callback(8, "Loading upstream filtered dataset...")
     total_reports = len(reports_df)
     if cancellation_check and cancellation_check():
         raise AdapterCancelledError("Run cancelled after dataset load.")
@@ -654,19 +704,24 @@ def execute_extract_workflow(
     else:
         n_reports = int(n_reports)
     refresh = _as_bool(config.get("refresh"), default=False)
-
-    if progress_callback:
-        progress_callback(8, "Loading report dataset...")
-    reports_df = load_reports(
-        start_date=start_date.isoformat(),
-        end_date=end_date.isoformat(),
-        n_reports=n_reports,
-        refresh=refresh,
-    )
-    reports_df, excluded_count = _apply_collection_and_workspace_scope(
-        reports_df=reports_df,
-        config=config,
-    )
+    reports_df = _load_reports_from_upstream_artifact(run=run, config=config)
+    if reports_df is None:
+        if progress_callback:
+            progress_callback(8, "Loading report dataset...")
+        reports_df = load_reports(
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+            n_reports=n_reports,
+            refresh=refresh,
+        )
+        reports_df, excluded_count = _apply_collection_and_workspace_scope(
+            reports_df=reports_df,
+            config=config,
+        )
+    else:
+        excluded_count = 0
+        if progress_callback:
+            progress_callback(8, "Loading upstream staged dataset...")
     total_reports = len(reports_df)
     if cancellation_check and cancellation_check():
         raise AdapterCancelledError("Run cancelled after dataset load.")

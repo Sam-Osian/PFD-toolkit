@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
 
@@ -18,6 +19,8 @@ from .models import (
     RunStatus,
     RunType,
     RunArtifact,
+    RunEvent,
+    RunEventType,
 )
 from .services import is_terminal_status, set_run_status
 from .pfd_toolkit_adapter import (
@@ -79,9 +82,140 @@ EXECUTION_ERROR_CODE_BY_RUN_TYPE = {
     RunType.EXPORT: "EXPORT_EXECUTION_ERROR",
 }
 
+PIPELINE_TERMINAL_CONTINUE_STATUSES = {
+    RunStatus.SUCCEEDED,
+    RunStatus.FAILED,
+    RunStatus.TIMED_OUT,
+}
+
 
 def _reload_run(run_id):
     return InvestigationRun.objects.select_related("workspace", "investigation").get(id=run_id)
+
+
+def _normalise_pipeline_plan(raw_plan) -> list[str]:
+    if not isinstance(raw_plan, list):
+        return []
+    allowed = {RunType.FILTER, RunType.THEMES, RunType.EXTRACT}
+    result: list[str] = []
+    for raw in raw_plan:
+        value = str(raw or "").strip().lower()
+        if value in allowed:
+            result.append(value)
+    return result
+
+
+def _pipeline_index_from_config(config: dict, *, plan: list[str], fallback_run_type: str) -> int:
+    raw_index = config.get("pipeline_index")
+    try:
+        index = int(raw_index)
+    except (TypeError, ValueError):
+        index = -1
+    if 0 <= index < len(plan):
+        return index
+    try:
+        return plan.index(str(fallback_run_type or "").strip().lower())
+    except ValueError:
+        return -1
+
+
+def _latest_ready_artifact_for_run(*, run: InvestigationRun, preferred_types: list[str]) -> RunArtifact | None:
+    for artifact_type in preferred_types:
+        artifact = (
+            run.artifacts.filter(
+                status=ArtifactStatus.READY,
+                artifact_type=artifact_type,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+        if artifact is not None:
+            return artifact
+    return run.artifacts.filter(status=ArtifactStatus.READY).order_by("-created_at").first()
+
+
+def _upstream_chaining_artifact(run: InvestigationRun) -> RunArtifact | None:
+    if run.run_type == RunType.FILTER:
+        return _latest_ready_artifact_for_run(
+            run=run,
+            preferred_types=[ArtifactType.FILTERED_DATASET],
+        )
+    if run.run_type == RunType.THEMES:
+        return _latest_ready_artifact_for_run(
+            run=run,
+            preferred_types=[ArtifactType.THEME_ASSIGNMENTS, ArtifactType.THEME_SUMMARY],
+        )
+    if run.run_type == RunType.EXTRACT:
+        return _latest_ready_artifact_for_run(
+            run=run,
+            preferred_types=[ArtifactType.EXTRACTION_TABLE],
+        )
+    return None
+
+
+def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun | None:
+    config = current_run.input_config_json or {}
+    pipeline_plan = _normalise_pipeline_plan(config.get("pipeline_plan"))
+    if not pipeline_plan:
+        return None
+
+    continue_on_fail = bool(config.get("pipeline_continue_on_fail", False))
+    if current_run.status == RunStatus.CANCELLED:
+        return None
+    if current_run.status not in PIPELINE_TERMINAL_CONTINUE_STATUSES:
+        return None
+    if not continue_on_fail and current_run.status != RunStatus.SUCCEEDED:
+        return None
+
+    current_index = _pipeline_index_from_config(
+        config,
+        plan=pipeline_plan,
+        fallback_run_type=current_run.run_type,
+    )
+    if current_index < 0:
+        return None
+    next_index = current_index + 1
+    if next_index >= len(pipeline_plan):
+        return None
+
+    next_run_type = pipeline_plan[next_index]
+    next_config = deepcopy(config)
+    next_config["pipeline_index"] = next_index
+    next_config["pipeline_plan"] = pipeline_plan
+    next_config["pipeline_continue_on_fail"] = continue_on_fail
+
+    upstream_artifact = _upstream_chaining_artifact(current_run)
+    if upstream_artifact is not None:
+        next_config["input_artifact_id"] = str(upstream_artifact.id)
+    else:
+        next_config.pop("input_artifact_id", None)
+    next_config["pipeline_require_upstream_artifact"] = bool(
+        next_run_type in {RunType.THEMES, RunType.EXTRACT}
+    )
+
+    next_run = InvestigationRun.objects.create(
+        investigation=current_run.investigation,
+        workspace=current_run.workspace,
+        requested_by=current_run.requested_by,
+        run_type=next_run_type,
+        status=RunStatus.QUEUED,
+        input_config_json=next_config,
+        query_start_date=current_run.query_start_date,
+        query_end_date=current_run.query_end_date,
+    )
+    RunEvent.objects.create(
+        run=next_run,
+        event_type=RunEventType.INFO,
+        message="Run queued by investigation pipeline.",
+        payload_json={
+            "status": next_run.status,
+            "pipeline_previous_run_id": str(current_run.id),
+            "pipeline_index": next_index,
+            "pipeline_plan": pipeline_plan,
+            "input_artifact_id": str(upstream_artifact.id) if upstream_artifact else "",
+        },
+    )
+    return next_run
 
 
 def _cancel_requested(run) -> bool:
@@ -462,6 +596,10 @@ def process_single_available_run(
 
     logger.info("Worker %s processing run %s", effective_worker_id, run.id)
     final_run = _execute_run(run, sleep_between_stages_seconds=sleep_between_stages_seconds)
+    try:
+        _queue_next_pipeline_run(final_run)
+    except Exception:  # pragma: no cover - defensive so pipeline issues don't kill worker
+        logger.exception("Worker %s failed while queueing pipeline continuation for run %s", effective_worker_id, run.id)
     logger.info("Worker %s finished run %s with status=%s", effective_worker_id, run.id, final_run.status)
     return final_run
 

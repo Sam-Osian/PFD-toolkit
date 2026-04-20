@@ -6,26 +6,50 @@
 <p>Status: {{ investigation.status }}</p>
 <p>Question: {{ investigation.question_text|default:"-" }}</p>
 
-<h3>Scope JSON</h3>
-<pre>{{ investigation.scope_json }}</pre>
-
-<h3>Method JSON</h3>
-<pre>{{ investigation.method_json }}</pre>
-
 {% if can_edit %}
-    <h3>Update Investigation</h3>
-    <form method="post" action="{% url 'workbook-investigation-update' workbook_id=workspace.id investigation_id=investigation.id %}">
-        {% csrf_token %}
-        {{ update_form.as_p }}
-        <button type="submit">Update investigation</button>
-    </form>
+    <h3>Next Action</h3>
+    <p>
+        <a href="{% url 'workbook-investigation-wizard' workbook_id=workspace.id investigation_id=investigation.id %}">
+            Open wizard
+        </a>
+        to configure scope and methods, then launch the sequential pipeline.
+    </p>
+{% else %}
+    <p>This investigation is read-only for your account.</p>
+{% endif %}
 
-    <h3>Queue Run</h3>
-    <form method="post" action="{% url 'workbook-run-queue' workbook_id=workspace.id investigation_id=investigation.id %}">
-        {% csrf_token %}
-        {{ run_form.as_p }}
-        <button type="submit">Queue run</button>
-    </form>
+<h3>Pipeline Timeline</h3>
+{% if pipeline_timeline %}
+    <p>
+        Latest pipeline root run:
+        <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=pipeline_timeline.root_run.id %}">
+            {{ pipeline_timeline.root_run.id }}
+        </a>
+        · continue on fail: {{ pipeline_timeline.continue_on_fail|yesno:"yes,no" }}
+    </p>
+    <ol>
+        {% for entry in pipeline_timeline.entries %}
+            <li>
+                <strong>{{ entry.stage_label }}</strong>
+                · status: {{ entry.status }}
+                {% if entry.run %}
+                    ·
+                    <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=entry.run.id %}">
+                        run {{ entry.run.id }}
+                    </a>
+                    · queued {{ entry.run.queued_at|date:"Y-m-d H:i" }}
+                {% endif %}
+                {% if pipeline_timeline.active_stage_index == forloop.counter0 %}
+                    · (active)
+                {% endif %}
+                {% if entry.note %}
+                    <br>{{ entry.note }}
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ol>
+{% else %}
+    <p>No wizard pipeline runs yet.</p>
 {% endif %}
 
 <h3>Runs</h3>
@@ -36,11 +60,16 @@
                 <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=run.id %}">
                     {{ run.id }}
                 </a>
-                {{ run.run_type }} - {{ run.status }} - queued {{ run.queued_at }}
+                {{ run.run_type }} - {{ run.status }} - queued {{ run.queued_at|date:"Y-m-d H:i" }}
             </li>
         {% endfor %}
     </ul>
 {% else %}
     <p>No runs for this investigation yet.</p>
 {% endif %}
+
+<h3>Configuration Snapshot</h3>
+<p>Scope setting: {{ investigation.scope_json.temporal_scope_option|default:"all_reports" }}</p>
+<p>Themes selected: {{ investigation.method_json.run_themes|yesno:"yes,no" }}</p>
+<p>Extract selected: {{ investigation.method_json.run_extract|yesno:"yes,no" }}</p>
 {% endblock %}

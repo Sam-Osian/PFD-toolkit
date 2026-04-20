@@ -731,6 +731,74 @@ class RunWorkerTests(TestCase):
         self.assertIn("Packaged 2 files", run.events.latest("created_at").message)
         mocked.assert_called_once()
 
+    def test_pipeline_queues_next_stage_after_success(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES, RunType.EXTRACT],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+
+        next_run = (
+            self.investigation.runs.filter(run_type=RunType.THEMES)
+            .exclude(id=run.id)
+            .first()
+        )
+        self.assertIsNotNone(next_run)
+        self.assertEqual(next_run.status, RunStatus.QUEUED)
+        self.assertEqual(next_run.input_config_json.get("pipeline_index"), 1)
+        self.assertTrue(next_run.input_config_json.get("pipeline_require_upstream_artifact"))
+        self.assertTrue(bool(next_run.input_config_json.get("input_artifact_id")))
+
+    def test_pipeline_continues_on_failure_when_enabled(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "simulate_failure": True,
+                "simulate_failure_stage": 1,
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.FAILED)
+        self.assertTrue(
+            self.investigation.runs.filter(run_type=RunType.THEMES).exclude(id=run.id).exists()
+        )
+
+    def test_pipeline_does_not_continue_after_cancellation(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        request_run_cancellation(actor=self.owner, run=run, reason="stop pipeline")
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.CANCELLED)
+        self.assertFalse(
+            self.investigation.runs.filter(run_type=RunType.THEMES).exclude(id=run.id).exists()
+        )
+
     @override_settings(ARTIFACT_STORAGE_BACKEND="object_storage")
     def test_worker_persists_output_using_object_storage_backend(self):
         output_path = Path("/tmp/test-run-object-storage-output.csv")

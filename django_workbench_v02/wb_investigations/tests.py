@@ -2,11 +2,21 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from django.urls import reverse
+from datetime import date
 
 from wb_auditlog.models import AuditEvent
+from wb_runs.models import InvestigationRun, RunEvent, RunEventType, RunStatus, RunType
 from wb_workspaces.models import MembershipAccessMode, MembershipRole, WorkspaceMembership, WorkspaceVisibility
 from wb_workspaces.services import create_workspace_for_user
 
+from .forms import (
+    InvestigationWizardExtractConfigForm,
+    InvestigationWizardMethodForm,
+    InvestigationWizardState,
+    InvestigationWizardThemesConfigForm,
+    TemporalScopeOption,
+    temporal_scope_parameters,
+)
 from .models import Investigation, InvestigationStatus
 from .services import InvestigationServiceError, create_investigation, update_investigation
 
@@ -206,3 +216,401 @@ class InvestigationViewTests(TestCase):
         self.investigation.refresh_from_db()
         self.assertIsNotNone(self.workspace.last_viewed_at)
         self.assertIsNotNone(self.investigation.last_viewed_at)
+
+    def test_investigation_detail_shows_wizard_first_ui(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-detail",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Open wizard")
+        self.assertContains(response, "Configuration Snapshot")
+        self.assertNotContains(response, "Scope JSON")
+        self.assertNotContains(response, "Queue Run")
+
+    def test_investigation_detail_shows_pipeline_timeline_when_pipeline_runs_exist(self):
+        self.client.force_login(self.owner)
+        root = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.SUCCEEDED,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        next_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.THEMES,
+            status=RunStatus.QUEUED,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 1,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        RunEvent.objects.create(
+            run=next_run,
+            event_type=RunEventType.INFO,
+            message="Run queued by investigation pipeline.",
+            payload_json={
+                "pipeline_previous_run_id": str(root.id),
+                "pipeline_index": 1,
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+            },
+        )
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-detail",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pipeline Timeline")
+        self.assertContains(response, "continue on fail: yes")
+        self.assertContains(response, "Screen and filter")
+        self.assertContains(response, "Discover themes")
+
+    def test_pipeline_timeline_flags_continued_after_failure(self):
+        self.client.force_login(self.owner)
+        root = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.FAILED,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        next_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.THEMES,
+            status=RunStatus.QUEUED,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 1,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        RunEvent.objects.create(
+            run=next_run,
+            event_type=RunEventType.INFO,
+            message="Run queued by investigation pipeline.",
+            payload_json={
+                "pipeline_previous_run_id": str(root.id),
+                "pipeline_index": 1,
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+            },
+        )
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-detail",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Continued after previous stage failed/timed out.")
+
+
+class InvestigationWizardFormTests(TestCase):
+    def test_temporal_scope_parameters(self):
+        today = date(2026, 4, 20)
+
+        all_reports = temporal_scope_parameters(
+            scope_option=TemporalScopeOption.ALL_REPORTS,
+            today=today,
+        )
+        self.assertIsNone(all_reports["query_start_date"])
+        self.assertIsNone(all_reports["query_end_date"])
+        self.assertIsNone(all_reports["report_limit"])
+
+        last_year = temporal_scope_parameters(
+            scope_option=TemporalScopeOption.LAST_YEAR,
+            today=today,
+        )
+        self.assertEqual(last_year["query_start_date"], date(2025, 4, 20))
+        self.assertEqual(last_year["query_end_date"], today)
+
+        recent_100 = temporal_scope_parameters(
+            scope_option=TemporalScopeOption.MOST_RECENT_100,
+            today=today,
+        )
+        self.assertEqual(recent_100["report_limit"], 100)
+
+    def test_method_form_pipeline_plan_fixed_order(self):
+        form = InvestigationWizardMethodForm(
+            data={"run_themes": "on", "run_extract": "on"}
+        )
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.pipeline_plan(), ["filter", "themes", "extract"])
+
+    def test_themes_config_rejects_invalid_min_max(self):
+        form = InvestigationWizardThemesConfigForm(
+            data={"enabled": "on", "min_themes": 8, "max_themes": 2}
+        )
+        self.assertFalse(form.is_valid())
+
+    def test_extract_config_requires_feature_fields_when_enabled(self):
+        form = InvestigationWizardExtractConfigForm(
+            data={"enabled": "on", "feature_fields": []}
+        )
+        self.assertFalse(form.is_valid())
+
+    def test_extract_config_accepts_valid_feature_fields(self):
+        form = InvestigationWizardExtractConfigForm(
+            data={
+                "enabled": "on",
+                "feature_fields": [
+                    {"name": "age", "type": "integer"},
+                    {"name": "setting", "type": "text"},
+                ],
+            }
+        )
+        self.assertTrue(form.is_valid())
+
+    def test_wizard_state_round_trip_and_pipeline_plan(self):
+        state = InvestigationWizardState.from_json(
+            {
+                "stage": "method",
+                "title": "T",
+                "question_text": "Q",
+                "scope_option": TemporalScopeOption.LAST_3_YEARS,
+                "run_themes": True,
+                "run_extract": False,
+                "themes_config": {"min_themes": 3},
+            }
+        )
+        self.assertEqual(state.pipeline_plan(), ["filter", "themes"])
+        payload = state.to_json()
+        self.assertEqual(payload["stage"], "method")
+        self.assertEqual(payload["scope_option"], TemporalScopeOption.LAST_3_YEARS)
+
+
+class InvestigationWizardViewTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="inv-wiz-owner@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Wizard Workspace",
+            slug="wizard-workspace",
+            description="desc",
+        )
+        self.investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Wizard Investigation",
+            question_text="Initial question",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+
+    def _wizard_url(self) -> str:
+        return reverse(
+            "workbook-investigation-wizard",
+            kwargs={
+                "workbook_id": self.workspace.id,
+                "investigation_id": self.investigation.id,
+            },
+        )
+
+    def _advance_question_and_scope(self, wizard_url: str):
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "title": "Updated Investigation",
+                "question_text": "What are medication safety failures?",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "scope_option": "last_year",
+            },
+        )
+
+    def _launch_from_review(self, wizard_url: str):
+        return self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "launch",
+                "execution_mode": "simulate",
+                "provider": "openai",
+                "model_name": "gpt-4.1-mini",
+                "request_completion_email": "",
+                "notify_on": "any",
+            },
+        )
+
+    def _assert_latest_run_pipeline_plan(self, expected_plan: list[str]):
+        self.investigation.refresh_from_db()
+        run = self.investigation.runs.latest("created_at")
+        self.assertEqual(run.run_type, RunType.FILTER)
+        self.assertEqual(run.input_config_json.get("pipeline_plan"), expected_plan)
+        self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
+        self.assertEqual(run.input_config_json.get("execution_mode"), "simulate")
+        return run
+
+    def test_wizard_launch_filter_themes_extract_path(self):
+        self.client.force_login(self.owner)
+        wizard_url = self._wizard_url()
+
+        self.assertEqual(self.client.get(wizard_url).status_code, 200)
+        self._advance_question_and_scope(wizard_url)
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "run_themes": "on",
+                "run_extract": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "min_themes": 2,
+                "max_themes": 8,
+                "seed_topics": "medication safety\nhandover",
+                "extra_theme_instructions": "Focus on actionable prevention patterns.",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "feature_fields": '[{"name":"setting","type":"text"},{"name":"age","type":"integer"}]',
+                "allow_multiple": "on",
+            },
+        )
+        launch_response = self._launch_from_review(wizard_url)
+        self.assertEqual(launch_response.status_code, 302)
+
+        run = self._assert_latest_run_pipeline_plan(["filter", "themes", "extract"])
+        self.assertEqual(run.input_config_json.get("search_query"), "What are medication safety failures?")
+        self.assertEqual(run.input_config_json.get("min_themes"), 2)
+        self.assertEqual(run.input_config_json.get("max_themes"), 8)
+        self.assertTrue(isinstance(run.input_config_json.get("feature_fields"), list))
+
+    def test_wizard_launch_filter_only_path(self):
+        self.client.force_login(self.owner)
+        wizard_url = self._wizard_url()
+        self._advance_question_and_scope(wizard_url)
+        review_response = self.client.post(
+            wizard_url,
+            data={"wizard_action": "next"},
+            follow=True,
+        )
+        self.assertEqual(review_response.status_code, 200)
+        self.assertContains(review_response, "Final check before launch.")
+        launch_response = self._launch_from_review(wizard_url)
+        self.assertEqual(launch_response.status_code, 302)
+        self._assert_latest_run_pipeline_plan(["filter"])
+
+    def test_wizard_launch_filter_themes_path(self):
+        self.client.force_login(self.owner)
+        wizard_url = self._wizard_url()
+        self._advance_question_and_scope(wizard_url)
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "run_themes": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "min_themes": 2,
+                "max_themes": 6,
+                "seed_topics": "medication safety",
+            },
+        )
+        launch_response = self._launch_from_review(wizard_url)
+        self.assertEqual(launch_response.status_code, 302)
+        run = self._assert_latest_run_pipeline_plan(["filter", "themes"])
+        self.assertEqual(run.input_config_json.get("min_themes"), 2)
+        self.assertEqual(run.input_config_json.get("max_themes"), 6)
+        self.assertFalse(isinstance(run.input_config_json.get("feature_fields"), list))
+
+    def test_wizard_launch_filter_extract_path(self):
+        self.client.force_login(self.owner)
+        wizard_url = self._wizard_url()
+        self._advance_question_and_scope(wizard_url)
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "run_extract": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "feature_fields": '[{"name":"setting","type":"text"}]',
+                "allow_multiple": "on",
+            },
+        )
+        launch_response = self._launch_from_review(wizard_url)
+        self.assertEqual(launch_response.status_code, 302)
+        run = self._assert_latest_run_pipeline_plan(["filter", "extract"])
+        self.assertTrue(isinstance(run.input_config_json.get("feature_fields"), list))
+
+    def test_method_branching_skips_optional_steps_when_not_selected(self):
+        self.client.force_login(self.owner)
+        wizard_url = self._wizard_url()
+
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "title": "Updated Investigation",
+                "question_text": "Question",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "scope_option": "all_reports",
+            },
+        )
+        response = self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "review")

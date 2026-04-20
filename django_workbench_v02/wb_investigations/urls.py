@@ -19,6 +19,11 @@ urlpatterns = [
         views.investigation_update,
         name="workbook-investigation-update",
     ),
+    path(
+        "workbooks/<uuid:workbook_id>/investigations/<uuid:investigation_id>/wizard/",
+        views.investigation_wizard,
+        name="workbook-investigation-wizard",
+    ),
 
     path(
         "workspaces/<uuid:workbook_id>/investigations/",
@@ -34,5 +39,10 @@ urlpatterns = [
         "workspaces/<uuid:workbook_id>/investigations/<uuid:investigation_id>/update/",
         views.investigation_update,
         name="investigation-update",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/investigations/<uuid:investigation_id>/wizard/",
+        views.investigation_wizard,
+        name="investigation-wizard",
     ),
 ]

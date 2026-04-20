@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Investigation Wizard</h2>
+<p>
+    Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+    · Investigation: <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">{{ investigation.title }}</a>
+</p>
+
+<p>Stage {{ wizard_stage_index|add:1 }} of {{ wizard_stage_sequence|length }}: <strong>{{ wizard_stage|title }}</strong></p>
+<p>Flow: {{ wizard_stage_sequence|join:" -> " }}</p>
+
+{% if wizard_stage == "question" %}
+    <p>Set the research question and workbook investigation title.</p>
+{% elif wizard_stage == "scope" %}
+    <p>Choose how broad to cast the net. This controls report date range or recency limit.</p>
+{% elif wizard_stage == "method" %}
+    <p>Filter runs first and is always required. Themes and extract are optional and run sequentially after filter.</p>
+{% elif wizard_stage == "themes" %}
+    <p>Configure theme discovery. If disabled, this stage is skipped at launch.</p>
+{% elif wizard_stage == "extract" %}
+    <p>Configure structured extraction fields. If disabled, this stage is skipped at launch.</p>
+{% elif wizard_stage == "review" %}
+    <p>Final check before launch.</p>
+{% endif %}
+
+<h3>Current Selection</h3>
+<ul>
+    <li>Title: {{ wizard_state.title|default:"-" }}</li>
+    <li>Question: {{ wizard_state.question_text|default:"-" }}</li>
+    <li>Scope: {{ wizard_state.scope_option }}</li>
+    <li>Pipeline: {{ wizard_state.pipeline_plan|join:" -> " }}</li>
+</ul>
+
+{% if wizard_stage == "review" %}
+    <h3>Review</h3>
+    <p><strong>Themes enabled:</strong> {{ wizard_state.run_themes|yesno:"yes,no" }}</p>
+    <p><strong>Extract enabled:</strong> {{ wizard_state.run_extract|yesno:"yes,no" }}</p>
+{% endif %}
+
+<form method="post">
+    {% csrf_token %}
+    {% if wizard_form.non_field_errors %}
+        <div role="alert">
+            {{ wizard_form.non_field_errors }}
+        </div>
+    {% endif %}
+    {{ wizard_form.as_p }}
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+        {% if can_go_back %}
+            <button type="submit" name="wizard_action" value="back">Back</button>
+        {% endif %}
+        {% if is_last_stage %}
+            <button type="submit" name="wizard_action" value="launch">Launch pipeline</button>
+        {% else %}
+            <button type="submit" name="wizard_action" value="next">Next</button>
+        {% endif %}
+        <button type="submit" name="wizard_action" value="reset">Reset wizard</button>
+    </div>
+</form>
+{% endblock %}

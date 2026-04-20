@@ -1,5 +1,14 @@
-from django import forms
+from __future__ import annotations
 
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+
+from django import forms
+from django.db import models
+
+from wb_notifications.models import NotificationTrigger
+from wb_runs.models import RunType
+from wb_workspaces.models import WorkspaceLLMProvider
 from .models import InvestigationStatus
 
 
@@ -20,3 +29,239 @@ class InvestigationUpdateForm(forms.Form):
     scope_json = forms.JSONField(required=False, initial=dict)
     method_json = forms.JSONField(required=False, initial=dict)
     status = forms.ChoiceField(choices=InvestigationStatus.choices)
+
+
+class TemporalScopeOption(models.TextChoices):
+    ALL_REPORTS = "all_reports", "All reports"
+    LAST_3_YEARS = "last_3_years", "Last 3 years"
+    LAST_YEAR = "last_year", "Last year"
+    LAST_6_MONTHS = "last_6_months", "Last 6 months"
+    MOST_RECENT_100 = "most_recent_100", "100 most recent reports"
+
+
+WIZARD_STAGES = (
+    "question",
+    "scope",
+    "method",
+    "themes",
+    "extract",
+    "review",
+)
+
+
+def _subtract_years(value: date, years: int) -> date:
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        # Handles leap-day rollover.
+        return value.replace(month=2, day=28, year=value.year - years)
+
+
+def temporal_scope_parameters(*, scope_option: str, today: date | None = None) -> dict:
+    current_date = today or date.today()
+    option = str(scope_option or "").strip()
+
+    if option == TemporalScopeOption.LAST_3_YEARS:
+        return {
+            "query_start_date": _subtract_years(current_date, 3),
+            "query_end_date": current_date,
+            "report_limit": None,
+            "scope_option": option,
+        }
+    if option == TemporalScopeOption.LAST_YEAR:
+        return {
+            "query_start_date": _subtract_years(current_date, 1),
+            "query_end_date": current_date,
+            "report_limit": None,
+            "scope_option": option,
+        }
+    if option == TemporalScopeOption.LAST_6_MONTHS:
+        return {
+            "query_start_date": current_date - timedelta(days=183),
+            "query_end_date": current_date,
+            "report_limit": None,
+            "scope_option": option,
+        }
+    if option == TemporalScopeOption.MOST_RECENT_100:
+        return {
+            "query_start_date": None,
+            "query_end_date": None,
+            "report_limit": 100,
+            "scope_option": option,
+        }
+    return {
+        "query_start_date": None,
+        "query_end_date": None,
+        "report_limit": None,
+        "scope_option": TemporalScopeOption.ALL_REPORTS,
+    }
+
+
+def build_pipeline_plan(*, run_themes: bool, run_extract: bool) -> list[str]:
+    plan = [RunType.FILTER]
+    if run_themes:
+        plan.append(RunType.THEMES)
+    if run_extract:
+        plan.append(RunType.EXTRACT)
+    return plan
+
+
+class InvestigationWizardQuestionForm(forms.Form):
+    title = forms.CharField(max_length=255)
+    question_text = forms.CharField(widget=forms.Textarea)
+
+    def clean_question_text(self):
+        value = str(self.cleaned_data.get("question_text") or "").strip()
+        if not value:
+            raise forms.ValidationError("Research question is required.")
+        return value
+
+
+class InvestigationWizardScopeForm(forms.Form):
+    scope_option = forms.ChoiceField(
+        choices=TemporalScopeOption.choices,
+        initial=TemporalScopeOption.ALL_REPORTS,
+    )
+
+    def resolved_scope(self, *, today: date | None = None) -> dict:
+        option = str(self.cleaned_data.get("scope_option") or "")
+        return temporal_scope_parameters(scope_option=option, today=today)
+
+
+class InvestigationWizardMethodForm(forms.Form):
+    run_filter = forms.BooleanField(required=False, initial=True, disabled=True)
+    run_themes = forms.BooleanField(required=False, initial=False)
+    run_extract = forms.BooleanField(required=False, initial=False)
+
+    def clean(self):
+        cleaned = super().clean()
+        cleaned["run_filter"] = True
+        return cleaned
+
+    def pipeline_plan(self) -> list[str]:
+        return build_pipeline_plan(
+            run_themes=bool(self.cleaned_data.get("run_themes")),
+            run_extract=bool(self.cleaned_data.get("run_extract")),
+        )
+
+
+class InvestigationWizardThemesConfigForm(forms.Form):
+    enabled = forms.BooleanField(required=False, initial=False)
+    seed_topics = forms.CharField(required=False, widget=forms.Textarea)
+    min_themes = forms.IntegerField(required=False, min_value=1, max_value=100)
+    max_themes = forms.IntegerField(required=False, min_value=1, max_value=100)
+    extra_theme_instructions = forms.CharField(required=False, widget=forms.Textarea)
+
+    def clean(self):
+        cleaned = super().clean()
+        if not bool(cleaned.get("enabled")):
+            return cleaned
+        min_themes = cleaned.get("min_themes")
+        max_themes = cleaned.get("max_themes")
+        if min_themes is not None and max_themes is not None and min_themes > max_themes:
+            raise forms.ValidationError("Minimum themes cannot exceed maximum themes.")
+        return cleaned
+
+
+class InvestigationWizardExtractConfigForm(forms.Form):
+    enabled = forms.BooleanField(required=False, initial=False)
+    feature_fields = forms.JSONField(required=False, initial=list)
+    allow_multiple = forms.BooleanField(required=False, initial=False)
+    force_assign = forms.BooleanField(required=False, initial=False)
+    skip_if_present = forms.BooleanField(required=False, initial=True)
+
+    def clean(self):
+        cleaned = super().clean()
+        if not bool(cleaned.get("enabled")):
+            return cleaned
+
+        feature_fields = cleaned.get("feature_fields")
+        if not isinstance(feature_fields, list) or not feature_fields:
+            raise forms.ValidationError(
+                "Extract configuration requires at least one feature field."
+            )
+        for index, row in enumerate(feature_fields, start=1):
+            if not isinstance(row, dict):
+                raise forms.ValidationError(f"Feature row {index} must be an object.")
+            name = str(row.get("name") or row.get("field_name") or "").strip()
+            field_type = str(row.get("type") or "").strip()
+            if not name:
+                raise forms.ValidationError(f"Feature row {index} is missing a field name.")
+            if not field_type:
+                raise forms.ValidationError(f"Feature row {index} is missing a type.")
+        return cleaned
+
+
+class InvestigationWizardReviewForm(forms.Form):
+    execution_mode = forms.ChoiceField(
+        choices=(("real", "Real"), ("simulate", "Simulate")),
+        initial="real",
+        required=True,
+    )
+    provider = forms.ChoiceField(
+        choices=WorkspaceLLMProvider.choices,
+        initial=WorkspaceLLMProvider.OPENAI,
+        required=False,
+    )
+    model_name = forms.CharField(required=False, initial="gpt-4.1-mini")
+    request_completion_email = forms.BooleanField(required=False, initial=False)
+    notify_on = forms.ChoiceField(
+        required=False,
+        choices=NotificationTrigger.choices,
+        initial=NotificationTrigger.ANY,
+    )
+
+
+@dataclass
+class InvestigationWizardState:
+    stage: str = "question"
+    title: str = ""
+    question_text: str = ""
+    scope_option: str = TemporalScopeOption.ALL_REPORTS
+    run_filter: bool = True
+    run_themes: bool = False
+    run_extract: bool = False
+    themes_config: dict = field(default_factory=dict)
+    extract_config: dict = field(default_factory=dict)
+    review_config: dict = field(default_factory=dict)
+
+    @classmethod
+    def from_json(cls, payload: dict | None) -> "InvestigationWizardState":
+        raw = payload if isinstance(payload, dict) else {}
+        stage = str(raw.get("stage") or "question").strip().lower()
+        if stage not in WIZARD_STAGES:
+            stage = "question"
+        return cls(
+            stage=stage,
+            title=str(raw.get("title") or "").strip(),
+            question_text=str(raw.get("question_text") or "").strip(),
+            scope_option=str(raw.get("scope_option") or TemporalScopeOption.ALL_REPORTS).strip(),
+            run_filter=True,
+            run_themes=bool(raw.get("run_themes")),
+            run_extract=bool(raw.get("run_extract")),
+            themes_config=raw.get("themes_config") if isinstance(raw.get("themes_config"), dict) else {},
+            extract_config=raw.get("extract_config")
+            if isinstance(raw.get("extract_config"), dict)
+            else {},
+            review_config=raw.get("review_config") if isinstance(raw.get("review_config"), dict) else {},
+        )
+
+    def to_json(self) -> dict:
+        return {
+            "stage": self.stage,
+            "title": self.title,
+            "question_text": self.question_text,
+            "scope_option": self.scope_option,
+            "run_filter": True,
+            "run_themes": self.run_themes,
+            "run_extract": self.run_extract,
+            "themes_config": self.themes_config,
+            "extract_config": self.extract_config,
+            "review_config": self.review_config,
+        }
+
+    def pipeline_plan(self) -> list[str]:
+        return build_pipeline_plan(
+            run_themes=bool(self.run_themes),
+            run_extract=bool(self.run_extract),
+        )

@@ -163,8 +163,6 @@ Scope: authoritative user/admin function inventory across v0.1 (`django_workbenc
 - `restore_excluded_report`
 - `refresh_collections_cache`
 - `download_bundle`
-- `set_ui_theme`
-- `save_settings`
 
 SSE endpoints in v0.1:
 - `POST /sse/filter/`
@@ -179,7 +177,7 @@ SSE endpoints in v0.1:
 1. Rename `Workspace` -> `Workbook` in models/routes/UI.
 2. Enforce read-only semantics in share-view endpoints/UI and complete editable-copy flow polish.
 3. Expand collections from baseline parity to Claude mock-up UX/spec.
-4. Expand persisted action-cache beyond current audit events (query/options payload level).
+4. Expand action-cache coverage/UX beyond v1 baseline where support workflows require it.
 
 ## Reality Check (Code vs SoT) - 2026-04-20
 
@@ -203,10 +201,7 @@ This section tracks what is truly shipped in v0.2 right now (not just model scaf
 - Workbook detail page is functionally complete for members/shares/credentials/exclusions, but still admin-style markup.
 
 ### Gaps Blocking Full v0.1 Parity
-- Session/workbook preference parity:
-  - `set_ui_theme`
-  - `save_settings`
-  - No v0.2 equivalent user-facing settings surface yet.
+- No critical parity blockers remain on settings/theme preferences because these are retired from v0.2 scope.
 
 ## v0.2 Execution Queue (Authoritative)
 
@@ -266,16 +261,12 @@ Deliverables:
 Acceptance check:
 - Repeated copy/filter/exclude cycles produce predictable workbook state and run scope.
 
-### Stage 4 - Settings and Preference Surface (Medium)
-Goal: close v0.1 `set_ui_theme`/`save_settings` gap and keep user state intentional.
+### Stage 4 - Settings and Preference Surface (Retired)
+Goal: retired for v0.2 to keep focus on workflow/investigation delivery.
 
-Deliverables:
-1. User settings model/surface (theme + workflow defaults as agreed).
-2. Persisted settings application in workbook/investigation/run pages.
-3. Audit trail for settings changes.
-
-Acceptance check:
-- User preference changes survive sessions and apply consistently.
+Notes:
+1. v0.1 `set_ui_theme` and `save_settings` are explicitly out of scope for v0.2.
+2. Reintroduce only if future UX requirements make persistent preferences operationally necessary.
 
 ### Stage 5 - Action Cache / Transparency Layer (Medium)
 Goal: operational transparency and replay confidence.
