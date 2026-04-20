@@ -59,6 +59,9 @@ def set_active_workspace_for_user(*, user, workspace: Workspace, request=None) -
         raise PermissionDenied("You do not have access to this workbook.")
 
     state, _ = WorkspaceUserState.objects.get_or_create(user=user)
+    if str(state.active_workspace_id or "") == str(workspace.id):
+        return state
+
     previous_workspace_id = str(state.active_workspace_id) if state.active_workspace_id else None
     state.active_workspace = workspace
     state.save(update_fields=["active_workspace", "updated_at"])

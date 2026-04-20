@@ -121,6 +121,10 @@ class InvestigationRun(models.Model):
                 name="idx_run_ws_stat_qd",
             ),
             models.Index(
+                fields=["status", "queued_at", "created_at"],
+                name="idx_run_stat_queue_cr",
+            ),
+            models.Index(
                 fields=["investigation", "-created_at"],
                 name="idx_run_inv_cr_desc",
             ),
@@ -188,6 +192,10 @@ class RunArtifact(models.Model):
             models.Index(
                 fields=["workspace", "status", "expires_at"],
                 name="idx_art_ws_stat_exp",
+            ),
+            models.Index(
+                fields=["status", "expires_at"],
+                name="idx_art_stat_exp",
             ),
             models.Index(fields=["run", "artifact_type"], name="idx_artifact_run_type"),
             models.Index(fields=["last_viewed_at"], name="idx_artifact_last_viewed"),

@@ -88,6 +88,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "pfd_workbench_v02.performance.PerformanceInstrumentationMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -254,6 +255,13 @@ EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", False)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@pfdtoolkit.org")
+
+# Performance instrumentation (MVP baseline)
+# Logs warnings for slow requests/queries via standard Django logging handlers.
+PERF_REQUEST_LOGGING_ENABLED = _env_bool("PERF_REQUEST_LOGGING_ENABLED", True)
+PERF_SLOW_REQUEST_MS = int(os.getenv("PERF_SLOW_REQUEST_MS", "800"))
+PERF_SLOW_QUERY_MS = int(os.getenv("PERF_SLOW_QUERY_MS", "200"))
+PERF_ADD_RESPONSE_TIMING_HEADER = _env_bool("PERF_ADD_RESPONSE_TIMING_HEADER", False)
 
 # Workspace credential encryption
 # Optional: set a dedicated Fernet key (base64 urlsafe, 32-byte key material).

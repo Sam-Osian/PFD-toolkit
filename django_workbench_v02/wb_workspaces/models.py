@@ -64,6 +64,7 @@ class Workspace(models.Model):
         ]
         indexes = [
             models.Index(fields=["visibility", "is_listed"], name="idx_ws_vis_listed"),
+            models.Index(fields=["archived_at", "-updated_at"], name="idx_ws_arch_upd_desc"),
             models.Index(fields=["updated_at"], name="idx_ws_updated_at"),
         ]
         ordering = ["-updated_at"]
