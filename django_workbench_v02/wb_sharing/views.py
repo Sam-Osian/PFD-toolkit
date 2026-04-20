@@ -9,7 +9,7 @@ from django.views.decorators.http import require_GET, require_POST
 from wb_workspaces.permissions import can_view_workspace
 from wb_workspaces.models import Workspace
 
-from .forms import ShareLinkCreateForm, ShareLinkUpdateForm
+from .forms import ShareCopyForm, ShareLinkCreateForm, ShareLinkUpdateForm
 from .models import WorkspaceShareLink
 from .services import (
     WorkspaceShareLinkError,
@@ -118,7 +118,13 @@ def view_share_link(request, share_id):
     return render(
         request,
         "wb_sharing/share_link_detail.html",
-        {"share_link": share_link, "workspace": share_link.workspace},
+        {
+            "share_link": share_link,
+            "workspace": share_link.workspace,
+            "copy_form": ShareCopyForm(
+                initial={"workbook_title": f"{share_link.workspace.title} (Copy)"}
+            ),
+        },
     )
 
 
@@ -138,9 +144,15 @@ def copy_share_link_to_workbook_view(request, share_id):
     if not share_link.is_public and not can_view_workspace(request.user, share_link.workspace):
         return redirect("accounts-login")
 
+    form = ShareCopyForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid copy request.")
+        return redirect("share-link-detail", share_id=share_id)
+
     copied_workspace = copy_share_link_to_workbook(
         actor=request.user,
         share_link=share_link,
+        target_title=form.cleaned_data["workbook_title"],
         request=request,
     )
     messages.success(request, "Editable workbook copy created.")

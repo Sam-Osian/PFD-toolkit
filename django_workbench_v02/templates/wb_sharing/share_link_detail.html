@@ -19,6 +19,8 @@
 {% if request.user.is_authenticated %}
 <form method="post" action="{% url 'share-link-copy' share_id=share_link.id %}">
     {% csrf_token %}
+    <label for="workbook_title">Workbook name</label>
+    <input id="workbook_title" name="workbook_title" required value="{{ copy_form.workbook_title.value }}">
     <button type="submit">Make editable copy</button>
 </form>
 {% else %}

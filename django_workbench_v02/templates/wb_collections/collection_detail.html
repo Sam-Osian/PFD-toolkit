@@ -16,6 +16,8 @@
 {% if request.user.is_authenticated %}
     <form method="post" action="{% url 'collection-copy' collection_slug=collection_slug %}">
         {% csrf_token %}
+        <label for="workbook_title">Workbook name</label>
+        <input id="workbook_title" name="workbook_title" required value="{{ collection.title }} workbook">
         <input type="hidden" name="q" value="{{ query }}">
         {% for value in selected_filters.coroner %}
             <input type="hidden" name="coroner" value="{{ value }}">
@@ -33,37 +35,33 @@
 {% endif %}
 
 <h3>Report Preview</h3>
-{% if preview_records %}
+{% if preview_rows %}
     <table>
         <thead>
             <tr>
-                <th>Date</th>
-                <th>Coroner</th>
-                <th>Area</th>
-                <th>Receiver</th>
-                <th>Title</th>
-                <th>Actions</th>
+                {% for column in preview_columns %}
+                    <th>{{ column|title }}</th>
+                {% endfor %}
+                <th>Workbook Action</th>
             </tr>
         </thead>
         <tbody>
-            {% for row in preview_records %}
+            {% for row in preview_rows %}
                 <tr>
-                    <td>{{ row.date|default:"-" }}</td>
-                    <td>{{ row.coroner|default:"-" }}</td>
-                    <td>{{ row.area|default:"-" }}</td>
-                    <td>{{ row.receiver|default:"-" }}</td>
-                    <td>
-                        {% if row.url %}
-                            <a href="{{ row.url }}" target="_blank" rel="noopener">{{ row.title|default:row.url }}</a>
-                        {% else %}
-                            {{ row.title|default:"-" }}
-                        {% endif %}
-                    </td>
+                    {% for cell in row.cells %}
+                        <td>
+                            {% if cell.link_href %}
+                                <a href="{{ cell.link_href }}" target="_blank" rel="noopener">{{ cell.value|default:cell.link_href }}</a>
+                            {% else %}
+                                {{ cell.value|default:"-" }}
+                            {% endif %}
+                        </td>
+                    {% endfor %}
                     <td>
                         {% if workbook_edit_allowed %}
                             <form method="post" action="{% url 'workbook-excluded-report-add' workbook_id=workbook.id %}">
                                 {% csrf_token %}
-                                <input type="hidden" name="report_identity" value="{{ row.__report_identity }}">
+                                <input type="hidden" name="report_identity" value="{{ row.report_identity }}">
                                 <input type="hidden" name="report_title" value="{{ row.title|default:'' }}">
                                 <input type="hidden" name="report_date" value="{{ row.date|default:'' }}">
                                 <input type="hidden" name="report_url" value="{{ row.url|default:'' }}">

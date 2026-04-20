@@ -22,8 +22,8 @@ class WorkspaceShareLinkError(ValidationError):
     pass
 
 
-def _next_copy_slug(*, actor, source_workspace) -> str:
-    base = slugify(source_workspace.slug or source_workspace.title or "workbook-copy")[:80]
+def _next_copy_slug(*, actor, source_workspace, target_title: str = "") -> str:
+    base = slugify(target_title or source_workspace.slug or source_workspace.title or "workbook-copy")[:80]
     if not base:
         base = "workbook-copy"
 
@@ -37,14 +37,18 @@ def _next_copy_slug(*, actor, source_workspace) -> str:
 
 
 @transaction.atomic
-def copy_share_link_to_workbook(*, actor, share_link: WorkspaceShareLink, request=None):
+def copy_share_link_to_workbook(*, actor, share_link: WorkspaceShareLink, target_title: str = "", request=None):
     source_workspace = share_link.workspace
-    target_slug = _next_copy_slug(actor=actor, source_workspace=source_workspace)
-    target_title = f"{source_workspace.title} (Copy)"
+    resolved_title = str(target_title or "").strip()[:255] or f"{source_workspace.title} (Copy)"
+    target_slug = _next_copy_slug(
+        actor=actor,
+        source_workspace=source_workspace,
+        target_title=resolved_title,
+    )
 
     copied_workspace = create_workspace_for_user(
         user=actor,
-        title=target_title,
+        title=resolved_title,
         slug=target_slug,
         description=source_workspace.description,
         request=request,

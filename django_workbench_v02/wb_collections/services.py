@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+from pathlib import Path
 from threading import Lock
 from typing import Any
+import logging
 
 import pandas as pd
 from django.db import transaction
-from django.utils import timezone
+from django.utils.text import slugify
 from pfd_toolkit import load_reports
 from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
 
@@ -20,12 +23,88 @@ _COLLECTIONS_CACHE_LOCK = Lock()
 _COLLECTIONS_CACHE_DF: pd.DataFrame | None = None
 _COLLECTIONS_CACHE_UPDATED_AT: datetime | None = None
 _COLLECTIONS_CACHE_TTL_SECONDS = 6 * 60 * 60
+logger = logging.getLogger(__name__)
+
+THEME_COLLECTION_SLUG_PREFIX = "theme"
+THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
+    "suicide_risk": "Suicide",
+    "care_home_safety": "Care home deaths",
+    "acute_hospital_wards": "Acute Hospital Care",
+    "alarm_alert_failures": "Alarms and Alerts",
+    "capacity_best_interests_failures": "Capacity and Best Interests",
+    "consent_decision_making_failures": "Consent and Decision-making",
+    "failure_recognise_escalate_deterioration": "Recognising and Escalating Deterioration",
+    "family_carer_concerns_not_acted_on": "Family and Carer Concerns",
+    "failure_learn_previous_deaths_incidents": "Failure to Learn",
+    "follow_up_failures": "Follow-up",
+    "housing_homelessness": "Housing and Homelessness",
+    "inter_agency_working": "Inter-agency Working",
+    "investigation_incident_review_failures": "Investigations and Incident Reviews",
+    "it_digital_system_failures": "IT and Digital Systems",
+    "language_interpreter_barriers": "Language and Interpreter Barriers",
+    "maternity_neonatal_perinatal_care": "Maternity, Neonatal and Perinatal Care",
+    "children_young_people": "Children and Young People",
+    "missed_appointments_non_attendance": "Missed Appointments and Non-attendance",
+    "observation_monitoring_failures": "Observation and Monitoring",
+    "policy_procedure_failures": "Policy and Procedure",
+    "record_sharing_failures": "Record Sharing",
+    "referral_failures": "Referrals",
+    "risk_assessment_failures": "Risk Assessment",
+    "roads_highways": "Roads and Highways",
+    "sepsis_infection": "Sepsis and Infection",
+    "staffing_shortages_workload_pressure": "Staffing Shortages and Workload Pressure",
+    "suicide_self_harm": "Suicide and Self-harm",
+    "test_result_management_failures": "Test Result Management",
+    "training_competence_gaps": "Training and Competence",
+    "transitions_discharge_failures": "Transitions and Discharge",
+    "violence_homicide_related_systems_failures": "Violence and Homicide-related Systems",
+    "falls_frailty": "Falls and Frailty",
+    "equipment_failures": "Equipment",
+    "environmental_design_failures": "Environmental Design",
+}
+EXCLUDED_THEME_KEYS: set[str] = {
+    "policy_procedure_failures",
+    "failure_recognise_escalate_deterioration",
+    "nutrition",
+}
+APPROVED_THEME_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2] / "scripts" / "theme_collections" / "approved_themes.json"
+)
+_APPROVED_THEME_COLUMNS_CACHE: set[str] | None = None
+_APPROVED_THEME_COLUMNS_MTIME_NS: int | None = None
 
 
 def _cache_stale(now_utc: datetime) -> bool:
     if _COLLECTIONS_CACHE_DF is None or _COLLECTIONS_CACHE_UPDATED_AT is None:
         return True
     return (now_utc - _COLLECTIONS_CACHE_UPDATED_AT).total_seconds() >= _COLLECTIONS_CACHE_TTL_SECONDS
+
+
+def _normalise_copy_title(raw_title: str, fallback_title: str) -> str:
+    title = str(raw_title or "").strip()
+    if not title:
+        return fallback_title
+    return title[:255].strip() or fallback_title
+
+
+def _workspace_slug_for_title(*, title: str, collection_slug: str) -> str:
+    base = slugify(title)[:84]
+    if not base:
+        base = slugify(collection_slug)[:84] or "workbook"
+    return base
+
+
+def _next_workspace_slug_for_actor(*, actor, title: str, collection_slug: str) -> str:
+    base = _workspace_slug_for_title(title=title, collection_slug=collection_slug)
+    candidate = base
+    counter = 2
+    from wb_workspaces.models import Workspace
+
+    while Workspace.objects.filter(created_by=actor, slug=candidate).exists():
+        suffix = f"-{counter}"
+        candidate = f"{base[: max(1, 100 - len(suffix))]}{suffix}"
+        counter += 1
+    return candidate
 
 
 def _normalise_dashboard_value(value: Any) -> str:
@@ -69,6 +148,92 @@ def _network_truthy(value: Any) -> bool:
     return cleaned in {"1", "true", "t", "yes", "y"}
 
 
+def _theme_collection_slug(theme_name: str) -> str:
+    return f"{THEME_COLLECTION_SLUG_PREFIX}-{slugify(str(theme_name or '')).replace('-', '_')}"
+
+
+def _approved_theme_columns() -> set[str]:
+    global _APPROVED_THEME_COLUMNS_CACHE, _APPROVED_THEME_COLUMNS_MTIME_NS
+    try:
+        stat = APPROVED_THEME_SCHEMA_PATH.stat()
+    except FileNotFoundError:
+        return set()
+
+    mtime_ns = int(stat.st_mtime_ns)
+    if _APPROVED_THEME_COLUMNS_CACHE is not None and _APPROVED_THEME_COLUMNS_MTIME_NS == mtime_ns:
+        return set(_APPROVED_THEME_COLUMNS_CACHE)
+
+    try:
+        payload = json.loads(APPROVED_THEME_SCHEMA_PATH.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return set()
+
+    raw_themes = payload.get("themes")
+    if not isinstance(raw_themes, dict):
+        return set()
+
+    columns: set[str] = set()
+    for key in raw_themes.keys():
+        theme_key = str(key or "").strip().lower()
+        if not theme_key:
+            continue
+        if not theme_key.startswith("theme_"):
+            theme_key = f"theme_{theme_key}"
+        columns.add(theme_key)
+
+    _APPROVED_THEME_COLUMNS_CACHE = set(columns)
+    _APPROVED_THEME_COLUMNS_MTIME_NS = mtime_ns
+    return columns
+
+
+def _theme_collection_title(theme_name: str) -> str:
+    key = str(theme_name or "").strip().lower()
+    if key in THEME_COLLECTION_TITLE_OVERRIDES:
+        return THEME_COLLECTION_TITLE_OVERRIDES[key]
+    return key.replace("_", " ").title()
+
+
+def _theme_collection_map_from_reports(reports_df: pd.DataFrame) -> dict[str, dict[str, str]]:
+    receiver_collection_columns = set(COLLECTION_COLUMNS.values())
+    approved_theme_columns = _approved_theme_columns()
+    discovered_theme_columns = sorted(
+        str(column)
+        for column in reports_df.columns
+        if str(column).startswith("theme_") and str(column) not in receiver_collection_columns
+    )
+    whitelisted_theme_columns = [
+        column for column in discovered_theme_columns if column in approved_theme_columns
+    ]
+    theme_columns = sorted(whitelisted_theme_columns or discovered_theme_columns)
+    collections: dict[str, dict[str, str]] = {}
+
+    for column in theme_columns:
+        theme_name = column[len("theme_"):]
+        if theme_name in EXCLUDED_THEME_KEYS:
+            continue
+        slug = _theme_collection_slug(theme_name)
+        if not slug:
+            continue
+        title = _theme_collection_title(theme_name) or "Theme Collection"
+        collections[slug] = {
+            "slug": slug,
+            "title": title,
+            "description": f"Reports in the {title} thematic collection.",
+            "collection_column": column,
+        }
+    return collections
+
+
+def _collection_column_for_slug(collection_slug: str, reports_df: pd.DataFrame) -> str:
+    receiver_column = COLLECTION_COLUMNS.get(collection_slug, "")
+    if receiver_column:
+        return receiver_column
+    theme_meta = _theme_collection_map_from_reports(reports_df).get(collection_slug)
+    if theme_meta:
+        return str(theme_meta.get("collection_column", "")).strip()
+    return ""
+
+
 def _lexical_search_score(row: pd.Series, query: str) -> float:
     query_norm = str(query or "").strip().lower()
     if not query_norm:
@@ -102,7 +267,17 @@ def load_collections_dataset(*, force_refresh: bool = False) -> pd.DataFrame:
         if not force_refresh and not _cache_stale(now_utc) and _COLLECTIONS_CACHE_DF is not None:
             return _COLLECTIONS_CACHE_DF.copy()
 
-    reports_df = load_reports(refresh=bool(force_refresh))
+    should_refresh = bool(force_refresh)
+    try:
+        reports_df = load_reports(refresh=should_refresh)
+    except Exception:
+        if should_refresh:
+            raise
+        logger.warning(
+            "collections.load_reports failed on cached dataset; retrying with refresh=True",
+            exc_info=True,
+        )
+        reports_df = load_reports(refresh=True)
     reports_df = reports_df.copy()
     apply_collection_columns(reports_df)
     reports_df = with_report_identities(reports_df)
@@ -141,6 +316,19 @@ def collection_cards(reports_df: pd.DataFrame) -> list[dict[str, Any]]:
                 "count": count,
             }
         )
+    for slug, meta in _theme_collection_map_from_reports(reports_df).items():
+        column_name = str(meta.get("collection_column") or "")
+        if not column_name or column_name not in reports_df.columns:
+            continue
+        count = int(reports_df[column_name].map(_network_truthy).sum())
+        cards.append(
+            {
+                "slug": slug,
+                "title": str(meta.get("title") or slug.replace("_", " ").title()),
+                "description": str(meta.get("description") or "Thematic collection."),
+                "count": count,
+            }
+        )
     return cards
 
 
@@ -158,7 +346,7 @@ def _apply_collection_slug(reports_df: pd.DataFrame, collection_slug: str, query
         scored = scored.sort_values(by=["_score"], ascending=False)
         return scored.drop(columns=["_score"], errors="ignore")
 
-    column_name = COLLECTION_COLUMNS.get(collection_slug, "")
+    column_name = _collection_column_for_slug(collection_slug, reports_df)
     if not column_name or column_name not in reports_df.columns:
         return reports_df.iloc[0:0].copy()
     return reports_df.loc[reports_df[column_name].map(_network_truthy)].copy()
@@ -215,15 +403,24 @@ def copy_collection_to_workbook(
     actor,
     collection_slug: str,
     collection_title: str,
+    workbook_title: str | None,
     collection_query: str,
     selected_filters: dict[str, list[str]],
     reports_df: pd.DataFrame,
     request=None,
 ):
+    resolved_title = _normalise_copy_title(
+        workbook_title or "",
+        f"{collection_title} workbook",
+    )
     workspace = create_workspace_for_user(
         user=actor,
-        title=f"{collection_title} workbook",
-        slug=f"{collection_slug}-{timezone.now().strftime('%Y%m%d%H%M%S')}",
+        title=resolved_title,
+        slug=_next_workspace_slug_for_actor(
+            actor=actor,
+            title=resolved_title,
+            collection_slug=collection_slug,
+        ),
         description=f"Created from collection '{collection_title}'.",
         request=request,
     )

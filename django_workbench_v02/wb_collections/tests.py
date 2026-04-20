@@ -20,20 +20,26 @@ class CollectionViewTests(TestCase):
                     "coroner": "A",
                     "area": "Wales",
                     "receiver": "NHS Trust",
+                    "investigation": "Investigation text",
+                    "circumstances": "Circumstances text",
                     "concerns": "Medication incident",
                     "url": "https://example.com/r1",
                     "collection_wales": True,
                     "collection_nhs": True,
+                    "theme_medication_safety": True,
                 },
                 {
                     "date": "2024-01-02",
                     "coroner": "B",
                     "area": "London",
                     "receiver": "Local Authority",
+                    "investigation": "Another investigation",
+                    "circumstances": "Another circumstances",
                     "concerns": "Road safety issue",
                     "url": "https://example.com/r2",
                     "collection_wales": False,
                     "collection_nhs": False,
+                    "theme_medication_safety": False,
                 },
             ]
         )
@@ -55,6 +61,8 @@ class CollectionViewTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Matching reports: 1")
+        self.assertContains(response, "Investigation")
+        self.assertContains(response, "Circumstances")
 
     @patch("wb_collections.services.load_reports")
     def test_collection_copy_creates_workspace_and_investigation(self, mock_load_reports):
@@ -69,3 +77,28 @@ class CollectionViewTests(TestCase):
         self.assertEqual(investigation.scope_json.get("collection_slug"), "custom-search")
         self.assertEqual(investigation.scope_json.get("collection_query"), "medication")
         self.assertEqual(len(investigation.scope_json.get("report_identity_allowlist", [])), 1)
+
+    @patch("wb_collections.services.load_reports")
+    def test_collection_list_includes_theme_collection_cards(self, mock_load_reports):
+        mock_load_reports.return_value = self.dataset.copy()
+        response = self.client.get(reverse("collection-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Medication Safety")
+
+    @patch("wb_collections.services.load_reports")
+    def test_multiple_collection_copies_are_retained(self, mock_load_reports):
+        mock_load_reports.return_value = self.dataset.copy()
+        self.client.force_login(self.user)
+
+        first = self.client.post(
+            reverse("collection-copy", kwargs={"collection_slug": "custom-search"}),
+            data={"q": "medication", "workbook_title": "Medication Copy"},
+        )
+        self.assertEqual(first.status_code, 302)
+        second = self.client.post(
+            reverse("collection-copy", kwargs={"collection_slug": "custom"}),
+            data={"workbook_title": "All Reports Copy"},
+        )
+        self.assertEqual(second.status_code, 302)
+
+        self.assertEqual(self.user.created_workspaces.count(), 2)

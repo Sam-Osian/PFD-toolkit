@@ -22,3 +22,7 @@ class ShareLinkUpdateForm(forms.Form):
         widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
         help_text="Optional expiry (UTC). Leave blank for no expiry.",
     )
+
+
+class ShareCopyForm(forms.Form):
+    workbook_title = forms.CharField(max_length=255, required=False)

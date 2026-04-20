@@ -1,6 +1,6 @@
 # PFD Toolkit Workbench - User Function Source of Truth
 
-Last updated: 2026-04-19
+Last updated: 2026-04-20
 Scope: authoritative user/admin function inventory across v0.1 (`django_workbench`) and v0.2 (`django_workbench_v02`).
 
 ## Product Contract (Agreed)
@@ -76,7 +76,7 @@ Scope: authoritative user/admin function inventory across v0.1 (`django_workbenc
 | Create investigation | Owner/Admin or edit member | No | Yes | POST `/workspaces/<id>/investigations/` |
 | Update investigation | Owner/Admin or edit member | No | Yes | POST `/workspaces/<id>/investigations/<id>/update/` |
 | View investigation detail and runs | permissioned viewers | No | Yes | GET `/workspaces/<id>/investigations/<id>/` |
-| Constraint target: exactly one investigation per workbook | n/a | n/a | Pending schema tightening | (currently many investigations per workspace) |
+| Constraint target: exactly one investigation per workbook | n/a | n/a | Implemented | DB unique constraint + service guard |
 
 ### 6) Workflow Runs (Async)
 | Function | Access | v0.1 | v0.2 | Entry points |
@@ -104,22 +104,22 @@ Scope: authoritative user/admin function inventory across v0.1 (`django_workbenc
 | Share link expiry and active toggle | Owner/Admin | No | Yes | share forms |
 | Share mode live/snapshot setting | Owner/Admin | No | Yes (exists) |
 | Policy target: all shared views read-only | Public/User | Yes | Enforce as core rule |
-| Editable copy from shared view | User/Owner/Admin | Yes | Pending parity completion | v0.1 `workbook_clone`/collection clone |
+| Editable copy from shared view | User/Owner/Admin | Yes | Implemented | v0.2 share copy endpoint + audit log |
 
 ### 9) Collections and Browsing
 | Function | Access | v0.1 | v0.2 | Entry points |
 |---|---|---|---|---|
-| Browse curated collections | Public/User | Yes | Pending | v0.1 `/browse/` |
-| Browse collection detail + dashboard | Public/User | Yes | Pending | v0.1 `/browse/<slug>/` |
-| Custom search collection | Public/User | Yes | Pending | v0.1 custom-search flow |
-| Clone collection into editable copy | User | Yes | Pending | v0.1 `/browse/<slug>/clone/` |
+| Browse curated collections | Public/User | Yes | Implemented (baseline) | v0.2 `/collections/` |
+| Browse collection detail + dashboard | Public/User | Yes | Implemented (baseline detail) | v0.2 `/collections/<slug>/` |
+| Custom search collection | Public/User | Yes | Implemented (baseline lexical search) | v0.2 `custom-search` query flow |
+| Clone collection into editable copy | User | Yes | Implemented | v0.2 `/collections/<slug>/copy/` |
 
 ### 10) Dataset Curation and State History
 | Function | Access | v0.1 | v0.2 | Entry points |
 |---|---|---|---|---|
 | Load dataset/date/report bounds | User | Yes | Partial via run config | v0.1 `load_reports` |
-| Exclude report from active set | User/Owner | Yes | Pending parity | v0.1 `exclude_report` |
-| Restore excluded report | User/Owner | Yes | Pending parity | v0.1 `restore_excluded_report` |
+| Exclude report from active set | User/Owner | Yes | Implemented | workbook excluded-report endpoints + model |
+| Restore excluded report | User/Owner | Yes | Implemented | workbook excluded-report restore endpoint |
 | Revert/start-over/undo/redo | User/Owner | Yes | Partial model groundwork | v0.1 actions |
 | Persisted revision history | system/user action logging | No | [NEW] model exists; UX pending | `WorkspaceRevision` |
 | Full action logging incl. queries/options | system | Partial | [NEW] audit foundation exists; deeper action cache still to complete |
@@ -177,8 +177,6 @@ SSE endpoints in v0.1:
 
 ## Next Contract Locks to Implement
 1. Rename `Workspace` -> `Workbook` in models/routes/UI.
-2. Enforce exactly one investigation per workbook in schema.
-3. Enforce read-only semantics in share-view endpoints/UI and complete editable-copy flow.
-4. Port excluded-report suite into v0.2 pages and run contracts.
-5. Implement collections in v0.2 using Claude mock-up and existing v0.1 behavior.
-6. Expand persisted action-cache beyond current audit events (query/options payload level).
+2. Enforce read-only semantics in share-view endpoints/UI and complete editable-copy flow polish.
+3. Expand collections from baseline parity to Claude mock-up UX/spec.
+4. Expand persisted action-cache beyond current audit events (query/options payload level).

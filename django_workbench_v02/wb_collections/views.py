@@ -81,14 +81,65 @@ def collection_detail(request, collection_slug):
             workbook = workspace
             workbook_edit_allowed = True
 
-    preview_records = (
-        filtered_reports[[
-            "__report_identity",
-            *[c for c in ("date", "coroner", "area", "receiver", "title", "url") if c in filtered_reports.columns],
-        ]]
-        .head(200)
-        .to_dict(orient="records")
+    preferred_columns = (
+        "date",
+        "coroner",
+        "area",
+        "receiver",
+        "title",
+        "investigation",
+        "circumstances",
+        "concerns",
+        "actions",
+        "response",
+        "response_date",
+        "url",
     )
+    internal_prefixes = ("theme_", "collection_")
+    internal_exact = {"__report_identity", "_score"}
+    ordered_preview_columns: list[str] = []
+    for column in preferred_columns:
+        if column in filtered_reports.columns and column not in ordered_preview_columns:
+            ordered_preview_columns.append(column)
+    for column in filtered_reports.columns:
+        name = str(column)
+        if name in internal_exact:
+            continue
+        if any(name.startswith(prefix) for prefix in internal_prefixes):
+            continue
+        if name not in ordered_preview_columns:
+            ordered_preview_columns.append(name)
+
+    preview_columns = ["__report_identity", *ordered_preview_columns]
+    preview_df = filtered_reports[preview_columns].head(200).copy()
+    preview_df = preview_df.rename(columns={"__report_identity": "report_identity"})
+    preview_records = preview_df.to_dict(orient="records")
+    preview_rows = []
+    for row in preview_records:
+        row_url = row.get("url")
+        cells = []
+        for column in ordered_preview_columns:
+            value = row.get(column)
+            link_href = ""
+            if column == "url" and row_url:
+                link_href = str(row_url)
+            elif column == "title" and row_url:
+                link_href = str(row_url)
+            cells.append(
+                {
+                    "value": value,
+                    "link_href": link_href,
+                }
+            )
+        preview_rows.append(
+            {
+                "report_identity": row.get("report_identity"),
+                "title": row.get("title"),
+                "date": row.get("date"),
+                "url": row_url,
+                "cells": cells,
+            }
+        )
 
     return render(
         request,
@@ -99,7 +150,8 @@ def collection_detail(request, collection_slug):
             "query": query,
             "selected_filters": selected_filters,
             "reports_count": len(filtered_reports),
-            "preview_records": preview_records,
+            "preview_columns": ordered_preview_columns,
+            "preview_rows": preview_rows,
             "workbook": workbook,
             "workbook_edit_allowed": workbook_edit_allowed,
         },
@@ -131,6 +183,7 @@ def collection_copy(request, collection_slug):
         actor=request.user,
         collection_slug=collection_slug,
         collection_title=str(collection.get("title") or collection_slug),
+        workbook_title=str(request.POST.get("workbook_title") or "").strip(),
         collection_query=query,
         selected_filters=selected_filters,
         reports_df=filtered_reports,
