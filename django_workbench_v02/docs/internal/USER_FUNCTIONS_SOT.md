@@ -120,8 +120,8 @@ Scope: authoritative user/admin function inventory across v0.1 (`django_workbenc
 | Load dataset/date/report bounds | User | Yes | Partial via run config | v0.1 `load_reports` |
 | Exclude report from active set | User/Owner | Yes | Implemented | workbook excluded-report endpoints + model |
 | Restore excluded report | User/Owner | Yes | Implemented | workbook excluded-report restore endpoint |
-| Revert/start-over/undo/redo | User/Owner | Yes | Partial model groundwork | v0.1 actions |
-| Persisted revision history | system/user action logging | No | [NEW] model exists; UX pending | `WorkspaceRevision` |
+| Revert/start-over/undo/redo | User/Owner | Yes | Implemented | `/workbooks/<id>/state/*` actions |
+| Persisted revision history | system/user action logging | No | [NEW] Implemented (baseline UX) | `WorkspaceRevision` + `Workspace.current_revision` |
 | Full action logging incl. queries/options | system | Partial | [NEW] audit foundation exists; deeper action cache still to complete |
 
 ### 11) Notifications
@@ -193,6 +193,7 @@ This section tracks what is truly shipped in v0.2 right now (not just model scaf
 - Artifact download endpoints and storage abstraction.
 - Share links (snapshot/live), public read-only view, and editable copy flow.
 - Excluded reports (exclude + restore + permission enforcement).
+- Stateful workbook revision controls (`undo`, `redo`, `start_over`, `revert_reports`) with revision cursor semantics.
 - Collections browsing and copy flow, including thematic collections and theme slug mapping.
 
 ### Implemented but UI/UX is Still Baseline
@@ -201,12 +202,6 @@ This section tracks what is truly shipped in v0.2 right now (not just model scaf
 - Workbook detail page is functionally complete for members/shares/credentials/exclusions, but still admin-style markup.
 
 ### Gaps Blocking Full v0.1 Parity
-- Stateful action model parity:
-  - `undo`
-  - `redo`
-  - `start_over`
-  - `revert_reports`
-  - These are not yet first-class v0.2 user flows despite `WorkspaceRevision` model groundwork.
 - Session/workbook preference parity:
   - `set_ui_theme`
   - `save_settings`
@@ -220,6 +215,8 @@ Order is set to reduce churn: lock behavior first, then complete UI.
 
 ### Stage 1 - Stateful Workbook Actions Parity (Critical)
 Goal: restore core v0.1 manipulation semantics in v0.2.
+
+Status: Completed (behavior complete; UX remains baseline pending full design pass).
 
 Deliverables:
 1. Workbook revision writer service (append-only snapshots with clear `change_type`).

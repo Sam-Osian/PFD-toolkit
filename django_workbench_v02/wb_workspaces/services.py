@@ -10,6 +10,7 @@ from .credentials import WorkspaceCredentialError, decrypt_secret, encrypt_secre
 from .models import (
     MembershipAccessMode,
     MembershipRole,
+    RevisionChangeType,
     Workspace,
     WorkspaceCredential,
     WorkspaceLLMProvider,
@@ -18,6 +19,7 @@ from .models import (
     WorkspaceUserState,
 )
 from .permissions import can_edit_workspace, can_manage_members, can_view_workspace
+from .revisions import capture_workspace_state, write_workspace_revision
 
 
 class WorkspaceMembershipError(ValidationError):
@@ -218,6 +220,7 @@ def create_workspace_for_user(
     title: str,
     slug: str,
     description: str = "",
+    seed_initial_revision: bool = True,
     request=None,
 ) -> Workspace:
     workspace = Workspace.objects.create(
@@ -245,6 +248,15 @@ def create_workspace_for_user(
         payload={"title": workspace.title, "slug": workspace.slug},
         request=request,
     )
+    if seed_initial_revision:
+        write_workspace_revision(
+            workspace=workspace,
+            actor=user,
+            change_type=RevisionChangeType.SYSTEM,
+            state_json=capture_workspace_state(workspace=workspace),
+            request=request,
+            payload={"action": "workspace_created"},
+        )
     _ensure_owner_invariants(workspace)
     return workspace
 
@@ -619,6 +631,17 @@ def upsert_workspace_report_exclusion(
         },
         request=request,
     )
+    write_workspace_revision(
+        workspace=workspace,
+        actor=actor,
+        change_type=RevisionChangeType.EDIT,
+        state_json=capture_workspace_state(workspace=workspace),
+        request=request,
+        payload={
+            "action": "report_excluded",
+            "report_identity": identity,
+        },
+    )
     return exclusion
 
 
@@ -649,4 +672,15 @@ def restore_workspace_report_exclusion(
         user=actor,
         payload=payload,
         request=request,
+    )
+    write_workspace_revision(
+        workspace=workspace,
+        actor=actor,
+        change_type=RevisionChangeType.RESTORE,
+        state_json=capture_workspace_state(workspace=workspace),
+        request=request,
+        payload={
+            "action": "report_restored",
+            "report_identity": payload["report_identity"],
+        },
     )

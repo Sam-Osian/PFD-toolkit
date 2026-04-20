@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import PermissionDenied
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -59,12 +59,6 @@ class ShareLinkServiceTests(TestCase):
             can_manage_shares=False,
             can_run_workflows=True,
         )
-        self.revision = WorkspaceRevision.objects.create(
-            workspace=self.workspace,
-            revision_number=1,
-            state_json={"k": "v"},
-            created_by=self.owner,
-        )
 
     def test_create_share_link_snapshot_success(self):
         share_link = create_share_link(
@@ -92,15 +86,15 @@ class ShareLinkServiceTests(TestCase):
                 is_public=True,
             )
 
-    def test_create_snapshot_share_fails_without_revision(self):
+    def test_create_snapshot_share_auto_seeds_revision_when_missing(self):
         WorkspaceRevision.objects.filter(workspace=self.workspace).delete()
-        with self.assertRaises(ValidationError):
-            create_share_link(
-                actor=self.owner,
-                workspace=self.workspace,
-                mode=ShareMode.SNAPSHOT,
-                is_public=True,
-            )
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.SNAPSHOT,
+            is_public=True,
+        )
+        self.assertIsNotNone(share_link.snapshot_revision)
 
     def test_update_share_and_revoke(self):
         share_link = create_share_link(
@@ -217,12 +211,6 @@ class ShareLinkViewTests(TestCase):
             can_manage_members=False,
             can_manage_shares=False,
             can_run_workflows=False,
-        )
-        WorkspaceRevision.objects.create(
-            workspace=self.workspace,
-            revision_number=1,
-            state_json={"k": "v"},
-            created_by=self.owner,
         )
 
     def test_owner_can_create_share_via_view(self):

@@ -23,9 +23,16 @@ from .models import (
     WorkspaceMembership,
     WorkspaceVisibility,
     WorkspaceReportExclusion,
+    WorkspaceRevision,
     WorkspaceUserState,
 )
 from .permissions import can_edit_workspace, can_manage_members, can_run_workflows, can_view_workspace
+from .revisions import (
+    redo_workspace_revision,
+    revert_workspace_reports,
+    start_over_workspace_state,
+    undo_workspace_revision,
+)
 from .services import (
     add_workspace_member,
     archive_workspace,
@@ -139,6 +146,14 @@ class WorkspaceServiceTests(TestCase):
         )
         state = WorkspaceUserState.objects.get(user=self.owner)
         self.assertEqual(state.active_workspace_id, self.workspace.id)
+        self.workspace.refresh_from_db()
+        self.assertIsNotNone(self.workspace.current_revision_id)
+        self.assertTrue(
+            WorkspaceRevision.objects.filter(
+                workspace=self.workspace,
+                revision_number=1,
+            ).exists()
+        )
 
     def test_add_workspace_member_creates_membership_and_audit(self):
         membership = add_workspace_member(
@@ -431,6 +446,90 @@ class WorkspaceReportExclusionTests(TestCase):
                 workspace=self.workspace,
                 report_identity="rep-2",
             )
+
+
+class WorkspaceRevisionServiceTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner-rev@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="Revision Workspace",
+            slug="revision-workspace",
+            description="",
+        )
+
+    def test_undo_and_redo_restore_investigation_state(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Investigation A",
+            question_text="q1",
+            scope_json={"collection_slug": "local-gov"},
+            method_json={"notes": "initial"},
+            status=InvestigationStatus.ACTIVE,
+        )
+        from wb_investigations.services import update_investigation
+
+        update_investigation(
+            actor=self.owner,
+            investigation=investigation,
+            title=investigation.title,
+            question_text="q2",
+            scope_json={"collection_slug": "care-homes"},
+            method_json=investigation.method_json,
+            status=investigation.status,
+        )
+
+        undo_workspace_revision(actor=self.owner, workspace=self.workspace)
+        investigation.refresh_from_db()
+        self.assertEqual(investigation.question_text, "q1")
+        self.assertEqual(investigation.scope_json.get("collection_slug"), "local-gov")
+
+        redo_workspace_revision(actor=self.owner, workspace=self.workspace)
+        investigation.refresh_from_db()
+        self.assertEqual(investigation.question_text, "q2")
+        self.assertEqual(investigation.scope_json.get("collection_slug"), "care-homes")
+
+    def test_revert_reports_clears_exclusions(self):
+        upsert_workspace_report_exclusion(
+            actor=self.owner,
+            workspace=self.workspace,
+            report_identity="report-1",
+            reason="Out of scope",
+        )
+        self.assertEqual(
+            WorkspaceReportExclusion.objects.filter(workspace=self.workspace).count(),
+            1,
+        )
+
+        revert_workspace_reports(actor=self.owner, workspace=self.workspace)
+        self.assertEqual(
+            WorkspaceReportExclusion.objects.filter(workspace=self.workspace).count(),
+            0,
+        )
+
+    def test_start_over_restores_baseline_state(self):
+        create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Investigation A",
+            question_text="q1",
+            scope_json={"collection_slug": "local-gov"},
+            method_json={"notes": "initial"},
+            status=InvestigationStatus.ACTIVE,
+        )
+        upsert_workspace_report_exclusion(
+            actor=self.owner,
+            workspace=self.workspace,
+            report_identity="report-1",
+            reason="Out of scope",
+        )
+
+        start_over_workspace_state(actor=self.owner, workspace=self.workspace)
+        self.assertFalse(self.workspace.investigations.exists())
+        self.assertFalse(
+            WorkspaceReportExclusion.objects.filter(workspace=self.workspace).exists()
+        )
 
 
 class WorkspaceMemberViewsTests(TestCase):

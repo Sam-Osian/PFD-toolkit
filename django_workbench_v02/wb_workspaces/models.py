@@ -52,6 +52,13 @@ class Workspace(models.Model):
     is_listed = models.BooleanField(default=False)
     last_viewed_at = models.DateTimeField(null=True, blank=True)
     archived_at = models.DateTimeField(null=True, blank=True)
+    current_revision = models.ForeignKey(
+        "wb_workspaces.WorkspaceRevision",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cursor_workspaces",
+    )
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
 

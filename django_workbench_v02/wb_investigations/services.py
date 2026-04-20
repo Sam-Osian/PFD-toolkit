@@ -6,7 +6,9 @@ from django.utils import timezone
 
 from wb_auditlog.services import log_audit_event
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
+from wb_workspaces.models import RevisionChangeType
 from wb_workspaces.permissions import can_edit_workspace
+from wb_workspaces.revisions import capture_workspace_state, write_workspace_revision
 
 from .models import Investigation
 
@@ -49,6 +51,17 @@ def create_investigation(
         user=actor,
         payload={"title": investigation.title, "status": investigation.status},
         request=request,
+    )
+    write_workspace_revision(
+        workspace=workspace,
+        actor=actor,
+        change_type=RevisionChangeType.EDIT,
+        state_json=capture_workspace_state(workspace=workspace),
+        request=request,
+        payload={
+            "action": "investigation_created",
+            "investigation_id": str(investigation.id),
+        },
     )
     return investigation
 
@@ -109,6 +122,17 @@ def update_investigation(
             },
         },
         request=request,
+    )
+    write_workspace_revision(
+        workspace=investigation.workspace,
+        actor=actor,
+        change_type=RevisionChangeType.EDIT,
+        state_json=capture_workspace_state(workspace=investigation.workspace),
+        request=request,
+        payload={
+            "action": "investigation_updated",
+            "investigation_id": str(investigation.id),
+        },
     )
     return investigation
 

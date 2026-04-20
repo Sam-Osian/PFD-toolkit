@@ -45,6 +45,35 @@
 {% endif %}
 
 {% if request.user.is_authenticated %}
+<h3>Workbook State</h3>
+{% if current_revision %}
+    <p>Current revision: #{{ current_revision.revision_number }} ({{ current_revision.change_type }})</p>
+{% else %}
+    <p>No revision captured yet.</p>
+{% endif %}
+{% if can_edit_state %}
+    <form method="post" action="{% url 'workbook-state-undo' workbook_id=workspace.id %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit">Undo</button>
+    </form>
+    <form method="post" action="{% url 'workbook-state-redo' workbook_id=workspace.id %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit">Redo</button>
+    </form>
+    <form method="post" action="{% url 'workbook-state-start-over' workbook_id=workspace.id %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit">Start Over</button>
+    </form>
+    <form method="post" action="{% url 'workbook-state-revert-reports' workbook_id=workspace.id %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit">Revert Reports</button>
+    </form>
+{% else %}
+    <p>You do not have edit access to modify workbook state history.</p>
+{% endif %}
+{% endif %}
+
+{% if request.user.is_authenticated %}
 <h3>Your Workbooks</h3>
 {% if user_workbook_memberships %}
     <ul>

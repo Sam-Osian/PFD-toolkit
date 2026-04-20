@@ -11,9 +11,10 @@ from wb_auditlog.services import log_audit_event
 from wb_investigations.models import Investigation
 from wb_runs.models import InvestigationRun, RunArtifact, RunEvent
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
-from wb_workspaces.models import WorkspaceVisibility, WorkspaceRevision
+from wb_workspaces.models import RevisionChangeType, WorkspaceVisibility, WorkspaceRevision
 from wb_workspaces.services import create_workspace_for_user
 from wb_workspaces.permissions import can_manage_shares
+from wb_workspaces.revisions import capture_workspace_state, write_workspace_revision
 
 from .models import ShareMode, WorkspaceShareLink
 
@@ -51,6 +52,7 @@ def copy_share_link_to_workbook(*, actor, share_link: WorkspaceShareLink, target
         title=resolved_title,
         slug=target_slug,
         description=source_workspace.description,
+        seed_initial_revision=False,
         request=request,
     )
     copied_workspace.visibility = WorkspaceVisibility.PRIVATE
@@ -75,6 +77,19 @@ def copy_share_link_to_workbook(*, actor, share_link: WorkspaceShareLink, target
             created_at=revision.created_at,
         )
         revision_map[str(revision.id)] = copied_revision
+
+    source_current_revision = source_workspace.current_revision
+    if source_current_revision is None:
+        source_current_revision = source_workspace.revisions.order_by(
+            "-revision_number",
+            "-created_at",
+        ).first()
+    copied_workspace.current_revision = (
+        revision_map.get(str(source_current_revision.id))
+        if source_current_revision is not None
+        else None
+    )
+    copied_workspace.save(update_fields=["current_revision", "updated_at"])
 
     source_investigation = (
         Investigation.objects.filter(workspace=source_workspace).order_by("-created_at").first()
@@ -166,7 +181,27 @@ def copy_share_link_to_workbook(*, actor, share_link: WorkspaceShareLink, target
 
 
 def _latest_workspace_revision(workspace):
-    return workspace.revisions.order_by("-revision_number").first()
+    if workspace.current_revision_id:
+        current = WorkspaceRevision.objects.filter(
+            id=workspace.current_revision_id,
+            workspace=workspace,
+        ).first()
+        if current is not None:
+            return current
+        workspace.current_revision = None
+        workspace.save(update_fields=["current_revision", "updated_at"])
+    latest = workspace.revisions.order_by("-revision_number").first()
+    if latest is not None:
+        workspace.current_revision = latest
+        workspace.save(update_fields=["current_revision", "updated_at"])
+        return latest
+    return write_workspace_revision(
+        workspace=workspace,
+        actor=workspace.created_by,
+        change_type=RevisionChangeType.SYSTEM,
+        state_json=capture_workspace_state(workspace=workspace),
+        payload={"action": "share_snapshot_seed"},
+    )
 
 
 def _validate_share_mode_requirements(*, mode: str, snapshot_revision):

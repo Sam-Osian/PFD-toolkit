@@ -29,6 +29,7 @@ from .models import (
     WorkspaceVisibility,
 )
 from .permissions import can_manage_members, can_manage_shares, can_view_workspace
+from .permissions import can_edit_workspace
 from .services import (
     WorkspaceCredentialValidationError,
     WorkspaceLifecycleError,
@@ -47,6 +48,13 @@ from .services import (
     upsert_workspace_report_exclusion,
     upsert_workspace_credential,
     update_workspace_member,
+)
+from .revisions import (
+    WorkspaceRevisionError,
+    redo_workspace_revision,
+    revert_workspace_reports,
+    start_over_workspace_state,
+    undo_workspace_revision,
 )
 
 
@@ -210,6 +218,9 @@ def workspace_detail(request, workbook_id):
     manage_members_allowed = bool(
         request.user.is_authenticated and can_manage_members(request.user, workspace)
     )
+    can_edit_state = bool(
+        request.user.is_authenticated and can_edit_workspace(request.user, workspace)
+    )
     manage_shares_allowed = bool(
         request.user.is_authenticated and can_manage_shares(request.user, workspace)
     )
@@ -252,6 +263,7 @@ def workspace_detail(request, workbook_id):
             "user_workbook_memberships": user_workbook_memberships,
             "active_workspace_id": active_workspace_id,
             "manage_members_allowed": manage_members_allowed,
+            "can_edit_state": can_edit_state,
             "manage_shares_allowed": manage_shares_allowed,
             "add_form": add_form,
             "credential_form": credential_form,
@@ -265,8 +277,61 @@ def workspace_detail(request, workbook_id):
             "role_choices": MembershipRole.choices,
             "access_mode_choices": MembershipAccessMode.choices,
             "share_mode_choices": ShareMode.choices,
+            "current_revision": workspace.current_revision,
         },
     )
+
+
+@login_required
+@require_POST
+def undo_workspace_state_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    try:
+        undo_workspace_revision(actor=request.user, workspace=workspace, request=request)
+    except (PermissionDenied, ValidationError, WorkspaceRevisionError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Undid workbook state to previous revision.")
+    return redirect("workbook-detail", workbook_id=workspace.id)
+
+
+@login_required
+@require_POST
+def redo_workspace_state_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    try:
+        redo_workspace_revision(actor=request.user, workspace=workspace, request=request)
+    except (PermissionDenied, ValidationError, WorkspaceRevisionError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Redid workbook state to next revision.")
+    return redirect("workbook-detail", workbook_id=workspace.id)
+
+
+@login_required
+@require_POST
+def start_over_workspace_state_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    try:
+        start_over_workspace_state(actor=request.user, workspace=workspace, request=request)
+    except (PermissionDenied, ValidationError, WorkspaceRevisionError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Workbook reset to baseline revision.")
+    return redirect("workbook-detail", workbook_id=workspace.id)
+
+
+@login_required
+@require_POST
+def revert_workspace_reports_view(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    try:
+        revert_workspace_reports(actor=request.user, workspace=workspace, request=request)
+    except (PermissionDenied, ValidationError, WorkspaceRevisionError) as exc:
+        messages.error(request, str(exc))
+    else:
+        messages.success(request, "Excluded reports have been reverted.")
+    return redirect("workbook-detail", workbook_id=workspace.id)
 
 
 @require_GET

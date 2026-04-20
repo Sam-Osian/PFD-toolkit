@@ -62,6 +62,26 @@ urlpatterns = [
         views.restore_excluded_report,
         name="workbook-excluded-report-restore",
     ),
+    path(
+        "workbooks/<uuid:workbook_id>/state/undo/",
+        views.undo_workspace_state_view,
+        name="workbook-state-undo",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/state/redo/",
+        views.redo_workspace_state_view,
+        name="workbook-state-redo",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/state/start-over/",
+        views.start_over_workspace_state_view,
+        name="workbook-state-start-over",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/state/revert-reports/",
+        views.revert_workspace_reports_view,
+        name="workbook-state-revert-reports",
+    ),
 
     path("workspaces/", views.dashboard, name="workspace-dashboard"),
     path(
@@ -120,5 +140,25 @@ urlpatterns = [
         "workspaces/<uuid:workbook_id>/excluded-reports/<uuid:exclusion_id>/restore/",
         views.restore_excluded_report,
         name="workspace-excluded-report-restore",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/state/undo/",
+        views.undo_workspace_state_view,
+        name="workspace-state-undo",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/state/redo/",
+        views.redo_workspace_state_view,
+        name="workspace-state-redo",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/state/start-over/",
+        views.start_over_workspace_state_view,
+        name="workspace-state-start-over",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/state/revert-reports/",
+        views.revert_workspace_reports_view,
+        name="workspace-state-revert-reports",
     ),
 ]
