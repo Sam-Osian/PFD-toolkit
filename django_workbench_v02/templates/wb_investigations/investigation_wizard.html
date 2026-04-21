@@ -5,15 +5,15 @@
 {% block page_header %}
 <div class="stack-sm">
     <h2 class="page-title">Investigation Wizard</h2>
-    <p class="page-subtitle">Build and launch a staged investigation pipeline for this workbook.</p>
+    <p class="page-subtitle">Build and launch a staged investigation pipeline for this workspace.</p>
 </div>
 {% endblock %}
 
 {% block content %}
 <div class="wizard-context card">
     <p>
-        Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
-        · Investigation: <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">{{ investigation.title }}</a>
+        Workspace: <a href="{% url 'workspace-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+        · Investigation: <a href="{% url 'investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">{{ investigation.title }}</a>
     </p>
 </div>
 
@@ -23,7 +23,7 @@
             <li class="wizard-stage-item{% if stage_name == wizard_stage %} is-current{% elif forloop.counter0 < wizard_stage_index %} is-complete{% endif %}">
                 <span class="wizard-stage-index">{{ forloop.counter }}</span>
                 <span class="wizard-stage-label">
-                    {% if stage_name == "question" %}Question{% elif stage_name == "scope" %}Scope{% elif stage_name == "method" %}Method{% elif stage_name == "themes" %}Themes{% elif stage_name == "extract" %}Extract{% elif stage_name == "review" %}Review{% else %}{{ stage_name|title }}{% endif %}
+                    {% if stage_name == "question" %}Question{% elif stage_name == "scope" %}Scope{% elif stage_name == "method" %}Method{% elif stage_name == "filter" %}Filter{% elif stage_name == "themes" %}Themes{% elif stage_name == "extract" %}Extract{% elif stage_name == "review" %}Review{% else %}{{ stage_name|title }}{% endif %}
                 </span>
             </li>
         {% endfor %}
@@ -38,6 +38,7 @@
                 {% if wizard_stage == "question" %}What do you want to know?
                 {% elif wizard_stage == "scope" %}How wide should we cast the net?
                 {% elif wizard_stage == "method" %}What should we do with the matches?
+                {% elif wizard_stage == "filter" %}Configure filter stage
                 {% elif wizard_stage == "themes" %}Configure theme discovery
                 {% elif wizard_stage == "extract" %}Configure structured extraction
                 {% elif wizard_stage == "review" %}Review and launch
@@ -45,11 +46,13 @@
             </h3>
             <p class="wizard-step-desc">
                 {% if wizard_stage == "question" %}
-                    Set the research question and workbook investigation title.
+                    Set the research question and workspace investigation title.
                 {% elif wizard_stage == "scope" %}
                     Choose how broad to cast the net. This controls report date range or recency limit.
                 {% elif wizard_stage == "method" %}
                     Select which stages to run. They execute sequentially in the order shown in Pipeline.
+                {% elif wizard_stage == "filter" %}
+                    Set the exact filter query and optional coroner/area/receiver constraints.
                 {% elif wizard_stage == "themes" %}
                     Configure theme discovery. If disabled, this stage is skipped at launch.
                 {% elif wizard_stage == "extract" %}
@@ -163,13 +166,44 @@
                 {% if wizard_form.allow_multiple.errors %}<div class="form-errors">{{ wizard_form.allow_multiple.errors }}</div>{% endif %}
                 {% if wizard_form.force_assign.errors %}<div class="form-errors">{{ wizard_form.force_assign.errors }}</div>{% endif %}
                 {% if wizard_form.skip_if_present.errors %}<div class="form-errors">{{ wizard_form.skip_if_present.errors }}</div>{% endif %}
+            {% elif wizard_stage == "filter" %}
+                <label class="checkbox-row" for="{{ wizard_form.enabled.id_for_label }}">
+                    {{ wizard_form.enabled }}
+                    <span>Enable filter stage</span>
+                </label>
+                {% if wizard_form.enabled.errors %}<div class="form-errors">{{ wizard_form.enabled.errors }}</div>{% endif %}
+
+                <div class="form-row">
+                    <label for="{{ wizard_form.search_query.id_for_label }}">{{ wizard_form.search_query.label }}</label>
+                    {{ wizard_form.search_query }}
+                    {% if wizard_form.search_query.errors %}<div class="form-errors">{{ wizard_form.search_query.errors }}</div>{% endif %}
+                </div>
+                <label class="checkbox-row" for="{{ wizard_form.filter_df.id_for_label }}">
+                    {{ wizard_form.filter_df }}
+                    <span>Apply AI filtering to dataframe rows</span>
+                </label>
+                {% if wizard_form.filter_df.errors %}<div class="form-errors">{{ wizard_form.filter_df.errors }}</div>{% endif %}
+
+                <div class="form-row">
+                    <label for="{{ wizard_form.coroner_filters.id_for_label }}">{{ wizard_form.coroner_filters.label }}</label>
+                    {{ wizard_form.coroner_filters }}
+                    <p class="field-help">Optional comma-separated coroner filters.</p>
+                    {% if wizard_form.coroner_filters.errors %}<div class="form-errors">{{ wizard_form.coroner_filters.errors }}</div>{% endif %}
+                </div>
+                <div class="form-row">
+                    <label for="{{ wizard_form.area_filters.id_for_label }}">{{ wizard_form.area_filters.label }}</label>
+                    {{ wizard_form.area_filters }}
+                    <p class="field-help">Optional comma-separated area filters.</p>
+                    {% if wizard_form.area_filters.errors %}<div class="form-errors">{{ wizard_form.area_filters.errors }}</div>{% endif %}
+                </div>
+                <div class="form-row">
+                    <label for="{{ wizard_form.receiver_filters.id_for_label }}">{{ wizard_form.receiver_filters.label }}</label>
+                    {{ wizard_form.receiver_filters }}
+                    <p class="field-help">Optional comma-separated receiver filters.</p>
+                    {% if wizard_form.receiver_filters.errors %}<div class="form-errors">{{ wizard_form.receiver_filters.errors }}</div>{% endif %}
+                </div>
             {% elif wizard_stage == "review" %}
                 <div class="wizard-review-grid">
-                    <div class="form-row">
-                        <label for="{{ wizard_form.execution_mode.id_for_label }}">{{ wizard_form.execution_mode.label }}</label>
-                        {{ wizard_form.execution_mode }}
-                        {% if wizard_form.execution_mode.errors %}<div class="form-errors">{{ wizard_form.execution_mode.errors }}</div>{% endif %}
-                    </div>
                     <div class="form-row">
                         <label for="{{ wizard_form.provider.id_for_label }}">{{ wizard_form.provider.label }}</label>
                         {{ wizard_form.provider }}

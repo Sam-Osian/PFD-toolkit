@@ -44,6 +44,7 @@ WIZARD_STAGES = (
     "question",
     "scope",
     "method",
+    "filter",
     "themes",
     "extract",
     "review",
@@ -272,7 +273,7 @@ class InvestigationWizardExtractConfigForm(forms.Form):
 
 class InvestigationWizardReviewForm(forms.Form):
     execution_mode = forms.ChoiceField(
-        choices=(("real", "Real"), ("simulate", "Simulate")),
+        choices=(("real", "Real"),),
         initial="real",
         required=True,
     )
@@ -299,6 +300,7 @@ class InvestigationWizardState:
     run_filter: bool = True
     run_themes: bool = False
     run_extract: bool = False
+    filter_config: dict = field(default_factory=dict)
     themes_config: dict = field(default_factory=dict)
     extract_config: dict = field(default_factory=dict)
     review_config: dict = field(default_factory=dict)
@@ -317,6 +319,7 @@ class InvestigationWizardState:
             run_filter=bool(raw.get("run_filter", True)),
             run_themes=bool(raw.get("run_themes")),
             run_extract=bool(raw.get("run_extract")),
+            filter_config=raw.get("filter_config") if isinstance(raw.get("filter_config"), dict) else {},
             themes_config=raw.get("themes_config") if isinstance(raw.get("themes_config"), dict) else {},
             extract_config=raw.get("extract_config")
             if isinstance(raw.get("extract_config"), dict)
@@ -333,6 +336,7 @@ class InvestigationWizardState:
             "run_filter": self.run_filter,
             "run_themes": self.run_themes,
             "run_extract": self.run_extract,
+            "filter_config": self.filter_config,
             "themes_config": self.themes_config,
             "extract_config": self.extract_config,
             "review_config": self.review_config,
@@ -344,6 +348,38 @@ class InvestigationWizardState:
             run_themes=bool(self.run_themes),
             run_extract=bool(self.run_extract),
         )
+
+
+class InvestigationWizardFilterConfigForm(forms.Form):
+    enabled = forms.BooleanField(required=False, initial=True)
+    search_query = forms.CharField(required=False, widget=forms.Textarea)
+    filter_df = forms.BooleanField(required=False, initial=True)
+    coroner_filters = forms.CharField(required=False)
+    area_filters = forms.CharField(required=False)
+    receiver_filters = forms.CharField(required=False)
+
+    @staticmethod
+    def _parse_csv_values(raw_value: str) -> list[str]:
+        return [
+            value.strip()
+            for value in str(raw_value or "").split(",")
+            if str(value or "").strip()
+        ]
+
+    def clean(self):
+        cleaned = super().clean()
+        if not bool(cleaned.get("enabled")):
+            return cleaned
+        query = str(cleaned.get("search_query") or "").strip()
+        if not query:
+            raise forms.ValidationError("Filter step requires a search query.")
+        cleaned["search_query"] = query
+        cleaned["selected_filters"] = {
+            "coroner": self._parse_csv_values(cleaned.get("coroner_filters") or ""),
+            "area": self._parse_csv_values(cleaned.get("area_filters") or ""),
+            "receiver": self._parse_csv_values(cleaned.get("receiver_filters") or ""),
+        }
+        return cleaned
 
 
 class InvestigationExportForm(forms.Form):

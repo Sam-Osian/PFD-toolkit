@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block page_title %}Dashboard · PFD Toolkit Workbench v0.2{% endblock %}
+{% block page_title %}Workspaces · PFD Toolkit Workbench v0.2{% endblock %}
 
 {% block page_header %}
 <div class="stack-sm">
-    <h2 class="page-title">Your Workbooks</h2>
-    <p class="page-subtitle">Manage active and archived workbooks, then launch investigations from the workbook you set active.</p>
+    <h2 class="page-title">Your Workspaces</h2>
+    <p class="page-subtitle">Manage active and archived workspaces. Start investigations from the sidebar command.</p>
 </div>
 {% endblock %}
 
@@ -14,35 +14,50 @@
     <div class="stack-md">
         <section class="card dashboard-section">
             <div class="dashboard-section__head">
-                <h3>Active Workbooks</h3>
+                <h3>Active Workspaces</h3>
                 <span class="count-pill">{{ active_rows|length }}</span>
             </div>
             {% if active_rows %}
                 <div class="workbook-list">
                     {% for row in active_rows %}
                         {% with membership=row.membership workspace=row.workspace %}
-                        <article class="workbook-row{% if active_workspace_id and active_workspace_id == workspace.id|stringformat:'s' %} is-active{% endif %}">
+                        <article class="workbook-row{% if active_workspace_id and active_workspace_id == workspace.id|stringformat:'s' %} is-active{% endif %}{% if row.pending_run %} is-pending{% endif %}">
                             <div class="workbook-row__main">
                                 <h4>
-                                    <a href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+                                    {% if row.pending_run %}
+                                        <span>{{ workspace.title }}</span>
+                                    {% else %}
+                                        <a href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+                                    {% endif %}
                                 </h4>
                                 <div class="workbook-row__meta">
                                     {% if active_workspace_id and active_workspace_id == workspace.id|stringformat:"s" %}
                                         <span class="tag tag-active">active</span>
                                         <span class="sr-only">(active)</span>
                                     {% endif %}
+                                    {% if row.pending_run %}
+                                        <span class="tag tag-active">pending</span>
+                                        <span class="tag">{{ row.pending_stage_label }}</span>
+                                        <span class="tag">{{ row.pending_run.status }}</span>
+                                    {% endif %}
                                     <span class="tag">{{ membership.role }}</span>
                                     <span class="tag">{{ membership.access_mode }}</span>
                                 </div>
                             </div>
                             <div class="workbook-row__actions">
-                                <a class="btn btn-secondary" href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a>
-                                {% if not active_workspace_id or active_workspace_id != workspace.id|stringformat:"s" %}
-                                    <form method="post" action="{% url 'workbook-activate' workbook_id=workspace.id %}" class="inline-form">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="next_url" value="{% url 'workbook-dashboard' %}">
-                                        <button type="submit" class="btn btn-ghost">Set active</button>
-                                    </form>
+                                {% if row.pending_run %}
+                                    <button type="button" class="btn btn-secondary" disabled>Launching…</button>
+                                {% else %}
+                                    <a class="btn btn-secondary" href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a>
+                                {% endif %}
+                                {% if not row.pending_run %}
+                                    {% if not active_workspace_id or active_workspace_id != workspace.id|stringformat:"s" %}
+                                        <form method="post" action="{% url 'workspace-activate' workbook_id=workspace.id %}" class="inline-form">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="next_url" value="{% url 'workspace-dashboard' %}">
+                                            <button type="submit" class="btn btn-ghost">Set active</button>
+                                        </form>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         </article>
@@ -50,14 +65,14 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <p class="empty-note">You do not currently have any active workbooks.</p>
+                <p class="empty-note">You do not currently have any active workspaces.</p>
             {% endif %}
         </section>
 
         {% if archived_rows %}
             <section class="card dashboard-section">
                 <div class="dashboard-section__head">
-                    <h3>Archived Workbooks</h3>
+                    <h3>Archived Workspaces <span class="sr-only">Archived Workbooks</span></h3>
                     <span class="count-pill">{{ archived_rows|length }}</span>
                 </div>
                 <div class="workbook-list">
@@ -65,7 +80,7 @@
                         {% with membership=row.membership workspace=row.workspace %}
                         <article class="workbook-row is-archived">
                             <div class="workbook-row__main">
-                                <h4><a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a></h4>
+                                <h4><a href="{% url 'workspace-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a></h4>
                                 <div class="workbook-row__meta">
                                     <span class="tag tag-archived">archived</span>
                                     {% if workspace.archived_at %}
@@ -77,12 +92,12 @@
                             </div>
                             <div class="workbook-row__actions">
                                 {% if row.can_restore %}
-                                    <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" class="inline-form">
+                                    <form method="post" action="{% url 'workspace-restore' workbook_id=workspace.id %}" class="inline-form">
                                         {% csrf_token %}
                                         <button type="submit" class="btn btn-secondary">Restore</button>
                                     </form>
                                 {% endif %}
-                                <a class="btn btn-ghost" href="{% url 'workbook-detail' workbook_id=workspace.id %}">Open details</a>
+                                <a class="btn btn-ghost" href="{% url 'workspace-detail' workbook_id=workspace.id %}">Open details</a>
                             </div>
                         </article>
                         {% endwith %}
@@ -91,42 +106,5 @@
             </section>
         {% endif %}
     </div>
-
-    <aside class="card dashboard-create-card">
-        <h3>Create Workbook</h3>
-        <p class="create-note">A workbook is your container for one investigation workflow and its full run history.</p>
-        <form method="post" class="create-form stack-sm">
-            {% csrf_token %}
-            {% if form.non_field_errors %}
-                <div class="form-errors">{{ form.non_field_errors }}</div>
-            {% endif %}
-            <div class="form-row">
-                <label for="{{ form.title.id_for_label }}">Title</label>
-                {{ form.title }}
-                {% if form.title.errors %}<div class="form-errors">{{ form.title.errors }}</div>{% endif %}
-            </div>
-            <div class="form-row">
-                <label for="{{ form.slug.id_for_label }}">Slug</label>
-                {{ form.slug }}
-                {% if form.slug.errors %}<div class="form-errors">{{ form.slug.errors }}</div>{% endif %}
-            </div>
-            <div class="form-row">
-                <label for="{{ form.description.id_for_label }}">Description</label>
-                {{ form.description }}
-                {% if form.description.errors %}<div class="form-errors">{{ form.description.errors }}</div>{% endif %}
-            </div>
-            <div class="form-row">
-                <label for="{{ form.visibility.id_for_label }}">Visibility</label>
-                {{ form.visibility }}
-                {% if form.visibility.errors %}<div class="form-errors">{{ form.visibility.errors }}</div>{% endif %}
-            </div>
-            <label class="checkbox-row" for="{{ form.is_listed.id_for_label }}">
-                {{ form.is_listed }}
-                <span>List this workbook publicly</span>
-            </label>
-            {% if form.is_listed.errors %}<div class="form-errors">{{ form.is_listed.errors }}</div>{% endif %}
-            <button type="submit" class="btn btn-primary">Create workbook</button>
-        </form>
-    </aside>
 </div>
 {% endblock %}

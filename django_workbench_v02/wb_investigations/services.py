@@ -23,9 +23,7 @@ class InvestigationServiceError(ValidationError):
 
 def _normalise_review_config(review_config: dict | None) -> dict:
     raw = review_config if isinstance(review_config, dict) else {}
-    execution_mode = str(raw.get("execution_mode") or "real").strip().lower()
-    if execution_mode not in {"real", "simulate"}:
-        execution_mode = "real"
+    execution_mode = "real"
     provider = str(raw.get("provider") or "openai").strip().lower()
     if provider not in {"openai", "openrouter"}:
         provider = "openai"
@@ -115,6 +113,21 @@ def launch_investigation_wizard_pipeline(
         "pipeline_continue_on_fail": True,
         "pipeline_require_upstream_artifact": False,
     }
+    if bool(wizard_state.run_filter):
+        filter_config = wizard_state.filter_config if isinstance(wizard_state.filter_config, dict) else {}
+        search_query = str(
+            filter_config.get("search_query") or wizard_state.question_text or investigation.question_text
+        ).strip()
+        if search_query:
+            run_config["search_query"] = search_query
+        run_config["filter_df"] = bool(filter_config.get("filter_df", True))
+        selected_filters = filter_config.get("selected_filters")
+        if isinstance(selected_filters, dict):
+            run_config["selected_filters"] = {
+                "coroner": list(selected_filters.get("coroner", []) or []),
+                "area": list(selected_filters.get("area", []) or []),
+                "receiver": list(selected_filters.get("receiver", []) or []),
+            }
     if scope_params.get("report_limit") is not None:
         run_config["report_limit"] = scope_params["report_limit"]
 

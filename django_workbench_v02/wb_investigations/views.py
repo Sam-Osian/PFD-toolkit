@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.text import slugify
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from wb_runs.models import InvestigationRun, RunStatus, RunType
@@ -9,12 +10,14 @@ from wb_runs.services import queue_run
 from wb_notifications.services import NotificationRequestError, create_notification_request
 from wb_workspaces.models import Workspace
 from wb_workspaces.permissions import can_edit_workspace, can_run_workflows, can_view_workspace
+from wb_workspaces.services import create_workspace_for_user
 
 from .forms import (
     InvestigationExportForm,
     InvestigationCreateForm,
     InvestigationUpdateForm,
     InvestigationWizardExtractConfigForm,
+    InvestigationWizardFilterConfigForm,
     InvestigationWizardMethodForm,
     InvestigationWizardQuestionForm,
     InvestigationWizardReviewForm,
@@ -47,6 +50,19 @@ TERMINAL_STATUSES = {
 }
 
 FAILED_STATUSES = {RunStatus.FAILED, RunStatus.TIMED_OUT}
+
+
+def _next_workspace_slug_for_user(*, user, title: str) -> str:
+    base = slugify(str(title or "").strip())[:80]
+    if not base:
+        base = "workspace"
+    candidate = base
+    counter = 2
+    while Workspace.objects.filter(created_by=user, slug=candidate).exists():
+        suffix = f"-{counter}"
+        candidate = f"{base[: max(1, 100 - len(suffix))]}{suffix}"
+        counter += 1
+    return candidate
 
 
 def _normalise_pipeline_plan(raw_plan) -> list[str]:
@@ -196,6 +212,8 @@ def _wizard_session_key(*, investigation_id) -> str:
 
 def _wizard_stage_sequence(state: InvestigationWizardState) -> list[str]:
     sequence = ["question", "scope", "method"]
+    if state.run_filter:
+        sequence.append("filter")
     if state.run_themes:
         sequence.append("themes")
     if state.run_extract:
@@ -215,9 +233,190 @@ def _wizard_initial_state(*, investigation: Investigation) -> InvestigationWizar
         run_filter=bool(method_json.get("run_filter", True)),
         run_themes=bool(method_json.get("run_themes", False)),
         run_extract=bool(method_json.get("run_extract", False)),
+        filter_config={},
         themes_config={},
         extract_config={},
         review_config={},
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def investigation_start(request):
+    if request.method == "POST":
+        form = InvestigationWizardQuestionForm(request.POST)
+        if form.is_valid():
+            workspace_title = str(form.cleaned_data["title"] or "").strip()
+            question_text = str(form.cleaned_data["question_text"] or "").strip()
+            is_modal_submit = str(request.POST.get("wizard_modal_submit") or "").strip() == "1"
+
+            modal_scope_option = "all_reports"
+            modal_run_filter = True
+            modal_run_themes = False
+            modal_run_extract = False
+            modal_themes_config: dict = {}
+            modal_extract_config: dict = {}
+            modal_review_config: dict = {}
+            modal_filter_config: dict = {}
+            if is_modal_submit:
+                scope_form = InvestigationWizardScopeForm(request.POST)
+                method_form = InvestigationWizardMethodForm(request.POST)
+                if not scope_form.is_valid() or not method_form.is_valid():
+                    messages.error(request, "Invalid wizard configuration. Please review scope and method.")
+                    return redirect(request.META.get("HTTP_REFERER") or "landing")
+                modal_scope_option = str(scope_form.cleaned_data.get("scope_option") or "all_reports").strip()
+                modal_run_filter = bool(method_form.cleaned_data.get("run_filter", False))
+                modal_run_themes = bool(method_form.cleaned_data.get("run_themes", False))
+                modal_run_extract = bool(method_form.cleaned_data.get("run_extract", False))
+
+                if modal_run_filter:
+                    filter_payload = request.POST.copy()
+                    filter_payload["enabled"] = "on"
+                    filter_form = InvestigationWizardFilterConfigForm(filter_payload)
+                    if not filter_form.is_valid():
+                        messages.error(request, "Filter configuration is invalid.")
+                        return redirect(request.META.get("HTTP_REFERER") or "landing")
+                    modal_filter_config = {
+                        "search_query": str(filter_form.cleaned_data.get("search_query") or "").strip(),
+                        "filter_df": bool(filter_form.cleaned_data.get("filter_df", True)),
+                        "selected_filters": filter_form.cleaned_data.get("selected_filters") or {},
+                    }
+
+                if modal_run_themes:
+                    themes_payload = request.POST.copy()
+                    themes_payload["enabled"] = "on"
+                    themes_form = InvestigationWizardThemesConfigForm(themes_payload)
+                    if not themes_form.is_valid():
+                        messages.error(request, "Themes configuration is invalid.")
+                        return redirect(request.META.get("HTTP_REFERER") or "landing")
+                    modal_themes_config = {
+                        "seed_topics": str(themes_form.cleaned_data.get("seed_topics") or "").strip(),
+                        "min_themes": themes_form.cleaned_data.get("min_themes"),
+                        "max_themes": themes_form.cleaned_data.get("max_themes"),
+                        "extra_theme_instructions": str(
+                            themes_form.cleaned_data.get("extra_theme_instructions") or ""
+                        ).strip(),
+                    }
+
+                if modal_run_extract:
+                    extract_payload = request.POST.copy()
+                    extract_payload["enabled"] = "on"
+                    extract_form = InvestigationWizardExtractConfigForm(extract_payload)
+                    if not extract_form.is_valid():
+                        for err in extract_form.non_field_errors():
+                            messages.error(request, err)
+                        for _, errors in extract_form.errors.items():
+                            for err in errors:
+                                messages.error(request, err)
+                        return redirect(request.META.get("HTTP_REFERER") or "landing")
+                    modal_extract_config = {
+                        "feature_fields": extract_form.cleaned_data.get("feature_fields") or [],
+                        "allow_multiple": bool(extract_form.cleaned_data.get("allow_multiple", False)),
+                        "force_assign": bool(extract_form.cleaned_data.get("force_assign", False)),
+                        "skip_if_present": bool(extract_form.cleaned_data.get("skip_if_present", True)),
+                    }
+
+                review_form = InvestigationWizardReviewForm(request.POST)
+                if review_form.is_valid():
+                    modal_review_config = {
+                        "execution_mode": "real",
+                        "provider": review_form.cleaned_data.get("provider") or "openai",
+                        "model_name": review_form.cleaned_data.get("model_name") or "gpt-4.1-mini",
+                        "request_completion_email": bool(
+                            review_form.cleaned_data.get("request_completion_email", False)
+                        ),
+                        "notify_on": review_form.cleaned_data.get("notify_on") or "any",
+                    }
+                else:
+                    messages.error(request, "Review configuration is invalid.")
+                    return redirect(request.META.get("HTTP_REFERER") or "landing")
+            try:
+                workspace = create_workspace_for_user(
+                    user=request.user,
+                    title=workspace_title,
+                    slug=_next_workspace_slug_for_user(user=request.user, title=workspace_title),
+                    description="Created from investigation wizard.",
+                    request=request,
+                )
+                investigation = create_investigation(
+                    actor=request.user,
+                    workspace=workspace,
+                    title=workspace_title,
+                    question_text=question_text,
+                    scope_json={},
+                    method_json={},
+                    status="draft",
+                    request=request,
+                )
+            except (PermissionDenied, ValidationError, InvestigationServiceError) as exc:
+                messages.error(request, str(exc))
+            else:
+                state = _wizard_initial_state(investigation=investigation)
+                state.title = workspace_title
+                state.question_text = question_text
+                if is_modal_submit:
+                    state.scope_option = modal_scope_option
+                    state.run_filter = modal_run_filter
+                    state.run_themes = modal_run_themes
+                    state.run_extract = modal_run_extract
+                    state.filter_config = modal_filter_config
+                    state.themes_config = modal_themes_config
+                    state.extract_config = modal_extract_config
+                    state.review_config = modal_review_config
+                    state.stage = "review"
+                else:
+                    state.stage = "scope"
+                if is_modal_submit:
+                    try:
+                        run, review = launch_investigation_wizard_pipeline(
+                            actor=request.user,
+                            investigation=investigation,
+                            wizard_state=state,
+                            request=request,
+                        )
+                    except (PermissionDenied, ValidationError, InvestigationServiceError) as exc:
+                        session_key = _wizard_session_key(investigation_id=investigation.id)
+                        request.session[session_key] = state.to_json()
+                        request.session.modified = True
+                        messages.error(request, str(exc))
+                        return redirect(
+                            "investigation-wizard",
+                            workbook_id=workspace.id,
+                            investigation_id=investigation.id,
+                        )
+
+                    if review.get("request_completion_email"):
+                        try:
+                            create_notification_request(
+                                run=run,
+                                user=request.user,
+                                notify_on=review.get("notify_on") or "any",
+                                request=request,
+                            )
+                        except (NotificationRequestError, ValidationError) as exc:
+                            messages.warning(
+                                request,
+                                f"Pipeline launched, but completion notification was not created: {exc}",
+                            )
+                    messages.success(request, "Investigation launched. Workspace is now pending.")
+                    return redirect("workspace-dashboard")
+
+                session_key = _wizard_session_key(investigation_id=investigation.id)
+                request.session[session_key] = state.to_json()
+                request.session.modified = True
+                messages.success(request, "Workspace created. Continue in the investigation wizard.")
+                return redirect(
+                    "investigation-wizard",
+                    workbook_id=workspace.id,
+                    investigation_id=investigation.id,
+                )
+    else:
+        form = InvestigationWizardQuestionForm()
+
+    return render(
+        request,
+        "wb_investigations/investigation_start.html",
+        {"wizard_form": form},
     )
 
 
@@ -241,6 +440,36 @@ def _wizard_form_for_stage(stage: str, *, state: InvestigationWizardState, post_
                 "run_extract": state.run_extract,
             },
         )
+    if stage == "filter":
+        filter_config = state.filter_config if isinstance(state.filter_config, dict) else {}
+        if post_data is not None:
+            mutable = post_data.copy()
+            if not str(mutable.get("search_query") or "").strip():
+                mutable["search_query"] = str(
+                    filter_config.get("search_query") or state.question_text or ""
+                ).strip()
+            post_data = mutable
+        initial = {
+            "enabled": True,
+            "search_query": str(filter_config.get("search_query") or state.question_text or "").strip(),
+            "filter_df": bool(filter_config.get("filter_df", True)),
+            "coroner_filters": ", ".join(
+                filter_config.get("selected_filters", {}).get("coroner", [])
+                if isinstance(filter_config.get("selected_filters"), dict)
+                else []
+            ),
+            "area_filters": ", ".join(
+                filter_config.get("selected_filters", {}).get("area", [])
+                if isinstance(filter_config.get("selected_filters"), dict)
+                else []
+            ),
+            "receiver_filters": ", ".join(
+                filter_config.get("selected_filters", {}).get("receiver", [])
+                if isinstance(filter_config.get("selected_filters"), dict)
+                else []
+            ),
+        }
+        return InvestigationWizardFilterConfigForm(post_data, initial=initial)
     if stage == "themes":
         initial = {"enabled": True, **(state.themes_config or {})}
         return InvestigationWizardThemesConfigForm(post_data, initial=initial)
@@ -288,6 +517,21 @@ def _apply_stage_to_state(*, stage: str, state: InvestigationWizardState, cleane
             state.themes_config = {}
         if not state.run_extract:
             state.extract_config = {}
+        if not state.run_filter:
+            state.filter_config = {}
+        elif not state.filter_config:
+            state.filter_config = {
+                "search_query": state.question_text,
+                "filter_df": True,
+                "selected_filters": {"coroner": [], "area": [], "receiver": []},
+            }
+        return
+    if stage == "filter":
+        state.filter_config = {
+            "search_query": str(cleaned_data.get("search_query") or state.question_text or "").strip(),
+            "filter_df": bool(cleaned_data.get("filter_df", True)),
+            "selected_filters": cleaned_data.get("selected_filters") or {},
+        }
         return
     if stage == "themes":
         state.themes_config = {
@@ -307,7 +551,7 @@ def _apply_stage_to_state(*, stage: str, state: InvestigationWizardState, cleane
         return
     if stage == "review":
         state.review_config = {
-            "execution_mode": cleaned_data.get("execution_mode") or "real",
+            "execution_mode": "real",
             "provider": cleaned_data.get("provider") or "openai",
             "model_name": cleaned_data.get("model_name") or "gpt-4.1-mini",
             "request_completion_email": bool(cleaned_data.get("request_completion_email", False)),
@@ -349,7 +593,7 @@ def investigation_wizard(request, workbook_id, investigation_id):
                 del request.session[session_key]
             messages.info(request, "Wizard reset.")
             return redirect(
-                "workbook-investigation-wizard",
+                "investigation-wizard",
                 workbook_id=workbook_id,
                 investigation_id=investigation_id,
             )
@@ -360,7 +604,7 @@ def investigation_wizard(request, workbook_id, investigation_id):
             request.session[session_key] = state.to_json()
             request.session.modified = True
             return redirect(
-                "workbook-investigation-wizard",
+                "investigation-wizard",
                 workbook_id=workbook_id,
                 investigation_id=investigation_id,
             )
@@ -402,7 +646,7 @@ def investigation_wizard(request, workbook_id, investigation_id):
                             del request.session[session_key]
                         messages.success(request, "Investigation pipeline launched.")
                         return redirect(
-                            "workbook-investigation-detail",
+                            "investigation-detail",
                             workbook_id=workbook_id,
                             investigation_id=investigation_id,
                         )
@@ -412,7 +656,7 @@ def investigation_wizard(request, workbook_id, investigation_id):
             request.session[session_key] = state.to_json()
             request.session.modified = True
             return redirect(
-                "workbook-investigation-wizard",
+                "investigation-wizard",
                 workbook_id=workbook_id,
                 investigation_id=investigation_id,
             )
@@ -456,14 +700,14 @@ def investigation_list(request, workbook_id):
         form = InvestigationCreateForm(request.POST)
         if not can_edit:
             messages.error(request, "You do not have permission to create investigations.")
-            return redirect("workbook-investigation-list", workbook_id=workspace.id)
+            return redirect("investigation-list", workbook_id=workspace.id)
         if existing_investigation is not None:
             messages.info(
                 request,
-                "This workbook already has an investigation. Opening it now.",
+                "This workspace already has an investigation. Opening it now.",
             )
             return redirect(
-                "workbook-investigation-detail",
+                "investigation-detail",
                 workbook_id=workspace.id,
                 investigation_id=existing_investigation.id,
             )
@@ -484,11 +728,11 @@ def investigation_list(request, workbook_id):
             else:
                 messages.success(request, "Investigation created.")
                 return redirect(
-                    "workbook-investigation-detail",
+                    "investigation-detail",
                     workbook_id=workspace.id,
                     investigation_id=investigation.id,
                 )
-            return redirect("workbook-investigation-list", workbook_id=workspace.id)
+            return redirect("investigation-list", workbook_id=workspace.id)
     else:
         form = InvestigationCreateForm()
 
@@ -519,8 +763,8 @@ def investigation_entry(request, workbook_id):
 
     if investigation is None:
         if not can_edit:
-            messages.info(request, "No investigation exists yet for this workbook.")
-            return redirect("workbook-detail", workbook_id=workspace.id)
+            messages.info(request, "No investigation exists yet for this workspace.")
+            return redirect("workspace-detail", workbook_id=workspace.id)
         try:
             investigation = create_investigation(
                 actor=request.user,
@@ -534,16 +778,16 @@ def investigation_entry(request, workbook_id):
             )
         except (PermissionDenied, ValidationError, InvestigationServiceError) as exc:
             messages.error(request, str(exc))
-            return redirect("workbook-detail", workbook_id=workspace.id)
+            return redirect("workspace-detail", workbook_id=workspace.id)
 
     if can_edit:
         return redirect(
-            "workbook-investigation-wizard",
+            "investigation-wizard",
             workbook_id=workspace.id,
             investigation_id=investigation.id,
         )
     return redirect(
-        "workbook-investigation-detail",
+        "investigation-detail",
         workbook_id=workspace.id,
         investigation_id=investigation.id,
     )
@@ -598,7 +842,7 @@ def queue_export_bundle(request, workbook_id, investigation_id):
     if not form.is_valid():
         messages.error(request, "Invalid export configuration.")
         return redirect(
-            "workbook-investigation-detail",
+            "investigation-detail",
             workbook_id=workbook_id,
             investigation_id=investigation_id,
         )
@@ -646,7 +890,7 @@ def queue_export_bundle(request, workbook_id, investigation_id):
         else:
             messages.success(request, "Export queued.")
     return redirect(
-        "workbook-investigation-detail",
+        "investigation-detail",
         workbook_id=workbook_id,
         investigation_id=investigation_id,
     )
@@ -664,7 +908,7 @@ def investigation_update(request, workbook_id, investigation_id):
     if not form.is_valid():
         messages.error(request, "Invalid investigation update form.")
         return redirect(
-            "workbook-investigation-detail",
+            "investigation-detail",
             workbook_id=workbook_id,
             investigation_id=investigation_id,
         )
@@ -686,7 +930,7 @@ def investigation_update(request, workbook_id, investigation_id):
         messages.success(request, "Investigation updated.")
 
     return redirect(
-        "workbook-investigation-detail",
+        "investigation-detail",
         workbook_id=workbook_id,
         investigation_id=investigation_id,
     )

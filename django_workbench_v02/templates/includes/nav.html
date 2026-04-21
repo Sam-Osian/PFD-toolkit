@@ -11,11 +11,11 @@
 </div>
 
 {% if request.user.is_authenticated %}
-    <a class="cmd-btn" href="{% url 'workbook-dashboard' %}">
+    <button class="cmd-btn" type="button" data-open-wizard>
         <span class="cmd-dot"></span>
         <span>Start an investigation</span>
         <span class="cmd-kbd">cmd+k</span>
-    </a>
+    </button>
 {% else %}
     <a class="cmd-btn" href="{% url 'accounts-login' %}">
         <span class="cmd-dot"></span>
@@ -31,9 +31,9 @@
         <span>Overview</span>
         <span class="nav-meta">H</span>
     </a>
-    <a class="nav-item{% if '/workbooks/' in p or '/workspaces/' in p %} on{% endif %}" href="{% url 'workbook-dashboard' %}">
+    <a class="nav-item{% if '/workbooks/' in p or '/workspaces/' in p %} on{% endif %}" href="{% url 'workspace-dashboard' %}">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="5.5" height="4" rx="1"/><rect x="8.5" y="3" width="5.5" height="4" rx="1"/><rect x="2" y="9" width="5.5" height="4" rx="1"/><rect x="8.5" y="9" width="5.5" height="4" rx="1"/></svg>
-        <span>Workbooks</span>
+        <span>Workspaces</span>
         <span class="nav-meta">W</span>
     </a>
     <a class="nav-item{% if '/explore/' in p %} on{% endif %}" href="{% url 'explore' %}">

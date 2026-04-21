@@ -24,7 +24,7 @@
         <div class="topbar">
             {% with p=request.path %}
             <div class="topbar-crumbs">
-                <span class="mono">Workbook</span>
+                <span class="mono">Workspace</span>
                 <span>/</span>
                 {% if "/collections/" in p %}
                     <span class="cur">Collections</span>
@@ -37,9 +37,9 @@
                 {% elif "/settings/llm/" in p %}
                     <span class="cur">LLM config</span>
                 {% elif "/workbooks/public/" in p %}
-                    <span class="cur">Public Workbooks</span>
+                    <span class="cur">Public Workspaces</span>
                 {% elif "/workbooks/" in p or "/workspaces/" in p %}
-                    <span class="cur">Workbooks</span>
+                    <span class="cur">Workspaces</span>
                 {% elif "/s/" in p %}
                     <span class="cur">Shared View</span>
                 {% elif "/auth/" in p %}
@@ -75,7 +75,7 @@
                 </button>
                 <a class="btn btn-secondary sm" href="{% url 'llm-config' %}">LLM config</a>
                 {% if request.user.is_authenticated %}
-                    <a class="btn btn-secondary sm" href="{% url 'workbook-dashboard' %}">Share</a>
+                    <a class="btn btn-secondary sm" href="{% url 'workspace-dashboard' %}">Share</a>
                     <button class="top-av" title="{{ request.user.get_full_name|default:request.user.email }}">
                         <span>{{ request.user.first_name|default:request.user.email|slice:":1"|upper }}{{ request.user.last_name|default:""|slice:":1"|upper }}</span>
                     </button>
@@ -110,6 +110,250 @@
         </section>
     </main>
 </div>
+
+{% if request.user.is_authenticated %}
+<div class="wz-back" id="wizard" aria-hidden="true">
+    <div class="wz" role="dialog" aria-labelledby="wz-title">
+        <div class="wz-bar">
+            <span class="cmd-prefix">&gt; investigate</span>
+            <div class="wz-step-dots">
+                <i class="on" data-dot="0"></i><span>Question</span>
+                <i data-dot="1"></i><span>Scope</span>
+                <i data-dot="2"></i><span>Method</span>
+                <i data-dot="3"></i><span>Review</span>
+            </div>
+            <button class="x" type="button" data-wiz-close aria-label="Close wizard">x</button>
+        </div>
+        <form class="wz-form" method="post" action="{% url 'investigation-start' %}">
+            {% csrf_token %}
+            <div class="wz-body">
+                <section class="wz-step on" data-wz-step="0" data-step="0">
+                    <div class="wz-step-k">Step 01 - The question</div>
+                    <h2 id="wz-title">What do you want to know?</h2>
+                    <p class="hint">One sentence in plain English. This becomes the filter query.</p>
+                    <div class="wz-field">
+                        <label>Title <span class="wz-optional">what to call this investigation</span></label>
+                        <input type="text" name="title" id="wz-title-input" placeholder="e.g. Delayed escalation in emergency care" maxlength="120" required>
+                    </div>
+                    <div class="wz-field" style="margin-top:12px">
+                        <label>Research question</label>
+                        <div class="wz-input-big">
+                            <textarea name="question_text" id="wz-q" placeholder="e.g. Where did delayed emergency response contribute to the death of someone in mental-health crisis?" required></textarea>
+                        </div>
+                    </div>
+                    <div class="wz-chips">
+                        <span class="c-lbl">Or start from:</span>
+                        <button type="button" class="wz-chip" data-wz-fill="Reports where delayed emergency response contributed to death in mental-health crisis">Delayed emergency response</button>
+                        <button type="button" class="wz-chip" data-wz-fill="Medication errors in residential care homes">Medication errors (care homes)</button>
+                        <button type="button" class="wz-chip" data-wz-fill="Young people who died while waiting for CAMHS">Young people - CAMHS waits</button>
+                        <button type="button" class="wz-chip" data-wz-fill="Communication failures between agencies in safeguarding cases">Safeguarding handoffs</button>
+                    </div>
+                </section>
+
+                <section class="wz-step" data-wz-step="1" data-step="1">
+                    <div class="wz-step-k">Step 02 - Scope</div>
+                    <h2>How far back should we look?</h2>
+                    <p class="hint">A wider scope finds more signals but takes longer. You can re-run with a narrower scope later.</p>
+                    <div class="wz-scope">
+                        <label class="on">
+                            <input type="radio" name="scope_option" value="all_reports" checked>
+                            <span class="wsm"></span>
+                            <div><strong>All reports</strong><span>Full archive from 2013 to today. Best for cross-cutting patterns.</span></div>
+                        </label>
+                        <label>
+                            <input type="radio" name="scope_option" value="last_3_years">
+                            <span class="wsm"></span>
+                            <div><strong>Last 3 years</strong><span>Reports from the past 3 years. Best for current policy relevance.</span></div>
+                        </label>
+                        <label>
+                            <input type="radio" name="scope_option" value="last_year">
+                            <span class="wsm"></span>
+                            <div><strong>Last year</strong><span>Reports from the past 12 months only.</span></div>
+                        </label>
+                        <label>
+                            <input type="radio" name="scope_option" value="last_6_months">
+                            <span class="wsm"></span>
+                            <div><strong>Last 6 months</strong><span>Most recent reports only. Good for time-sensitive work.</span></div>
+                        </label>
+                        <label>
+                            <input type="radio" name="scope_option" value="most_recent_100">
+                            <span class="wsm"></span>
+                            <div><strong>100 most recent</strong><span>Quick scan. Useful for testing a question before a full run.</span></div>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="wz-step" data-wz-step="2" data-step="2">
+                    <div class="wz-step-k">Step 03 - Method</div>
+                    <h2>What should the pipeline do?</h2>
+                    <p class="hint">Stages run sequentially in the order shown. Uncheck to skip a stage.</p>
+                    <div class="wz-method">
+                        <label class="on">
+                            <input id="wz-filter" type="checkbox" name="run_filter" value="on" checked>
+                            <span class="wcb"></span>
+                            <div><strong>Screen &amp; filter</strong><span>Read every report and keep only those relevant to your question. Returns a CSV with one supporting quote per match. Required for themes and extract.</span></div>
+                            <span class="wm-est">Stage 1</span>
+                        </label>
+                        <label id="wz-themes-label">
+                            <input id="wz-themes" type="checkbox" name="run_themes" value="on">
+                            <span class="wcb"></span>
+                            <div><strong>Discover themes</strong><span>Cluster the filtered set into recurring topics. Configure seed topics and range on the next step.</span></div>
+                            <span class="wm-est">Stage 2</span>
+                        </label>
+                        <label id="wz-extract-label">
+                            <input id="wz-extract" type="checkbox" name="run_extract" value="on">
+                            <span class="wcb"></span>
+                            <div><strong>Extract structured data</strong><span>Pull specific fields (age, setting, cause...) from free text. Define the columns on the next step.</span></div>
+                            <span class="wm-est">Stage 3</span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="wz-step wz-step-conditional" data-wz-step="filter" data-step="2b" id="wz-step-filter">
+                    <div class="wz-step-k">Screen &amp; filter · configure</div>
+                    <h2>What makes a report relevant?</h2>
+                    <p class="hint">Your research question is carried forward automatically. Adjust below if needed.</p>
+                    <div class="wz-fields">
+                        <div class="wz-field">
+                            <label>Research question</label>
+                            <div class="wz-input-big">
+                                <textarea id="wz-filter-query" name="search_query" placeholder="Describe what counts as relevant..."></textarea>
+                            </div>
+                            <input type="hidden" name="coroner_filters" value="">
+                            <input type="hidden" name="area_filters" value="">
+                            <input type="hidden" name="receiver_filters" value="">
+                        </div>
+                        <div class="wz-field">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+                                <label class="wz-toggle"><input type="checkbox" name="filter_df" value="on" checked><span>Keep only matching reports</span></label>
+                                <label class="wz-toggle"><input type="checkbox" name="include_supporting_quotes" value="on"><span>Include supporting quotes</span></label>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="wz-step wz-step-conditional" data-wz-step="themes" data-step="3" id="wz-step-themes">
+                    <div class="wz-step-k">Step 04 - Themes configuration</div>
+                    <h2>Configure theme discovery.</h2>
+                    <p class="hint">Optional. Leave blank to let the model decide.</p>
+                    <div class="wz-fields">
+                        <div class="wz-field-row">
+                            <div class="wz-field">
+                                <label>Min themes</label>
+                                <input type="number" name="min_themes" min="1" max="50" placeholder="e.g. 5">
+                            </div>
+                            <div class="wz-field">
+                                <label>Max themes</label>
+                                <input type="number" name="max_themes" min="1" max="50" placeholder="e.g. 12">
+                            </div>
+                        </div>
+                        <div class="wz-field">
+                            <label>Seed topics <span class="wz-optional">suggest starting points</span></label>
+                            <textarea name="seed_topics" rows="3" placeholder="e.g. Communication failures&#10;Medication safety&#10;Inter-agency handoffs"></textarea>
+                        </div>
+                        <div class="wz-field">
+                            <label>Extra guidance <span class="wz-optional">optional</span></label>
+                            <textarea name="extra_theme_instructions" rows="2" placeholder="e.g. Prioritise systemic failures over individual clinician errors."></textarea>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="wz-step wz-step-conditional" data-wz-step="extract" data-step="4" id="wz-step-extract">
+                    <div class="wz-step-k">Step 05 - Extract configuration</div>
+                    <h2>Define the fields to extract.</h2>
+                    <p class="hint">One field per row. Supported types: text, boolean, integer, decimal.</p>
+                    <div class="wz-field">
+                        <label>Feature fields</label>
+                        <div class="wz-extract-table" id="wz-extract-table">
+                            <div class="wet-head"><span>Name</span><span>Description</span><span>Type</span><span></span></div>
+                            <div class="wet-row">
+                                <input type="text" class="wet-name" placeholder="age_at_death">
+                                <input type="text" class="wet-description" placeholder="Age at death in years">
+                                <select class="wet-type"><option>integer</option><option>text</option><option>boolean</option><option>decimal</option></select>
+                                <button type="button" class="wet-del" title="Remove">x</button>
+                            </div>
+                            <div class="wet-row">
+                                <input type="text" class="wet-name" placeholder="setting">
+                                <input type="text" class="wet-description" placeholder="Care setting where death occurred">
+                                <select class="wet-type"><option>text</option><option>integer</option><option>boolean</option><option>decimal</option></select>
+                                <button type="button" class="wet-del" title="Remove">x</button>
+                            </div>
+                        </div>
+                        <button type="button" class="wet-add" id="wz-add-field">+ Add field</button>
+                        <textarea id="wz-feature-fields" name="feature_fields" style="display:none;"></textarea>
+                    </div>
+                    <div class="wz-field" style="margin-top:14px">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <label class="wz-toggle"><input type="checkbox" name="force_assign" value="on"><span>Force assign</span></label>
+                            <label class="wz-toggle"><input type="checkbox" name="allow_multiple" value="on"><span>Allow multiple values</span></label>
+                            <label class="wz-toggle"><input type="checkbox" name="skip_if_present" value="on" checked><span>Skip if already present</span></label>
+                            <label class="wz-toggle"><input type="checkbox" name="extract_include_supporting_quotes" value="on"><span>Include supporting quotes</span></label>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="wz-step" data-wz-step="review" data-step="5">
+                    <div class="wz-step-k">Step 06 - Review &amp; launch</div>
+                    <h2>Ready to run.</h2>
+                    <p class="hint">Check your configuration before launch. You can cancel while running.</p>
+                    <div class="wz-preview">
+                        <div class="wz-pv">
+                            <div class="pk">Question</div>
+                            <div class="pv" id="wz-preview-q">Where did delayed emergency response contribute to death in mental-health crisis?</div>
+                        </div>
+                        <input type="hidden" name="execution_mode" value="real">
+                        <div class="wz-pv-row">
+                            <div class="wz-pv">
+                                <div class="pk">Scope</div>
+                                <div class="pv" id="wz-preview-scope">All reports</div>
+                            </div>
+                            <div class="wz-pv">
+                                <div class="pk">Pipeline</div>
+                                <div class="pv" id="wz-preview-pipeline">Filter</div>
+                            </div>
+                        </div>
+                        <div class="wz-pv">
+                            <div class="pk">Model</div>
+                            <div class="wz-review-model">
+                                <div class="seg-pick wz-provider-pick" style="grid-template-columns:1fr 1fr">
+                                    <button type="button" class="on" data-provider="openai">OpenAI</button>
+                                    <button type="button" data-provider="openrouter">OpenRouter</button>
+                                </div>
+                                <input type="hidden" name="provider" id="wz-provider-input" value="openai">
+                                <select id="wz-model-select" name="model_name" style="margin-top:8px;width:100%;background:var(--bg-2);border:1px solid var(--line-2);border-radius:8px;padding:8px 12px;font-size:12.5px;color:var(--text)">
+                                    <option value="gpt-4.1-mini">gpt-4.1-mini (recommended - lower cost)</option>
+                                    <option value="gpt-4.1">gpt-4.1 (higher accuracy)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="wz-pv">
+                            <div class="pk">On completion</div>
+                            <label class="wz-toggle"><input type="checkbox" name="request_completion_email" value="on"><span>Email me when done</span></label>
+                            <input type="hidden" name="notify_on" value="any">
+                        </div>
+                        <div class="wz-pv" style="background:color-mix(in srgb,var(--accent) 7%,transparent);border-color:color-mix(in srgb,var(--accent) 30%,transparent)">
+                            <div class="pk">Credential</div>
+                            <div class="pv">API key saved for this workspace.</div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="wz-foot">
+                <div class="wz-hot">
+                    <span><span class="k">Enter</span> Next</span>
+                    <span><span class="k">Esc</span> Cancel</span>
+                    <span><span class="k">Cmd+Enter</span> Launch</span>
+                </div>
+                <div class="acts">
+                    <button class="btn btn-ghost" type="button" data-wiz-back>Back</button>
+                    <button class="btn btn-primary" type="button" data-wiz-next>Next</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 <div class="dlg-back" id="dlg-start-over" aria-hidden="true">
     <div class="dlg confirm danger" role="dialog" aria-labelledby="start-over-title">
@@ -275,12 +519,279 @@ document.addEventListener("click", function(event) {
 document.addEventListener("keydown", function(event) {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();
+    const wizardOpen = window.__openInvestigationWizard;
+    if (typeof wizardOpen === "function" && document.body.dataset.auth === "user") {
+      wizardOpen();
+      return;
+    }
     const input = document.getElementById("global-search-input");
     if (input) input.focus();
   }
 });
 
 document.addEventListener("DOMContentLoaded", function() {
+  const wizardOverlay = document.getElementById("wizard");
+  const wizardForm = wizardOverlay ? wizardOverlay.querySelector("form.wz-form") : null;
+  const wizardSteps = wizardOverlay ? Array.from(wizardOverlay.querySelectorAll(".wz-step")) : [];
+  const wizardDots = wizardOverlay ? Array.from(wizardOverlay.querySelectorAll("[data-dot]")) : [];
+  const wizardNext = wizardOverlay ? wizardOverlay.querySelector("[data-wiz-next]") : null;
+  const wizardBack = wizardOverlay ? wizardOverlay.querySelector("[data-wiz-back]") : null;
+  const wizardCloseButtons = wizardOverlay ? wizardOverlay.querySelectorAll("[data-wiz-close]") : [];
+  const wizardOpenButtons = document.querySelectorAll("[data-open-wizard]");
+  const runThemesInput = document.getElementById("wz-themes");
+  const runExtractInput = document.getElementById("wz-extract");
+  const runFilterInput = document.getElementById("wz-filter");
+  const featureFieldsInput = document.getElementById("wz-feature-fields");
+  const filterQueryInput = document.getElementById("wz-filter-query");
+  const questionInput = document.getElementById("wz-q");
+  const titleInput = document.getElementById("wz-title-input");
+  const reviewQuestion = document.getElementById("wz-preview-q");
+  const reviewScope = document.getElementById("wz-preview-scope");
+  const reviewPipeline = document.getElementById("wz-preview-pipeline");
+  const providerInput = document.getElementById("wz-provider-input");
+  const modelSelect = document.getElementById("wz-model-select");
+  const addFieldButton = document.getElementById("wz-add-field");
+  const extractTable = document.getElementById("wz-extract-table");
+  let wizardStep = 0;
+
+  const getActiveWizardSteps = function() {
+    const active = [0, 1, 2];
+    if (Boolean(runFilterInput?.checked)) active.push(3);
+    if (Boolean(runThemesInput?.checked)) active.push(4);
+    if (Boolean(runExtractInput?.checked)) active.push(5);
+    active.push(wizardSteps.length - 1);
+    return active;
+  };
+
+  const getWizardDotIndex = function(stepDomIndex) {
+    if (stepDomIndex <= 2) return stepDomIndex;
+    if (stepDomIndex === wizardSteps.length - 1) return 3;
+    return 2;
+  };
+
+  const updatePipelinePreview = function() {
+    const entries = [];
+    if (runFilterInput?.checked) entries.push("Filter");
+    if (runThemesInput?.checked) entries.push("Themes");
+    if (runExtractInput?.checked) entries.push("Extract");
+    if (reviewPipeline) reviewPipeline.textContent = entries.length ? entries.join(" → ") : "—";
+  };
+
+  const syncExtractFeatureRows = function() {
+    if (!featureFieldsInput || !extractTable) return;
+    const rows = Array.from(extractTable.querySelectorAll(".wet-row"));
+    const payload = [];
+    rows.forEach(function(row) {
+      const name = String(row.querySelector(".wet-name")?.value || "").trim();
+      const description = String(row.querySelector(".wet-description")?.value || "").trim();
+      const type = String(row.querySelector(".wet-type")?.value || "").trim();
+      if (!name) return;
+      payload.push({ name: name, description: description, type: type || "text" });
+    });
+    featureFieldsInput.value = JSON.stringify(payload);
+  };
+
+  const addExtractRow = function(defaults) {
+    if (!extractTable) return;
+    const row = document.createElement("div");
+    row.className = "wet-row";
+    row.innerHTML = `
+      <input type="text" class="wet-name" placeholder="field_name">
+      <input type="text" class="wet-description" placeholder="Description">
+      <select class="wet-type">
+        <option>text</option><option>integer</option><option>boolean</option><option>decimal</option>
+      </select>
+      <button type="button" class="wet-del" title="Remove">x</button>
+    `;
+    extractTable.appendChild(row);
+    if (defaults && typeof defaults === "object") {
+      row.querySelector(".wet-name").value = defaults.name || "";
+      row.querySelector(".wet-description").value = defaults.description || "";
+      row.querySelector(".wet-type").value = defaults.type || "text";
+    }
+    row.querySelector(".wet-del")?.addEventListener("click", function() {
+      row.remove();
+      syncExtractFeatureRows();
+    });
+    row.querySelectorAll("input,select").forEach(function(node) {
+      node.addEventListener("input", syncExtractFeatureRows);
+      node.addEventListener("change", syncExtractFeatureRows);
+    });
+  };
+
+  const renderWizard = function() {
+    if (!wizardOverlay) return;
+    const activeSteps = getActiveWizardSteps();
+    const currentIndex = activeSteps.indexOf(wizardStep);
+    if (currentIndex === -1) wizardStep = activeSteps[0];
+    wizardSteps.forEach(function(step, index) { step.classList.toggle("on", index === wizardStep); });
+    const dotIdx = getWizardDotIndex(wizardStep);
+    wizardDots.forEach(function(dot, index) {
+      dot.classList.toggle("on", index === dotIdx);
+      dot.classList.toggle("done", index < dotIdx);
+    });
+    const visibleIndex = getActiveWizardSteps().indexOf(wizardStep);
+    const visibleCount = getActiveWizardSteps().length;
+    if (wizardBack) wizardBack.style.visibility = visibleIndex <= 0 ? "hidden" : "visible";
+    if (wizardNext) {
+      const isFinal = visibleIndex === visibleCount - 1;
+      wizardNext.textContent = isFinal ? "Launch" : "Next";
+      wizardNext.type = isFinal ? "submit" : "button";
+      wizardNext.name = isFinal ? "wizard_modal_submit" : "";
+      wizardNext.value = isFinal ? "1" : "";
+    }
+
+    if (featureFieldsInput) {
+      if (Boolean(runExtractInput?.checked)) {
+        featureFieldsInput.setAttribute("required", "required");
+      } else {
+        featureFieldsInput.removeAttribute("required");
+      }
+    }
+    if (filterQueryInput) {
+      if (Boolean(runFilterInput?.checked)) {
+        filterQueryInput.setAttribute("required", "required");
+      } else {
+        filterQueryInput.removeAttribute("required");
+      }
+    }
+    updatePipelinePreview();
+    if (questionInput && reviewQuestion) {
+      reviewQuestion.textContent = questionInput.value.trim() || "Where did delayed emergency response contribute to death in mental-health crisis?";
+    }
+  };
+
+  const openWizard = function() {
+    if (!wizardOverlay) return;
+    wizardStep = 0;
+    renderWizard();
+    wizardOverlay.classList.add("on");
+    wizardOverlay.setAttribute("aria-hidden", "false");
+    if (titleInput) {
+      setTimeout(function() { titleInput.focus(); }, 30);
+    }
+  };
+
+  const closeWizard = function() {
+    if (!wizardOverlay) return;
+    wizardOverlay.classList.remove("on");
+    wizardOverlay.setAttribute("aria-hidden", "true");
+  };
+
+  window.__openInvestigationWizard = openWizard;
+
+  wizardOpenButtons.forEach(function(button) {
+    button.addEventListener("click", function(event) {
+      if (document.body.dataset.auth !== "user") return;
+      event.preventDefault();
+      openWizard();
+    });
+  });
+  wizardCloseButtons.forEach(function(button) { button.addEventListener("click", closeWizard); });
+  wizardNext?.addEventListener("click", function(event) {
+    const active = getActiveWizardSteps();
+    const currentIndex = active.indexOf(wizardStep);
+    if (currentIndex < active.length - 1) {
+      event.preventDefault();
+      wizardStep = active[currentIndex + 1];
+      renderWizard();
+    }
+  });
+  wizardBack?.addEventListener("click", function(event) {
+    event.preventDefault();
+    const active = getActiveWizardSteps();
+    const currentIndex = active.indexOf(wizardStep);
+    if (currentIndex > 0) {
+      wizardStep = active[currentIndex - 1];
+      renderWizard();
+    }
+  });
+  wizardOverlay?.querySelectorAll(".wz-scope label").forEach(function(label) {
+    label.addEventListener("click", function() {
+      setTimeout(function() {
+        const group = label.parentElement;
+        group?.querySelectorAll("label").forEach(function(node) {
+          node.classList.toggle("on", Boolean(node.querySelector("input")?.checked));
+        });
+      }, 0);
+    });
+  });
+  wizardOverlay?.querySelectorAll(".wz-method label").forEach(function(label) {
+    label.addEventListener("click", function() {
+      setTimeout(function() {
+        const checked = Boolean(label.querySelector("input")?.checked);
+        label.classList.toggle("on", checked);
+        const sequence = getActiveWizardSteps();
+        if (!sequence.includes(wizardStep)) {
+          wizardStep = 2;
+        }
+        renderWizard();
+      }, 0);
+    });
+  });
+  filterQueryInput?.addEventListener("focus", function() {
+    if (!filterQueryInput.value.trim()) {
+      const question = document.getElementById("wz-q");
+      if (question?.value?.trim()) filterQueryInput.value = question.value.trim();
+    }
+  });
+  questionInput?.addEventListener("input", function() {
+    if (reviewQuestion) reviewQuestion.textContent = questionInput.value.trim() || "Where did delayed emergency response contribute to death in mental-health crisis?";
+  });
+  wizardOverlay?.querySelectorAll('input[name="scope_option"]').forEach(function(radio) {
+    radio.addEventListener("change", function() {
+      const labels = {
+        all_reports: "All reports",
+        last_3_years: "Last 3 years",
+        last_year: "Last year",
+        last_6_months: "Last 6 months",
+        most_recent_100: "100 most recent",
+      };
+      if (reviewScope) reviewScope.textContent = labels[radio.value] || radio.value;
+    });
+  });
+  wizardOverlay?.querySelectorAll("[data-wz-fill]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      if (questionInput) {
+        questionInput.value = button.getAttribute("data-wz-fill") || "";
+        questionInput.dispatchEvent(new Event("input"));
+        questionInput.focus();
+      }
+    });
+  });
+  wizardOverlay?.querySelectorAll(".wz-provider-pick button").forEach(function(button) {
+    button.addEventListener("click", function() {
+      wizardOverlay.querySelectorAll(".wz-provider-pick button").forEach(function(b) { b.classList.remove("on"); });
+      button.classList.add("on");
+      if (providerInput) providerInput.value = button.getAttribute("data-provider") || "openai";
+      if (modelSelect) {
+        if (providerInput?.value === "openrouter") {
+          modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini (recommended - lower cost)</option><option value="openai/gpt-4.1">openai/gpt-4.1 (higher accuracy)</option>';
+        } else {
+          modelSelect.innerHTML = '<option value="gpt-4.1-mini">gpt-4.1-mini (recommended - lower cost)</option><option value="gpt-4.1">gpt-4.1 (higher accuracy)</option>';
+        }
+      }
+    });
+  });
+  addFieldButton?.addEventListener("click", function() {
+    addExtractRow({ name: "", description: "", type: "text" });
+    syncExtractFeatureRows();
+  });
+  extractTable?.querySelectorAll(".wet-row").forEach(function(row) {
+    row.querySelector(".wet-del")?.addEventListener("click", function() {
+      row.remove();
+      syncExtractFeatureRows();
+    });
+    row.querySelectorAll("input,select").forEach(function(node) {
+      node.addEventListener("input", syncExtractFeatureRows);
+      node.addEventListener("change", syncExtractFeatureRows);
+    });
+  });
+  wizardForm?.addEventListener("submit", function() {
+    syncExtractFeatureRows();
+    closeWizard();
+  });
+
   const startOverDialog = document.getElementById("dlg-start-over");
   const startOverOpen = document.getElementById("start-over-open");
   const startOverCloseButtons = startOverDialog ? startOverDialog.querySelectorAll("[data-start-over-close]") : [];
@@ -379,9 +890,23 @@ document.addEventListener("DOMContentLoaded", function() {
       if (tutorialOverlay?.classList.contains("on")) {
         event.preventDefault();
         closeTutorial();
+      } else if (wizardOverlay?.classList.contains("on")) {
+        event.preventDefault();
+        closeWizard();
       } else if (startOverDialog?.classList.contains("on")) {
         event.preventDefault();
         closeStartOverDialog();
+      }
+    }
+    if (wizardOverlay?.classList.contains("on")) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        wizardBack?.click();
+      } else if (event.key === "ArrowRight" || event.key === "Enter") {
+        if (!(event.target instanceof HTMLTextAreaElement)) {
+          event.preventDefault();
+          wizardNext?.click();
+        }
       }
     }
     if (tutorialOverlay?.classList.contains("on")) {

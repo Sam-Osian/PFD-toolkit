@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 
-{% block page_title %}Workbooks · PFD Toolkit Workbench v0.2{% endblock %}
+{% block page_title %}Workspaces · PFD Toolkit Workbench v0.2{% endblock %}
 
 {% block page_header %}
-<div class="eyebrow"><span class="d"></span>Workbooks</div>
+<div class="eyebrow"><span class="d"></span>Workspaces</div>
 {% endblock %}
 
 {% block content %}
@@ -20,8 +20,8 @@
         <div class="ws-lock-copy">
             <div class="eyebrow"><span class="d"></span>Account required</div>
             <h2>Your investigations live here.</h2>
-            <p>A workbook is a named research environment where you define a question, run AI workflows, and save findings.</p>
-            <p class="ws-lock-sub">Workbooks are free. Your API key, your data.</p>
+            <p>A workspace is a named research environment where you define a question, run AI workflows, and save findings.</p>
+            <p class="ws-lock-sub">Workspaces are free. Your API key, your data.</p>
             <div class="ws-lock-acts">
                 <a class="btn btn-primary lg" href="{% url 'accounts-login' %}">Create a free account</a>
                 <a class="btn btn-ghost lg" href="{% url 'explore' %}">Browse reports first</a>
@@ -41,7 +41,7 @@
     <h3>Public workbook examples</h3>
     <ul class="ws-list">
         {% for workbook in public_workbooks %}
-            <li><a href="{% url 'workbook-detail' workbook_id=workbook.id %}">{{ workbook.title }}</a></li>
+            <li><a href="{% url 'workspace-detail' workbook_id=workbook.id %}">{{ workbook.title }}</a></li>
         {% endfor %}
     </ul>
 </section>

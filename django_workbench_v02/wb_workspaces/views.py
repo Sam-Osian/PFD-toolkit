@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from wb_investigations.models import Investigation
+from wb_runs.models import InvestigationRun, RunStatus
 from wb_sharing.forms import ShareLinkCreateForm
 from wb_sharing.models import ShareMode, WorkspaceShareLink
 
@@ -75,24 +76,6 @@ def dashboard(request):
             {"public_workbooks": public_workbooks},
         )
 
-    if request.method == "POST":
-        form = WorkspaceCreateForm(request.POST)
-        if form.is_valid():
-            workspace = create_workspace_for_user(
-                user=request.user,
-                title=form.cleaned_data["title"],
-                slug=form.cleaned_data["slug"],
-                description=form.cleaned_data["description"],
-                request=request,
-            )
-            workspace.visibility = form.cleaned_data["visibility"]
-            workspace.is_listed = form.cleaned_data["is_listed"]
-            workspace.save(update_fields=["visibility", "is_listed", "updated_at"])
-            messages.success(request, f"Workbook '{workspace.title}' created.")
-            return redirect("workbook-detail", workbook_id=workspace.id)
-    else:
-        form = WorkspaceCreateForm()
-
     memberships = (
         WorkspaceMembership.objects.select_related("workspace")
         .filter(user=request.user)
@@ -113,8 +96,40 @@ def dashboard(request):
                 "workspace": workspace,
                 "is_archived": workspace.archived_at is not None,
                 "can_restore": can_restore,
+                "pending_run": None,
+                "pending_stage_label": "",
             }
         )
+    workspace_ids = [row["workspace"].id for row in dashboard_rows]
+    latest_run_by_workspace_id: dict[str, InvestigationRun] = {}
+    if workspace_ids:
+        runs = (
+            InvestigationRun.objects.select_related("investigation")
+            .filter(workspace_id__in=workspace_ids)
+            .order_by("workspace_id", "-created_at")
+        )
+        for run in runs:
+            key = str(run.workspace_id)
+            if key not in latest_run_by_workspace_id:
+                latest_run_by_workspace_id[key] = run
+
+    pending_statuses = {
+        RunStatus.QUEUED,
+        RunStatus.STARTING,
+        RunStatus.RUNNING,
+        RunStatus.CANCELLING,
+    }
+    run_type_labels = {
+        "filter": "Filtering",
+        "themes": "Themes",
+        "extract": "Extracting",
+        "export": "Exporting",
+    }
+    for row in dashboard_rows:
+        run = latest_run_by_workspace_id.get(str(row["workspace"].id))
+        if run and run.status in pending_statuses:
+            row["pending_run"] = run
+            row["pending_stage_label"] = run_type_labels.get(str(run.run_type), str(run.run_type).title())
     active_workspace = get_active_workspace_for_user(user=request.user)
     if active_workspace is None and memberships_list:
         for membership in memberships_list:
@@ -135,7 +150,6 @@ def dashboard(request):
             "memberships": memberships_list,
             "active_rows": [row for row in dashboard_rows if not row["is_archived"]],
             "archived_rows": [row for row in dashboard_rows if row["is_archived"]],
-            "form": form,
             "active_workspace_id": active_workspace_id,
         },
     )

@@ -5,6 +5,16 @@ from . import views
 
 urlpatterns = [
     path(
+        "workbooks/investigation/start/",
+        views.investigation_start,
+        name="workbook-investigation-start",
+    ),
+    path(
+        "workspaces/investigation/start/",
+        views.investigation_start,
+        name="investigation-start",
+    ),
+    path(
         "workbooks/<uuid:workbook_id>/investigation/",
         views.investigation_entry,
         name="workbook-investigation-entry",

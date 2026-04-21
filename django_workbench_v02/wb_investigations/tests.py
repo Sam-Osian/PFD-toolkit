@@ -13,7 +13,7 @@ from wb_workspaces.models import (
     WorkspaceReportExclusion,
     WorkspaceVisibility,
 )
-from wb_workspaces.services import create_workspace_for_user
+from wb_workspaces.services import create_workspace_for_user, upsert_workspace_credential
 
 from .forms import (
     InvestigationWizardExtractConfigForm,
@@ -577,6 +577,13 @@ class InvestigationWizardViewTests(TestCase):
             method_json={},
             status=InvestigationStatus.DRAFT,
         )
+        upsert_workspace_credential(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+            api_key="sk-test-1234567890",
+            base_url="",
+        )
 
     def _wizard_url(self) -> str:
         return reverse(
@@ -609,7 +616,7 @@ class InvestigationWizardViewTests(TestCase):
             wizard_url,
             data={
                 "wizard_action": "launch",
-                "execution_mode": "simulate",
+                "execution_mode": "real",
                 "provider": "openai",
                 "model_name": "gpt-4.1-mini",
                 "request_completion_email": "",
@@ -623,7 +630,7 @@ class InvestigationWizardViewTests(TestCase):
         self.assertEqual(run.run_type, expected_plan[0])
         self.assertEqual(run.input_config_json.get("pipeline_plan"), expected_plan)
         self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
-        self.assertEqual(run.input_config_json.get("execution_mode"), "simulate")
+        self.assertEqual(run.input_config_json.get("execution_mode"), "real")
         return run
 
     def test_wizard_launch_filter_themes_extract_path(self):
@@ -639,6 +646,15 @@ class InvestigationWizardViewTests(TestCase):
                 "run_filter": "on",
                 "run_themes": "on",
                 "run_extract": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "search_query": "What are medication safety failures?",
+                "filter_df": "on",
             },
         )
         self.client.post(
@@ -684,7 +700,19 @@ class InvestigationWizardViewTests(TestCase):
             follow=True,
         )
         self.assertEqual(review_response.status_code, 200)
-        self.assertContains(review_response, "Final check before launch.")
+        self.assertContains(review_response, "Configure filter stage")
+        review_response = self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "search_query": "What are medication safety failures?",
+                "filter_df": "on",
+            },
+            follow=True,
+        )
+        self.assertEqual(review_response.status_code, 200)
+        self.assertContains(review_response, "Final check before launch")
         launch_response = self._launch_from_review(wizard_url)
         self.assertEqual(launch_response.status_code, 302)
         self._assert_latest_run_pipeline_plan(["filter"])
@@ -699,6 +727,15 @@ class InvestigationWizardViewTests(TestCase):
                 "wizard_action": "next",
                 "run_filter": "on",
                 "run_themes": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "search_query": "What are medication safety failures?",
+                "filter_df": "on",
             },
         )
         self.client.post(
@@ -728,6 +765,15 @@ class InvestigationWizardViewTests(TestCase):
                 "wizard_action": "next",
                 "run_filter": "on",
                 "run_extract": "on",
+            },
+        )
+        self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "next",
+                "enabled": "on",
+                "search_query": "What are medication safety failures?",
+                "filter_df": "on",
             },
         )
         self.client.post(
@@ -774,7 +820,7 @@ class InvestigationWizardViewTests(TestCase):
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "review")
+        self.assertContains(response, "Configure filter stage")
 
     def test_wizard_launch_themes_extract_without_filter(self):
         self.client.force_login(self.owner)
@@ -807,7 +853,16 @@ class InvestigationWizardViewTests(TestCase):
                 ),
             },
         )
-        launch_response = self._launch_from_review(wizard_url)
+        launch_response = self.client.post(
+            wizard_url,
+            data={
+                "wizard_action": "launch",
+                "execution_mode": "real",
+                "provider": "openai",
+                "model_name": "gpt-4.1-mini",
+                "notify_on": "any",
+            },
+        )
         self.assertEqual(launch_response.status_code, 302)
         run = self._assert_latest_run_pipeline_plan(["themes", "extract"])
         self.assertEqual(run.run_type, RunType.THEMES)

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block page_title %}Start Investigation · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Start Investigation</h2>
+    <p class="page-subtitle">Step 1: name your workspace and set your research question.</p>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="wizard-layout">
+    <section class="card wizard-main-card">
+        <div class="wizard-step-head">
+            <p class="wizard-kicker">Step 1 of 6</p>
+            <h3>What do you want to know?</h3>
+            <p class="wizard-step-desc">This creates a new workspace and opens the full investigation wizard.</p>
+        </div>
+
+        <form method="post" class="wizard-form stack-md">
+            {% csrf_token %}
+            {% if wizard_form.non_field_errors %}
+                <div role="alert" class="form-errors">{{ wizard_form.non_field_errors }}</div>
+            {% endif %}
+
+            <div class="form-row">
+                <label for="{{ wizard_form.title.id_for_label }}">Workspace name</label>
+                {{ wizard_form.title }}
+                {% if wizard_form.title.errors %}<div class="form-errors">{{ wizard_form.title.errors }}</div>{% endif %}
+            </div>
+            <div class="form-row">
+                <label for="{{ wizard_form.question_text.id_for_label }}">Research question</label>
+                {{ wizard_form.question_text }}
+                {% if wizard_form.question_text.errors %}<div class="form-errors">{{ wizard_form.question_text.errors }}</div>{% endif %}
+            </div>
+
+            <div class="wizard-actions">
+                <button type="submit" class="btn btn-primary">Create workspace and continue</button>
+            </div>
+        </form>
+    </section>
+
+    <aside class="card wizard-side-card stack-md">
+        <section>
+            <h4>What happens next</h4>
+            <ul class="wizard-review-list">
+                <li>A new workspace is created.</li>
+                <li>You continue at scope selection.</li>
+                <li>Then method, optional themes/extract, and launch.</li>
+            </ul>
+        </section>
+    </aside>
+</div>
+{% endblock %}
