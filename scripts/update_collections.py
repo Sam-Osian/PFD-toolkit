@@ -291,6 +291,7 @@ def _run_llm_updates(
 ) -> tuple[int, dict[str, int]]:
     themes = _load_theme_schema(schema_path)
     theme_columns = list(themes.keys())
+
     row_mask = _row_mask_for_update(reports, theme_columns, recompute_all=recompute_all_llm)
     rows_to_update = int(row_mask.sum())
 

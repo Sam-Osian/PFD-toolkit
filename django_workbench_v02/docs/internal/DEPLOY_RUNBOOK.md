@@ -1,7 +1,7 @@
 # Deploy Runbook (Railway, v0.2)
 
 Status: Active  
-Last updated: 2026-04-19
+Last updated: 2026-04-21
 
 ## 1. Scope
 
@@ -98,6 +98,11 @@ curl -sS -D - -o /dev/null https://web-production-b259d.up.railway.app/auth/logi
 ```
 Expect: `HTTP/2 302` with `location: https://oreliandata.uk.auth0.com/authorize?...`
 
+4. Verify live dataset metadata (row count, date range, fingerprint, package version):
+```bash
+railway run -s web -- uv run python manage.py report_pfd_dataset --json
+```
+
 ## 5.2 Manual Browser Checks (Required)
 
 1. Open app and login via Auth0.
@@ -151,4 +156,17 @@ Commands:
 railway logs -s web --deployment --latest --lines 200
 railway logs -s worker --deployment --latest --lines 200
 railway logs -s notification-dispatcher --deployment --latest --lines 200
+```
+
+## 8. Scheduler Baseline
+
+Add or confirm these scheduled jobs in Railway:
+
+1. Collection counters snapshot refresh every 6 hours:
+```bash
+uv run python manage.py refresh_collection_cards_snapshot
+```
+2. Lifecycle maintenance (existing):
+```bash
+uv run python manage.py run_lifecycle_maintenance
 ```

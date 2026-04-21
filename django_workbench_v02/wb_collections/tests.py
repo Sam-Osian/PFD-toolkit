@@ -4,6 +4,7 @@ import pandas as pd
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from wb_investigations.models import Investigation
 from wb_collections.services import refresh_collection_cards_snapshot
@@ -134,12 +135,31 @@ class CollectionViewTests(TestCase):
         self.assertContains(response, "Medication Safety")
         self.assertContains(response, "Unapproved X")
 
-    @patch("wb_collections.views.load_collections_dataset")
-    def test_collection_list_does_not_load_dataset_on_request(self, mock_load_dataset):
+    @patch("wb_collections.views.refresh_collection_cards_snapshot")
+    @patch("wb_collections.views.get_collection_cards_for_list")
+    def test_collection_list_auto_refreshes_snapshot_when_missing(
+        self,
+        mock_get_collection_cards_for_list,
+        mock_refresh_snapshot,
+    ):
+        mock_get_collection_cards_for_list.side_effect = [
+            ([], None),
+            (
+                [
+                    {
+                        "slug": "custom",
+                        "title": "All reports",
+                        "description": "Open the full PFD archive.",
+                        "count": 2,
+                    }
+                ],
+                timezone.now(),
+            ),
+        ]
         response = self.client.get(reverse("collection-list"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Counter snapshot not available yet")
-        mock_load_dataset.assert_not_called()
+        self.assertContains(response, "All reports")
+        mock_refresh_snapshot.assert_called_once_with(force_refresh_dataset=False)
 
     @patch("wb_collections.services.load_reports")
     def test_multiple_collection_copies_are_retained(self, mock_load_reports):

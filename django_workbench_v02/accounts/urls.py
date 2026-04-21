@@ -6,6 +6,8 @@ from . import views
 urlpatterns = [
     path("", views.landing, name="landing"),
     path("explore/", views.explore, name="explore"),
+    path("explore/reports-panel/", views.explore_reports_panel, name="explore-reports-panel"),
+    path("explore/export.csv", views.explore_export_csv, name="explore-export-csv"),
     path("about/", views.about, name="about"),
     path("research/", views.research, name="research"),
     path("settings/llm/", views.llm_config, name="llm-config"),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+from collections import Counter
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -49,7 +50,6 @@ THEME_COLLECTION_TITLE_OVERRIDES: dict[str, str] = {
     "policy_procedure_failures": "Policy and Procedure",
     "record_sharing_failures": "Record Sharing",
     "referral_failures": "Referrals",
-    "risk_assessment_failures": "Risk Assessment",
     "roads_highways": "Roads and Highways",
     "sepsis_infection": "Sepsis and Infection",
     "staffing_shortages_workload_pressure": "Staffing Shortages and Workload Pressure",
@@ -479,6 +479,256 @@ def reports_for_collection(
     if REPORT_IDENTITY_COLUMN not in subset.columns:
         subset = with_report_identities(subset)
     return subset
+
+
+def _summarise_ranked_counts(
+    items: list[tuple[str, int]],
+    *,
+    limit: int,
+    denominator: int,
+) -> list[dict[str, Any]]:
+    trimmed = [(label, int(count)) for label, count in items if label and int(count) > 0][:limit]
+    if not trimmed:
+        return []
+    max_count = max(count for _, count in trimmed) or 1
+    safe_denominator = max(1, int(denominator))
+    return [
+        {
+            "label": label,
+            "count": count,
+            "percent_of_top": round((count / max_count) * 100, 1),
+            "percent_of_scope": round((count / safe_denominator) * 100, 1),
+        }
+        for label, count in trimmed
+    ]
+
+
+def _normalise_string_series(series: pd.Series | None) -> pd.Series:
+    if series is None:
+        return pd.Series(dtype="object")
+    return series.map(_normalise_dashboard_value).loc[lambda s: s != ""]
+
+
+def build_explore_metrics(
+    *,
+    reports_df: pd.DataFrame,
+    scoped_reports_df: pd.DataFrame,
+    query: str = "",
+    top_n: int = 8,
+) -> dict[str, Any]:
+    scope_df = scoped_reports_df.copy()
+    total_reports = int(len(reports_df))
+    scope_reports = int(len(scope_df))
+
+    date_series = pd.to_datetime(
+        scope_df.get("date", pd.Series(dtype="object")),
+        errors="coerce",
+        dayfirst=True,
+    ).dropna()
+    if date_series.empty:
+        date_range_label = "Date range unavailable"
+    else:
+        start_year = int(date_series.min().year)
+        end_year = int(date_series.max().year)
+        date_range_label = f"{start_year}–{end_year}" if start_year != end_year else str(start_year)
+
+    temporal_points: list[dict[str, Any]] = []
+    temporal_line_path = ""
+    temporal_area_path = ""
+    temporal_latest_month = ""
+    temporal_latest_count = 0
+    temporal_start_label = ""
+    temporal_end_label = ""
+    temporal_axis_labels: list[str] = []
+    temporal_mode = "month"
+    temporal_series: dict[str, dict[str, Any]] = {
+        "week": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
+        "month": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
+        "year": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
+    }
+
+    def _build_temporal_series(
+        counts_by_period: pd.Series,
+        *,
+        max_points: int | None,
+        smooth_window: int,
+    ) -> dict[str, Any]:
+        result: dict[str, Any] = {
+            "points": [],
+            "line_path": "",
+            "area_path": "",
+            "axis_labels": [],
+            "start_label": "",
+            "end_label": "",
+            "latest_label": "",
+            "latest_count": 0,
+        }
+        if counts_by_period.empty:
+            return result
+
+        counts = [int(value) for value in counts_by_period.tolist()]
+        labels = [str(period) for period in counts_by_period.index.tolist()]
+        count_series = pd.Series(counts, dtype="float64")
+        smoothed_series = count_series.rolling(window=max(1, smooth_window), min_periods=1).mean()
+        smoothed_counts = [float(value) for value in smoothed_series.tolist()]
+
+        point_pairs = list(zip(labels, counts, smoothed_counts))
+        if max_points is not None and len(point_pairs) > max_points:
+            sampled_indexes = sorted(
+                {
+                    int(round(index * (len(point_pairs) - 1) / (max_points - 1)))
+                    for index in range(max_points)
+                }
+            )
+            point_pairs = [point_pairs[index] for index in sampled_indexes]
+
+        smoothed_only = [float(smoothed) for _, _, smoothed in point_pairs]
+        clip_low = float(pd.Series(smoothed_only).quantile(0.05))
+        clip_high = float(pd.Series(smoothed_only).quantile(0.95))
+        if clip_high <= clip_low:
+            clip_high = clip_low + 1.0
+        span = clip_high - clip_low
+
+        point_count = len(point_pairs)
+        raw_points: list[tuple[float, float]] = []
+        chart_width = 900.0
+        chart_top = 20.0
+        chart_bottom = 170.0
+        chart_range = chart_bottom - chart_top
+        area_bottom = 200.0
+
+        for index, (label, count, smoothed) in enumerate(point_pairs):
+            x = chart_width / 2.0 if point_count == 1 else (index * chart_width / (point_count - 1))
+            clipped_count = min(max(float(smoothed), clip_low), clip_high)
+            y = chart_bottom - ((clipped_count - clip_low) * chart_range / span)
+            raw_points.append((x, y))
+            result["points"].append(
+                {"label": label, "count": count, "x": round(x, 2), "y": round(y, 2)}
+            )
+
+        line_segments = [f"M {raw_points[0][0]:.2f} {raw_points[0][1]:.2f}"]
+        for x, y in raw_points[1:]:
+            line_segments.append(f"L {x:.2f} {y:.2f}")
+        result["line_path"] = " ".join(line_segments)
+        first_x = raw_points[0][0]
+        last_x = raw_points[-1][0]
+        result["area_path"] = f'{result["line_path"]} L{last_x:.2f} {area_bottom:.2f} L{first_x:.2f} {area_bottom:.2f} Z'
+        result["latest_label"] = point_pairs[-1][0]
+        result["latest_count"] = point_pairs[-1][1]
+        result["start_label"] = point_pairs[0][0][:4]
+        result["end_label"] = point_pairs[-1][0][:4]
+
+        start_year = int(result["start_label"])
+        end_year = int(result["end_label"])
+        if end_year - start_year >= 2:
+            axis_labels = [str(year) for year in range(start_year, end_year, 2)]
+            if str(end_year - 1) not in axis_labels:
+                axis_labels.append(str(end_year - 1))
+            axis_labels.append("Now")
+            result["axis_labels"] = axis_labels
+        else:
+            result["axis_labels"] = [result["start_label"], "Now"]
+        return result
+
+    if not date_series.empty:
+        temporal_series["week"] = _build_temporal_series(
+            date_series.dt.to_period("W-SUN").value_counts().sort_index(),
+            max_points=None,
+            smooth_window=2,
+        )
+        temporal_series["month"] = _build_temporal_series(
+            date_series.dt.to_period("M").value_counts().sort_index(),
+            max_points=None,
+            smooth_window=3,
+        )
+        temporal_series["year"] = _build_temporal_series(
+            date_series.dt.to_period("Y").value_counts().sort_index(),
+            max_points=20,
+            smooth_window=1,
+        )
+
+        chosen = temporal_series[temporal_mode]
+        temporal_points = chosen["points"]
+        temporal_line_path = chosen["line_path"]
+        temporal_area_path = chosen["area_path"]
+        temporal_latest_month = chosen["latest_label"]
+        temporal_latest_count = chosen["latest_count"]
+        temporal_start_label = chosen["start_label"]
+        temporal_end_label = chosen["end_label"]
+        temporal_axis_labels = chosen["axis_labels"]
+
+    area_counts = _normalise_string_series(scope_df.get("area")).value_counts()
+    top_areas = _summarise_ranked_counts(
+        [(str(label), int(count)) for label, count in area_counts.items()],
+        limit=top_n,
+        denominator=scope_reports,
+    )
+
+    receiver_counter: Counter[str] = Counter()
+    for raw in scope_df.get("receiver", pd.Series(dtype="object")).tolist():
+        for receiver in _split_receivers(raw):
+            receiver_counter[receiver] += 1
+    top_receivers = _summarise_ranked_counts(
+        receiver_counter.most_common(top_n),
+        limit=top_n,
+        denominator=scope_reports,
+    )
+
+    theme_rows: list[tuple[str, int]] = []
+    for _, meta in _theme_collection_map_from_reports(reports_df).items():
+        column_name = str(meta.get("collection_column") or "").strip()
+        if not column_name or column_name not in scope_df.columns:
+            continue
+        count = int(scope_df[column_name].map(_network_truthy).sum())
+        if count <= 0:
+            continue
+        title = str(meta.get("title") or column_name.replace("_", " ").title())
+        theme_rows.append((title, count))
+    theme_rows.sort(key=lambda item: (-item[1], item[0]))
+    top_themes = _summarise_ranked_counts(
+        theme_rows,
+        limit=top_n,
+        denominator=scope_reports,
+    )
+
+    unique_coroner_count = int(
+        _normalise_string_series(scope_df.get("coroner")).str.casefold().nunique()
+    )
+    unique_receivers: set[str] = set()
+    for raw in scope_df.get("receiver", pd.Series(dtype="object")).tolist():
+        for receiver in _split_receivers(raw):
+            cleaned = _normalise_dashboard_value(receiver)
+            if cleaned:
+                unique_receivers.add(cleaned.casefold())
+    unique_receiver_count = len(unique_receivers)
+    most_common_theme = top_themes[0]["label"] if top_themes else "No theme signals"
+
+    return {
+        "query": query,
+        "has_query": bool(query),
+        "total_reports": total_reports,
+        "scope_reports": scope_reports,
+        "date_range_label": date_range_label,
+        "scope_label": (
+            f'Custom search for "{query}"' if query else "All reports"
+        ),
+        "temporal_points": temporal_points,
+        "temporal_line_path": temporal_line_path,
+        "temporal_area_path": temporal_area_path,
+        "temporal_latest_month": temporal_latest_month,
+        "temporal_latest_count": temporal_latest_count,
+        "temporal_start_label": temporal_start_label,
+        "temporal_end_label": temporal_end_label,
+        "temporal_axis_labels": temporal_axis_labels,
+        "temporal_mode": temporal_mode,
+        "temporal_series": temporal_series,
+        "unique_coroner_count": unique_coroner_count,
+        "unique_receiver_count": unique_receiver_count,
+        "most_common_theme": most_common_theme,
+        "top_areas": top_areas,
+        "top_receivers": top_receivers,
+        "top_themes": top_themes,
+    }
 
 
 @transaction.atomic

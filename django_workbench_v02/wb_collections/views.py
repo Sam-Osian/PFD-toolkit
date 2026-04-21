@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
@@ -13,8 +15,11 @@ from .services import (
     copy_collection_to_workbook,
     get_collection_cards_for_list,
     load_collections_dataset,
+    refresh_collection_cards_snapshot,
     reports_for_collection,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _selected_filters_from_request(request) -> dict[str, list[str]]:
@@ -49,6 +54,12 @@ def _collection_meta(cards: list[dict], slug: str) -> dict:
 @require_GET
 def collection_list(request):
     cards, generated_at = get_collection_cards_for_list()
+    if not cards:
+        try:
+            refresh_collection_cards_snapshot(force_refresh_dataset=False)
+            cards, generated_at = get_collection_cards_for_list()
+        except Exception:
+            logger.exception("collection snapshot auto-refresh failed")
     return render(
         request,
         "wb_collections/collection_list.html",

@@ -1,0 +1,94 @@
+{% if not dataset_available %}
+<div class="reports-empty-state">
+    <p>Live dataset is temporarily unavailable. Try again shortly.</p>
+</div>
+{% elif reports_count == 0 %}
+<div class="reports-empty-state">
+    <p>No reports match the active Explore filters.</p>
+</div>
+{% else %}
+<div class="table-wrap explore-reports-table-wrap">
+    <table class="explore-reports-table">
+        <thead>
+            <tr>
+                {% for column in reports_columns %}
+                    <th>{{ column }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in reports_rows %}
+                <tr>
+                    {% for cell in row.cells %}
+                        <td>{{ cell|default:"-" }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+<div class="reports-pagination">
+    <span class="reports-pagination__meta">Showing {{ reports_page_from }}-{{ reports_page_to }} of {{ reports_count }}</span>
+    <div class="reports-pagination__actions">
+        {% if reports_page > 1 %}
+            <a
+                class="btn btn-secondary sm"
+                href="{{ dataset_browser_base }}?show_reports=1&page=1{% if dataset_shared_query %}&{{ dataset_shared_query }}{% endif %}"
+                data-reports-panel-url="{{ dataset_panel_base }}?page=1{% if dataset_shared_query %}&{{ dataset_shared_query }}{% endif %}"
+            >
+                First
+            </a>
+        {% else %}
+            <span class="btn btn-secondary sm is-disabled">First</span>
+        {% endif %}
+
+        {% if reports_prev_page %}
+            <a
+                class="btn btn-secondary sm"
+                href="{{ dataset_browser_base }}?show_reports=1&page={{ reports_prev_page }}{% if dataset_shared_query %}&{{ dataset_shared_query }}{% endif %}"
+                data-reports-panel-url="{{ dataset_panel_base }}?page={{ reports_prev_page }}{% if dataset_shared_query %}&{{ dataset_shared_query }}{% endif %}"
+                aria-label="Previous page"
+            >
+                ←
+            </a>
+        {% else %}
+            <span class="btn btn-secondary sm is-disabled">←</span>
+        {% endif %}
+
+        <span class="reports-pagination__page">Page {{ reports_page }} of {{ reports_total_pages }}</span>
+
+        {% if reports_next_page %}
+            <a
+                class="btn btn-secondary sm"
+                href="{{ dataset_browser_base }}?show_reports=1&page={{ reports_next_page }}{% if dataset_shared_query %}&{{ dataset_shared_query }}{% endif %}"
+                data-reports-panel-url="{{ dataset_panel_base }}?page={{ reports_next_page }}{% if dataset_shared_query %}&{{ dataset_shared_query }}{% endif %}"
+                aria-label="Next page"
+            >
+                →
+            </a>
+        {% else %}
+            <span class="btn btn-secondary sm is-disabled">→</span>
+        {% endif %}
+
+        <form
+            class="reports-pagination__goto"
+            data-reports-goto
+            data-reports-panel-base="{{ dataset_panel_base }}"
+            data-reports-browser-base="{{ dataset_browser_base }}"
+            data-reports-shared-query="{{ dataset_shared_query }}"
+        >
+            <label for="explore-reports-page-input" class="sr-only">Go to page</label>
+            <input
+                id="explore-reports-page-input"
+                name="page"
+                type="number"
+                min="1"
+                max="{{ reports_total_pages }}"
+                value="{{ reports_page }}"
+                aria-label="Page number"
+            >
+            <button type="submit" class="btn btn-secondary sm">Go</button>
+        </form>
+    </div>
+</div>
+{% endif %}

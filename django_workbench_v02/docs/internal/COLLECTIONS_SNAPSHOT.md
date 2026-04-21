@@ -1,7 +1,7 @@
 # Collections Counter Snapshot
 
 Status: Implemented  
-Last updated: 2026-04-20
+Last updated: 2026-04-21
 
 ## Purpose
 
@@ -12,7 +12,7 @@ Counters now update only when refresh jobs run.
 ## Runtime Behavior
 
 1. `GET /collections/` reads `CollectionCardSnapshot` from Postgres.
-2. If no snapshot exists yet, page renders with a "snapshot not available" message.
+2. If no snapshot exists yet, v0.2 now attempts a one-time synchronous refresh during that request.
 3. Collection detail/copy endpoints still load dataset as needed.
 
 ## Refresh Command
@@ -43,3 +43,17 @@ Suggested cadence:
 ## Deploy Note
 
 After first deploy with this feature, run the refresh command once so counters appear immediately.
+
+## Dataset Verification Command
+
+Use this to verify production is reading the expected PFD dataset and package version:
+
+```bash
+uv run python manage.py report_pfd_dataset --json
+```
+
+Optional forced upstream refresh:
+
+```bash
+uv run python manage.py report_pfd_dataset --refresh --json
+```

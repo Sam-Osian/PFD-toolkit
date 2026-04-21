@@ -233,7 +233,6 @@ def load_reports(
         - epilepsy_seizure_management
         - allergy_anaphylaxis
         - ligature_anchor_point_risks
-        - risk_assessment_failures
         - failure_recognise_escalate_deterioration
         - communication_failures
         - handover_failures
@@ -253,7 +252,6 @@ def load_reports(
         - alarm_alert_failures
         - environmental_design_failures
         - transport_access_barriers
-        - repeated_missed_opportunities
         - missed_appointments_non_attendance
         - restraint_restrictive_intervention
         - delayed_admission

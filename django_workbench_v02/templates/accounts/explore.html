@@ -3,55 +3,386 @@
 {% block page_title %}Explore · PFD Toolkit Workbench v0.2{% endblock %}
 
 {% block page_header %}
-<div class="eyebrow"><span class="d"></span>Explore · 6,293 reports</div>
+<div class="eyebrow"><span class="d"></span>Explore · {{ explore.total_reports }} reports</div>
 {% endblock %}
 
 {% block content %}
 <div class="stack-md">
-    <section class="panel">
-        <div class="panel-head">
-            <div class="left">
-                <h1 class="page-title">Explore PFD reports</h1>
-                <p class="page-lede">A live HUD over the archive. Ask a question, narrow by receiver or area, and update your active view.</p>
-            </div>
-            <div class="right" style="display:flex; gap:8px;">
-                <a class="btn btn-secondary" href="{% url 'collection-list' %}">Open collections</a>
-                {% if request.user.is_authenticated %}
-                    <a class="btn btn-primary" href="{% url 'workbook-dashboard' %}">Start investigation</a>
-                {% else %}
-                    <a class="btn btn-primary" href="{% url 'accounts-login' %}">Sign in to investigate</a>
-                {% endif %}
-            </div>
+    <section class="explore-hero">
+        <div>
+            <h1 class="page-title xl">Explore PFD reports</h1>
+            <p class="page-lede big">A live HUD over the archive. Ask a question, narrow by receiver or area, and the whole surface updates.</p>
+        </div>
+        <div class="explore-hero-actions">
+            <button type="button" class="btn btn-secondary" id="explore-export-open">Export</button>
+            {% if request.user.is_authenticated %}
+                <a class="btn btn-primary" href="{% url 'workbook-dashboard' %}">+ New investigation</a>
+            {% else %}
+                <a class="btn btn-primary" href="{% url 'accounts-login' %}">+ New investigation</a>
+            {% endif %}
         </div>
     </section>
 
     <section class="hud">
-        <div class="hud-q">Query</div>
-        <form method="get" action="{% url 'collection-detail' collection_slug='custom-search' %}" class="topbar-search" style="width:100%;">
-            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><path d="M13 13l-3-3" stroke-linecap="round"/></svg>
-            <input name="q" placeholder="Search reports by question, theme, coroner, or receiver..." required>
-            <button type="submit" class="btn btn-primary sm">Search</button>
+        <div class="hud-q">Filter</div>
+        <form method="get" action="{% url 'explore' %}" class="explore-filter-form" id="explore-filter-form">
+            <input type="hidden" name="q" value="{{ explore.query }}">
+            <input type="hidden" name="show_reports" id="show-reports-field" value="{% if show_reports_requested %}1{% endif %}">
+            <div class="hud-chips">
+                <details class="chip-menu" data-filter-menu="ai_filter">
+                    <summary class="chip-filter primary">
+                        <em>AI filter:</em>
+                        <b id="chip-label-ai">{{ explore.selected_ai_filter_title|default:"All reports" }}</b>
+                        <button
+                            type="button"
+                            class="chip-x {% if explore.selected_ai_filter == 'custom' %}is-hidden{% endif %}"
+                            data-clear-chip="ai_filter"
+                            aria-label="Clear AI filter"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                        </button>
+                    </summary>
+                    <div class="chip-popover">
+                        <div class="chip-popover-head">
+                            <span>AI filter</span>
+                            <button type="button" class="chip-close" data-close-menu aria-label="Close AI filter">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                            </button>
+                        </div>
+                        <input type="search" class="menu-search" data-menu-search placeholder="Search AI filters...">
+                        <div class="menu-options" data-menu-options>
+                            {% for option in explore.ai_filter_options %}
+                                <label class="menu-option" data-label="{{ option.title|lower }}">
+                                    <input type="radio" name="ai_filter" value="{{ option.slug }}" {% if option.slug == explore.selected_ai_filter %}checked{% endif %}>
+                                    <span>{{ option.title }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </details>
+
+                <details class="chip-menu" data-filter-menu="date">
+                    <summary class="chip-filter">
+                        <em>Date:</em>
+                        <b id="chip-label-date">{{ explore.date_start_effective|default:"" }} - {{ explore.date_end_effective|default:"" }}</b>
+                        <button
+                            type="button"
+                            class="chip-x {% if not explore.date_start and not explore.date_end %}is-hidden{% endif %}"
+                            data-clear-chip="date"
+                            aria-label="Clear date range"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                        </button>
+                    </summary>
+                    <div class="chip-popover">
+                        <div class="chip-popover-head">
+                            <span>Date range</span>
+                            <button type="button" class="chip-close" data-close-menu aria-label="Close date filter">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                            </button>
+                        </div>
+                        <div class="menu-date-grid">
+                            <label>
+                                Start
+                                <input
+                                    type="text"
+                                    id="filter-date-start-display"
+                                    inputmode="numeric"
+                                    autocomplete="off"
+                                    placeholder="DD/MM/YYYY"
+                                    aria-label="Start date"
+                                >
+                            </label>
+                            <label>
+                                End
+                                <input
+                                    type="text"
+                                    id="filter-date-end-display"
+                                    inputmode="numeric"
+                                    autocomplete="off"
+                                    placeholder="DD/MM/YYYY"
+                                    aria-label="End date"
+                                >
+                            </label>
+                            <input type="hidden" name="date_start" id="filter-date-start" value="{{ explore.date_start }}" min="{{ explore.dataset_min_date }}" max="{{ explore.dataset_max_date }}">
+                            <input type="hidden" name="date_end" id="filter-date-end" value="{{ explore.date_end }}" min="{{ explore.dataset_min_date }}" max="{{ explore.dataset_max_date }}">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="chip-menu" data-filter-menu="receiver">
+                    <summary class="chip-filter">
+                        <em>Receiver:</em>
+                        <b id="chip-label-receiver">
+                            {% if explore.selected_receivers %}
+                                {{ explore.selected_receivers|length }} selected
+                            {% else %}
+                                All
+                            {% endif %}
+                        </b>
+                        <button
+                            type="button"
+                            class="chip-x {% if not explore.selected_receivers %}is-hidden{% endif %}"
+                            data-clear-chip="receiver"
+                            aria-label="Clear receiver selection"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                        </button>
+                    </summary>
+                    <div class="chip-popover">
+                        <div class="chip-popover-head">
+                            <span>Receiver</span>
+                            <button type="button" class="chip-close" data-close-menu aria-label="Close receiver filter">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                            </button>
+                        </div>
+                        <input type="search" class="menu-search" data-menu-search placeholder="Search receivers...">
+                        <div class="menu-options" data-menu-options>
+                            {% for receiver in explore.receiver_options %}
+                                <label class="menu-option" data-label="{{ receiver|lower }}">
+                                    <input type="checkbox" name="receiver" value="{{ receiver }}" {% if receiver in explore.selected_receivers %}checked{% endif %}>
+                                    <span>{{ receiver }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <button type="button" class="menu-clear" data-clear-group="receiver">Clear receivers</button>
+                    </div>
+                </details>
+
+                <details class="chip-menu" data-filter-menu="area">
+                    <summary class="chip-filter">
+                        <em>Area:</em>
+                        <b id="chip-label-area">
+                            {% if explore.selected_areas %}
+                                {{ explore.selected_areas|length }} selected
+                            {% else %}
+                                All
+                            {% endif %}
+                        </b>
+                        <button
+                            type="button"
+                            class="chip-x {% if not explore.selected_areas %}is-hidden{% endif %}"
+                            data-clear-chip="area"
+                            aria-label="Clear area selection"
+                        >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                        </button>
+                    </summary>
+                    <div class="chip-popover">
+                        <div class="chip-popover-head">
+                            <span>Area</span>
+                            <button type="button" class="chip-close" data-close-menu aria-label="Close area filter">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+                            </button>
+                        </div>
+                        <input type="search" class="menu-search" data-menu-search placeholder="Search areas...">
+                        <div class="menu-options" data-menu-options>
+                            {% for area in explore.area_options %}
+                                <label class="menu-option" data-label="{{ area|lower }}">
+                                    <input type="checkbox" name="area" value="{{ area }}" {% if area in explore.selected_areas %}checked{% endif %}>
+                                    <span>{{ area }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        <button type="button" class="menu-clear" data-clear-group="area">Clear areas</button>
+                    </div>
+                </details>
+
+                <button type="submit" class="btn btn-primary sm" id="apply-filters-btn" disabled>Apply filters</button>
+                <a href="{% url 'explore' %}?reset=1" class="btn btn-ghost sm">Reset</a>
+            </div>
         </form>
+        <div class="hud-stats">
+            <div class="hud-stat">
+                <div class="lbl">Reports in view</div>
+                <div class="val">
+                    {{ explore.scope_reports }}
+                    <span class="ratio">/ {{ explore.total_reports }}</span>
+                </div>
+            </div>
+            <div class="hud-stat">
+                <div class="lbl">Receiver count</div>
+                <div class="val">{{ explore.unique_receiver_count }}</div>
+            </div>
+            <div class="hud-stat">
+                <div class="lbl">Most common receiver</div>
+                <div class="val theme">{{ explore.top_receivers.0.label|default:"No receiver signals" }}</div>
+            </div>
+            <div class="hud-stat">
+                <div class="lbl">Most common theme</div>
+                <div class="val theme">{{ explore.most_common_theme }}</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel" style="margin-bottom: 16px;">
+        <div class="panel-head">
+            <div class="left">
+                <span class="k">01 · Temporal overview</span>
+                <h3>
+                    Reports in view ·
+                    {% if explore.temporal_start_label and explore.temporal_end_label %}
+                        {{ explore.temporal_start_label }} → {{ explore.temporal_end_label }}
+                    {% else %}
+                        Date range unavailable
+                    {% endif %}
+                </h3>
+            </div>
+            <div class="right">
+                <div class="seg">
+                    <button type="button" data-temporal-mode="week">Week</button>
+                    <button type="button" data-temporal-mode="month" class="on">Month</button>
+                    <button type="button" data-temporal-mode="year">Year</button>
+                </div>
+            </div>
+        </div>
+        {% if explore.temporal_line_path %}
+        <div class="timeline" data-interactive="true">
+            <svg class="timeline-svg" viewBox="0 0 900 200" preserveAspectRatio="none" role="img" aria-label="Monthly report counts over time">
+                <defs>
+                    <linearGradient id="tl-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" style="stop-color:var(--accent); stop-opacity:0.3"/>
+                        <stop offset="100%" style="stop-color:var(--accent); stop-opacity:0"/>
+                    </linearGradient>
+                </defs>
+                <g class="axis">
+                    <line class="gl" x1="0" y1="40" x2="900" y2="40"/>
+                    <line class="gl" x1="0" y1="90" x2="900" y2="90"/>
+                    <line class="gl" x1="0" y1="140" x2="900" y2="140"/>
+                </g>
+                <path class="area" id="timeline-area" d="{{ explore.temporal_area_path }}"/>
+                <path class="line" id="timeline-line" pathLength="100" d="{{ explore.temporal_line_path }}"/>
+                <line class="hover-guide" x1="0" y1="20" x2="0" y2="170" hidden></line>
+                <circle class="hover-dot" cx="0" cy="0" r="4" hidden></circle>
+            </svg>
+            <div class="timeline-tip" aria-live="polite" hidden></div>
+            <div class="tl-labels" id="timeline-axis-labels">
+                {% for label in explore.temporal_axis_labels %}
+                    <span>{{ label }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {{ explore.temporal_series|json_script:"explore-temporal-series" }}
+        {% else %}
+        <p class="page-subtitle">No temporal data available for current scope.</p>
+        {% endif %}
     </section>
 
     <div class="charts-3">
         <section class="panel">
-            <div class="panel-head"><div class="left"><span class="k">Area</span><h3>Most common areas</h3></div></div>
-            <p class="page-subtitle">Use the custom-search workflow to generate live bars from your scoped report set.</p>
+            <div class="panel-head">
+                <div class="left"><span class="k">Area</span><h3>Most common areas</h3></div>
+                <div class="right">
+                    <button type="button" class="icon-btn" data-metric-expand="areas" aria-label="Expand areas">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="12" r="1.9"/>
+                            <circle cx="12" cy="12" r="1.9"/>
+                            <circle cx="18" cy="12" r="1.9"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <ul class="ex-metric-list">
+                {% for item in explore.top_areas %}
+                    <li>
+                        <div class="ex-metric-row">
+                            <span class="lbl">{{ item.label }}</span>
+                            <span class="cnt">{{ item.count }}</span>
+                        </div>
+                        <div class="ex-metric-bar"><i style="--w: {{ item.percent_of_top }}%;"></i></div>
+                    </li>
+                {% empty %}
+                    <li class="empty">No area data for current scope.</li>
+                {% endfor %}
+            </ul>
         </section>
         <section class="panel">
-            <div class="panel-head"><div class="left"><span class="k">Receiver</span><h3>Most common receivers</h3></div></div>
-            <p class="page-subtitle">Receiver prevalence updates once your filter run is complete.</p>
+            <div class="panel-head">
+                <div class="left"><span class="k">Receiver</span><h3>Most common receivers</h3></div>
+                <div class="right">
+                    <button type="button" class="icon-btn" data-metric-expand="receivers" aria-label="Expand receivers">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="12" r="1.9"/>
+                            <circle cx="12" cy="12" r="1.9"/>
+                            <circle cx="18" cy="12" r="1.9"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <ul class="ex-metric-list">
+                {% for item in explore.top_receivers %}
+                    <li>
+                        <div class="ex-metric-row">
+                            <span class="lbl">{{ item.label }}</span>
+                            <span class="cnt">{{ item.count }}</span>
+                        </div>
+                        <div class="ex-metric-bar"><i style="--w: {{ item.percent_of_top }}%;"></i></div>
+                    </li>
+                {% empty %}
+                    <li class="empty">No receiver data for current scope.</li>
+                {% endfor %}
+            </ul>
         </section>
         <section class="panel">
-            <div class="panel-head"><div class="left"><span class="k">Theme</span><h3>Most common themes</h3></div></div>
-            <p class="page-subtitle">Theme frequency appears after a themes run in your workbook investigation.</p>
+            <div class="panel-head">
+                <div class="left"><span class="k">Theme</span><h3>Most common themes</h3></div>
+                <div class="right">
+                    <button type="button" class="icon-btn" data-metric-expand="themes" aria-label="Expand themes">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="6" cy="12" r="1.9"/>
+                            <circle cx="12" cy="12" r="1.9"/>
+                            <circle cx="18" cy="12" r="1.9"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <ul class="ex-metric-list">
+                {% for item in explore.top_themes %}
+                    <li>
+                        <div class="ex-metric-row">
+                            <span class="lbl">{{ item.label }}</span>
+                            <span class="cnt">{{ item.count }}</span>
+                        </div>
+                        <div class="ex-metric-bar"><i style="--w: {{ item.percent_of_top }}%;"></i></div>
+                    </li>
+                {% empty %}
+                    <li class="empty">No theme signals in current scope.</li>
+                {% endfor %}
+            </ul>
         </section>
     </div>
 
+    <section class="panel explore-reports-shell" id="explore-reports-root" data-panel-url="{{ explore_reports_panel_url }}" data-auto-load="{% if show_reports_requested and dataset_available %}1{% else %}0{% endif %}">
+        <div class="panel-head">
+            <div class="left">
+                <span class="k">02 · Report dataset</span>
+                <h3>Interactive report list</h3>
+            </div>
+            <div class="right">
+                <button type="button" class="btn btn-secondary sm" id="explore-show-reports" {% if not dataset_available %}disabled{% endif %}>{% if show_reports_requested %}Hide reports{% else %}Show reports{% endif %}</button>
+            </div>
+        </div>
+        <div class="explore-reports-body">
+            <p class="page-subtitle" id="explore-reports-hint" {% if show_reports_requested %}hidden{% endif %}>Press "Show reports" to load the PFD report dataset.</p>
+            <div id="explore-reports-panel" class="explore-reports-panel" {% if not show_reports_requested %}hidden{% endif %}></div>
+        </div>
+    </section>
+
+    {% if not dataset_available %}
+    <section class="panel">
+        <div class="panel-head">
+            <div class="left">
+                <span class="k">Status</span>
+                <h3>Dataset temporarily unavailable</h3>
+            </div>
+        </div>
+        <p class="page-subtitle">Try again shortly or use Collections while live metrics recover.</p>
+    </section>
+    {% endif %}
+
     {% if not request.user.is_authenticated %}
     <section class="explore-unlock">
-        <div class="eu-head"><span class="d"></span><span>Free with a PFD Toolkit account</span></div>
+        <div class="eu-head"><span class="d"></span><span>Unlock advanced AI tools with a free account</span></div>
         <div class="eu-grid">
             <div class="eu-item">
                 <div class="eu-icon" aria-hidden="true">
@@ -92,5 +423,1037 @@
         </div>
     </section>
     {% endif %}
+
+    <div class="dlg-back" id="explore-export-dialog" aria-hidden="true">
+        <div class="dlg confirm" role="dialog" aria-modal="true" aria-labelledby="explore-export-title">
+            <div class="dlg-head">
+                <div class="k"><span class="d"></span>Export</div>
+                <h3 id="explore-export-title">Download report dataset</h3>
+                <p>Download the currently filtered Explore dataset as a CSV file.</p>
+            </div>
+            <div class="dlg-foot">
+                <div class="meta">Current filter scope</div>
+                <div class="acts">
+                    <button type="button" class="btn btn-secondary" id="explore-export-cancel">Cancel</button>
+                    <a class="btn btn-primary" id="explore-export-download" href="{% url 'explore-export-csv' %}">Download CSV</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="dlg-back" id="explore-metric-dialog" aria-hidden="true">
+        <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="explore-metric-title">
+            <div class="dlg-head">
+                <div class="k"><span class="d"></span><span id="explore-metric-kicker">Explore</span></div>
+                <h3 id="explore-metric-title">Full breakdown</h3>
+                <p id="explore-metric-copy">Top values for the current Explore scope.</p>
+            </div>
+            <div class="dlg-body">
+                <input type="search" id="explore-metric-search" placeholder="Search values..." aria-label="Search values">
+                <div class="explore-metric-list-wrap">
+                    <ul class="explore-metric-list" id="explore-metric-list"></ul>
+                </div>
+            </div>
+            <div class="dlg-foot">
+                <div class="meta" id="explore-metric-meta"></div>
+                <div class="acts">
+                    <button type="button" class="btn btn-secondary" id="explore-metric-close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{ explore.all_areas|json_script:"explore-all-areas" }}
+    {{ explore.all_receivers|json_script:"explore-all-receivers" }}
+    {{ explore.all_themes|json_script:"explore-all-themes" }}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(() => {
+  const timeline = document.querySelector('.timeline[data-interactive="true"]');
+  if (!timeline) return;
+
+  const dataNode = document.getElementById('explore-temporal-series');
+  if (!dataNode) return;
+
+  let series = {};
+  try {
+    series = JSON.parse(dataNode.textContent || '{}');
+  } catch (_) {
+    return;
+  }
+  if (!series || typeof series !== 'object') return;
+
+  const svg = timeline.querySelector('.timeline-svg');
+  const areaPath = svg.querySelector('#timeline-area');
+  const linePath = svg.querySelector('#timeline-line');
+  const guide = svg.querySelector('.hover-guide');
+  const dot = svg.querySelector('.hover-dot');
+  const tip = timeline.querySelector('.timeline-tip');
+  const axisLabels = timeline.querySelector('#timeline-axis-labels');
+  const modeButtons = document.querySelectorAll('[data-temporal-mode]');
+  const titleNode = document.querySelector('.panel-head .left h3');
+  if (!svg || !areaPath || !linePath || !guide || !dot || !tip || !axisLabels || !titleNode) return;
+
+  const VIEWBOX_WIDTH = 900;
+  let activeMode = 'month';
+  let activePoints = [];
+
+  const renderAxisLabels = (labels) => {
+    axisLabels.innerHTML = '';
+    (labels || []).forEach((label) => {
+      const span = document.createElement('span');
+      span.textContent = String(label);
+      axisLabels.appendChild(span);
+    });
+  };
+
+  const setMode = (mode) => {
+    const payload = series[mode];
+    if (!payload || !Array.isArray(payload.points) || !payload.line_path || !payload.area_path) {
+      return;
+    }
+    activeMode = mode;
+    activePoints = payload.points;
+    areaPath.setAttribute('d', payload.area_path);
+    linePath.setAttribute('d', payload.line_path);
+    linePath.style.animation = 'none';
+    linePath.getBoundingClientRect();
+    linePath.style.animation = '';
+    renderAxisLabels(payload.axis_labels || []);
+    titleNode.textContent = `Reports in view · ${payload.start_label || 'N/A'} → ${payload.end_label || 'N/A'}`;
+    modeButtons.forEach((button) => {
+      button.classList.toggle('on', button.getAttribute('data-temporal-mode') === mode);
+    });
+    guide.hidden = true;
+    dot.hidden = true;
+    tip.hidden = true;
+  };
+
+  const showPoint = (point, pixelX) => {
+    guide.setAttribute('x1', String(point.x));
+    guide.setAttribute('x2', String(point.x));
+    guide.hidden = false;
+    dot.setAttribute('cx', String(point.x));
+    dot.setAttribute('cy', String(point.y));
+    dot.hidden = false;
+    tip.textContent = `${point.label} · ${point.count} report(s)`;
+    tip.hidden = false;
+    tip.style.left = `${pixelX}px`;
+  };
+
+  const nearestPoint = (chartX) => {
+    let nearest = activePoints[0];
+    let minDelta = Math.abs(Number(nearest.x) - chartX);
+    for (let i = 1; i < activePoints.length; i += 1) {
+      const point = activePoints[i];
+      const delta = Math.abs(Number(point.x) - chartX);
+      if (delta < minDelta) {
+        nearest = point;
+        minDelta = delta;
+      }
+    }
+    return nearest;
+  };
+
+  svg.addEventListener('mousemove', (event) => {
+    if (!activePoints.length) return;
+    const rect = svg.getBoundingClientRect();
+    const pixelX = Math.min(Math.max(event.clientX - rect.left, 0), rect.width);
+    const chartX = (pixelX / rect.width) * VIEWBOX_WIDTH;
+    showPoint(nearestPoint(chartX), pixelX);
+  });
+
+  svg.addEventListener('mouseleave', () => {
+    guide.hidden = true;
+    dot.hidden = true;
+    tip.hidden = true;
+  });
+
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = button.getAttribute('data-temporal-mode') || '';
+      setMode(mode);
+    });
+  });
+
+  setMode(activeMode);
+})();
+
+(() => {
+  const menus = document.querySelectorAll('.chip-menu');
+  if (!menus.length) return;
+  const form = document.getElementById('explore-filter-form');
+  const applyButton = document.getElementById('apply-filters-btn');
+  if (!form || !applyButton) return;
+
+  const labelAi = document.getElementById('chip-label-ai');
+  const labelDate = document.getElementById('chip-label-date');
+  const labelReceiver = document.getElementById('chip-label-receiver');
+  const labelArea = document.getElementById('chip-label-area');
+  const dateStartInput = document.getElementById('filter-date-start');
+  const dateEndInput = document.getElementById('filter-date-end');
+  const dateStartDisplayInput = document.getElementById('filter-date-start-display');
+  const dateEndDisplayInput = document.getElementById('filter-date-end-display');
+  if (
+    !labelAi
+    || !labelDate
+    || !labelReceiver
+    || !labelArea
+    || !dateStartInput
+    || !dateEndInput
+    || !dateStartDisplayInput
+    || !dateEndDisplayInput
+  ) return;
+
+  const minDate = String(dateStartInput.getAttribute('min') || '');
+  const maxDate = String(dateEndInput.getAttribute('max') || '');
+
+  const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const formatDateForInput = (isoValue) => {
+    const safeIso = normalizeDate(isoValue);
+    if (!safeIso) return '';
+    const [yearText, monthText, dayText] = safeIso.split('-');
+    return `${dayText}/${monthText}/${yearText}`;
+  };
+  const formatDateForChip = (isoValue) => {
+    return formatDateForInput(isoValue);
+  };
+  const parseDisplayDateToIso = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (isIsoDate(raw)) return normalizeDate(raw);
+    const matched = raw.match(/^(\d{1,2})\D(\d{1,2})\D(\d{4})$/);
+    if (!matched) return null;
+    const day = Number(matched[1]);
+    const month = Number(matched[2]);
+    const year = Number(matched[3]);
+    if (!Number.isInteger(year) || year < 1000 || year > 9999) return null;
+    if (!Number.isInteger(month) || month < 1 || month > 12) return null;
+    if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+    const stamp = new Date(Date.UTC(year, month - 1, day));
+    if (
+      stamp.getUTCFullYear() !== year
+      || stamp.getUTCMonth() !== month - 1
+      || stamp.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    const iso = `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return normalizeDate(iso);
+  };
+  const normalizeDate = (value) => {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (!isIsoDate(raw)) return '';
+    const [yearText, monthText, dayText] = raw.split('-');
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    if (!Number.isInteger(year) || year < 1000 || year > 9999) return '';
+    const stamp = new Date(Date.UTC(year, month - 1, day));
+    if (
+      stamp.getUTCFullYear() !== year
+      || stamp.getUTCMonth() !== month - 1
+      || stamp.getUTCDate() !== day
+    ) {
+      return '';
+    }
+    let normalized = raw;
+    if (minDate && normalized < minDate) normalized = minDate;
+    if (maxDate && normalized > maxDate) normalized = maxDate;
+    return normalized;
+  };
+
+  const parseSelections = (name) => (
+    Array.from(form.querySelectorAll(`input[name="${name}"]:checked`))
+      .map((input) => String(input.value || '').trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+  );
+
+  const currentState = () => {
+    const ai = form.querySelector('input[name="ai_filter"]:checked');
+    const start = normalizeDate(dateStartInput.value);
+    const end = normalizeDate(dateEndInput.value);
+    return {
+      ai_filter: ai ? String(ai.value || 'custom') : 'custom',
+      date_start: start,
+      date_end: end,
+      receiver: parseSelections('receiver'),
+      area: parseSelections('area'),
+    };
+  };
+
+  const stateFingerprint = (state) => JSON.stringify(state);
+  const baselineState = stateFingerprint(currentState());
+
+  const closeAllMenus = (exceptMenu = null) => {
+    menus.forEach((menu) => {
+      if (menu !== exceptMenu) menu.removeAttribute('open');
+    });
+  };
+
+  menus.forEach((menu) => {
+    menu.addEventListener('toggle', () => {
+      if (menu.hasAttribute('open')) {
+        closeAllMenus(menu);
+      }
+    });
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeAllMenus();
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!(event.target instanceof Element)) return;
+    if (event.target.closest('.chip-menu')) return;
+    closeAllMenus();
+  });
+
+  document.querySelectorAll('[data-close-menu]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      const menu = button.closest('.chip-menu');
+      if (menu) menu.removeAttribute('open');
+    });
+  });
+
+  const updateClearButtons = (state) => {
+    document.querySelectorAll('[data-clear-chip]').forEach((button) => {
+      const key = String(button.getAttribute('data-clear-chip') || '');
+      if (!(button instanceof HTMLElement)) return;
+      let show = false;
+      if (key === 'ai_filter') show = state.ai_filter !== 'custom';
+      if (key === 'date') show = Boolean(state.date_start || state.date_end);
+      if (key === 'receiver') show = state.receiver.length > 0;
+      if (key === 'area') show = state.area.length > 0;
+      button.classList.toggle('is-hidden', !show);
+    });
+  };
+
+  const updateChipLabels = (state) => {
+    const aiOption = form.querySelector(`input[name="ai_filter"][value="${state.ai_filter}"]`);
+    const aiLabelNode = aiOption ? aiOption.closest('.menu-option')?.querySelector('span') : null;
+    labelAi.textContent = aiLabelNode ? aiLabelNode.textContent || 'All reports' : 'All reports';
+
+    const startDisplay = formatDateForChip(state.date_start || minDate);
+    const endDisplay = formatDateForChip(state.date_end || maxDate);
+    labelDate.textContent = `${startDisplay} - ${endDisplay}`;
+    labelReceiver.textContent = state.receiver.length ? `${state.receiver.length} selected` : 'All';
+    labelArea.textContent = state.area.length ? `${state.area.length} selected` : 'All';
+    updateClearButtons(state);
+  };
+
+  const updateApplyState = (state) => {
+    const dirty = stateFingerprint(state) !== baselineState;
+    applyButton.disabled = !dirty;
+  };
+
+  const syncDateInputs = () => {
+    const parsedStart = parseDisplayDateToIso(dateStartDisplayInput.value);
+    const parsedEnd = parseDisplayDateToIso(dateEndDisplayInput.value);
+    const start = parsedStart === null ? normalizeDate(dateStartInput.value) : normalizeDate(parsedStart);
+    const end = parsedEnd === null ? normalizeDate(dateEndInput.value) : normalizeDate(parsedEnd);
+    dateStartInput.value = start;
+    dateEndInput.value = end;
+    if (start && end && start > end) {
+      dateEndInput.value = start;
+      dateEndDisplayInput.value = formatDateForInput(start);
+    }
+    if (parsedStart !== null) {
+      dateStartDisplayInput.value = formatDateForInput(dateStartInput.value);
+    }
+    if (parsedEnd !== null) {
+      dateEndDisplayInput.value = formatDateForInput(dateEndInput.value);
+    }
+  };
+
+  const refreshUi = () => {
+    syncDateInputs();
+    const state = currentState();
+    updateChipLabels(state);
+    updateApplyState(state);
+  };
+
+  menus.forEach((menu) => {
+    const searchInput = menu.querySelector('[data-menu-search]');
+    const optionsRoot = menu.querySelector('[data-menu-options]');
+    if (searchInput && optionsRoot) {
+      searchInput.addEventListener('input', () => {
+        const needle = (searchInput.value || '').trim().toLowerCase();
+        optionsRoot.querySelectorAll('.menu-option').forEach((option) => {
+          const hay = String(option.getAttribute('data-label') || '').toLowerCase();
+          option.style.display = (!needle || hay.includes(needle)) ? '' : 'none';
+        });
+      });
+    }
+  });
+
+  document.querySelectorAll('[data-clear-chip]').forEach((button) => {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = button.getAttribute('data-clear-chip');
+      const menu = button.closest('.chip-menu');
+      if (!key || !menu) return;
+      if (key === 'ai_filter') {
+        const fallback = menu.querySelector('input[name="ai_filter"][value="custom"]');
+        if (fallback instanceof HTMLInputElement) fallback.checked = true;
+      } else if (key === 'date') {
+        ['date_start', 'date_end'].forEach((name) => {
+          const input = document.querySelector(`input[name="${name}"]`);
+          if (input instanceof HTMLInputElement) input.value = '';
+        });
+        dateStartDisplayInput.value = '';
+        dateEndDisplayInput.value = '';
+      } else if (key === 'receiver' || key === 'area') {
+        menu.querySelectorAll(`input[name="${key}"]`).forEach((input) => {
+          if (input instanceof HTMLInputElement) input.checked = false;
+        });
+      }
+      refreshUi();
+    });
+  });
+
+  document.querySelectorAll('[data-clear-group]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const groupName = button.getAttribute('data-clear-group');
+      if (!groupName) return;
+      const menu = button.closest('.chip-menu');
+      if (!menu) return;
+      menu.querySelectorAll(`input[name="${groupName}"]`).forEach((input) => {
+        if (input instanceof HTMLInputElement) {
+          input.checked = false;
+        }
+      });
+      refreshUi();
+    });
+  });
+
+  form.querySelectorAll('input[name="ai_filter"], input[name="receiver"], input[name="area"]').forEach((input) => {
+    input.addEventListener('change', refreshUi);
+  });
+  [dateStartDisplayInput, dateEndDisplayInput].forEach((input) => {
+    input.addEventListener('input', refreshUi);
+    input.addEventListener('blur', refreshUi);
+    input.addEventListener('change', refreshUi);
+  });
+
+  form.addEventListener('submit', (event) => {
+    refreshUi();
+    if (applyButton.disabled) {
+      event.preventDefault();
+      return;
+    }
+    applyButton.disabled = true;
+  });
+
+  dateStartDisplayInput.value = formatDateForInput(dateStartInput.value);
+  dateEndDisplayInput.value = formatDateForInput(dateEndInput.value);
+  refreshUi();
+})();
+
+(() => {
+  const root = document.getElementById('explore-reports-root');
+  const showButton = document.getElementById('explore-show-reports');
+  const panelHost = document.getElementById('explore-reports-panel');
+  const showReportsField = document.getElementById('show-reports-field');
+  const hintNode = document.getElementById('explore-reports-hint');
+  if (!root || !showButton || !panelHost || !showReportsField || !hintNode) return;
+
+  const panelUrlRaw = String(root.getAttribute('data-panel-url') || '').trim();
+  const autoLoad = root.getAttribute('data-auto-load') === '1';
+  if (!panelUrlRaw) return;
+
+  let isLoading = false;
+  let hasLoaded = false;
+  let isVisible = panelHost.hidden !== true;
+  let popup = null;
+  let popupContent = null;
+  let activeCell = null;
+  let popupScrollBound = false;
+
+  const eventTargetInsidePopup = (event) => {
+    if (!popup || !event || !(event.target instanceof Node)) return false;
+    return popup.contains(event.target);
+  };
+
+  const buildUrlWithSharedQuery = (baseUrl, sharedQuery) => {
+    const safeBase = String(baseUrl || '').trim();
+    const safeQuery = String(sharedQuery || '').trim();
+    if (!safeQuery) return safeBase;
+    return `${safeBase}${safeBase.includes('?') ? '&' : '?'}${safeQuery}`;
+  };
+
+  const setLoading = (loading) => {
+    isLoading = loading;
+    showButton.disabled = loading;
+    if (loading) {
+      showButton.textContent = 'Loading reports…';
+      return;
+    }
+    showButton.textContent = isVisible ? 'Hide reports' : 'Show reports';
+  };
+
+  const setVisible = (visible) => {
+    isVisible = Boolean(visible);
+    panelHost.hidden = !isVisible;
+    hintNode.hidden = isVisible;
+    showReportsField.value = isVisible ? '1' : '';
+    if (!isLoading) showButton.textContent = isVisible ? 'Hide reports' : 'Show reports';
+  };
+
+  const hidePopup = () => {
+    if (!popup) return;
+    popup.classList.remove('is-visible');
+    popup.style.width = '';
+    if (activeCell) {
+      activeCell.classList.remove('is-active');
+      activeCell = null;
+    }
+  };
+
+  const getPopup = () => {
+    if (popup && popupContent) return { popup, popupContent };
+    popup = document.createElement('div');
+    popup.className = 'report-cell-popup';
+    popup.setAttribute('role', 'dialog');
+    popup.setAttribute('aria-modal', 'false');
+    popup.setAttribute('aria-label', 'Full cell text');
+
+    popupContent = document.createElement('div');
+    popupContent.className = 'report-cell-popup__content';
+    popup.appendChild(popupContent);
+    document.body.appendChild(popup);
+    return { popup, popupContent };
+  };
+
+  const getColumnClass = (headerText) => {
+    const label = String(headerText || '').trim().toLowerCase();
+    if (label === 'id') return 'dataset-col-id';
+    if (label.includes('date')) return 'dataset-col-date';
+    if (label.includes('url')) return 'dataset-col-url';
+    if (label.includes('investigation') || label.includes('circumstances') || label.includes('concern')) {
+      return 'dataset-col-long';
+    }
+    if (label.includes('coroner') || label.includes('area') || label.includes('receiver')) {
+      return 'dataset-col-meta';
+    }
+    return 'dataset-col-standard';
+  };
+
+  const clampNumber = (value, min, max) => Math.min(max, Math.max(min, value));
+  const textMeasureCanvas = document.createElement('canvas');
+  const textMeasureContext = textMeasureCanvas.getContext('2d');
+
+  const decodeEscapedNewlines = (value) => (
+    String(value || '')
+      .replace(/\\r\\n/g, '\n')
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '\n')
+  );
+
+  const measureLongestLinePx = (text) => {
+    if (!textMeasureContext || !popupContent) return 0;
+    const font = window.getComputedStyle(popupContent).font;
+    if (font) textMeasureContext.font = font;
+    const lines = String(text || '').split('\n');
+    let widest = 0;
+    lines.forEach((line) => {
+      const width = textMeasureContext.measureText(line).width;
+      widest = Math.max(widest, width);
+    });
+    return widest;
+  };
+
+  const computePopupWidthPx = (text, cell) => {
+    const totalLength = String(text || '').trim().length;
+    const isVeryShortField =
+      cell.classList.contains('dataset-col-id')
+      || cell.classList.contains('dataset-col-date')
+      || cell.classList.contains('dataset-col-meta');
+    const textPx = measureLongestLinePx(text);
+    const contentPaddingPx = 34;
+
+    if (isVeryShortField) {
+      if (totalLength <= 28) {
+        return clampNumber(textPx + contentPaddingPx, 95, 220);
+      }
+      const compactTargetPx = Math.max(textPx + contentPaddingPx, Math.sqrt(totalLength) * 16);
+      return clampNumber(compactTargetPx, 120, 280);
+    }
+
+    if (totalLength <= 24) {
+      return clampNumber(textPx + contentPaddingPx, 120, 340);
+    }
+
+    const targetPx = Math.max(textPx + contentPaddingPx, Math.sqrt(totalLength) * 22);
+    return clampNumber(targetPx, 220, 700);
+  };
+
+  const positionPopup = (cell) => {
+    if (!popup) return;
+    const anchorGap = 2;
+    const margin = 12;
+    const visualViewport = window.visualViewport;
+    const viewportLeft = visualViewport ? visualViewport.offsetLeft : 0;
+    const viewportTop = visualViewport ? visualViewport.offsetTop : 0;
+    const viewportWidth = visualViewport ? visualViewport.width : window.innerWidth;
+    const viewportHeight = visualViewport ? visualViewport.height : window.innerHeight;
+    const viewportRight = viewportLeft + viewportWidth;
+    const viewportBottom = viewportTop + viewportHeight;
+
+    const cellRect = cell.getBoundingClientRect();
+    const popupRect = popup.getBoundingClientRect();
+
+    // Anchor directly on the clicked row/cell to prevent "floating far away".
+    let left = cellRect.left + anchorGap;
+    let top = cellRect.top + anchorGap;
+
+    top = Math.min(
+      Math.max(top, viewportTop + margin),
+      viewportBottom - popupRect.height - margin,
+    );
+    left = Math.min(
+      Math.max(left, viewportLeft + margin),
+      viewportRight - popupRect.width - margin,
+    );
+
+    popup.style.left = `${left}px`;
+    popup.style.top = `${top}px`;
+  };
+
+  const clampPopupIntoViewport = () => {
+    if (!popup || !popup.classList.contains('is-visible')) return;
+    const visualViewport = window.visualViewport;
+    const viewportLeft = visualViewport ? visualViewport.offsetLeft : 0;
+    const viewportTop = visualViewport ? visualViewport.offsetTop : 0;
+    const viewportWidth = visualViewport ? visualViewport.width : window.innerWidth;
+    const viewportHeight = visualViewport ? visualViewport.height : window.innerHeight;
+    const viewportRight = viewportLeft + viewportWidth;
+    const viewportBottom = viewportTop + viewportHeight;
+    const margin = 12;
+
+    const rect = popup.getBoundingClientRect();
+    let left = Number.parseFloat(popup.style.left || '0');
+    let top = Number.parseFloat(popup.style.top || '0');
+    if (!Number.isFinite(left)) left = rect.left;
+    if (!Number.isFinite(top)) top = rect.top;
+
+    if (rect.right > viewportRight - margin) {
+      left -= (rect.right - (viewportRight - margin));
+    }
+    if (rect.left < viewportLeft + margin) {
+      left += ((viewportLeft + margin) - rect.left);
+    }
+    if (rect.bottom > viewportBottom - margin) {
+      top -= (rect.bottom - (viewportBottom - margin));
+    }
+    if (rect.top < viewportTop + margin) {
+      top += ((viewportTop + margin) - rect.top);
+    }
+
+    popup.style.left = `${Math.round(left)}px`;
+    popup.style.top = `${Math.round(top)}px`;
+  };
+
+  const showPopup = (cell) => {
+    const fullText = String(cell.dataset.fullText || '').trim();
+    if (!fullText) return;
+
+    const popupElements = getPopup();
+    if (!popupElements.popup || !popupElements.popupContent) return;
+
+    if (activeCell && activeCell !== cell) {
+      activeCell.classList.remove('is-active');
+    }
+
+    activeCell = cell;
+    activeCell.classList.add('is-active');
+
+    const decodedText = decodeEscapedNewlines(fullText);
+    const visualViewport = window.visualViewport;
+    const viewportWidth = visualViewport ? visualViewport.width : window.innerWidth;
+    const viewportHeight = visualViewport ? visualViewport.height : window.innerHeight;
+    const margin = 12;
+    const maxWidthPx = Math.max(220, Math.floor(viewportWidth - (margin * 2)));
+    const maxHeightPx = Math.max(160, Math.floor(viewportHeight - (margin * 2)));
+    const computedWidth = Math.round(computePopupWidthPx(decodedText, cell));
+    popupElements.popup.style.maxWidth = `${maxWidthPx}px`;
+    popupElements.popup.style.width = `${Math.min(computedWidth, Math.min(maxWidthPx, 560))}px`;
+    popupElements.popupContent.style.maxHeight = `${Math.min(maxHeightPx, 420)}px`;
+    popupElements.popupContent.textContent = decodedText;
+    popupElements.popup.style.visibility = 'hidden';
+    popupElements.popup.classList.add('is-visible');
+    positionPopup(cell);
+    clampPopupIntoViewport();
+    popupElements.popup.style.visibility = 'visible';
+    window.requestAnimationFrame(() => {
+      if (!popupElements.popup.classList.contains('is-visible')) return;
+      positionPopup(cell);
+      clampPopupIntoViewport();
+    });
+  };
+
+  const setupCellPreview = () => {
+    const table = panelHost.querySelector('.explore-reports-table');
+    if (!table || table.dataset.previewBound === '1') return;
+    table.dataset.previewBound = '1';
+
+    const headerCells = Array.from(table.querySelectorAll('thead th'));
+    const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+    if (!headerCells.length || !bodyRows.length) return;
+
+    const columnClasses = headerCells.map((th) => {
+      const columnClass = getColumnClass(th.textContent || '');
+      th.classList.add(columnClass);
+      return columnClass;
+    });
+
+    bodyRows.forEach((row) => {
+      Array.from(row.children).forEach((cell, index) => {
+        const columnClass = columnClasses[index];
+        if (columnClass) cell.classList.add(columnClass);
+      });
+    });
+
+    const cells = table.querySelectorAll('tbody td');
+    cells.forEach((cell) => {
+      const fullText = String(cell.textContent || '').trim();
+      if (!fullText) return;
+      cell.dataset.fullText = fullText;
+
+      const clamp = document.createElement('div');
+      clamp.className = 'report-cell-clamp';
+      clamp.textContent = fullText;
+      cell.textContent = '';
+      cell.appendChild(clamp);
+
+      cell.classList.add('report-cell-previewable');
+      cell.setAttribute('tabindex', '0');
+      cell.setAttribute('role', 'button');
+      cell.setAttribute('aria-label', 'Show full cell text');
+
+      cell.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (activeCell === cell && popup?.classList.contains('is-visible')) {
+          hidePopup();
+          return;
+        }
+        showPopup(cell);
+      });
+
+      cell.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          showPopup(cell);
+        }
+        if (event.key === 'Escape') hidePopup();
+      });
+    });
+
+    const wrap = panelHost.querySelector('.explore-reports-table-wrap');
+    wrap?.addEventListener('scroll', hidePopup, { passive: true });
+    if (!popupScrollBound) {
+      popupScrollBound = true;
+      const hidePopupUnlessInside = (event) => {
+        if (eventTargetInsidePopup(event)) return;
+        hidePopup();
+      };
+      window.addEventListener('scroll', hidePopupUnlessInside, true);
+      document.addEventListener('scroll', hidePopupUnlessInside, true);
+      document.addEventListener('wheel', hidePopupUnlessInside, { passive: true, capture: true });
+      document.addEventListener('touchmove', hidePopupUnlessInside, { passive: true, capture: true });
+    }
+  };
+
+  const normalizePanelUrl = (rawUrl) => {
+    const absolute = new URL(rawUrl, window.location.origin);
+    return `${absolute.pathname}${absolute.search}`;
+  };
+
+  const normalizeBrowserUrl = (rawUrl) => {
+    const absolute = new URL(rawUrl, window.location.origin);
+    return `${absolute.pathname}${absolute.search}`;
+  };
+
+  const fetchAndRender = (panelUrl, browserUrl) => {
+    if (isLoading) return;
+    hidePopup();
+    setLoading(true);
+    fetch(panelUrl, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin',
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Failed to fetch reports panel');
+        return response.text();
+      })
+      .then((html) => {
+        panelHost.innerHTML = html;
+        hasLoaded = true;
+        setVisible(true);
+        setupCellPreview();
+        window.history.replaceState(window.history.state, '', browserUrl);
+      })
+      .catch(() => {
+        window.location.href = browserUrl;
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  };
+
+  const loadFromConfiguredPanelUrl = () => {
+    const panelUrl = normalizePanelUrl(panelUrlRaw);
+    const panelAbsolute = new URL(panelUrlRaw, window.location.origin);
+    const browserAbsolute = new URL(window.location.href);
+    browserAbsolute.searchParams.set('show_reports', '1');
+    const page = panelAbsolute.searchParams.get('page');
+    if (page) {
+      browserAbsolute.searchParams.set('page', page);
+    } else {
+      browserAbsolute.searchParams.delete('page');
+    }
+    fetchAndRender(panelUrl, normalizeBrowserUrl(browserAbsolute.toString()));
+  };
+
+  showButton.addEventListener('click', () => {
+    if (isLoading) return;
+    if (isVisible) {
+      hidePopup();
+      setVisible(false);
+      const browserAbsolute = new URL(window.location.href);
+      browserAbsolute.searchParams.delete('show_reports');
+      browserAbsolute.searchParams.delete('page');
+      window.history.replaceState(window.history.state, '', normalizeBrowserUrl(browserAbsolute.toString()));
+      return;
+    }
+    if (hasLoaded) {
+      setVisible(true);
+      const browserAbsolute = new URL(window.location.href);
+      browserAbsolute.searchParams.set('show_reports', '1');
+      window.history.replaceState(window.history.state, '', normalizeBrowserUrl(browserAbsolute.toString()));
+      return;
+    }
+    loadFromConfiguredPanelUrl();
+  });
+
+  panelHost.addEventListener('click', (event) => {
+    const link = event.target instanceof Element ? event.target.closest('a[data-reports-panel-url]') : null;
+    if (!link) return;
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+      return;
+    }
+    const panelUrlAttr = String(link.getAttribute('data-reports-panel-url') || '').trim();
+    if (!panelUrlAttr) return;
+    event.preventDefault();
+    const panelUrl = normalizePanelUrl(panelUrlAttr);
+    const browserUrl = normalizeBrowserUrl(link.href);
+    fetchAndRender(panelUrl, browserUrl);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!popup || !popup.classList.contains('is-visible')) return;
+    if (popup.contains(event.target)) return;
+    const clickedCell = event.target instanceof Element ? event.target.closest('.explore-reports-table tbody td.report-cell-previewable') : null;
+    if (clickedCell) return;
+    hidePopup();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hidePopup();
+  });
+  window.addEventListener('resize', hidePopup);
+
+  panelHost.addEventListener('submit', (event) => {
+    const form = event.target instanceof Element ? event.target.closest('form[data-reports-goto]') : null;
+    if (!form) return;
+    event.preventDefault();
+
+    const input = form.querySelector('input[name="page"]');
+    if (!(input instanceof HTMLInputElement)) return;
+    const min = Number(input.min || '1');
+    const max = Number(input.max || '1');
+    let page = Number(input.value || '1');
+    if (!Number.isFinite(page)) page = min;
+    page = Math.max(min, Math.min(max, Math.floor(page)));
+    input.value = String(page);
+
+    const panelBase = String(form.getAttribute('data-reports-panel-base') || '').trim();
+    const browserBase = String(form.getAttribute('data-reports-browser-base') || '').trim();
+    const sharedQuery = String(form.getAttribute('data-reports-shared-query') || '').trim();
+    if (!panelBase || !browserBase) return;
+
+    const panelUrl = buildUrlWithSharedQuery(`${panelBase}?page=${page}`, sharedQuery);
+    const browserUrl = buildUrlWithSharedQuery(`${browserBase}?show_reports=1&page=${page}`, sharedQuery);
+    fetchAndRender(normalizePanelUrl(panelUrl), normalizeBrowserUrl(browserUrl));
+  });
+
+  if (autoLoad) {
+    loadFromConfiguredPanelUrl();
+  } else {
+    setVisible(false);
+  }
+})();
+
+(() => {
+  const exportOpenButton = document.getElementById('explore-export-open');
+  const exportDialog = document.getElementById('explore-export-dialog');
+  const exportCancel = document.getElementById('explore-export-cancel');
+  const exportDownload = document.getElementById('explore-export-download');
+  if (!exportOpenButton || !exportDialog || !exportCancel || !exportDownload) return;
+
+  const openExport = () => {
+    const url = new URL(exportDownload.href, window.location.origin);
+    const current = new URL(window.location.href);
+    ['q', 'ai_filter', 'date_start', 'date_end', 'receiver', 'area'].forEach((name) => {
+      url.searchParams.delete(name);
+      current.searchParams.getAll(name).forEach((value) => {
+        if (String(value || '').trim()) url.searchParams.append(name, value);
+      });
+    });
+    const qs = url.searchParams.toString();
+    exportDownload.href = qs ? `${url.pathname}?${qs}` : url.pathname;
+    exportDialog.classList.add('on');
+    exportDialog.setAttribute('aria-hidden', 'false');
+  };
+  const closeExport = () => {
+    exportDialog.classList.remove('on');
+    exportDialog.setAttribute('aria-hidden', 'true');
+  };
+
+  exportOpenButton.addEventListener('click', openExport);
+  exportCancel.addEventListener('click', closeExport);
+  exportDialog.addEventListener('click', (event) => {
+    if (event.target === exportDialog) closeExport();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeExport();
+  });
+})();
+
+(() => {
+  const dialog = document.getElementById('explore-metric-dialog');
+  const titleNode = document.getElementById('explore-metric-title');
+  const kickerNode = document.getElementById('explore-metric-kicker');
+  const copyNode = document.getElementById('explore-metric-copy');
+  const searchNode = document.getElementById('explore-metric-search');
+  const listNode = document.getElementById('explore-metric-list');
+  const metaNode = document.getElementById('explore-metric-meta');
+  const closeNode = document.getElementById('explore-metric-close');
+  if (!dialog || !titleNode || !kickerNode || !copyNode || !searchNode || !listNode || !metaNode || !closeNode) return;
+
+  const readJson = (id) => {
+    const node = document.getElementById(id);
+    if (!node) return [];
+    try {
+      const parsed = JSON.parse(node.textContent || '[]');
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      return [];
+    }
+  };
+
+  const datasets = {
+    areas: {
+      title: 'Area breakdown',
+      kicker: 'Area',
+      copy: 'Most common areas in the current Explore scope.',
+      rows: readJson('explore-all-areas'),
+      cap: null,
+    },
+    receivers: {
+      title: 'Receiver breakdown',
+      kicker: 'Receiver',
+      copy: 'Most common receivers in the current Explore scope.',
+      rows: readJson('explore-all-receivers'),
+      cap: 500,
+    },
+    themes: {
+      title: 'Theme breakdown',
+      kicker: 'Theme',
+      copy: 'Most common themes in the current Explore scope.',
+      rows: readJson('explore-all-themes'),
+      cap: null,
+    },
+  };
+
+  let activeKey = '';
+
+  const renderRows = (needle = '') => {
+    const config = datasets[activeKey];
+    if (!config) return;
+    const query = String(needle || '').trim().toLowerCase();
+    const cappedRows = Number.isInteger(config.cap) ? config.rows.slice(0, config.cap) : config.rows;
+    const visibleRows = query
+      ? cappedRows.filter((row) => String(row.label || '').toLowerCase().includes(query))
+      : cappedRows;
+
+    listNode.innerHTML = '';
+    if (!visibleRows.length) {
+      const li = document.createElement('li');
+      li.className = 'empty';
+      li.textContent = 'No values found for this search.';
+      listNode.appendChild(li);
+    } else {
+      visibleRows.forEach((row) => {
+        const li = document.createElement('li');
+        const label = document.createElement('span');
+        const count = document.createElement('strong');
+        label.textContent = String(row.label || '—');
+        count.textContent = String(row.count || 0);
+        li.appendChild(label);
+        li.appendChild(count);
+        listNode.appendChild(li);
+      });
+    }
+
+    const shown = visibleRows.length;
+    const total = config.rows.length;
+    if (Number.isInteger(config.cap) && config.cap > 0 && total > config.cap) {
+      metaNode.textContent = `Showing ${shown} matching value(s) from top ${config.cap.toLocaleString()} of ${total.toLocaleString()}.`;
+    } else {
+      metaNode.textContent = `${shown.toLocaleString()} value(s) shown.`;
+    }
+  };
+
+  const openDialog = (key) => {
+    const config = datasets[key];
+    if (!config) return;
+    activeKey = key;
+    titleNode.textContent = config.title;
+    kickerNode.textContent = config.kicker;
+    copyNode.textContent = config.copy;
+    searchNode.value = '';
+    renderRows('');
+    dialog.classList.add('on');
+    dialog.setAttribute('aria-hidden', 'false');
+    window.setTimeout(() => searchNode.focus(), 10);
+  };
+
+  const closeDialog = () => {
+    dialog.classList.remove('on');
+    dialog.setAttribute('aria-hidden', 'true');
+  };
+
+  document.querySelectorAll('[data-metric-expand]').forEach((button) => {
+    button.addEventListener('click', () => {
+      openDialog(String(button.getAttribute('data-metric-expand') || ''));
+    });
+  });
+  searchNode.addEventListener('input', () => renderRows(searchNode.value));
+  closeNode.addEventListener('click', closeDialog);
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) closeDialog();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeDialog();
+  });
+})();
+</script>
 {% endblock %}
