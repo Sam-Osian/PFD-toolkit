@@ -4,7 +4,7 @@
 </div>
 {% elif reports_count == 0 %}
 <div class="reports-empty-state">
-    <p>No reports match the active Explore filters.</p>
+    <p>No reports match the active {{ scope_label|default:"Explore" }} filters.</p>
 </div>
 {% else %}
 <div class="table-wrap explore-reports-table-wrap">

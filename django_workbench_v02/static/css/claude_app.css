@@ -278,6 +278,10 @@ svg:not([width]):not([height]) {
 .chip-filter em { font-style: normal; color: var(--text-3); font-weight: 400; margin-right: 4px; }
 .chip-filter:hover { border-color: var(--line-3); }
 .chip-filter.primary { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--text); }
+.chip-filter.readonly {
+  background: color-mix(in srgb, var(--surface-2) 70%, var(--accent-soft));
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--line-2));
+}
 .chip-x {
   width: 22px;
   height: 22px;
@@ -915,6 +919,7 @@ svg:not([width]):not([height]) {
 
 .coll-filters { display: flex; gap: 6px; margin-bottom: 20px; flex-wrap: wrap; }
 .coll-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.coll-empty-search { margin-top: 8px; }
 .coll-card {
   background: var(--surface); border: 1px solid var(--line-2); border-radius: var(--radius-lg);
   padding: 20px 22px;
@@ -925,19 +930,42 @@ svg:not([width]):not([height]) {
   min-height: 200px;
 }
 .coll-card:hover { border-color: var(--accent); background: var(--surface-2); transform: translateY(-2px); box-shadow: 0 12px 32px rgba(0,0,0,0.3); }
+.coll-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 12px 32px rgba(0,0,0,0.3);
+}
 .coll-card .cc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
 .coll-card .cc-tag { font-family: var(--ff-mono); font-size: 9.5px; color: var(--text-3); letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--line); }
 .coll-card.primary .cc-tag { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
 .coll-card .cc-n { font-family: var(--ff-mono); font-size: 11px; color: var(--text-3); }
 .coll-card h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-bottom: 6px; }
-.coll-card p { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin-bottom: 14px; flex: 1; }
+.coll-card p {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.5;
+  margin-bottom: 14px;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .coll-card .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
 .coll-card .chips span { font-size: 10.5px; padding: 3px 7px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); border: 1px solid var(--line); font-family: var(--ff-mono); letter-spacing: 0.02em; }
-.coll-card .chips span em { font-style: normal; color: var(--text-3); margin-left: 4px; }
+.coll-card .chips span em { font-style: normal; color: var(--text-3); margin-right: 6px; }
 .coll-card .spark { height: 24px; margin-bottom: 12px; }
 .coll-card .spark svg { width: 100%; height: 100%; }
 .coll-card .cc-foot { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--text-3); padding-top: 12px; border-top: 1px solid var(--line); }
-.coll-card .cc-go { color: var(--accent); font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.coll-card .cc-go {
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  text-decoration: none;
+}
+.coll-card .cc-go:hover { color: color-mix(in srgb, var(--accent) 70%, white); }
 .coll-card .cc-up { font-family: var(--ff-mono); color: var(--good); }
 
 /* ═══════════════ NETWORK ═══════════════════════════════ */

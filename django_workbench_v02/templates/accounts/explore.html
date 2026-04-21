@@ -1,17 +1,38 @@
 {% extends "base.html" %}
 
-{% block page_title %}Explore · PFD Toolkit Workbench v0.2{% endblock %}
+{% block page_title %}
+{% if is_collection_view %}
+{{ collection_title }} · Collection · PFD Toolkit Workbench v0.2
+{% else %}
+Explore · PFD Toolkit Workbench v0.2
+{% endif %}
+{% endblock %}
 
 {% block page_header %}
+{% if is_collection_view %}
+<div class="eyebrow"><span class="d"></span>Collection · {{ explore.scope_reports }} reports in view</div>
+{% else %}
 <div class="eyebrow"><span class="d"></span>Explore · {{ explore.total_reports }} reports</div>
+{% endif %}
 {% endblock %}
 
 {% block content %}
 <div class="stack-md">
     <section class="explore-hero">
         <div>
-            <h1 class="page-title xl">Explore PFD reports</h1>
-            <p class="page-lede big">A live HUD over the archive. Ask a question, narrow by receiver or area, and the whole surface updates.</p>
+            {% if is_collection_view %}
+                <h1 class="page-title xl">{{ collection_title }}</h1>
+                <p class="page-lede big">
+                    {% if collection_description %}
+                        {{ collection_description }}
+                    {% else %}
+                        Collection-scoped view. Narrow by receiver, area, and date to inspect this curation.
+                    {% endif %}
+                </p>
+            {% else %}
+                <h1 class="page-title xl">Explore PFD reports</h1>
+                <p class="page-lede big">A live HUD over the archive. Ask a question, narrow by receiver or area, and the whole surface updates.</p>
+            {% endif %}
         </div>
         <div class="explore-hero-actions">
             <button type="button" class="btn btn-secondary" id="explore-export-open">Export</button>
@@ -25,10 +46,19 @@
 
     <section class="hud">
         <div class="hud-q">Filter</div>
-        <form method="get" action="{% url 'explore' %}" class="explore-filter-form" id="explore-filter-form">
+        <form method="get" action="{{ filter_action_url|default:request.path }}" class="explore-filter-form" id="explore-filter-form">
             <input type="hidden" name="q" value="{{ explore.query }}">
             <input type="hidden" name="show_reports" id="show-reports-field" value="{% if show_reports_requested %}1{% endif %}">
+            {% if is_collection_view %}
+                <input type="hidden" name="ai_filter" value="{{ collection_slug }}">
+            {% endif %}
             <div class="hud-chips">
+                {% if is_collection_view %}
+                <div class="chip-filter readonly">
+                    <em>Collection:</em>
+                    <b>{{ collection_title }}</b>
+                </div>
+                {% else %}
                 <details class="chip-menu" data-filter-menu="ai_filter">
                     <summary class="chip-filter primary">
                         <em>AI filter:</em>
@@ -60,6 +90,7 @@
                         </div>
                     </div>
                 </details>
+                {% endif %}
 
                 <details class="chip-menu" data-filter-menu="date">
                     <summary class="chip-filter">
@@ -189,7 +220,11 @@
                 </details>
 
                 <button type="submit" class="btn btn-primary sm" id="apply-filters-btn" disabled>Apply filters</button>
-                <a href="{% url 'explore' %}?reset=1" class="btn btn-ghost sm">Reset</a>
+                {% if is_collection_view %}
+                    <a href="{{ filter_reset_url|default:request.path }}" class="btn btn-ghost sm">Reset</a>
+                {% else %}
+                    <a href="{% url 'explore' %}?reset=1" class="btn btn-ghost sm">Reset</a>
+                {% endif %}
             </div>
         </form>
         <div class="hud-stats">
@@ -435,7 +470,7 @@
                 <div class="meta">Current filter scope</div>
                 <div class="acts">
                     <button type="button" class="btn btn-secondary" id="explore-export-cancel">Cancel</button>
-                    <a class="btn btn-primary" id="explore-export-download" href="{% url 'explore-export-csv' %}">Download CSV</a>
+                    <a class="btn btn-primary" id="explore-export-download" href="{% if explore_export_url %}{{ explore_export_url }}{% else %}{% url 'explore-export-csv' %}{% endif %}">Download CSV</a>
                 </div>
             </div>
         </div>
@@ -444,9 +479,9 @@
     <div class="dlg-back" id="explore-metric-dialog" aria-hidden="true">
         <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="explore-metric-title">
             <div class="dlg-head">
-                <div class="k"><span class="d"></span><span id="explore-metric-kicker">Explore</span></div>
+                <div class="k"><span class="d"></span><span id="explore-metric-kicker">{% if is_collection_view %}Collection{% else %}Explore{% endif %}</span></div>
                 <h3 id="explore-metric-title">Full breakdown</h3>
-                <p id="explore-metric-copy">Top values for the current Explore scope.</p>
+                <p id="explore-metric-copy">Top values for the current {% if is_collection_view %}collection{% else %}Explore{% endif %} scope.</p>
             </div>
             <div class="dlg-body">
                 <input type="search" id="explore-metric-search" placeholder="Search values..." aria-label="Search values">
@@ -593,13 +628,13 @@
   const labelDate = document.getElementById('chip-label-date');
   const labelReceiver = document.getElementById('chip-label-receiver');
   const labelArea = document.getElementById('chip-label-area');
+  const aiHiddenInput = form.querySelector('input[name="ai_filter"][type="hidden"]');
   const dateStartInput = document.getElementById('filter-date-start');
   const dateEndInput = document.getElementById('filter-date-end');
   const dateStartDisplayInput = document.getElementById('filter-date-start-display');
   const dateEndDisplayInput = document.getElementById('filter-date-end-display');
   if (
-    !labelAi
-    || !labelDate
+    !labelDate
     || !labelReceiver
     || !labelArea
     || !dateStartInput
@@ -678,8 +713,11 @@
     const ai = form.querySelector('input[name="ai_filter"]:checked');
     const start = normalizeDate(dateStartInput.value);
     const end = normalizeDate(dateEndInput.value);
+    const aiValue = ai
+      ? String(ai.value || 'custom')
+      : String(aiHiddenInput?.value || 'custom');
     return {
-      ai_filter: ai ? String(ai.value || 'custom') : 'custom',
+      ai_filter: aiValue || 'custom',
       date_start: start,
       date_end: end,
       receiver: parseSelections('receiver'),
@@ -736,9 +774,11 @@
   };
 
   const updateChipLabels = (state) => {
-    const aiOption = form.querySelector(`input[name="ai_filter"][value="${state.ai_filter}"]`);
-    const aiLabelNode = aiOption ? aiOption.closest('.menu-option')?.querySelector('span') : null;
-    labelAi.textContent = aiLabelNode ? aiLabelNode.textContent || 'All reports' : 'All reports';
+    if (labelAi) {
+      const aiOption = form.querySelector(`input[name="ai_filter"][value="${state.ai_filter}"]`);
+      const aiLabelNode = aiOption ? aiOption.closest('.menu-option')?.querySelector('span') : null;
+      labelAi.textContent = aiLabelNode ? aiLabelNode.textContent || 'All reports' : 'All reports';
+    }
 
     const startDisplay = formatDateForChip(state.date_start || minDate);
     const endDisplay = formatDateForChip(state.date_end || maxDate);
@@ -1363,21 +1403,21 @@
     areas: {
       title: 'Area breakdown',
       kicker: 'Area',
-      copy: 'Most common areas in the current Explore scope.',
+      copy: 'Most common areas in the current {% if is_collection_view %}collection{% else %}Explore{% endif %} scope.',
       rows: readJson('explore-all-areas'),
       cap: null,
     },
     receivers: {
       title: 'Receiver breakdown',
       kicker: 'Receiver',
-      copy: 'Most common receivers in the current Explore scope.',
+      copy: 'Most common receivers in the current {% if is_collection_view %}collection{% else %}Explore{% endif %} scope.',
       rows: readJson('explore-all-receivers'),
       cap: 500,
     },
     themes: {
       title: 'Theme breakdown',
       kicker: 'Theme',
-      copy: 'Most common themes in the current Explore scope.',
+      copy: 'Most common themes in the current {% if is_collection_view %}collection{% else %}Explore{% endif %} scope.',
       rows: readJson('explore-all-themes'),
       cap: null,
     },

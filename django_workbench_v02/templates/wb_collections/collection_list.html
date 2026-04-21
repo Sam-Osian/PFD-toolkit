@@ -3,30 +3,111 @@
 {% block page_title %}Collections · PFD Toolkit Workbench v0.2{% endblock %}
 
 {% block page_header %}
-<div class="stack-sm">
-    <h2 class="page-title">Collections</h2>
-    <p class="page-subtitle">Browse curated and custom collections, then copy one into an editable workbook.</p>
-</div>
+<div class="eyebrow"><span class="d"></span>Collections · {{ collections|length }} curated</div>
 {% endblock %}
 
 {% block content %}
 <div class="stack-md">
-    <section class="card">
-        {% if snapshot_available %}
-            <p class="empty-note">Counter snapshot updated: {{ snapshot_generated_at|date:"Y-m-d H:i:s" }}</p>
-        {% else %}
-            <p class="empty-note">Counter snapshot not available yet. Counts will appear after the refresh job runs.</p>
-        {% endif %}
+    <section class="explore-hero">
+        <div>
+            <h1 class="page-title xl">Collections</h1>
+            <p class="page-lede big">Starting points, not storage. Each collection is a live, filtered view — curated around a real policy question — that updates as new reports land.</p>
+        </div>
+        <div class="explore-hero-actions">
+            <label class="topbar-search" for="collection-search-input">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><path d="M13 13l-3-3" stroke-linecap="round"/></svg>
+                <input id="collection-search-input" type="search" placeholder="Search collections..." autocomplete="off">
+            </label>
+        </div>
     </section>
 
-    <section class="collection-grid">
-        {% for item in collections %}
-            <article class="card collection-card">
-                <h3><a href="{% url 'collection-detail' collection_slug=item.slug %}">{{ item.title }}</a></h3>
-                <p class="collection-desc">{{ item.description }}</p>
-                <p class="collection-meta">{{ item.count }} reports</p>
-            </article>
-        {% endfor %}
-    </section>
+    {% if collections %}
+        <section class="coll-grid" id="collection-grid">
+            {% for item in collections %}
+                <article
+                    class="coll-card{% if item.is_primary %} primary{% endif %}"
+                    data-collection-card
+                    data-collection-filter="{{ item.title|lower }} {{ item.description|lower }} {{ item.badge|lower }} {{ item.slug|lower }} {% for chip in item.chips %}{{ chip.key|lower }} {{ chip.value|lower }} {% endfor %}"
+                    data-href="{% url 'collection-detail' collection_slug=item.slug %}"
+                    tabindex="0"
+                    role="link"
+                >
+                    <div class="cc-head">
+                        <span class="cc-tag">{{ item.badge }}</span>
+                    </div>
+                    <h3>{{ item.title }}</h3>
+                    <p>{{ item.description }}</p>
+                    {% if item.chips %}
+                        <div class="chips">
+                            {% for chip in item.chips %}
+                                <span>{% if chip.key %}<em>{{ chip.key }}</em>{% endif %}{{ chip.value }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="spark" aria-hidden="true">
+                        <svg viewBox="0 0 200 24" preserveAspectRatio="none">
+                            <path d="{{ item.spark_path }}" stroke="{{ item.spark_color }}" stroke-width="1.5" fill="none"/>
+                        </svg>
+                    </div>
+                    <div class="cc-foot">
+                        <span{% if item.footer_up %} class="cc-up"{% endif %}>{{ item.footer_left }}</span>
+                        <a class="cc-go" href="{% url 'collection-detail' collection_slug=item.slug %}">Open →</a>
+                    </div>
+                </article>
+            {% endfor %}
+        </section>
+        <section class="card coll-empty-search" id="collection-search-empty" hidden>
+            <p class="empty-note">No collections match your search.</p>
+        </section>
+    {% else %}
+        <section class="card">
+            <p class="empty-note">Collections are temporarily unavailable. Try again in a moment.</p>
+        </section>
+    {% endif %}
 </div>
+
+<script>
+(() => {
+  const input = document.getElementById('collection-search-input');
+  if (!input) return;
+  const cards = Array.from(document.querySelectorAll('[data-collection-card]'));
+  const emptyState = document.getElementById('collection-search-empty');
+
+  const normalize = (value) => String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const applySearch = () => {
+    const query = normalize(input.value);
+    let visibleCount = 0;
+    cards.forEach((card) => {
+      const hay = normalize(card.getAttribute('data-collection-filter') || '');
+      const visible = !query || hay.includes(query);
+      card.hidden = !visible;
+      if (visible) visibleCount += 1;
+    });
+    if (emptyState) {
+      emptyState.hidden = visibleCount > 0;
+    }
+  };
+
+  input.addEventListener('input', () => {
+    applySearch();
+  });
+  applySearch();
+
+  cards.forEach((card) => {
+    const href = card.getAttribute('data-href');
+    if (!href) return;
+    card.addEventListener('click', (event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('a,button,input,select,textarea,label')) return;
+      window.location.href = href;
+    });
+    card.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        window.location.href = href;
+      }
+    });
+  });
+})();
+</script>
 {% endblock %}

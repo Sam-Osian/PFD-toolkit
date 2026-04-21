@@ -214,6 +214,7 @@ def _build_explore_payload(
     date_end_raw: str,
     request: HttpRequest | None = None,
     emit_messages: bool = False,
+    force_collection_scope: bool = False,
 ) -> dict[str, object]:
     explore = {
         "query": query,
@@ -251,7 +252,7 @@ def _build_explore_payload(
             and str(card.get("slug") or "").strip() not in EXPLORE_AI_FILTER_EXCLUDED_SLUGS
         ]
         allowed_slugs = {item["slug"] for item in ai_filter_options}
-        if ai_filter not in allowed_slugs:
+        if not force_collection_scope and ai_filter not in allowed_slugs:
             ai_filter = "custom"
 
         receiver_counter: dict[str, int] = {}
@@ -660,6 +661,7 @@ def explore_reports_panel(request: HttpRequest) -> HttpResponse:
             "dataset_panel_base": reverse("explore-reports-panel"),
             "dataset_browser_base": reverse("explore"),
             "dataset_shared_query": shared_query,
+            "scope_label": "Explore",
         },
     )
 
