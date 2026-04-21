@@ -15,7 +15,6 @@ from django.views.decorators.http import require_GET
 
 from .services import normalize_auth0_profile, sync_user_from_auth0
 
-
 def _require_auth0_settings() -> bool:
     return bool(settings.AUTH0_DOMAIN and settings.AUTH0_CLIENT_ID and settings.AUTH0_CLIENT_SECRET)
 
@@ -140,3 +139,35 @@ def landing(request: HttpRequest) -> HttpResponse:
 def admin_login_proxy(request: HttpRequest) -> HttpResponse:
     admin_index = reverse("admin:index")
     return redirect(f"{reverse('accounts-login')}?next={admin_index}")
+
+
+@require_GET
+def explore(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/explore.html")
+
+
+@require_GET
+def about(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/about.html")
+
+
+@require_GET
+def research(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/research.html")
+
+
+@require_GET
+def llm_config(request: HttpRequest) -> HttpResponse:
+    if not request.user.is_authenticated:
+        next_url = reverse("llm-config")
+        return redirect(f"{reverse('accounts-login')}?next={next_url}")
+
+    from wb_workspaces.services import get_active_workspace_for_user
+
+    active_workspace = get_active_workspace_for_user(user=request.user)
+    if active_workspace is not None:
+        detail_url = reverse("workbook-detail", kwargs={"workbook_id": active_workspace.id})
+        return redirect(f"{detail_url}#llm-credentials")
+
+    messages.info(request, "Create a workbook first, then add your LLM credential there.")
+    return redirect("workbook-dashboard")

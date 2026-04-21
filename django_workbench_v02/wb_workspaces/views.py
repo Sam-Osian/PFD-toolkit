@@ -61,9 +61,20 @@ from .revisions import (
 User = get_user_model()
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def dashboard(request):
+    if not request.user.is_authenticated:
+        public_workbooks = Workspace.objects.filter(
+            visibility=WorkspaceVisibility.PUBLIC,
+            is_listed=True,
+            archived_at__isnull=True,
+        ).order_by("-updated_at")[:6]
+        return render(
+            request,
+            "wb_workspaces/workbooks_guest.html",
+            {"public_workbooks": public_workbooks},
+        )
+
     if request.method == "POST":
         form = WorkspaceCreateForm(request.POST)
         if form.is_valid():

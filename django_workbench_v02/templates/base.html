@@ -8,29 +8,394 @@
     <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/components.css' %}">
+    <link rel="stylesheet" href="{% static 'css/claude_app.css' %}">
     {% block extra_head %}{% endblock %}
 </head>
-<body class="app-body">
-<div class="app-shell">
-    <header class="app-header">
-        <div class="app-header-inner">
-            <div>
-                <h1 class="brand-title">PFD Toolkit Workbench v0.2</h1>
-                <p class="brand-subtitle">Research workflow beta</p>
-            </div>
-            {% include "includes/nav.html" %}
-        </div>
-    </header>
+<body class="app-body {% block body_class %}{% endblock %}" data-auth="{% if request.user.is_authenticated %}user{% else %}guest{% endif %}">
+<div class="ambient"></div>
+<div class="grid-bg"></div>
 
-    <main class="app-main stack-md">
-        {% include "includes/messages.html" %}
-        <div class="page-head">
-            <div>{% block page_header %}{% endblock %}</div>
-            <div class="page-actions">{% block page_actions %}{% endblock %}</div>
+<div class="app">
+    <aside class="side">
+        {% include "includes/nav.html" %}
+    </aside>
+
+    <main class="main">
+        <div class="topbar">
+            {% with p=request.path %}
+            <div class="topbar-crumbs">
+                <span class="mono">Workbook</span>
+                <span>/</span>
+                {% if "/collections/" in p %}
+                    <span class="cur">Collections</span>
+                {% elif "/explore/" in p %}
+                    <span class="cur">Explore</span>
+                {% elif "/about/" in p %}
+                    <span class="cur">About</span>
+                {% elif "/research/" in p %}
+                    <span class="cur">Research</span>
+                {% elif "/settings/llm/" in p %}
+                    <span class="cur">LLM config</span>
+                {% elif "/workbooks/public/" in p %}
+                    <span class="cur">Public Workbooks</span>
+                {% elif "/workbooks/" in p or "/workspaces/" in p %}
+                    <span class="cur">Workbooks</span>
+                {% elif "/s/" in p %}
+                    <span class="cur">Shared View</span>
+                {% elif "/auth/" in p %}
+                    <span class="cur">Authentication</span>
+                {% else %}
+                    <span class="cur">Overview</span>
+                {% endif %}
+            </div>
+            {% endwith %}
+
+            <div class="topbar-search">
+                <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><path d="M13 13l-3-3" stroke-linecap="round"/></svg>
+                <input
+                    id="global-search-input"
+                    placeholder="Search reports, themes, coroners..."
+                    aria-label="Search"
+                    data-search-url="{% url 'collection-detail' collection_slug='custom-search' %}"
+                >
+                <span class="k">cmd+k</span>
+            </div>
+
+            <div class="topbar-actions">
+                <button
+                    class="icon-btn"
+                    id="start-over-open"
+                    title="{% if can_start_over_active_workbook %}Start over{% else %}Start over unavailable{% endif %}"
+                    {% if not can_start_over_active_workbook %}disabled{% endif %}
+                >
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8a5 5 0 1 1 1.5 3.6"/><path d="M3 4v4h4"/></svg>
+                </button>
+                <button class="icon-btn tut-reopen" id="tut-reopen" title="Take the tour">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6 6.2a2 2 0 1 1 3 1.7c-.7.4-1 .7-1 1.4M8 11.5v.1"/></svg>
+                </button>
+                <a class="btn btn-secondary sm" href="{% url 'llm-config' %}">LLM config</a>
+                {% if request.user.is_authenticated %}
+                    <a class="btn btn-secondary sm" href="{% url 'workbook-dashboard' %}">Share</a>
+                    <button class="top-av" title="{{ request.user.get_full_name|default:request.user.email }}">
+                        <span>{{ request.user.first_name|default:request.user.email|slice:":1"|upper }}{{ request.user.last_name|default:""|slice:":1"|upper }}</span>
+                    </button>
+                {% endif %}
+                {% if request.user.is_authenticated %}
+                    <a class="btn btn-secondary sm" href="{% url 'accounts-logout' %}">Log out</a>
+                {% else %}
+                    <a class="btn btn-primary sm" href="{% url 'accounts-login' %}">Sign in</a>
+                {% endif %}
+            </div>
         </div>
-        {% block content %}{% endblock %}
+
+        {% if not request.user.is_authenticated %}
+        <div class="guest-banner">
+            <div class="gb-l">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v3.5M8 11v0.1" stroke-linecap="round"/></svg>
+                <div><strong>You're browsing as guest.</strong><span> Sign in to save investigations and workbook history. </span></div>
+            </div>
+            <div class="gb-r">
+                <a class="btn btn-primary sm" href="{% url 'accounts-login' %}">Sign in</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <section class="screen on">
+            {% include "includes/messages.html" %}
+            <div class="page-head">
+                <div>{% block page_header %}{% endblock %}</div>
+                <div class="page-actions">{% block page_actions %}{% endblock %}</div>
+            </div>
+            {% block content %}{% endblock %}
+        </section>
     </main>
 </div>
+
+<div class="dlg-back" id="dlg-start-over" aria-hidden="true">
+    <div class="dlg confirm danger" role="dialog" aria-labelledby="start-over-title">
+        <div class="dlg-head">
+            <div class="k"><span class="d"></span>Destructive · cannot be undone</div>
+            <h3 id="start-over-title">Start over?</h3>
+            <p>This clears the active workbook state and returns to the loaded dataset baseline.</p>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to cancel</span>
+            <div class="acts">
+                <button class="btn btn-ghost" type="button" data-start-over-close>Cancel</button>
+                {% if can_start_over_active_workbook and active_workbook %}
+                <form method="post" action="{% url 'workbook-state-start-over' workbook_id=active_workbook.id %}">
+                    {% csrf_token %}
+                    <button class="btn btn-danger" type="submit">Confirm start over</button>
+                </form>
+                {% else %}
+                <button class="btn btn-danger" type="button" disabled>Confirm start over</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="tut-back" id="tut-back" aria-hidden="true">
+    <div class="tut" role="dialog" aria-labelledby="tut-title">
+        <div class="tut-bar">
+            <div class="tut-brand">
+                <div class="brand-mark"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="5"/><path d="M8 3v5l3 2"/></svg></div>
+                <span>PFD Toolkit · Tour</span>
+            </div>
+            <div class="tut-dots" id="tut-dots">
+                <i class="on"></i><i></i><i></i><i></i><i></i>
+            </div>
+            <button class="tut-skip" id="tut-skip">Skip tour</button>
+        </div>
+
+        <div class="tut-body">
+            <div class="tut-stage" id="tut-stage">
+                <div class="tut-step on" data-step="1">
+                    <div class="tut-art art-welcome">
+                        <div class="art-report r1"><div class="rh"></div><div class="rl"></div><div class="rl"></div><div class="rl s"></div></div>
+                        <div class="art-report r2"><div class="rh"></div><div class="rl"></div><div class="rl"></div><div class="rl s"></div></div>
+                        <div class="art-report r3"><div class="rh"></div><div class="rl"></div><div class="rl"></div><div class="rl s"></div></div>
+                        <div class="art-report r4"><div class="rh"></div><div class="rl"></div><div class="rl"></div><div class="rl s"></div></div>
+                        <div class="art-beam"></div>
+                        <div class="art-focal">
+                            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><circle cx="32" cy="32" r="20"/><path d="M32 20v12l8 5"/></svg>
+                            <span>6,293 reports</span>
+                        </div>
+                    </div>
+                    <div class="tut-copy">
+                        <div class="tut-k">Welcome · 01 of 05</div>
+                        <h2 id="tut-title">A toolkit for coroner-report research.</h2>
+                        <p>PFD Toolkit gives you a living view of every Prevention of Future Death report published since 2013.</p>
+                        <p>Use this short tour to understand the core flow before launching investigations.</p>
+                        <div class="tut-badge"><span class="d"></span>Peer-reviewed · 97% agreement with expert clinicians</div>
+                    </div>
+                </div>
+
+                <div class="tut-step" data-step="2">
+                    <div class="tut-art art-llm">
+                        <div class="llm-prompt">
+                            <div class="lp-k">YOU ASK</div>
+                            <div class="lp-text" id="lp-typing">Find reports mentioning delayed escalation in emergency care</div>
+                        </div>
+                        <div class="llm-flow"><span></span><span></span><span></span><span></span><span></span></div>
+                        <div class="llm-brain">
+                            <div class="lb-core"></div><div class="lb-ring r1"></div><div class="lb-ring r2"></div><div class="lb-ring r3"></div>
+                            <div class="lb-label">Language model</div>
+                        </div>
+                        <div class="llm-flow rev"><span></span><span></span><span></span><span></span><span></span></div>
+                        <div class="llm-answer">
+                            <div class="la-k">IT READS · RETURNS</div>
+                            <div class="la-row"><i></i><span>Escalation delay</span><em>32</em></div>
+                            <div class="la-row"><i></i><span>Communication failure</span><em>19</em></div>
+                            <div class="la-row"><i></i><span>Handover issue</span><em>11</em></div>
+                        </div>
+                    </div>
+                    <div class="tut-copy">
+                        <div class="tut-k">Concept · 02 of 05</div>
+                        <h2>An LLM is a calculator for language.</h2>
+                        <p>You write a question, the model reads reports, and the tool returns structured outputs with traceable evidence.</p>
+                    </div>
+                </div>
+
+                <div class="tut-step" data-step="3">
+                    <div class="tut-art art-key">
+                        <div class="key-lane">
+                            <div class="key-node us"><span>PFD Toolkit</span><small>Free</small></div>
+                            <div class="key-wire"><i></i></div>
+                            <div class="key-node u"><span>You</span><small>Own key</small></div>
+                            <div class="key-wire"><i></i></div>
+                            <div class="key-node them"><span>Provider</span><small>Usage billing</small></div>
+                        </div>
+                        <div class="key-key"><span>sk-••••••••••••••••</span></div>
+                    </div>
+                    <div class="tut-copy">
+                        <div class="tut-k">Security · 03 of 05</div>
+                        <h2>Your API key stays yours.</h2>
+                        <p>Configure credentials in your workbook and run workflows without sharing keys publicly.</p>
+                    </div>
+                </div>
+
+                <div class="tut-step" data-step="4">
+                    <div class="tut-art art-explore">
+                        <div class="ex-hud">
+                            <div class="ex-chip"><b>scope</b><em>Last 3 years</em></div>
+                            <div class="ex-chip"><b>mode</b><em>Filter</em></div>
+                        </div>
+                        <div class="ex-panel"><div class="ex-p-head"><span>Explore</span></div></div>
+                        <div class="ex-bars">
+                            <div class="ex-bar"><span>Mental health</span><div class="eb-t"><i style="--w:82%"></i></div></div>
+                            <div class="ex-bar"><span>Emergency care</span><div class="eb-t"><i style="--w:66%"></i></div></div>
+                            <div class="ex-bar"><span>Medication</span><div class="eb-t"><i style="--w:40%"></i></div></div>
+                        </div>
+                    </div>
+                    <div class="tut-copy">
+                        <div class="tut-k">Workflow · 04 of 05</div>
+                        <h2>Explore first, then investigate.</h2>
+                        <p>Use Explore and Collections to scope candidates, then launch workbook investigations for filter, themes, and extract.</p>
+                    </div>
+                </div>
+
+                <div class="tut-step" data-step="5">
+                    <div class="tut-art art-go">
+                        <div class="go-orb"><span class="go-core"></span><span class="go-ring r1"></span><span class="go-ring r2"></span><span class="go-ring r3"></span></div>
+                        <div class="go-paths">
+                            <div class="go-path"><b>⌘K</b><span>Start an investigation</span></div>
+                            <div class="go-path"><b>Browse</b><span>Use curated collections</span></div>
+                            <div class="go-path"><b>Run</b><span>Track stage-by-stage outputs</span></div>
+                        </div>
+                    </div>
+                    <div class="tut-copy">
+                        <div class="tut-k">Ready · 05 of 05</div>
+                        <h2>You are ready to start.</h2>
+                        <p>Open Workbooks, pick your active workbook, and run a guided investigation.</p>
+                        <p class="tut-dim">You can re-open this tour any time from the top-bar question icon.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tut-foot">
+            <button class="btn btn-ghost" id="tut-back-btn" disabled>← Back</button>
+            <div class="tut-keys">
+                <span><span class="k">←</span><span class="k">→</span> Navigate</span>
+                <span><span class="k">Esc</span> Skip</span>
+            </div>
+            <button class="btn btn-primary" id="tut-next-btn">Next →</button>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener("click", function(event) {
+  const btn = event.target.closest(".gb-x");
+  if (!btn) return;
+  const banner = btn.closest(".guest-banner");
+  if (banner) banner.style.display = "none";
+});
+
+document.addEventListener("keydown", function(event) {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    const input = document.getElementById("global-search-input");
+    if (input) input.focus();
+  }
+});
+
+document.addEventListener("DOMContentLoaded", function() {
+  const startOverDialog = document.getElementById("dlg-start-over");
+  const startOverOpen = document.getElementById("start-over-open");
+  const startOverCloseButtons = startOverDialog ? startOverDialog.querySelectorAll("[data-start-over-close]") : [];
+  const openStartOverDialog = function() {
+    if (!startOverDialog || startOverOpen?.disabled) return;
+    startOverDialog.classList.add("on");
+    startOverDialog.setAttribute("aria-hidden", "false");
+  };
+  const closeStartOverDialog = function() {
+    if (!startOverDialog) return;
+    startOverDialog.classList.remove("on");
+    startOverDialog.setAttribute("aria-hidden", "true");
+  };
+  startOverOpen?.addEventListener("click", openStartOverDialog);
+  startOverDialog?.addEventListener("click", function(event) {
+    if (event.target === startOverDialog) closeStartOverDialog();
+  });
+  startOverCloseButtons.forEach(function(btn) {
+    btn.addEventListener("click", closeStartOverDialog);
+  });
+
+  const tutorialOverlay = document.getElementById("tut-back");
+  const tutorialOpen = document.getElementById("tut-reopen");
+  const tutorialSkip = document.getElementById("tut-skip");
+  const tutorialBack = document.getElementById("tut-back-btn");
+  const tutorialNext = document.getElementById("tut-next-btn");
+  const tutorialSteps = tutorialOverlay ? Array.from(tutorialOverlay.querySelectorAll(".tut-step")) : [];
+  const tutorialDots = tutorialOverlay ? Array.from(tutorialOverlay.querySelectorAll(".tut-dots i")) : [];
+  const tutorialSeenKey = "pfd_tut_v1_seen";
+  let tutorialIndex = 0;
+
+  const showTutorialStep = function(index) {
+    if (!tutorialSteps.length) return;
+    tutorialIndex = Math.max(0, Math.min(tutorialSteps.length - 1, index));
+    tutorialSteps.forEach(function(step, i) { step.classList.toggle("on", i === tutorialIndex); });
+    tutorialDots.forEach(function(dot, i) {
+      dot.classList.toggle("on", i === tutorialIndex);
+      dot.classList.toggle("done", i < tutorialIndex);
+    });
+    if (tutorialBack) tutorialBack.disabled = tutorialIndex === 0;
+    if (tutorialNext) tutorialNext.textContent = tutorialIndex === tutorialSteps.length - 1 ? "Let's go →" : "Next →";
+  };
+
+  const closeTutorial = function() {
+    if (!tutorialOverlay) return;
+    tutorialOverlay.classList.remove("on");
+    tutorialOverlay.setAttribute("aria-hidden", "true");
+    try { localStorage.setItem(tutorialSeenKey, "1"); } catch (error) {}
+  };
+  const openTutorial = function() {
+    if (!tutorialOverlay) return;
+    tutorialOverlay.classList.add("on");
+    tutorialOverlay.setAttribute("aria-hidden", "false");
+    document.body.removeAttribute("data-tut-unseen");
+    showTutorialStep(0);
+  };
+
+  tutorialOpen?.addEventListener("click", openTutorial);
+  tutorialSkip?.addEventListener("click", closeTutorial);
+  tutorialBack?.addEventListener("click", function() { showTutorialStep(tutorialIndex - 1); });
+  tutorialNext?.addEventListener("click", function() {
+    if (tutorialIndex >= tutorialSteps.length - 1) {
+      closeTutorial();
+      return;
+    }
+    showTutorialStep(tutorialIndex + 1);
+  });
+  tutorialOverlay?.addEventListener("click", function(event) {
+    if (event.target === tutorialOverlay) closeTutorial();
+  });
+
+  const input = document.getElementById("global-search-input");
+  if (input) {
+    input.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter") return;
+      const query = (input.value || "").trim();
+      if (!query) return;
+      const searchUrl = input.getAttribute("data-search-url");
+      if (!searchUrl) return;
+      event.preventDefault();
+      const url = new URL(searchUrl, window.location.origin);
+      url.searchParams.set("q", query);
+      window.location.href = url.toString();
+    });
+  }
+
+  try {
+    if (!localStorage.getItem(tutorialSeenKey)) {
+      document.body.setAttribute("data-tut-unseen", "1");
+      setTimeout(openTutorial, 700);
+    }
+  } catch (error) {}
+
+  window.addEventListener("keydown", function(event) {
+    if (event.key === "Escape") {
+      if (tutorialOverlay?.classList.contains("on")) {
+        event.preventDefault();
+        closeTutorial();
+      } else if (startOverDialog?.classList.contains("on")) {
+        event.preventDefault();
+        closeStartOverDialog();
+      }
+    }
+    if (tutorialOverlay?.classList.contains("on")) {
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        tutorialBack?.click();
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        tutorialNext?.click();
+      }
+    }
+  });
+});
+</script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

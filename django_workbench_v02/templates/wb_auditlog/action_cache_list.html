@@ -1,41 +1,51 @@
 {% extends "base.html" %}
 
-{% block content %}
-<h2>Workbook Action Cache</h2>
-<p>Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a></p>
+{% block page_title %}Workbook Action Cache · PFD Toolkit Workbench v0.2{% endblock %}
 
-{% if events %}
-    <table>
-        <thead>
-            <tr>
-                <th>When</th>
-                <th>Action</th>
-                <th>Entity</th>
-                <th>User</th>
-                <th>Query</th>
-                <th>Options</th>
-                <th>Before</th>
-                <th>After</th>
-                <th>Context</th>
-            </tr>
-        </thead>
-        <tbody>
-        {% for row in events %}
-            <tr>
-                <td>{{ row.created_at }}</td>
-                <td>{{ row.action_key }}</td>
-                <td>{{ row.entity_type }} / {{ row.entity_id }}</td>
-                <td>{% if row.user %}{{ row.user.email }}{% else %}-{% endif %}</td>
-                <td><pre>{{ row.query_json }}</pre></td>
-                <td><pre>{{ row.options_json }}</pre></td>
-                <td><pre>{{ row.state_before_json }}</pre></td>
-                <td><pre>{{ row.state_after_json }}</pre></td>
-                <td><pre>{{ row.context_json }}</pre></td>
-            </tr>
-        {% endfor %}
-        </tbody>
-    </table>
-{% else %}
-    <p>No action-cache events yet.</p>
-{% endif %}
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Workbook Action Cache</h2>
+    <p class="page-subtitle">Workbook: <a href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a></p>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="card">
+    {% if events %}
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>When</th>
+                        <th>Action</th>
+                        <th>Entity</th>
+                        <th>User</th>
+                        <th>Query</th>
+                        <th>Options</th>
+                        <th>Before</th>
+                        <th>After</th>
+                        <th>Context</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for row in events %}
+                    <tr>
+                        <td>{{ row.created_at }}</td>
+                        <td>{{ row.action_key }}</td>
+                        <td>{{ row.entity_type }} / {{ row.entity_id }}</td>
+                        <td>{% if row.user %}{{ row.user.email }}{% else %}-{% endif %}</td>
+                        <td><pre>{{ row.query_json }}</pre></td>
+                        <td><pre>{{ row.options_json }}</pre></td>
+                        <td><pre>{{ row.state_before_json }}</pre></td>
+                        <td><pre>{{ row.state_after_json }}</pre></td>
+                        <td><pre>{{ row.context_json }}</pre></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p>No action-cache events yet.</p>
+    {% endif %}
+</section>
 {% endblock %}

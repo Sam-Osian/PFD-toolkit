@@ -1,32 +1,46 @@
 {% extends "base.html" %}
 
+{% block page_title %}Investigations · {{ workspace.title }} · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="stack-sm">
+    <h2 class="page-title">Investigations for {{ workspace.title }}</h2>
+    <p class="page-subtitle"><a href="{% url 'workbook-detail' workbook_id=workspace.id %}">Back to workbook</a></p>
+</div>
+{% endblock %}
+
 {% block content %}
-<h2>Investigations for {{ workspace.title }}</h2>
-<p><a href="{% url 'workbook-detail' workbook_id=workspace.id %}">Back to workbook</a></p>
+<div class="stack-md">
+    <section class="card">
+        {% if investigations %}
+            <ul class="ws-list">
+                {% for inv in investigations %}
+                    <li>
+                        <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=inv.id %}">
+                            {{ inv.title }}
+                        </a>
+                        ({{ inv.status }})
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>No investigation yet.</p>
+        {% endif %}
+    </section>
 
-{% if investigations %}
-    <ul>
-        {% for inv in investigations %}
-            <li>
-                <a href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=inv.id %}">
-                    {{ inv.title }}
-                </a>
-                ({{ inv.status }})
-            </li>
-        {% endfor %}
-    </ul>
-{% else %}
-    <p>No investigation yet.</p>
-{% endif %}
-
-{% if can_edit and not has_investigation %}
-    <h3>Create Investigation</h3>
-    <form method="post">
-        {% csrf_token %}
-        {{ create_form.as_p }}
-        <button type="submit">Create investigation</button>
-    </form>
-{% elif has_investigation %}
-    <p>This workbook already has its investigation bundle.</p>
-{% endif %}
+    {% if can_edit and not has_investigation %}
+        <section class="card">
+            <h3>Create Investigation</h3>
+            <form method="post" class="stack-sm">
+                {% csrf_token %}
+                {{ create_form.as_p }}
+                <button type="submit" class="btn btn-primary">Create investigation</button>
+            </form>
+        </section>
+    {% elif has_investigation %}
+        <section class="card">
+            <p>This workbook already has its investigation bundle.</p>
+        </section>
+    {% endif %}
+</div>
 {% endblock %}

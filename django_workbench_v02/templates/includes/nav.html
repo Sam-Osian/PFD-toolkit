@@ -1,14 +1,107 @@
-<nav class="site-nav" aria-label="Primary">
-    <a href="{% url 'landing' %}">Home</a>
-    {% if request.user.is_authenticated %}
-        <a href="{% url 'workbook-dashboard' %}">Dashboard</a>
-        <a href="{% url 'collection-list' %}">Collections</a>
-        <a href="{% url 'accounts-logout' %}">Log out</a>
-        {% if request.user.is_staff %}
-            <a href="/admin/">Admin</a>
-        {% endif %}
-    {% else %}
-        <a href="{% url 'accounts-login' %}">Log in</a>
-        <a href="{% url 'collection-list' %}">Collections</a>
+{% load static %}
+{% with p=request.path %}
+<div class="brand">
+    <div class="brand-mark">
+        <img src="{% static 'brand/logo-lens.svg' %}" alt="PFD Toolkit logo" width="16" height="16">
+    </div>
+    <div class="brand-text">
+        <strong>PFD Toolkit</strong>
+        <small>v0.2 · beta</small>
+    </div>
+</div>
+
+{% if request.user.is_authenticated %}
+    <a class="cmd-btn" href="{% url 'workbook-dashboard' %}">
+        <span class="cmd-dot"></span>
+        <span>Start an investigation</span>
+        <span class="cmd-kbd">cmd+k</span>
+    </a>
+{% else %}
+    <a class="cmd-btn" href="{% url 'accounts-login' %}">
+        <span class="cmd-dot"></span>
+        <span>Sign in to investigate</span>
+        <span class="cmd-kbd">free</span>
+    </a>
+{% endif %}
+
+<nav class="nav" aria-label="Primary navigation">
+    <div class="nav-group">Workspace</div>
+    <a class="nav-item{% if p == '/' %} on{% endif %}" href="{% url 'landing' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8l6-5 6 5v6a1 1 0 01-1 1H3a1 1 0 01-1-1V8z"/></svg>
+        <span>Overview</span>
+        <span class="nav-meta">H</span>
+    </a>
+    <a class="nav-item{% if '/workbooks/' in p or '/workspaces/' in p %} on{% endif %}" href="{% url 'workbook-dashboard' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="5.5" height="4" rx="1"/><rect x="8.5" y="3" width="5.5" height="4" rx="1"/><rect x="2" y="9" width="5.5" height="4" rx="1"/><rect x="8.5" y="9" width="5.5" height="4" rx="1"/></svg>
+        <span>Workbooks</span>
+        <span class="nav-meta">W</span>
+    </a>
+    <a class="nav-item{% if '/explore/' in p %} on{% endif %}" href="{% url 'explore' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
+        <span>Explore</span>
+        <span class="nav-meta">E</span>
+    </a>
+    <a class="nav-item{% if '/collections/' in p %} on{% endif %}" href="{% url 'collection-list' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M3 5l1 8h8l1-8M6 5V3h4v2"/></svg>
+        <span>Collections</span>
+        <span class="nav-meta">C</span>
+    </a>
+
+    <div class="nav-group">Learn</div>
+    <a class="nav-item{% if '/about/' in p %} on{% endif %}" href="{% url 'about' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="7" x2="8" y2="12"/><circle cx="8" cy="4.5" r="0.6" fill="currentColor" stroke="none"/></svg>
+        <span>About PFD Toolkit</span>
+    </a>
+    <a class="nav-item{% if '/research/' in p %} on{% endif %}" href="{% url 'research' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><line x1="14" y1="14" x2="10" y2="10" stroke-linecap="round"/></svg>
+        <span>Research</span>
+        <span class="nav-badge">New</span>
+    </a>
+
+    <div class="nav-group">Advanced</div>
+    {% if request.user.is_authenticated and request.user.is_staff %}
+        <a class="nav-item" href="/admin/">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2l5 2v4c0 3-2 5.5-5 6-3-0.5-5-3-5-6V4l5-2z"/><path d="M6.2 8.2l1.2 1.2 2.5-2.5"/></svg>
+            <span>Admin</span>
+        </a>
     {% endif %}
+    <a class="nav-item" href="{% if request.user.is_authenticated %}{% url 'accounts-logout' %}{% else %}{% url 'accounts-login' %}{% endif %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 3H3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h3"/><path d="M10 11l4-3-4-3"/><path d="M14 8H6"/></svg>
+        <span>{% if request.user.is_authenticated %}Log out{% else %}Log in{% endif %}</span>
+    </a>
 </nav>
+
+<div class="side-foot">
+    {% if request.user.is_authenticated %}
+        <div class="acct acct-user">
+            <div class="acct-avatar">
+                <span>{{ request.user.first_name|default:request.user.email|slice:":1"|upper }}{{ request.user.last_name|default:""|slice:":1"|upper }}</span>
+                <span class="acct-status"></span>
+            </div>
+            <div class="acct-body">
+                <strong>{{ request.user.get_full_name|default:request.user.email }}</strong>
+                <small>{{ request.user.email }}</small>
+            </div>
+        </div>
+    {% else %}
+        <div class="acct acct-guest">
+            <div class="acct-ico guest">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 13c0-2.5 2.5-4 6-4s6 1.5 6 4"/><circle cx="8" cy="5" r="2.5"/></svg>
+            </div>
+            <div class="acct-body">
+                <strong>Browsing as guest</strong>
+                <small>Sign in to save investigations</small>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="foot-card">
+        <div class="fc-row"><span class="d"></span><span>Workbench ready</span></div>
+        <div class="fc-body">pfd_toolkit adapters connected</div>
+    </div>
+    <div class="foot-meta">
+        <a href="{% url 'landing' %}">pfdtoolkit.org</a>
+        <span>v0.2 · beta</span>
+    </div>
+</div>
+{% endwith %}

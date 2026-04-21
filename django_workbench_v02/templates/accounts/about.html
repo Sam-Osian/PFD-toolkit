@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block page_title %}About · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="eyebrow"><span class="d"></span>About · The story</div>
+{% endblock %}
+
+{% block content %}
+<div class="stack-md">
+    <section class="about-hero">
+        <h1 class="page-title xl">Why coroners’ reports deserve more than a filing cabinet.</h1>
+        <p class="page-lede big">
+            Every Prevention of Future Death report is a coroner saying, on the record, that someone did not have to die.
+            PFD Toolkit exists to make this archive searchable, analysable, and usable at scale.
+        </p>
+    </section>
+
+    <section class="about-grid">
+        <article class="ab-card">
+            <div class="ab-k">The reports</div>
+            <h3>What a PFD is</h3>
+            <p>When a coroner concludes an inquest, they can issue a Regulation 28 report to any organisation they believe could prevent similar deaths.</p>
+        </article>
+        <article class="ab-card">
+            <div class="ab-k">The problem</div>
+            <h3>Why they go unread</h3>
+            <p>Reports are published as PDFs with minimal metadata. Serious thematic work is otherwise manual and slow.</p>
+        </article>
+        <article class="ab-card accent">
+            <div class="ab-k">The approach</div>
+            <h3>AI as an instrument, not an oracle</h3>
+            <p>You ask a plain-English question; the toolkit screens reports, returns matches with supporting quotes, and preserves traceability.</p>
+        </article>
+        <article class="ab-card">
+            <div class="ab-k">The cost</div>
+            <h3>Why some features need an API key</h3>
+            <p>PFD Toolkit is free/open-source. AI model usage is billed by model providers; users bring their own key.</p>
+        </article>
+    </section>
+
+    <section class="about-values">
+        <div class="av-head">
+            <div class="eyebrow"><span class="d"></span>How we work</div>
+            <h2>Principles we won’t compromise on.</h2>
+        </div>
+        <div class="av-grid">
+            <div class="av"><i>01</i><h4>Evidence first</h4><p>Claims map back to source text.</p></div>
+            <div class="av"><i>02</i><h4>Open by default</h4><p>Methods are documented and reproducible.</p></div>
+            <div class="av"><i>03</i><h4>Research-grade</h4><p>Validated against expert review.</p></div>
+            <div class="av"><i>04</i><h4>Anonymity preserved</h4><p>No re-identification of the deceased.</p></div>
+        </div>
+    </section>
+
+    <section class="about-cta-row">
+        <div>
+            <div class="eyebrow"><span class="d"></span>Custom work</div>
+            <h3>Need bespoke analysis?</h3>
+            <p>Structured policy outputs, custom extraction schemas, and defensible methodology are available on request.</p>
+        </div>
+        <a class="btn btn-secondary lg" href="mailto:sam.osian@oreliandata.co.uk">Commission custom analysis →</a>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block page_title %}Explore · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="eyebrow"><span class="d"></span>Explore · 6,293 reports</div>
+{% endblock %}
+
+{% block content %}
+<div class="stack-md">
+    <section class="panel">
+        <div class="panel-head">
+            <div class="left">
+                <h1 class="page-title">Explore PFD reports</h1>
+                <p class="page-lede">A live HUD over the archive. Ask a question, narrow by receiver or area, and update your active view.</p>
+            </div>
+            <div class="right" style="display:flex; gap:8px;">
+                <a class="btn btn-secondary" href="{% url 'collection-list' %}">Open collections</a>
+                {% if request.user.is_authenticated %}
+                    <a class="btn btn-primary" href="{% url 'workbook-dashboard' %}">Start investigation</a>
+                {% else %}
+                    <a class="btn btn-primary" href="{% url 'accounts-login' %}">Sign in to investigate</a>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="hud">
+        <div class="hud-q">Query</div>
+        <form method="get" action="{% url 'collection-detail' collection_slug='custom-search' %}" class="topbar-search" style="width:100%;">
+            <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4"/><path d="M13 13l-3-3" stroke-linecap="round"/></svg>
+            <input name="q" placeholder="Search reports by question, theme, coroner, or receiver..." required>
+            <button type="submit" class="btn btn-primary sm">Search</button>
+        </form>
+    </section>
+
+    <div class="charts-3">
+        <section class="panel">
+            <div class="panel-head"><div class="left"><span class="k">Area</span><h3>Most common areas</h3></div></div>
+            <p class="page-subtitle">Use the custom-search workflow to generate live bars from your scoped report set.</p>
+        </section>
+        <section class="panel">
+            <div class="panel-head"><div class="left"><span class="k">Receiver</span><h3>Most common receivers</h3></div></div>
+            <p class="page-subtitle">Receiver prevalence updates once your filter run is complete.</p>
+        </section>
+        <section class="panel">
+            <div class="panel-head"><div class="left"><span class="k">Theme</span><h3>Most common themes</h3></div></div>
+            <p class="page-subtitle">Theme frequency appears after a themes run in your workbook investigation.</p>
+        </section>
+    </div>
+
+    {% if not request.user.is_authenticated %}
+    <section class="explore-unlock">
+        <div class="eu-head"><span class="d"></span><span>Free with a PFD Toolkit account</span></div>
+        <div class="eu-grid">
+            <div class="eu-item">
+                <div class="eu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M2 8l3.2 3.2L14 2.4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div><strong>AI screening</strong><span>Ask a question. The toolkit reads every report and keeps only relevant matches.</span></div>
+            </div>
+            <div class="eu-item">
+                <div class="eu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="8" cy="8" r="5.2"/><path d="M8 4.8v3.2l2.2 1.6" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div><strong>Theme discovery</strong><span>Cluster matched reports into recurring topics automatically.</span></div>
+            </div>
+            <div class="eu-item">
+                <div class="eu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M5 6h6M5 9h6" stroke-linecap="round"/>
+                    </svg>
+                </div>
+                <div><strong>Structured extraction</strong><span>Pull fields into a table and export to CSV.</span></div>
+            </div>
+            <div class="eu-item">
+                <div class="eu-icon" aria-hidden="true">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M8 2.5l4.8 2v4.2c0 2.5-1.6 4.4-4.8 5.3-3.2-.9-4.8-2.8-4.8-5.3V4.5l4.8-2z"/><path d="M6.4 8l1.1 1.1L10 6.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div><strong>Persistent workbooks</strong><span>Save filters, themes, outputs, and notes so work is never lost.</span></div>
+            </div>
+        </div>
+        <div class="eu-foot">
+            <a class="btn btn-primary" href="{% url 'accounts-login' %}">Create free account</a>
+            <a class="btn btn-ghost" href="{% url 'about' %}">Learn more</a>
+        </div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

@@ -57,6 +57,12 @@
   background: rgba(255, 255, 255, 0.06);
 }
 
+.brand-mark img {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
 .page-head {
   display: flex;
   flex-wrap: wrap;
@@ -97,6 +103,16 @@
   background: var(--surface);
   border-radius: var(--radius-sm);
   padding: 0.7rem 0.9rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.message-kicker {
+  font-family: var(--ff-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
 }
 
 .message.success {

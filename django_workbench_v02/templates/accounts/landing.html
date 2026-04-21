@@ -1,22 +1,80 @@
 {% extends "base.html" %}
 
 {% block page_title %}PFD Toolkit Workbench v0.2{% endblock %}
+{% block body_class %}landing-page{% endblock %}
 
 {% block page_header %}
-<div class="stack-sm">
-    <h2 class="page-title">Auth + Permission Spine (v0.2)</h2>
-</div>
+<div></div>
 {% endblock %}
 
 {% block content %}
-<section class="card auth-card stack-sm">
+<div class="home-stage">
+    <div class="eyebrow"><span class="d"></span><span>PFD Toolkit Workbench</span></div>
+    <h1 class="home-h1">
+        A <span class="accent">toolkit</span> for<br>
+        coroner-report research.
+    </h1>
+    <p class="home-sub">
+        PFD Toolkit makes Prevention of Future Death reports searchable, filterable, and analysable with AI workflows.
+    </p>
+    <div class="home-ctas">
+        {% if request.user.is_authenticated %}
+            <a class="btn btn-primary lg" href="{% url 'workbook-dashboard' %}">Open your workbooks</a>
+            <a class="btn btn-secondary lg" href="{% url 'explore' %}">Browse all reports</a>
+        {% else %}
+            <a class="btn btn-primary lg" href="{% url 'accounts-login' %}">Sign in</a>
+            <a class="btn btn-secondary lg" href="{% url 'explore' %}">Browse all reports</a>
+        {% endif %}
+    </div>
+    <div class="home-meta">
+        <div class="hm-stat"><span>6,293</span> reports</div>
+        <div class="hm-div"></div>
+        <div class="hm-stat"><span>2013–26</span> date range</div>
+        <div class="hm-div"></div>
+        <div class="hm-stat"><span>88</span> coroners</div>
+        <div class="hm-div"></div>
+        <div class="hm-stat"><span>34</span> areas</div>
+    </div>
+
     {% if request.user.is_authenticated %}
-        <p>Signed in as <strong>{{ request.user.email }}</strong>.</p>
-        <p>Use the dashboard to view your workbooks.</p>
-        <p><a class="btn btn-secondary" href="{% url 'workbook-dashboard' %}">Open dashboard</a></p>
+        <div class="home-resume-slim">
+            <div class="hrs-label">Last open</div>
+            <a class="hrs-item" href="{% url 'workbook-dashboard' %}">
+                <span class="hrs-tag">Investigation</span>
+                <span class="hrs-title">Continue in your active workbook</span>
+                <span class="hrs-meta">Open runs and artifacts</span>
+                <span class="hrs-go">→</span>
+            </a>
+        </div>
     {% else %}
-        <p>You are signed out.</p>
-        <p><a class="btn btn-primary" href="{% url 'accounts-login' %}">Continue with Auth0</a></p>
+        <p class="home-guest-nudge"><a href="{% url 'accounts-login' %}">Create a free account</a> to save investigations and pick up where you left off.</p>
     {% endif %}
-</section>
+</div>
+
+<div class="home-tiles reveal reveal-4">
+    <a class="ht" href="{% url 'explore' %}">
+        <div class="ht-k">Explore</div>
+        <div class="ht-title">Browse the full archive</div>
+        <p class="ht-desc">Search all reports by question, area, coroner, and receiver.</p>
+        <span class="ht-go">Open →</span>
+    </a>
+    <a class="ht" href="{% url 'workbook-dashboard' %}">
+        <div class="ht-k">Workbooks</div>
+        <div class="ht-title">Run AI investigations</div>
+        <p class="ht-desc">Filter, discover themes, extract structured data, and keep full run history.</p>
+        <span class="ht-go">Open →</span>
+    </a>
+    <a class="ht" href="{% url 'collection-list' %}">
+        <div class="ht-k">Collections</div>
+        <div class="ht-title">Start from curated views</div>
+        <p class="ht-desc">Open high-signal starting points and copy into editable workbooks.</p>
+        <span class="ht-go">Open →</span>
+    </a>
+    <a class="ht" href="{% url 'research' %}">
+        <div class="ht-k">Research</div>
+        <div class="ht-title">Read the evidence base</div>
+        <p class="ht-desc">See published validation work and collaborate on future studies.</p>
+        <span class="ht-go">Open →</span>
+    </a>
+</div>
 {% endblock %}
