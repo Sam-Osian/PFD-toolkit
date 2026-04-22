@@ -26,6 +26,7 @@ from accounts.views import (
 from wb_investigations.models import Investigation
 from wb_collections.services import (
     _network_truthy,
+    _parse_report_dates,
     _split_receivers,
     _theme_collection_map_from_reports,
     build_explore_metrics,
@@ -290,10 +291,8 @@ def _pipeline_dashboard_context(*, workspace: Workspace, request) -> dict:
         ordered_column_labels = [_explore_column_label(column_name) for column_name in reports_columns]
         display_df = filtered_df.copy()
         if "date" in display_df.columns:
-            display_df["_sort_date"] = pd.to_datetime(
-                display_df.get("date", pd.Series(dtype="object")),
-                errors="coerce",
-                dayfirst=True,
+            display_df["_sort_date"] = _parse_report_dates(
+                display_df.get("date", pd.Series(dtype="object"))
             )
             display_df = display_df.sort_values(
                 by=["_sort_date"],
@@ -688,35 +687,42 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
         }
         return {"dataset_available": dataset_available, "explore": explore, "scoped_reports": base_df}
 
+    selected_filters = {
+        "coroner": [],
+        "area": list(params["selected_areas"]),
+        "receiver": list(params["selected_receivers"]),
+    }
     scoped_reports = reports_for_collection(
         reports_df=base_df,
         collection_slug="custom",
         query=str(params["query"]),
-        selected_filters={
-            "coroner": [],
-            "area": list(params["selected_areas"]),
-            "receiver": list(params["selected_receivers"]),
-        },
+        selected_filters=selected_filters,
+    )
+    scoped_reports_raw = reports_for_collection(
+        reports_df=base_df_raw,
+        collection_slug="custom",
+        query=str(params["query"]),
+        selected_filters=selected_filters,
     )
 
     date_start_raw = str(params["date_start_raw"])
     date_end_raw = str(params["date_end_raw"])
     if date_start_raw or date_end_raw:
-        date_series = pd.to_datetime(
-            scoped_reports.get("date", pd.Series(dtype="object")),
-            errors="coerce",
-            dayfirst=True,
-        )
-        mask = pd.Series(True, index=scoped_reports.index)
-        if date_start_raw:
-            start_ts = pd.to_datetime(date_start_raw, errors="coerce")
-            if pd.notna(start_ts):
-                mask = mask & (date_series >= start_ts)
-        if date_end_raw:
-            end_ts = pd.to_datetime(date_end_raw, errors="coerce")
-            if pd.notna(end_ts):
-                mask = mask & (date_series <= end_ts)
-        scoped_reports = scoped_reports.loc[mask].reset_index(drop=True)
+        def _apply_date_mask(df: pd.DataFrame) -> pd.DataFrame:
+            date_series = _parse_report_dates(df.get("date", pd.Series(dtype="object")))
+            mask = pd.Series(True, index=df.index)
+            if date_start_raw:
+                start_ts = pd.to_datetime(date_start_raw, errors="coerce")
+                if pd.notna(start_ts):
+                    mask = mask & (date_series >= start_ts)
+            if date_end_raw:
+                end_ts = pd.to_datetime(date_end_raw, errors="coerce")
+                if pd.notna(end_ts):
+                    mask = mask & (date_series <= end_ts)
+            return df.loc[mask].reset_index(drop=True)
+
+        scoped_reports = _apply_date_mask(scoped_reports)
+        scoped_reports_raw = _apply_date_mask(scoped_reports_raw)
 
     explore = build_explore_metrics(reports_df=base_df, scoped_reports_df=scoped_reports, query=str(params["query"]))
     scope_area_counts = (
@@ -754,7 +760,7 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
     else:
         scope_theme_rows = _theme_rows_from_generic_scope(
             reports_df=base_df_raw,
-            scoped_reports=scoped_reports,
+            scoped_reports=scoped_reports_raw,
         )
 
     top_theme_rows = scope_theme_rows[:8]
@@ -777,10 +783,8 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
         for value in base_df.get("area", [])
         if str(value or "").strip()
     }
-    dataset_date_series = pd.to_datetime(
-        base_df.get("date", pd.Series(dtype="object")),
-        errors="coerce",
-        dayfirst=True,
+    dataset_date_series = _parse_report_dates(
+        base_df.get("date", pd.Series(dtype="object"))
     ).dropna()
     default_start = dataset_date_series.min().date().isoformat() if not dataset_date_series.empty else ""
     default_end = timezone.now().date().isoformat()
@@ -840,10 +844,8 @@ def _workspace_reports_panel_context(*, workspace: Workspace, request) -> dict:
         ordered_column_labels = [_explore_column_label(column_name) for column_name in ordered_columns]
         display_df = scoped_reports.copy()
         if "date" in display_df.columns:
-            display_df["_sort_date"] = pd.to_datetime(
-                display_df.get("date", pd.Series(dtype="object")),
-                errors="coerce",
-                dayfirst=True,
+            display_df["_sort_date"] = _parse_report_dates(
+                display_df.get("date", pd.Series(dtype="object"))
             )
             display_df = display_df.sort_values(
                 by=["_sort_date"],

@@ -24,6 +24,7 @@ from wb_collections.services import (
     build_explore_metrics,
     load_collections_dataset,
     reports_for_collection,
+    _parse_report_dates,
     _split_receivers,
     _normalise_dashboard_value,
     _theme_collection_map_from_reports,
@@ -195,7 +196,7 @@ def _explore_report_rows(
         for column in ordered_columns:
             value = row.get(column)
             if column in date_columns:
-                parsed = pd.to_datetime(value, errors="coerce", dayfirst=True)
+                parsed = _parse_report_dates(pd.Series([value])).iloc[0]
                 if pd.notna(parsed):
                     cells.append(parsed.date().isoformat())
                     continue
@@ -278,11 +279,7 @@ def _build_explore_payload(
         )
 
         if date_start_raw or date_end_raw:
-            date_series = pd.to_datetime(
-                scoped_reports.get("date", pd.Series(dtype="object")),
-                errors="coerce",
-                dayfirst=True,
-            )
+            date_series = _parse_report_dates(scoped_reports.get("date", pd.Series(dtype="object")))
             mask = pd.Series(True, index=scoped_reports.index)
             if date_start_raw:
                 start_ts = pd.to_datetime(date_start_raw, errors="coerce")
@@ -294,10 +291,8 @@ def _build_explore_payload(
                     mask = mask & (date_series <= end_ts)
             scoped_reports = scoped_reports.loc[mask].reset_index(drop=True)
 
-        dataset_date_series = pd.to_datetime(
-            reports_df.get("date", pd.Series(dtype="object")),
-            errors="coerce",
-            dayfirst=True,
+        dataset_date_series = _parse_report_dates(
+            reports_df.get("date", pd.Series(dtype="object"))
         ).dropna()
         if dataset_date_series.empty:
             default_start = ""
@@ -612,10 +607,8 @@ def explore_reports_panel(request: HttpRequest) -> HttpResponse:
         ordered_column_labels = [_explore_column_label(column_name) for column_name in ordered_columns]
         display_df = scoped_reports.copy()
         if "date" in display_df.columns:
-            display_df["_sort_date"] = pd.to_datetime(
-                display_df.get("date", pd.Series(dtype="object")),
-                errors="coerce",
-                dayfirst=True,
+            display_df["_sort_date"] = _parse_report_dates(
+                display_df.get("date", pd.Series(dtype="object"))
             )
             display_df = display_df.sort_values(
                 by=["_sort_date"],
@@ -686,10 +679,8 @@ def explore_export_csv(request: HttpRequest) -> HttpResponse:
     export_df = scoped_reports[ordered_columns].copy() if ordered_columns else scoped_reports.copy()
 
     if "date" in export_df.columns:
-        export_df["_sort_date"] = pd.to_datetime(
-            export_df.get("date", pd.Series(dtype="object")),
-            errors="coerce",
-            dayfirst=True,
+        export_df["_sort_date"] = _parse_report_dates(
+            export_df.get("date", pd.Series(dtype="object"))
         )
         export_df = export_df.sort_values(
             by=["_sort_date"],
@@ -699,11 +690,9 @@ def explore_export_csv(request: HttpRequest) -> HttpResponse:
 
     for column_name in ("date", "response_date"):
         if column_name in export_df.columns:
-            export_df[column_name] = pd.to_datetime(
-                export_df[column_name],
-                errors="coerce",
-                dayfirst=True,
-            ).dt.date.astype("string").fillna("")
+            export_df[column_name] = (
+                _parse_report_dates(export_df[column_name]).dt.date.astype("string").fillna("")
+            )
 
     buffer = StringIO()
     export_df.to_csv(buffer, index=False)

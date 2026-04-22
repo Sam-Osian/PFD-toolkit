@@ -149,6 +149,22 @@ def _network_truthy(value: Any) -> bool:
     return cleaned in {"1", "true", "t", "yes", "y"}
 
 
+def _parse_report_dates(values: Any) -> pd.Series:
+    """
+    Parse mixed report date formats without dropping ISO YYYY-MM-DD values.
+
+    We first parse strict ISO entries, then parse remaining values using
+    day-first semantics for legacy UK-style dates.
+    """
+    series = values if isinstance(values, pd.Series) else pd.Series(values, dtype="object")
+    as_text = series.astype("string").str.strip()
+    iso_mask = as_text.str.match(r"^\d{4}-\d{2}-\d{2}$", na=False)
+
+    parsed_iso = pd.to_datetime(as_text.where(iso_mask), errors="coerce", format="%Y-%m-%d")
+    parsed_dayfirst = pd.to_datetime(as_text.where(~iso_mask), errors="coerce", dayfirst=True)
+    return parsed_iso.fillna(parsed_dayfirst)
+
+
 def _theme_collection_slug(theme_name: str) -> str:
     return f"{THEME_COLLECTION_SLUG_PREFIX}-{slugify(str(theme_name or '')).replace('-', '_')}"
 
@@ -520,11 +536,7 @@ def build_explore_metrics(
     total_reports = int(len(reports_df))
     scope_reports = int(len(scope_df))
 
-    date_series = pd.to_datetime(
-        scope_df.get("date", pd.Series(dtype="object")),
-        errors="coerce",
-        dayfirst=True,
-    ).dropna()
+    date_series = _parse_report_dates(scope_df.get("date", pd.Series(dtype="object"))).dropna()
     if date_series.empty:
         date_range_label = "Date range unavailable"
     else:
