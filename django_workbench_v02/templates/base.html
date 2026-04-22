@@ -1794,7 +1794,6 @@ document.addEventListener("DOMContentLoaded", function() {
   try {
     if (!localStorage.getItem(tutorialSeenKey)) {
       document.body.setAttribute("data-tut-unseen", "1");
-      setTimeout(openTutorial, 700);
     }
   } catch (error) {}
 
