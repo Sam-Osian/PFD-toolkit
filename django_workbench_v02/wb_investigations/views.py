@@ -56,6 +56,10 @@ TERMINAL_STATUSES = {
 FAILED_STATUSES = {RunStatus.FAILED, RunStatus.TIMED_OUT}
 
 
+def _can_request_run_cancellation(*, run: InvestigationRun, can_run: bool) -> bool:
+    return bool(can_run and run.status not in TERMINAL_STATUSES and run.status != RunStatus.CANCELLING)
+
+
 def _next_workspace_slug_for_user(*, user, title: str) -> str:
     base = slugify(str(title or "").strip())[:80]
     if not base:
@@ -684,7 +688,9 @@ def investigation_detail(request, workbook_id, investigation_id):
         request.user.is_authenticated
         and can_run_workflows(request.user, investigation.workspace)
     )
-    runs = InvestigationRun.objects.filter(investigation=investigation).order_by("-created_at")
+    runs = list(InvestigationRun.objects.filter(investigation=investigation).order_by("-created_at"))
+    for run in runs:
+        run.can_request_cancellation = _can_request_run_cancellation(run=run, can_run=can_run)
     retry_run_id = str(request.GET.get("retry_run_id") or "").strip()
     retry_wizard_prefill_json = ""
     if retry_run_id and can_edit:

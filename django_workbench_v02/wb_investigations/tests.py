@@ -496,6 +496,57 @@ class InvestigationViewTests(TestCase):
             f"open_wizard=1&wizard_step=review&retry_run_id={failed_run.id}",
         )
 
+    def test_investigation_detail_shows_cancel_button_for_active_run(self):
+        self.client.force_login(self.owner)
+        active_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.RUNNING,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-detail",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            reverse(
+                "workbook-run-cancel",
+                kwargs={"workbook_id": self.workspace.id, "run_id": active_run.id},
+            ),
+        )
+        self.assertContains(response, "Cancel run")
+
+    def test_investigation_detail_hides_cancel_button_for_terminal_run(self):
+        self.client.force_login(self.owner)
+        InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.SUCCEEDED,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-detail",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Cancel run")
+
     def test_queue_export_bundle_from_investigation_detail(self):
         self.investigation.scope_json = {
             "collection_slug": "local-gov",

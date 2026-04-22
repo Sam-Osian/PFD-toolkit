@@ -65,3 +65,51 @@ uv run python manage.py run_runs_worker --reconcile-timeouts-only
 
 1. Heartbeat freshness gate is intentionally strict and should block "ready" claims if stale.
 2. This slice validates continuity only; notification semantics are handled in Slice 3.
+
+## 6. Evidence Log (2026-04-22)
+
+Production verification captured via Railway CLI + Django management commands against `DATABASE_PUBLIC_URL`.
+
+CLI gates:
+
+1. Services healthy: `web`, `worker`, `notification-dispatcher`, `Postgres` all `SUCCESS`.
+2. Worker heartbeat gate passed:
+   `Run worker heartbeat healthy: worker=railway-worker-1 state=idle last_seen_at=2026-04-22T16:36:56.532861+00:00`
+3. Deployed smoke checks passed:
+   `/` returned `HTTP/2 200`, `/auth/login/` returned `HTTP/2 302` to Auth0.
+
+Manual gate evidence:
+
+1. Live run terminal success + artifact present (deployed env):
+   - `run_id`: `9fa4ae7f-796c-4f4c-993d-f3f811ad8c2e`
+   - `run_type`: `filter`
+   - `status`: `succeeded`
+   - `worker_id`: `railway-worker-1`
+   - `created_at`: `2026-04-22T16:41:18.334620+00:00`
+   - `started_at`: `2026-04-22T16:41:19.310857+00:00`
+   - `finished_at`: `2026-04-22T16:42:36.115430+00:00`
+   - terminal event message: `Run completed successfully. Matched 25 of 100 reports.`
+   - artifact:
+     - `artifact_id`: `63b13393-2a39-42be-b05c-278dda060c6c`
+     - `artifact_type`: `filtered_dataset`
+     - `status`: `ready`
+     - `storage_backend`: `object_storage`
+     - `storage_uri`: `s3://pfd-workbench-artifacts/workbench-artifacts/workspace_697a7641-1be3-47cb-be80-9ab7ba180068/investigation_b171d276-25b5-4b7e-8e86-45b60750556f/run_9fa4ae7f-796c-4f4c-993d-f3f811ad8c2e/filtered_dataset/20260422T164235Z_67fd940e8e1e4d689a54de39c6ad7271_filtered_reports.csv`
+2. Browser/session-closure continuity condition validated (user-confirmed browser closed immediately after launch) with terminal server-side completion:
+   - `run_id`: `75b2526d-04a0-4345-8ab7-22b027545f9f`
+   - `run_type`: `filter`
+   - `status`: `succeeded`
+   - `worker_id`: `railway-worker-1`
+   - `created_at`: `2026-04-22T16:45:16.187527+00:00`
+   - `started_at`: `2026-04-22T16:45:16.328753+00:00`
+   - `finished_at`: `2026-04-22T16:45:22.503784+00:00`
+   - terminal event message: `Run completed successfully. Matched 24 of 100 reports.`
+   - artifact:
+     - `artifact_id`: `cb65226e-0dc5-4b1a-96b0-a35608b00f6f`
+     - `artifact_type`: `filtered_dataset`
+     - `status`: `ready`
+     - `storage_backend`: `object_storage`
+3. Remaining manual checks still pending:
+   - cancellation terminal `cancelled`
+   - timeout path terminal `timed_out`
+   - transient retry path requeue/backoff + terminal outcome

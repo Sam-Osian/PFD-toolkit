@@ -21,7 +21,7 @@ This file defines the default production guardrails and reliability controls for
 3. `RUN_RETRY_BACKOFF_SECONDS=30,120,600`
 4. `RUN_RETRY_JITTER_PCT=20`
 5. `RUN_STAGE_TIMEOUT_SECONDS=1800`
-6. `RUN_TOTAL_TIMEOUT_SECONDS=7200`
+6. `RUN_TOTAL_TIMEOUT_SECONDS=28800`
 
 Retry scope:
 

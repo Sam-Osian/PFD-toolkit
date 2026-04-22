@@ -106,6 +106,13 @@
                             {{ run.id }}
                         </a>
                         <span>{{ run.run_type }} · {{ run.status }} · queued {{ run.queued_at|date:"Y-m-d H:i" }}</span>
+                        {% if run.can_request_cancellation %}
+                            <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="inline-form">
+                                {% csrf_token %}
+                                <input type="hidden" name="cancel_reason" value="Cancelled from investigation runs list.">
+                                <button type="submit" class="btn btn-secondary sm">Cancel run</button>
+                            </form>
+                        {% endif %}
                         {% if can_edit %}
                             {% if run.status == "failed" or run.status == "timed_out" %}
                                 <a
