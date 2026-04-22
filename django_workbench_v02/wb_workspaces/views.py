@@ -65,8 +65,7 @@ from .models import (
     WorkspaceReportExclusion,
     WorkspaceVisibility,
 )
-from .permissions import can_manage_members, can_manage_shares, can_view_workspace
-from .permissions import can_edit_workspace
+from .permissions import can_edit_workspace, can_manage_members, can_manage_shares, can_run_workflows, can_view_workspace
 from .services import (
     WorkspaceCredentialValidationError,
     WorkspaceLifecycleError,
@@ -391,6 +390,7 @@ def dashboard(request):
                 "workspace": workspace,
                 "is_archived": workspace.archived_at is not None,
                 "can_restore": can_restore,
+                "can_cancel_pending_run": False,
                 "pending_run": None,
                 "pending_stage_label": "",
                 "pipeline_state": "",
@@ -425,6 +425,7 @@ def dashboard(request):
         if run and run.status in PIPELINE_PENDING_STATUSES:
             row["pending_run"] = run
             row["pending_stage_label"] = RUN_TYPE_LABELS.get(str(run.run_type), str(run.run_type).title())
+            row["can_cancel_pending_run"] = bool(can_run_workflows(request.user, row["workspace"]))
     active_workspace = get_active_workspace_for_user(user=request.user)
     if active_workspace is None and memberships_list:
         for membership in memberships_list:

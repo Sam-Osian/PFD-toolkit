@@ -15,6 +15,7 @@ from wb_runs.models import (
     ArtifactStatus,
     ArtifactStorageBackend,
     ArtifactType,
+    RunStatus,
     RunArtifact,
     RunType,
     RunWorkerHeartbeat,
@@ -816,6 +817,32 @@ class WorkspaceActiveStateViewTests(TestCase):
         response = self.client.get(reverse("workbook-dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Worker offline")
+
+    def test_dashboard_shows_cancel_button_for_pending_run(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Pending Run Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        self.assertEqual(run.status, RunStatus.QUEUED)
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cancel run")
+        self.assertContains(
+            response,
+            reverse("run-cancel", kwargs={"workbook_id": self.workspace_a.id, "run_id": run.id}),
+        )
 
     def test_workspace_detail_shows_switcher_with_all_user_workbooks(self):
         self.client.force_login(self.owner)

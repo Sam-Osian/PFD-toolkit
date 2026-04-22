@@ -64,7 +64,15 @@
                             </div>
                             <div class="workbook-row__actions">
                                 {% if row.pending_run %}
-                                    <button type="button" class="btn btn-secondary" disabled>Launching…</button>
+                                    {% if row.can_cancel_pending_run %}
+                                        <form method="post" action="{% url 'run-cancel' workbook_id=workspace.id run_id=row.pending_run.id %}" class="inline-form">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="cancel_reason" value="Cancelled from workspace dashboard.">
+                                            <button type="submit" class="btn btn-secondary">Cancel run</button>
+                                        </form>
+                                    {% else %}
+                                        <button type="button" class="btn btn-secondary" disabled>Launching…</button>
+                                    {% endif %}
                                 {% else %}
                                     <a class="btn btn-secondary" href="{% url 'workbook-open' workbook_id=workspace.id %}">Open</a>
                                 {% endif %}
