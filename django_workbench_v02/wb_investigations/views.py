@@ -694,7 +694,7 @@ def investigation_detail(request, workbook_id, investigation_id):
     retry_run_id = str(request.GET.get("retry_run_id") or "").strip()
     retry_wizard_prefill_json = ""
     if retry_run_id and can_edit:
-        retry_run = runs.filter(id=retry_run_id).first()
+        retry_run = next((item for item in runs if str(item.id) == retry_run_id), None)
         if retry_run is not None:
             retry_wizard_prefill_json = json.dumps(
                 _wizard_retry_prefill(investigation=investigation, run=retry_run)
