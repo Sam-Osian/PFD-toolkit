@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Q
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -156,6 +157,20 @@ def _reports_found_from_artifact(artifact: RunArtifact | None) -> int:
             except (TypeError, ValueError):
                 continue
     return 0
+
+
+def _active_public_share_link_for_workspace(*, workspace: Workspace) -> WorkspaceShareLink | None:
+    now = timezone.now()
+    return (
+        WorkspaceShareLink.objects.filter(
+            workspace=workspace,
+            is_active=True,
+            is_public=True,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .order_by("-created_at")
+        .first()
+    )
 
 
 def _worker_health() -> tuple[bool, str]:
@@ -1021,6 +1036,15 @@ def open_workspace(request, workbook_id):
     )
     latest_run = runs[0] if runs else None
     investigation = Investigation.objects.filter(workspace=workspace).first()
+    can_share_workspace_investigation = bool(
+        investigation is not None and can_edit_workspace(request.user, workspace)
+    )
+    public_share_url = ""
+    active_public_share = _active_public_share_link_for_workspace(workspace=workspace)
+    if active_public_share is not None:
+        public_share_url = request.build_absolute_uri(
+            reverse("share-link-detail", kwargs={"share_id": active_public_share.id})
+        )
     theme_summary_artifact = _latest_workspace_artifact(workspace=workspace, artifact_type=ArtifactType.THEME_SUMMARY)
     theme_summary_preview = _artifact_preview(theme_summary_artifact)
     run_detail_items = []
@@ -1059,6 +1083,8 @@ def open_workspace(request, workbook_id):
             "explore_export_url": reverse("workbook-export-csv", kwargs={"workbook_id": workspace.id}),
             "workspace_id": str(workspace.id),
             "workspace_investigation": investigation,
+            "can_share_workspace_investigation": can_share_workspace_investigation,
+            "workspace_public_share_url": public_share_url,
             "workspace_latest_run": latest_run,
             "workspace_theme_summary": theme_summary_preview,
             "workspace_debug_runs": run_detail_items,

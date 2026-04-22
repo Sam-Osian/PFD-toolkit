@@ -5,7 +5,29 @@
 {% block page_header %}
 <div class="stack-sm">
     <h2 class="page-title">{{ investigation.title }}</h2>
-    <p class="page-subtitle">Investigation workspace with timeline, runs, and export controls.</p>
+    <p class="page-subtitle">
+        {% if read_only_shared %}
+            Read-only shared investigation view.
+        {% else %}
+            Investigation workspace with timeline, runs, and export controls.
+        {% endif %}
+    </p>
+</div>
+{% endblock %}
+
+{% block page_actions %}
+<div class="ws-inline-actions">
+    {% if read_only_shared and shared_export_url %}
+        <a class="btn btn-secondary sm" href="{{ shared_export_url }}">Export CSV</a>
+    {% elif can_run %}
+        <a class="btn btn-secondary sm" href="#investigation-export">Export</a>
+    {% endif %}
+    {% if can_share and not read_only_shared %}
+        <form method="post" action="{% url 'workbook-investigation-share-public' workbook_id=workspace.id investigation_id=investigation.id %}" class="inline-form js-share-link-form">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary sm">Share</button>
+        </form>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -30,106 +52,119 @@
         </div>
     </section>
 
-    <section class="card inv-next-card">
-        {% if can_edit %}
-            <h3>Next Action</h3>
-            <p>
-                <button class="btn btn-primary" type="button" data-open-wizard>
-                    Open wizard
-                </button>
-                to configure scope and methods, then launch the sequential pipeline.
-            </p>
-        {% else %}
-            <h3>Next Action</h3>
-            <p>This investigation is read-only for your account.</p>
-        {% endif %}
-    </section>
-
-    {% if can_run %}
-        <section class="card inv-export-card">
-            <h3>Export Bundle</h3>
-            <p>Package current investigation outputs for download, similar to v0.1 bundle export options.</p>
-            <form method="post" action="{% url 'workbook-investigation-export-queue' workbook_id=workspace.id investigation_id=investigation.id %}" class="stack-sm">
-                {% csrf_token %}
-                {{ export_form.as_p }}
-                <button type="submit" class="btn btn-primary">Queue export bundle</button>
-            </form>
+    {% if not read_only_shared %}
+        <section class="card inv-next-card">
+            {% if can_edit %}
+                <h3>Next Action</h3>
+                <p>
+                    <button class="btn btn-primary" type="button" data-open-wizard>
+                        Open wizard
+                    </button>
+                    to configure scope and methods, then launch the sequential pipeline.
+                </p>
+            {% else %}
+                <h3>Next Action</h3>
+                <p>This investigation is read-only for your account.</p>
+            {% endif %}
         </section>
     {% endif %}
 
-    <section class="card inv-timeline-card">
-        <h3>Pipeline Timeline</h3>
-        {% if pipeline_timeline %}
-            <p>
-                Latest pipeline root run:
-                <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=pipeline_timeline.root_run.id %}">
-                    {{ pipeline_timeline.root_run.id }}
-                </a>
-                · continue on fail: {{ pipeline_timeline.continue_on_fail|yesno:"yes,no" }}
-            </p>
-            <ol class="inv-timeline-list">
-                {% for entry in pipeline_timeline.entries %}
-                    <li class="inv-timeline-item{% if pipeline_timeline.active_stage_index == forloop.counter0 %} is-active{% endif %}">
-                        <div class="inv-timeline-main">
-                            <strong>{{ entry.stage_label }}</strong>
-                            <span>status: {{ entry.status }}</span>
-                            {% if entry.run %}
-                                <span>
-                                    <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=entry.run.id %}">
-                                        run {{ entry.run.id }}
-                                    </a>
-                                </span>
-                                <span>queued {{ entry.run.queued_at|date:"Y-m-d H:i" }}</span>
-                            {% endif %}
-                            {% if pipeline_timeline.active_stage_index == forloop.counter0 %}
-                                <span>(active)</span>
-                            {% endif %}
-                        </div>
-                        {% if entry.note %}
-                            <p class="inv-timeline-note">{{ entry.note }}</p>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ol>
-        {% else %}
-            <p>No wizard pipeline runs yet.</p>
-        {% endif %}
-    </section>
+    {% if can_run or read_only_shared %}
+        <section class="card inv-export-card" id="investigation-export">
+            <h3>Export Bundle</h3>
+            {% if read_only_shared %}
+                <p>Download the latest filtered dataset export for this investigation.</p>
+                {% if shared_export_url %}
+                    <a class="btn btn-primary" href="{{ shared_export_url }}">Download CSV</a>
+                {% else %}
+                    <p>No export artifact is currently available.</p>
+                {% endif %}
+            {% else %}
+                <p>Package current investigation outputs for download, similar to v0.1 bundle export options.</p>
+                <form method="post" action="{% url 'workbook-investigation-export-queue' workbook_id=workspace.id investigation_id=investigation.id %}" class="stack-sm">
+                    {% csrf_token %}
+                    {{ export_form.as_p }}
+                    <button type="submit" class="btn btn-primary">Queue export bundle</button>
+                </form>
+            {% endif %}
+        </section>
+    {% endif %}
 
-    <section class="card inv-runs-card">
-        <h3>Runs</h3>
-        {% if runs %}
-            <ul class="inv-runs-list">
-                {% for run in runs %}
-                    <li class="inv-run-row">
-                        <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=run.id %}">
-                            {{ run.id }}
-                        </a>
-                        <span>{{ run.run_type }} · {{ run.status }} · queued {{ run.queued_at|date:"Y-m-d H:i" }}</span>
-                        {% if run.can_request_cancellation %}
-                            <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="inline-form">
-                                {% csrf_token %}
-                                <input type="hidden" name="cancel_reason" value="Cancelled from investigation runs list.">
-                                <button type="submit" class="btn btn-secondary sm">Cancel run</button>
-                            </form>
-                        {% endif %}
-                        {% if can_edit %}
-                            {% if run.status == "failed" or run.status == "timed_out" %}
-                                <a
-                                    class="btn btn-secondary sm"
-                                    href="{% url 'investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}?open_wizard=1&wizard_step=review&retry_run_id={{ run.id }}"
-                                >
-                                    Try again
-                                </a>
+    {% if not read_only_shared %}
+        <section class="card inv-timeline-card">
+            <h3>Pipeline Timeline</h3>
+            {% if pipeline_timeline %}
+                <p>
+                    Latest pipeline root run:
+                    <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=pipeline_timeline.root_run.id %}">
+                        {{ pipeline_timeline.root_run.id }}
+                    </a>
+                    · continue on fail: {{ pipeline_timeline.continue_on_fail|yesno:"yes,no" }}
+                </p>
+                <ol class="inv-timeline-list">
+                    {% for entry in pipeline_timeline.entries %}
+                        <li class="inv-timeline-item{% if pipeline_timeline.active_stage_index == forloop.counter0 %} is-active{% endif %}">
+                            <div class="inv-timeline-main">
+                                <strong>{{ entry.stage_label }}</strong>
+                                <span>status: {{ entry.status }}</span>
+                                {% if entry.run %}
+                                    <span>
+                                        <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=entry.run.id %}">
+                                            run {{ entry.run.id }}
+                                        </a>
+                                    </span>
+                                    <span>queued {{ entry.run.queued_at|date:"Y-m-d H:i" }}</span>
+                                {% endif %}
+                                {% if pipeline_timeline.active_stage_index == forloop.counter0 %}
+                                    <span>(active)</span>
+                                {% endif %}
+                            </div>
+                            {% if entry.note %}
+                                <p class="inv-timeline-note">{{ entry.note }}</p>
                             {% endif %}
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <p>No runs for this investigation yet.</p>
-        {% endif %}
-    </section>
+                        </li>
+                    {% endfor %}
+                </ol>
+            {% else %}
+                <p>No wizard pipeline runs yet.</p>
+            {% endif %}
+        </section>
+
+        <section class="card inv-runs-card">
+            <h3>Runs</h3>
+            {% if runs %}
+                <ul class="inv-runs-list">
+                    {% for run in runs %}
+                        <li class="inv-run-row">
+                            <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=run.id %}">
+                                {{ run.id }}
+                            </a>
+                            <span>{{ run.run_type }} · {{ run.status }} · queued {{ run.queued_at|date:"Y-m-d H:i" }}</span>
+                            {% if run.can_request_cancellation %}
+                                <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="inline-form">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="cancel_reason" value="Cancelled from investigation runs list.">
+                                    <button type="submit" class="btn btn-secondary sm">Cancel run</button>
+                                </form>
+                            {% endif %}
+                            {% if can_edit %}
+                                {% if run.status == "failed" or run.status == "timed_out" %}
+                                    <a
+                                        class="btn btn-secondary sm"
+                                        href="{% url 'investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}?open_wizard=1&wizard_step=review&retry_run_id={{ run.id }}"
+                                    >
+                                        Try again
+                                    </a>
+                                {% endif %}
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No runs for this investigation yet.</p>
+            {% endif %}
+        </section>
+    {% endif %}
 
     <section class="card inv-config-card">
         <h3>Configuration Snapshot</h3>
@@ -140,7 +175,54 @@
         </div>
     </section>
 </div>
-{% if retry_wizard_prefill_json %}
+{% if retry_wizard_prefill_json and not read_only_shared %}
     {{ retry_wizard_prefill_json|json_script:"wizard-retry-prefill" }}
+{% endif %}
+{% if can_share and not read_only_shared %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const forms = document.querySelectorAll(".js-share-link-form");
+  if (!forms.length) return;
+  forms.forEach(function(form) {
+    form.addEventListener("submit", async function(event) {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      const originalLabel = button ? button.textContent : "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Sharing...";
+      }
+      try {
+        const response = await fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json"
+          }
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok || !payload.public_url) {
+          throw new Error(payload.error || "Failed to create share link.");
+        }
+        const url = String(payload.public_url || "").trim();
+        if (!url) throw new Error("No share URL returned.");
+        await navigator.clipboard.writeText(url);
+        if (button) button.textContent = "Copied";
+      } catch (error) {
+        const fallback = error instanceof Error ? error.message : "Share failed.";
+        window.prompt(`Copy this public URL: ${fallback}`, "{{ public_share_url|default:'' }}");
+      } finally {
+        if (button) {
+          setTimeout(function() {
+            button.disabled = false;
+            button.textContent = originalLabel || "Share";
+          }, 1100);
+        }
+      }
+    });
+  });
+});
+</script>
 {% endif %}
 {% endblock %}

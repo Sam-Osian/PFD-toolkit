@@ -49,19 +49,26 @@ Explore · PFD Toolkit Workbench v0.2
         </div>
         <div class="explore-hero-actions">
             <button type="button" class="btn btn-secondary" id="explore-export-open">Export</button>
-            {% if is_workspace_view and workspace_investigation %}
+            {% if is_workspace_view and workspace_investigation and can_share_workspace_investigation %}
+                <form method="post" action="{% url 'workbook-investigation-share-public' workbook_id=workspace_id investigation_id=workspace_investigation.id %}" class="inline-form js-share-link-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-secondary">Share</button>
+                </form>
+            {% endif %}
+            {% if is_workspace_view and workspace_investigation and not is_shared_read_only %}
                 <a class="btn btn-secondary" href="{% url 'workbook-investigation-detail' workbook_id=workspace_id investigation_id=workspace_investigation.id %}">Open investigation</a>
             {% endif %}
-            {% if request.user.is_authenticated %}
+            {% if request.user.is_authenticated and not is_shared_read_only %}
                 <a class="btn btn-primary" href="{% url 'workbook-dashboard' %}">+ New investigation</a>
-            {% else %}
+            {% elif not is_shared_read_only %}
                 <a class="btn btn-primary" href="{% url 'accounts-login' %}">+ New investigation</a>
             {% endif %}
         </div>
     </section>
 
     <section class="hud">
-        <div class="hud-q">Filter</div>
+        <div class="hud-q">{% if is_shared_read_only %}Overview{% else %}Filter{% endif %}</div>
+        {% if not is_shared_read_only %}
         <form method="get" action="{{ filter_action_url|default:request.path }}" class="explore-filter-form" id="explore-filter-form">
             <input type="hidden" name="q" value="{{ explore.query }}">
             <input type="hidden" name="show_reports" id="show-reports-field" value="{% if show_reports_requested %}1{% endif %}">
@@ -243,6 +250,7 @@ Explore · PFD Toolkit Workbench v0.2
                 {% endif %}
             </div>
         </form>
+        {% endif %}
         <div class="hud-stats">
             <div class="hud-stat">
                 <div class="lbl">Reports in view</div>
@@ -451,6 +459,7 @@ Explore · PFD Toolkit Workbench v0.2
     {% endif %}
 
     {% if is_workspace_view %}
+    {% if not is_shared_read_only %}
     <details class="panel">
         <summary class="panel-head" style="cursor:pointer; list-style:none;">
             <div class="left">
@@ -478,6 +487,7 @@ Explore · PFD Toolkit Workbench v0.2
             {% endfor %}
         </div>
     </details>
+    {% endif %}
     {% endif %}
 
     {% if not dataset_available %}
@@ -980,7 +990,7 @@ Explore · PFD Toolkit Workbench v0.2
   const panelHost = document.getElementById('explore-reports-panel');
   const showReportsField = document.getElementById('show-reports-field');
   const hintNode = document.getElementById('explore-reports-hint');
-  if (!root || !showButton || !panelHost || !showReportsField || !hintNode) return;
+  if (!root || !showButton || !panelHost || !hintNode) return;
 
   const panelUrlRaw = String(root.getAttribute('data-panel-url') || '').trim();
   const autoLoad = root.getAttribute('data-auto-load') === '1';
@@ -1020,7 +1030,7 @@ Explore · PFD Toolkit Workbench v0.2
     isVisible = Boolean(visible);
     panelHost.hidden = !isVisible;
     hintNode.hidden = isVisible;
-    showReportsField.value = isVisible ? '1' : '';
+    if (showReportsField) showReportsField.value = isVisible ? '1' : '';
     if (!isLoading) showButton.textContent = isVisible ? 'Hide reports' : 'Show reports';
   };
 
@@ -1573,4 +1583,51 @@ Explore · PFD Toolkit Workbench v0.2
   });
 })();
 </script>
+{% if is_workspace_view and workspace_investigation and can_share_workspace_investigation %}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const forms = document.querySelectorAll(".js-share-link-form");
+  if (!forms.length) return;
+  forms.forEach(function(form) {
+    form.addEventListener("submit", async function(event) {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      const originalLabel = button ? button.textContent : "";
+      if (button) {
+        button.disabled = true;
+        button.textContent = "Sharing...";
+      }
+      try {
+        const response = await fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json"
+          }
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload.ok || !payload.public_url) {
+          throw new Error(payload.error || "Failed to create share link.");
+        }
+        const url = String(payload.public_url || "").trim();
+        if (!url) throw new Error("No share URL returned.");
+        await navigator.clipboard.writeText(url);
+        if (button) button.textContent = "Copied";
+      } catch (error) {
+        const fallback = error instanceof Error ? error.message : "Share failed.";
+        window.prompt(`Copy this public URL: ${fallback}`, "{{ workspace_public_share_url|default:'' }}");
+      } finally {
+        if (button) {
+          setTimeout(function() {
+            button.disabled = false;
+            button.textContent = originalLabel || "Share";
+          }, 1100);
+        }
+      }
+    });
+  });
+});
+</script>
+{% endif %}
 {% endblock %}

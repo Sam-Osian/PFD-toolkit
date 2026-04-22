@@ -14,6 +14,7 @@ from wb_runs.models import (
     RunType,
     RunWorkerHeartbeat,
 )
+from wb_sharing.models import ShareMode, WorkspaceShareLink
 from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
@@ -464,8 +465,41 @@ class InvestigationViewTests(TestCase):
         self.assertContains(response, "Open wizard")
         self.assertContains(response, "Configuration Snapshot")
         self.assertContains(response, "Export Bundle")
+        self.assertContains(response, "Share")
         self.assertNotContains(response, "Scope JSON")
         self.assertNotContains(response, "Queue Run")
+
+    def test_share_public_link_endpoint_creates_live_public_link(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "workbook-investigation-share-public",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        share_link = WorkspaceShareLink.objects.filter(workspace=self.workspace).order_by("-created_at").first()
+        self.assertIsNotNone(share_link)
+        self.assertEqual(share_link.mode, ShareMode.LIVE)
+        self.assertTrue(share_link.is_public)
+        self.assertTrue(share_link.is_active)
+
+    def test_viewer_cannot_create_public_share_link(self):
+        self.client.force_login(self.viewer)
+        response = self.client.post(
+            reverse(
+                "workbook-investigation-share-public",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(WorkspaceShareLink.objects.filter(workspace=self.workspace).exists())
 
     def test_investigation_detail_shows_try_again_for_failed_runs(self):
         self.client.force_login(self.owner)

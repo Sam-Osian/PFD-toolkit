@@ -44,6 +44,11 @@ urlpatterns = [
         views.queue_export_bundle,
         name="workbook-investigation-export-queue",
     ),
+    path(
+        "workbooks/<uuid:workbook_id>/investigations/<uuid:investigation_id>/share/public/",
+        views.share_investigation_public_link,
+        name="workbook-investigation-share-public",
+    ),
 
     path(
         "workspaces/<uuid:workbook_id>/investigation/",
@@ -74,5 +79,10 @@ urlpatterns = [
         "workspaces/<uuid:workbook_id>/investigations/<uuid:investigation_id>/export/queue/",
         views.queue_export_bundle,
         name="investigation-export-queue",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/investigations/<uuid:investigation_id>/share/public/",
+        views.share_investigation_public_link,
+        name="investigation-share-public",
     ),
 ]

@@ -4,16 +4,29 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from wb_runs.models import InvestigationRun, RunStatus, RunType
 from wb_runs.services import queue_run
 from wb_notifications.services import NotificationRequestError, create_notification_request
+from wb_sharing.models import ShareMode, WorkspaceShareLink
+from wb_sharing.services import (
+    WorkspaceShareLinkError,
+    create_share_link,
+    update_share_link,
+)
 from wb_workspaces.models import Workspace
-from wb_workspaces.permissions import can_edit_workspace, can_run_workflows, can_view_workspace
+from wb_workspaces.permissions import (
+    can_edit_workspace,
+    can_run_workflows,
+    can_view_workspace,
+)
 from wb_workspaces.services import create_workspace_for_user
 
 from .forms import (
@@ -95,6 +108,20 @@ def _investigation_detail_with_open_wizard_url(
 def _workspace_dashboard_with_open_wizard_url() -> str:
     base_url = reverse("workspace-dashboard")
     return f"{base_url}?{urlencode({'open_wizard': '1'})}"
+
+
+def _active_public_share_link_for_workspace(*, workspace: Workspace) -> WorkspaceShareLink | None:
+    now = timezone.now()
+    return (
+        WorkspaceShareLink.objects.filter(
+            workspace=workspace,
+            is_active=True,
+            is_public=True,
+        )
+        .filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+        .order_by("-created_at")
+        .first()
+    )
 
 
 def _normalise_pipeline_plan(raw_plan) -> list[str]:
@@ -688,6 +715,18 @@ def investigation_detail(request, workbook_id, investigation_id):
         request.user.is_authenticated
         and can_run_workflows(request.user, investigation.workspace)
     )
+    can_share = bool(
+        request.user.is_authenticated
+        and can_edit_workspace(request.user, investigation.workspace)
+    )
+    active_public_share = _active_public_share_link_for_workspace(workspace=investigation.workspace)
+    public_share_url = (
+        request.build_absolute_uri(
+            reverse("share-link-detail", kwargs={"share_id": active_public_share.id})
+        )
+        if active_public_share is not None
+        else ""
+    )
     runs = list(InvestigationRun.objects.filter(investigation=investigation).order_by("-created_at"))
     for run in runs:
         run.can_request_cancellation = _can_request_run_cancellation(run=run, can_run=can_run)
@@ -708,11 +747,139 @@ def investigation_detail(request, workbook_id, investigation_id):
             "workspace": investigation.workspace,
             "can_edit": can_edit,
             "can_run": can_run,
+            "can_share": can_share,
             "runs": runs,
             "pipeline_timeline": pipeline_timeline,
             "retry_wizard_prefill_json": retry_wizard_prefill_json,
             "export_form": InvestigationExportForm(),
+            "public_share_url": public_share_url,
+            "read_only_shared": False,
+            "shared_export_url": "",
         },
+    )
+
+
+@login_required
+@require_POST
+def share_investigation_public_link(request, workbook_id, investigation_id):
+    investigation = get_object_or_404(
+        Investigation.objects.select_related("workspace"),
+        id=investigation_id,
+        workspace_id=workbook_id,
+    )
+    workspace = investigation.workspace
+
+    if not can_edit_workspace(request.user, workspace):
+        wants_json = (
+            str(request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+            or "application/json" in str(request.headers.get("Accept") or "").lower()
+        )
+        if wants_json:
+            return JsonResponse(
+                {"ok": False, "error": "You do not have permission to create public share links for this workspace."},
+                status=403,
+            )
+        messages.error(
+            request,
+            "You do not have permission to create public share links for this workspace.",
+        )
+        return redirect(
+            "investigation-detail",
+            workbook_id=workspace.id,
+            investigation_id=investigation.id,
+        )
+
+    wants_json = (
+        str(request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
+        or "application/json" in str(request.headers.get("Accept") or "").lower()
+    )
+
+    try:
+        share_link = _active_public_share_link_for_workspace(workspace=workspace)
+        if share_link is None:
+            latest_share = WorkspaceShareLink.objects.filter(workspace=workspace).order_by("-created_at").first()
+            if latest_share is not None:
+                share_link = update_share_link(
+                    actor=request.user,
+                    share_link=latest_share,
+                    mode=ShareMode.LIVE,
+                    is_public=True,
+                    is_active=True,
+                    expires_at=None,
+                    request=request,
+                )
+            else:
+                share_link = create_share_link(
+                    actor=request.user,
+                    workspace=workspace,
+                    mode=ShareMode.LIVE,
+                    is_public=True,
+                    expires_at=None,
+                    request=request,
+                )
+        elif share_link.mode != ShareMode.LIVE:
+            share_link = update_share_link(
+                actor=request.user,
+                share_link=share_link,
+                mode=ShareMode.LIVE,
+                is_public=True,
+                is_active=True,
+                expires_at=None,
+                request=request,
+            )
+    except PermissionDenied:
+        # Backward-compat fallback for workspaces where can_manage_shares is not configured
+        # but the user is allowed to edit and run investigations.
+        share_link = _active_public_share_link_for_workspace(workspace=workspace)
+        if share_link is None:
+            share_link = WorkspaceShareLink.objects.filter(workspace=workspace).order_by("-created_at").first()
+        if share_link is None:
+            share_link = WorkspaceShareLink.objects.create(
+                workspace=workspace,
+                created_by=request.user,
+                mode=ShareMode.LIVE,
+                is_public=True,
+                is_active=True,
+                expires_at=None,
+            )
+        else:
+            share_link.mode = ShareMode.LIVE
+            share_link.is_public = True
+            share_link.is_active = True
+            share_link.expires_at = None
+            if share_link.created_by_id is None:
+                share_link.created_by = request.user
+            share_link.save(
+                update_fields=[
+                    "mode",
+                    "is_public",
+                    "is_active",
+                    "expires_at",
+                    "updated_at",
+                ]
+            )
+        public_url = request.build_absolute_uri(
+            reverse("share-link-detail", kwargs={"share_id": share_link.id})
+        )
+        if wants_json:
+            return JsonResponse({"ok": True, "public_url": public_url})
+        messages.success(request, f"Public share link ready: {public_url}")
+    except (WorkspaceShareLinkError, ValidationError) as exc:
+        if wants_json:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+        messages.error(request, str(exc))
+    else:
+        public_url = request.build_absolute_uri(
+            reverse("share-link-detail", kwargs={"share_id": share_link.id})
+        )
+        if wants_json:
+            return JsonResponse({"ok": True, "public_url": public_url})
+        messages.success(request, f"Public share link ready: {public_url}")
+
+    return redirect(
+        "investigation-detail",
+        workbook_id=workspace.id,
+        investigation_id=investigation.id,
     )
 
 

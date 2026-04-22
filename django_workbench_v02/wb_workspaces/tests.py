@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from wb_auditlog.models import AuditEvent
-from wb_investigations.models import InvestigationStatus
+from wb_investigations.models import Investigation, InvestigationStatus
 from wb_investigations.services import create_investigation
 from wb_runs.models import (
     ArtifactStatus,
@@ -810,6 +810,33 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertContains(response, "Workspace-scoped view of your pipeline result dataset.")
         state = WorkspaceUserState.objects.get(user=self.owner)
         self.assertEqual(state.active_workspace_id, self.workspace_a.id)
+
+    def test_open_workspace_shows_share_button_when_investigation_exists(self):
+        create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Shareable Workspace Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse("workbook-open", kwargs={"workbook_id": self.workspace_a.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Share")
+        self.assertContains(
+            response,
+            reverse(
+                "workbook-investigation-share-public",
+                kwargs={
+                    "workbook_id": self.workspace_a.id,
+                    "investigation_id": Investigation.objects.get(workspace=self.workspace_a).id,
+                },
+            ),
+        )
 
     def test_dashboard_shows_worker_offline_banner_without_heartbeat(self):
         RunWorkerHeartbeat.objects.all().delete()

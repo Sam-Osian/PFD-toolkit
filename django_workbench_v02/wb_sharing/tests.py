@@ -1,4 +1,6 @@
 from datetime import timedelta
+from pathlib import Path
+import tempfile
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
@@ -225,6 +227,15 @@ class ShareLinkViewTests(TestCase):
         )
 
     def test_public_share_view_accessible_without_login(self):
+        Investigation.objects.create(
+            workspace=self.workspace,
+            created_by=self.owner,
+            title="Shared investigation",
+            question_text="What happened?",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
         share_link = create_share_link(
             actor=self.owner,
             workspace=self.workspace,
@@ -235,6 +246,57 @@ class ShareLinkViewTests(TestCase):
             reverse("share-link-detail", kwargs={"share_id": share_link.id})
         )
         self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Workspace")
+        self.assertContains(response, "Reports in view")
+        self.assertContains(response, "Interactive report list")
+        self.assertContains(response, "Export")
+        self.assertNotContains(response, "Open investigation")
+        self.assertNotContains(response, '<form method="get" action=')
+        self.assertNotContains(response, 'id="explore-filter-form"')
+        self.assertNotContains(response, "Troubleshooting and support payload")
+
+    def test_public_share_export_csv_available_without_login(self):
+        investigation = Investigation.objects.create(
+            workspace=self.workspace,
+            created_by=self.owner,
+            title="Exportable shared investigation",
+            question_text="What happened?",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = InvestigationRun.objects.create(
+            investigation=investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.SUCCEEDED,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, encoding="utf-8") as tmp:
+            tmp.write("report_id,title\n1,Example report\n")
+            artifact_path = Path(tmp.name)
+        self.addCleanup(lambda: artifact_path.unlink(missing_ok=True))
+        RunArtifact.objects.create(
+            run=run,
+            workspace=self.workspace,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri=str(artifact_path),
+            metadata_json={"matched_reports": 1},
+        )
+        share_link = create_share_link(
+            actor=self.owner,
+            workspace=self.workspace,
+            mode=ShareMode.LIVE,
+            is_public=True,
+        )
+        response = self.client.get(
+            reverse("share-link-export-csv", kwargs={"share_id": share_link.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment;", response.headers.get("Content-Disposition", ""))
 
     def test_private_share_requires_membership_or_login(self):
         share_link = create_share_link(
