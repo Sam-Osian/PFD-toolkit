@@ -4,6 +4,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -23,7 +25,15 @@ from wb_workspaces.models import (
 from wb_workspaces.services import create_workspace_for_user
 
 from .artifact_storage import StoredArtifactFile
-from .models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact, RunStatus, RunType
+from .models import (
+    ArtifactStatus,
+    ArtifactStorageBackend,
+    ArtifactType,
+    RunArtifact,
+    RunStatus,
+    RunType,
+    RunWorkerHeartbeat,
+)
 from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run, reconcile_timed_out_runs
 
@@ -1253,3 +1263,29 @@ class RunWorkerTests(TestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, RunStatus.TIMED_OUT)
         self.assertEqual(run.error_code, "RUN_TOTAL_TIMEOUT")
+
+    def test_worker_records_heartbeat_when_idle(self):
+        processed = process_single_available_run(worker_id="heartbeat-worker")
+        self.assertIsNone(processed)
+        heartbeat = RunWorkerHeartbeat.objects.get(worker_id="heartbeat-worker")
+        self.assertEqual(heartbeat.state, "idle")
+        self.assertIsNone(heartbeat.last_run)
+
+    @override_settings(WORKER_HEARTBEAT_STALE_SECONDS=120)
+    def test_worker_healthcheck_passes_when_recent_heartbeat_exists(self):
+        RunWorkerHeartbeat.objects.create(
+            worker_id="healthy-worker",
+            state="idle",
+            last_seen_at=timezone.now(),
+        )
+        call_command("check_run_worker_health", worker_id="healthy-worker")
+
+    @override_settings(WORKER_HEARTBEAT_STALE_SECONDS=60)
+    def test_worker_healthcheck_fails_when_heartbeat_stale(self):
+        RunWorkerHeartbeat.objects.create(
+            worker_id="stale-worker",
+            state="idle",
+            last_seen_at=timezone.now() - timedelta(seconds=500),
+        )
+        with self.assertRaises(CommandError):
+            call_command("check_run_worker_health", worker_id="stale-worker")

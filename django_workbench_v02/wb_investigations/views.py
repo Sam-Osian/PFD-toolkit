@@ -367,7 +367,7 @@ def investigation_start(request):
                     user=request.user,
                     title=workspace_title,
                     slug=_next_workspace_slug_for_user(user=request.user, title=workspace_title),
-                    description="Created from investigation wizard.",
+                    description=question_text,
                     request=request,
                 )
                 investigation = create_investigation(

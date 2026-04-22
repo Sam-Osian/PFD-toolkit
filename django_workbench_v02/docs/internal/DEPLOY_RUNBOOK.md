@@ -1,7 +1,7 @@
 # Deploy Runbook (Railway, v0.2)
 
 Status: Active  
-Last updated: 2026-04-21
+Last updated: 2026-04-22
 
 ## 1. Scope
 
@@ -101,6 +101,10 @@ Expect: `HTTP/2 302` with `location: https://oreliandata.uk.auth0.com/authorize?
 4. Verify live dataset metadata (row count, date range, fingerprint, package version):
 ```bash
 railway run -s web -- uv run python manage.py report_pfd_dataset --json
+```
+5. Verify run-worker heartbeat is fresh (release gate):
+```bash
+railway run -s web -- uv run python manage.py check_run_worker_health --stale-seconds 180
 ```
 
 ## 5.2 Manual Browser Checks (Required)

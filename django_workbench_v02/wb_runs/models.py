@@ -204,3 +204,29 @@ class RunArtifact(models.Model):
 
     def __str__(self) -> str:
         return f"{self.run_id} {self.artifact_type} ({self.status})"
+
+
+class RunWorkerHeartbeat(models.Model):
+    worker_id = models.CharField(max_length=255, unique=True)
+    state = models.CharField(max_length=32, blank=True)
+    last_run = models.ForeignKey(
+        "wb_runs.InvestigationRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    last_run_status = models.CharField(max_length=16, blank=True)
+    last_error = models.TextField(blank=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["last_seen_at"], name="idx_worker_hb_last_seen"),
+        ]
+        ordering = ["-last_seen_at"]
+
+    def __str__(self) -> str:
+        return f"{self.worker_id} ({self.state or 'unknown'})"

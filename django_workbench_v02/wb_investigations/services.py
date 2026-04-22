@@ -280,7 +280,7 @@ def launch_investigation_wizard_pipeline(
         actor=actor,
         investigation=investigation,
         title=wizard_state.title or investigation.title,
-        question_text=wizard_state.question_text or investigation.question_text,
+        question_text=str(wizard_state.question_text or "").strip(),
         scope_json=scope_json,
         method_json=method_json,
         status=investigation.status,

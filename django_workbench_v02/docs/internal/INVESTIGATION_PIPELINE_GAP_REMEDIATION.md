@@ -9,6 +9,12 @@ This document defines the remediation plan for investigation launch and pipeline
 
 The goal is to ensure investigation launch is truthful, robust, and operationally predictable.
 
+Canonical contract note:
+
+1. This remediation plan inherits the authoritative contract in `docs/internal/INVESTIGATION_WORKSPACE_CONTRACT.md`.
+2. Investigation wizard is a new-workspace creation-and-launch flow.
+3. Title/description mapping and pipeline semantics should follow that contract.
+
 ---
 
 ## First-Principles Contract

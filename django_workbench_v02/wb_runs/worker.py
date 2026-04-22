@@ -24,6 +24,7 @@ from .models import (
     RunArtifact,
     RunEvent,
     RunEventType,
+    RunWorkerHeartbeat,
 )
 from .services import is_terminal_status, set_run_status
 from .pfd_toolkit_adapter import (
@@ -178,6 +179,25 @@ def _run_exceeded_timeouts(run: InvestigationRun) -> tuple[bool, str, str]:
         if now - run.updated_at >= timedelta(seconds=stage_timeout):
             return True, "RUN_STAGE_TIMEOUT", "Run timed out due to stage inactivity."
     return False, "", ""
+
+
+def _record_worker_heartbeat(
+    *,
+    worker_id: str,
+    state: str,
+    run: InvestigationRun | None = None,
+    error: str = "",
+) -> None:
+    RunWorkerHeartbeat.objects.update_or_create(
+        worker_id=worker_id,
+        defaults={
+            "state": str(state or "").strip().lower()[:32],
+            "last_run": run,
+            "last_run_status": str(getattr(run, "status", "") or "")[:16],
+            "last_error": str(error or "")[:2000],
+            "last_seen_at": timezone.now(),
+        },
+    )
 
 
 def _apply_timeout_if_needed(run: InvestigationRun) -> InvestigationRun:
@@ -820,17 +840,37 @@ def process_single_available_run(
     sleep_between_stages_seconds: float = 0.0,
 ) -> InvestigationRun | None:
     effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    _record_worker_heartbeat(worker_id=effective_worker_id, state="polling")
     reconcile_timed_out_runs(worker_id=effective_worker_id)
     run = claim_next_runnable_run(effective_worker_id)
     if run is None:
+        _record_worker_heartbeat(worker_id=effective_worker_id, state="idle")
         return None
 
+    _record_worker_heartbeat(worker_id=effective_worker_id, state="claimed", run=run)
     logger.info("Worker %s processing run %s", effective_worker_id, run.id)
-    final_run = _execute_run(run, sleep_between_stages_seconds=sleep_between_stages_seconds)
+    try:
+        final_run = _execute_run(run, sleep_between_stages_seconds=sleep_between_stages_seconds)
+    except Exception as exc:  # pragma: no cover - defensive heartbeat for crash diagnostics
+        _record_worker_heartbeat(
+            worker_id=effective_worker_id,
+            state="error",
+            run=run,
+            error=str(exc),
+        )
+        raise
+
+    _record_worker_heartbeat(worker_id=effective_worker_id, state="processed", run=final_run)
     try:
         _queue_next_pipeline_run(final_run)
     except Exception:  # pragma: no cover - defensive so pipeline issues don't kill worker
         logger.exception("Worker %s failed while queueing pipeline continuation for run %s", effective_worker_id, run.id)
+        _record_worker_heartbeat(
+            worker_id=effective_worker_id,
+            state="pipeline_queue_error",
+            run=final_run,
+            error="Failed while queueing pipeline continuation.",
+        )
     logger.info("Worker %s finished run %s with status=%s", effective_worker_id, run.id, final_run.status)
     return final_run
 

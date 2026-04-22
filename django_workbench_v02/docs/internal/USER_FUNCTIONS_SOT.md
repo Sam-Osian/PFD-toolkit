@@ -1,11 +1,13 @@
 # PFD Toolkit Workbench - User Function Source of Truth
 
-Last updated: 2026-04-20
+Last updated: 2026-04-22
 Scope: authoritative user/admin function inventory across v0.1 (`django_workbench`) and v0.2 (`django_workbench_v02`).
 
 ## Product Contract (Agreed)
 - `Workbook` is the product term. (Current code still uses `Workspace` model/URLs; rename pending.)
 - One workbook has exactly one investigation bundle (filter/themes/extract).
+- Investigation wizard is the mechanism that creates a new workbook/workspace and launches its pipeline.
+- Investigation title/description map to the created workbook/investigation metadata per contract.
 - Every workflow run is anchored to a workbook.
 - Shared links are always read-only for viewers.
 - Viewers can create their own editable copy.

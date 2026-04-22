@@ -764,6 +764,29 @@ class InvestigationModalWizardLaunchTests(TestCase):
         )
         self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
 
+    def test_modal_launch_uses_description_for_workspace_and_investigation(self):
+        _, run = self._launch_modal(
+            title="Falls investigation",
+            question_text="Investigate delayed escalation patterns in emergency settings.",
+        )
+        run.investigation.refresh_from_db()
+        run.workspace.refresh_from_db()
+        self.assertEqual(
+            run.investigation.question_text,
+            "Investigate delayed escalation patterns in emergency settings.",
+        )
+        self.assertEqual(
+            run.workspace.description,
+            "Investigate delayed escalation patterns in emergency settings.",
+        )
+
+    def test_modal_launch_preserves_blank_optional_description(self):
+        _, run = self._launch_modal(question_text="")
+        run.investigation.refresh_from_db()
+        run.workspace.refresh_from_db()
+        self.assertEqual(run.investigation.question_text, "")
+        self.assertEqual(run.workspace.description, "")
+
     def test_legacy_wizard_route_redirects_to_detail_modal(self):
         workspace = create_workspace_for_user(
             user=self.owner,

@@ -1,7 +1,7 @@
 # Run Worker Execution (v0.2)
 
 Status: Implemented adapter-backed execution + guardrails/retries  
-Last updated: 2026-04-20
+Last updated: 2026-04-22
 
 ## 1. Purpose
 
@@ -38,6 +38,7 @@ Core processing module:
    - timeout path: `running -> timed_out`
 6. Writes `RunEvent` + `AuditEvent` on lifecycle transitions.
 7. Creates a ready `RunArtifact` on success.
+8. Updates `RunWorkerHeartbeat` for liveness/release-gate checks.
 
 Run launch guardrails are enforced at queue time:
 
@@ -178,6 +179,18 @@ Process only timeout reconciliation:
 
 ```bash
 uv run python manage.py run_runs_worker --reconcile-timeouts-only
+```
+
+Worker liveness gate:
+
+```bash
+uv run python manage.py check_run_worker_health
+```
+
+Worker-specific liveness gate:
+
+```bash
+uv run python manage.py check_run_worker_health --worker-id railway-worker-1
 ```
 
 ## 8. Railway Deployment Shape
