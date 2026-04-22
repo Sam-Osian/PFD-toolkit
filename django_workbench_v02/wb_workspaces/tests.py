@@ -785,7 +785,7 @@ class WorkspaceActiveStateViewTests(TestCase):
         response = self.client.get(reverse("workbook-dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Workspace Active B")
-        self.assertContains(response, "(active)")
+        self.assertContains(response, "ws-card-active")
 
     def test_dashboard_links_active_workbooks_to_open_route(self):
         self.client.force_login(self.owner)
@@ -818,7 +818,7 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Worker offline")
 
-    def test_dashboard_shows_cancel_button_for_pending_run(self):
+    def test_dashboard_shows_cancel_button_for_running_run(self):
         investigation = create_investigation(
             actor=self.owner,
             workspace=self.workspace_a,
@@ -834,15 +834,80 @@ class WorkspaceActiveStateViewTests(TestCase):
             run_type=RunType.FILTER,
             input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
         )
-        self.assertEqual(run.status, RunStatus.QUEUED)
+        run.status = RunStatus.RUNNING
+        run.save(update_fields=["status"])
         self.client.force_login(self.owner)
         response = self.client.get(reverse("workbook-dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Cancel run")
+        self.assertContains(response, "Cancel")
         self.assertContains(
             response,
             reverse("run-cancel", kwargs={"workbook_id": self.workspace_a.id, "run_id": run.id}),
         )
+
+    def test_dashboard_shows_complete_reports_found_metric(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Complete Investigation",
+            question_text="Question prompt shown as card description",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        run.status = RunStatus.SUCCEEDED
+        run.save(update_fields=["status"])
+        RunArtifact.objects.create(
+            run=run,
+            workspace=self.workspace_a,
+            artifact_type=ArtifactType.FILTERED_DATASET,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.DB,
+            storage_uri="db://artifact",
+            metadata_json={"matched_reports": 47},
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Complete Investigation")
+        self.assertContains(response, "Question prompt shown as card description")
+        self.assertContains(response, "Reports found")
+        self.assertContains(response, ">47<", html=False)
+
+    def test_dashboard_last_edited_prefers_newer_investigation_update_over_older_run(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Recency Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        now = timezone.now()
+        older_run_time = now - timedelta(hours=1, minutes=20)
+        newer_investigation_time = now - timedelta(minutes=20)
+        type(run).objects.filter(id=run.id).update(status=RunStatus.SUCCEEDED, updated_at=older_run_time)
+        type(investigation).objects.filter(id=investigation.id).update(updated_at=newer_investigation_time)
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        active_rows = response.context["active_rows"]
+        row = next(item for item in active_rows if item["workspace"].id == self.workspace_a.id)
+        self.assertEqual(row["last_edited_at"], newer_investigation_time)
 
     def test_workspace_detail_shows_switcher_with_all_user_workbooks(self):
         self.client.force_login(self.owner)
@@ -876,7 +941,7 @@ class WorkspaceLifecycleControlTests(TestCase):
         self.assertEqual(archive_response.status_code, 200)
         self.workspace.refresh_from_db()
         self.assertIsNotNone(self.workspace.archived_at)
-        self.assertContains(archive_response, "Archived Workbooks")
+        self.assertContains(archive_response, "Archived")
         self.assertContains(archive_response, "Restore")
 
         restore_response = self.client.post(

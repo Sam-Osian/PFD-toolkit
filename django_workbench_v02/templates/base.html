@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block page_title %}PFD Toolkit Workbench v0.2{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'brand/logo-lens.svg' %}">
     <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/components.css' %}">
@@ -122,7 +123,15 @@
 </div>
 
 {% if request.user.is_authenticated %}
-<div class="wz-back" id="wizard" aria-hidden="true">
+<div
+    class="wz-back"
+    id="wizard"
+    aria-hidden="true"
+    data-cred-openai="{% if active_llm_config and active_llm_config.credentials.openai %}1{% else %}0{% endif %}"
+    data-cred-openrouter="{% if active_llm_config and active_llm_config.credentials.openrouter %}1{% else %}0{% endif %}"
+    data-cred-last4-openai="{% if active_llm_config %}{{ active_llm_config.credential_last4.openai|default:'' }}{% endif %}"
+    data-cred-last4-openrouter="{% if active_llm_config %}{{ active_llm_config.credential_last4.openrouter|default:'' }}{% endif %}"
+>
     <div class="wz" role="dialog" aria-labelledby="wz-title">
         <div class="wz-bar">
             <span class="cmd-prefix">&gt; investigate</span>
@@ -368,7 +377,7 @@
                                 <div class="pk">AI configuration</div>
                                 <button type="button" class="btn btn-secondary sm wz-ai-open" id="wz-ai-open">AI configuration</button>
                             </div>
-                            <input type="hidden" name="provider" id="wz-provider-input" value="openai">
+                            <input type="hidden" name="provider" id="wz-provider-input" value="{{ active_llm_config.provider|default:'openai' }}">
                             <input type="hidden" name="save_api_key" value="on">
                             <input type="hidden" name="notify_on" value="any">
                         </div>
@@ -379,12 +388,17 @@
                 <div class="wz-ai-pop-k">AI configuration</div>
                 <div class="wz-review-compact">
                     <div class="seg-pick wz-provider-pick wz-provider-pick-compact">
-                        <button type="button" class="on" data-provider="openai">OpenAI</button>
-                        <button type="button" data-provider="openrouter">OpenRouter</button>
+                        <button type="button" class="{% if not active_llm_config or active_llm_config.provider == 'openai' %}on{% endif %}" data-provider="openai">OpenAI</button>
+                        <button type="button" class="{% if active_llm_config and active_llm_config.provider == 'openrouter' %}on{% endif %}" data-provider="openrouter">OpenRouter</button>
                     </div>
                     <select id="wz-model-select" name="model_name" class="wz-review-control">
-                        <option value="gpt-4.1-mini">gpt-4.1-mini (recommended - lower cost)</option>
-                        <option value="gpt-4.1">gpt-4.1 (higher accuracy)</option>
+                        {% if active_llm_config and active_llm_config.provider == "openrouter" %}
+                            <option value="openai/gpt-4.1-mini" {% if active_llm_config.model_name == "openai/gpt-4.1-mini" or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>openai/gpt-4.1-mini (recommended - lower cost)</option>
+                            <option value="openai/gpt-4.1" {% if active_llm_config.model_name == "openai/gpt-4.1" or active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>openai/gpt-4.1 (higher accuracy)</option>
+                        {% else %}
+                            <option value="gpt-4.1-mini" {% if not active_llm_config or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>gpt-4.1-mini (recommended - lower cost)</option>
+                            <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>gpt-4.1 (higher accuracy)</option>
+                        {% endif %}
                     </select>
                     <div class="wz-review-inline">
                         <input
@@ -392,7 +406,7 @@
                             name="max_parallel_workers"
                             min="1"
                             max="32"
-                            value="1"
+                            value="{{ active_llm_config.max_parallel_workers|default:1 }}"
                             class="wz-review-control"
                             aria-label="Concurrency"
                         >
@@ -408,6 +422,14 @@
                             >
                         </label>
                     </div>
+                    <input
+                        type="url"
+                        name="base_url"
+                        value="{{ active_llm_config.base_url|default:'' }}"
+                        placeholder="https://... (optional provider base URL)"
+                        class="wz-review-control"
+                        aria-label="Provider base URL"
+                    >
                 </div>
             </div>
 
@@ -725,7 +747,9 @@ document.addEventListener("DOMContentLoaded", function() {
   const wizardHotNext = document.getElementById("wz-hot-next");
   const providerInput = document.getElementById("wz-provider-input");
   const modelSelect = document.getElementById("wz-model-select");
+  const workersInput = wizardOverlay ? wizardOverlay.querySelector('input[name="max_parallel_workers"]') : null;
   const apiKeyInput = wizardOverlay ? wizardOverlay.querySelector('input[name="api_key"]') : null;
+  const baseUrlInput = wizardOverlay ? wizardOverlay.querySelector('input[name="base_url"]') : null;
   const aiOpenButton = document.getElementById("wz-ai-open");
   const aiPopover = document.getElementById("wz-ai-pop");
   const completionToggle = document.getElementById("wz-completion-toggle");
@@ -1042,6 +1066,50 @@ document.addEventListener("DOMContentLoaded", function() {
     return "";
   };
 
+  const normaliseModelForProvider = function(providerValue, rawModel) {
+    const provider = String(providerValue || "openai").trim().toLowerCase();
+    const model = String(rawModel || "").trim();
+    if (provider === "openrouter") {
+      if (model === "gpt-4.1-mini") return "openai/gpt-4.1-mini";
+      if (model === "gpt-4.1") return "openai/gpt-4.1";
+      return model || "openai/gpt-4.1-mini";
+    }
+    if (model === "openai/gpt-4.1-mini") return "gpt-4.1-mini";
+    if (model === "openai/gpt-4.1") return "gpt-4.1";
+    return model || "gpt-4.1-mini";
+  };
+
+  const setWizardModelOptions = function(providerValue, preferredModel) {
+    if (!modelSelect) return;
+    const provider = String(providerValue || "openai").trim().toLowerCase();
+    const selectedModel = normaliseModelForProvider(provider, preferredModel);
+    if (provider === "openrouter") {
+      modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini (recommended - lower cost)</option><option value="openai/gpt-4.1">openai/gpt-4.1 (higher accuracy)</option>';
+    } else {
+      modelSelect.innerHTML = '<option value="gpt-4.1-mini">gpt-4.1-mini (recommended - lower cost)</option><option value="gpt-4.1">gpt-4.1 (higher accuracy)</option>';
+    }
+    modelSelect.value = selectedModel;
+    if (!modelSelect.value) {
+      modelSelect.selectedIndex = 0;
+    }
+  };
+
+  const syncWizardCredentialMaskForProvider = function(providerValue) {
+    if (!apiKeyInput) return;
+    const provider = String(providerValue || "openai").trim().toLowerCase();
+    const hasSaved = hasSavedCredentialForProvider(provider);
+    const last4 = credentialLast4ForProvider(provider);
+    if (!hasSaved) {
+      apiKeyInput.value = "";
+      apiKeyInput.removeAttribute("data-masked");
+      apiKeyInput.placeholder = "Paste provider API key";
+      return;
+    }
+    apiKeyInput.value = `${maskedCredentialValue}${last4}`;
+    apiKeyInput.setAttribute("data-masked", "1");
+    apiKeyInput.placeholder = `Saved credential ending in ${last4}`;
+  };
+
   const updateActionState = function() {
     if (!wizardNext) return;
     const canProceed = isCurrentStepValid();
@@ -1217,6 +1285,16 @@ document.addEventListener("DOMContentLoaded", function() {
     if (options && typeof options === "object" && options.step) {
       wizardStep = wizardStepIndexFromKey(options.step);
     }
+    const selectedProvider = String(providerInput?.value || "openai").toLowerCase();
+    applyProviderButtonState(wizardOverlay?.querySelector(".wz-provider-pick"), selectedProvider);
+    setWizardModelOptions(selectedProvider, modelSelect?.value || "");
+    if (workersInput && !String(workersInput.value || "").trim()) {
+      workersInput.value = "1";
+    }
+    if (baseUrlInput && typeof baseUrlInput.value !== "string") {
+      baseUrlInput.value = "";
+    }
+    syncWizardCredentialMaskForProvider(selectedProvider);
     renderWizard();
     wizardOverlay.classList.add("on");
     wizardOverlay.setAttribute("aria-hidden", "false");
@@ -1543,20 +1621,21 @@ document.addEventListener("DOMContentLoaded", function() {
   });
   wizardOverlay?.querySelectorAll(".wz-provider-pick button").forEach(function(button) {
     button.addEventListener("click", function() {
-      wizardOverlay.querySelectorAll(".wz-provider-pick button").forEach(function(b) { b.classList.remove("on"); });
-      button.classList.add("on");
-      if (providerInput) providerInput.value = button.getAttribute("data-provider") || "openai";
-      if (modelSelect) {
-        if (providerInput?.value === "openrouter") {
-          modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini (recommended - lower cost)</option><option value="openai/gpt-4.1">openai/gpt-4.1 (higher accuracy)</option>';
-        } else {
-          modelSelect.innerHTML = '<option value="gpt-4.1-mini">gpt-4.1-mini (recommended - lower cost)</option><option value="gpt-4.1">gpt-4.1 (higher accuracy)</option>';
-        }
-      }
+      const selectedProvider = String(button.getAttribute("data-provider") || "openai").toLowerCase();
+      applyProviderButtonState(wizardOverlay?.querySelector(".wz-provider-pick"), selectedProvider);
+      if (providerInput) providerInput.value = selectedProvider;
+      setWizardModelOptions(selectedProvider, modelSelect?.value || "");
+      syncWizardCredentialMaskForProvider(selectedProvider);
       updateActionState();
     });
   });
   modelSelect?.addEventListener("change", updateActionState);
+  apiKeyInput?.addEventListener("focus", function() {
+    if (apiKeyInput.getAttribute("data-masked") === "1") {
+      apiKeyInput.value = "";
+      apiKeyInput.removeAttribute("data-masked");
+    }
+  });
   apiKeyInput?.addEventListener("input", updateActionState);
   aiOpenButton?.addEventListener("click", function(event) {
     event.preventDefault();
@@ -1609,6 +1688,10 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
   wizardForm?.addEventListener("submit", function(event) {
+    if (apiKeyInput?.getAttribute("data-masked") === "1") {
+      apiKeyInput.value = "";
+      apiKeyInput.removeAttribute("data-masked");
+    }
     syncExtractFeatureRows();
     const csrfInput = wizardForm.querySelector('input[name="csrfmiddlewaretoken"]');
     if (csrfInput instanceof HTMLInputElement) {

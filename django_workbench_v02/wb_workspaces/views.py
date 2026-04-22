@@ -118,6 +118,16 @@ RUN_TYPE_LABELS = {
     "extract": "Extracting",
     "export": "Exporting",
 }
+RUN_STATUS_CARD_LABELS = {
+    RunStatus.QUEUED: "Queued",
+    RunStatus.STARTING: "Starting",
+    RunStatus.RUNNING: "Running",
+    RunStatus.CANCELLING: "Cancelling",
+    RunStatus.CANCELLED: "Cancelled",
+    RunStatus.SUCCEEDED: "Complete",
+    RunStatus.FAILED: "Failed",
+    RunStatus.TIMED_OUT: "Timed out",
+}
 
 
 def _pipeline_status_for_run(run: InvestigationRun | None) -> str:
@@ -130,6 +140,22 @@ def _pipeline_status_for_run(run: InvestigationRun | None) -> str:
     if run.status == RunStatus.SUCCEEDED:
         return "complete"
     return ""
+
+
+def _reports_found_from_artifact(artifact: RunArtifact | None) -> int:
+    if artifact is None:
+        return 0
+    if isinstance(artifact.metadata_json, dict):
+        metadata = artifact.metadata_json
+        for key in ("matched_reports", "output_reports", "total_reports"):
+            value = metadata.get(key)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                continue
+    return 0
 
 
 def _worker_health() -> tuple[bool, str]:
@@ -377,9 +403,10 @@ def dashboard(request):
     )
     memberships_list = list(memberships)
     dashboard_rows: list[dict] = []
+    can_hard_delete = bool(request.user.is_superuser)
     for membership in memberships_list:
         workspace = membership.workspace
-        can_restore = bool(request.user.is_superuser) or (
+        can_manage_lifecycle = bool(request.user.is_superuser) or (
             membership.role == MembershipRole.OWNER
             and membership.access_mode == MembershipAccessMode.EDIT
             and membership.can_manage_members
@@ -389,31 +416,71 @@ def dashboard(request):
                 "membership": membership,
                 "workspace": workspace,
                 "is_archived": workspace.archived_at is not None,
-                "can_restore": can_restore,
-                "can_cancel_pending_run": False,
-                "pending_run": None,
+                "can_restore": can_manage_lifecycle,
+                "can_archive": can_manage_lifecycle and workspace.archived_at is None,
+                "can_hard_delete": can_hard_delete,
+                "can_cancel_running_run": False,
+                "running_run": None,
                 "pending_stage_label": "",
                 "pipeline_state": "",
                 "pipeline_stage_label": "",
                 "pipeline_run_status": "",
+                "pipeline_status_label": "Not started",
                 "pipeline_updated_at": None,
+                "investigation_title": workspace.title,
+                "investigation_description": "",
+                "reports_found_count": 0,
+                "show_reports_found_count": False,
+                "last_edited_at": workspace.updated_at,
             }
         )
     workspace_ids = [row["workspace"].id for row in dashboard_rows]
-    latest_run_by_workspace_id: dict[str, InvestigationRun] = {}
+    latest_run_by_workspace_id: dict = {}
+    investigations_by_workspace_id: dict = {}
+    reports_found_by_workspace_id: dict = {}
     if workspace_ids:
+        investigations = Investigation.objects.filter(workspace_id__in=workspace_ids).only(
+            "workspace_id",
+            "title",
+            "question_text",
+            "updated_at",
+        )
+        for investigation in investigations:
+            investigations_by_workspace_id[investigation.workspace_id] = investigation
+
         runs = (
             InvestigationRun.objects.select_related("investigation")
             .filter(workspace_id__in=workspace_ids)
             .order_by("workspace_id", "-created_at")
         )
         for run in runs:
-            key = str(run.workspace_id)
+            key = run.workspace_id
             if key not in latest_run_by_workspace_id:
                 latest_run_by_workspace_id[key] = run
 
+        filtered_artifacts = (
+            RunArtifact.objects.filter(
+                workspace_id__in=workspace_ids,
+                status=ArtifactStatus.READY,
+                artifact_type=ArtifactType.FILTERED_DATASET,
+            )
+            .only("workspace_id", "metadata_json")
+            .order_by("workspace_id", "-created_at")
+        )
+        for artifact in filtered_artifacts:
+            key = artifact.workspace_id
+            if key not in reports_found_by_workspace_id:
+                reports_found_by_workspace_id[key] = _reports_found_from_artifact(artifact)
+
     for row in dashboard_rows:
-        run = latest_run_by_workspace_id.get(str(row["workspace"].id))
+        workspace_id = row["workspace"].id
+        investigation = investigations_by_workspace_id.get(workspace_id)
+        if investigation is not None:
+            row["investigation_title"] = str(investigation.title or row["workspace"].title).strip() or row["workspace"].title
+            row["investigation_description"] = str(investigation.question_text or "").strip()
+            row["last_edited_at"] = investigation.updated_at
+
+        run = latest_run_by_workspace_id.get(workspace_id)
         row["latest_run"] = run
         row["latest_investigation_id"] = str(run.investigation_id) if run else ""
         if run:
@@ -421,11 +488,21 @@ def dashboard(request):
             row["pipeline_state"] = _pipeline_status_for_run(run)
             row["pipeline_stage_label"] = stage_label
             row["pipeline_run_status"] = str(run.status)
+            row["pipeline_status_label"] = RUN_STATUS_CARD_LABELS.get(run.status, str(run.status).replace("_", " ").title())
             row["pipeline_updated_at"] = run.updated_at
-        if run and run.status in PIPELINE_PENDING_STATUSES:
-            row["pending_run"] = run
+            if run.updated_at and run.updated_at > row["last_edited_at"]:
+                row["last_edited_at"] = run.updated_at
+        if run and run.status == RunStatus.RUNNING:
+            row["running_run"] = run
             row["pending_stage_label"] = RUN_TYPE_LABELS.get(str(run.run_type), str(run.run_type).title())
-            row["can_cancel_pending_run"] = bool(can_run_workflows(request.user, row["workspace"]))
+            row["can_cancel_running_run"] = bool(can_run_workflows(request.user, row["workspace"]))
+
+        reports_found_count = int(reports_found_by_workspace_id.get(workspace_id, 0))
+        row["reports_found_count"] = reports_found_count
+        row["show_reports_found_count"] = row["pipeline_state"] == "complete"
+
+        if row["pipeline_updated_at"] and row["pipeline_updated_at"] > row["last_edited_at"]:
+            row["last_edited_at"] = row["pipeline_updated_at"]
     active_workspace = get_active_workspace_for_user(user=request.user)
     if active_workspace is None and memberships_list:
         for membership in memberships_list:

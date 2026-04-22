@@ -3,10 +3,7 @@
 {% block page_title %}Workspaces · PFD Toolkit Workbench v0.2{% endblock %}
 
 {% block page_header %}
-<div class="stack-sm">
-    <h2 class="page-title">Your Workspaces</h2>
-    <p class="page-subtitle">Manage active and archived workspaces. Start investigations from the sidebar command.</p>
-</div>
+<div class="stack-sm"></div>
 {% endblock %}
 
 {% block content %}
@@ -20,125 +17,276 @@
                 <p class="empty-note">{{ worker_status_message }}</p>
             </section>
         {% endif %}
-        <section class="card dashboard-section">
+
+        <section class="dashboard-section">
             <div class="dashboard-section__head">
                 <h3>Active Workspaces</h3>
                 <span class="count-pill">{{ active_rows|length }}</span>
             </div>
-            {% if active_rows %}
-                <div class="workbook-list">
-                    {% for row in active_rows %}
-                        {% with membership=row.membership workspace=row.workspace %}
-                        <article class="workbook-row{% if active_workspace_id and active_workspace_id == workspace.id|stringformat:'s' %} is-active{% endif %}{% if row.pending_run %} is-pending{% endif %}">
-                            <div class="workbook-row__main">
-                                <h4>
-                                    {% if row.pending_run %}
-                                        <span>{{ workspace.title }}</span>
-                                    {% else %}
-                                        <a href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ workspace.title }}</a>
-                                    {% endif %}
-                                </h4>
-                                <div class="workbook-row__meta">
-                                    {% if active_workspace_id and active_workspace_id == workspace.id|stringformat:"s" %}
-                                        <span class="tag tag-active">active</span>
-                                        <span class="sr-only">(active)</span>
-                                    {% endif %}
-                                    {% if row.pipeline_state == "pending" %}
-                                        <span class="tag tag-active">pending</span>
-                                        <span class="tag">{{ row.pipeline_stage_label }}</span>
-                                        <span class="tag">{{ row.pipeline_run_status }}</span>
-                                    {% elif row.pipeline_state == "failed-warning" %}
-                                        <span class="tag tag-warn">failed warning</span>
-                                        <span class="tag">{{ row.pipeline_stage_label }}</span>
-                                        <span class="tag">{{ row.pipeline_run_status }}</span>
-                                    {% elif row.pipeline_state == "complete" %}
-                                        <span class="tag tag-good">complete</span>
-                                        <span class="tag">{{ row.pipeline_stage_label }}</span>
-                                    {% endif %}
-                                    {% if row.pipeline_updated_at %}
-                                        <span class="tag">updated {{ row.pipeline_updated_at|date:"Y-m-d H:i" }}</span>
-                                    {% endif %}
-                                    <span class="tag">{{ membership.role }}</span>
-                                    <span class="tag">{{ membership.access_mode }}</span>
-                                </div>
-                            </div>
-                            <div class="workbook-row__actions">
-                                {% if row.pending_run %}
-                                    {% if row.can_cancel_pending_run %}
-                                        <form method="post" action="{% url 'run-cancel' workbook_id=workspace.id run_id=row.pending_run.id %}" class="inline-form">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="cancel_reason" value="Cancelled from workspace dashboard.">
-                                            <button type="submit" class="btn btn-secondary">Cancel run</button>
-                                        </form>
-                                    {% else %}
-                                        <button type="button" class="btn btn-secondary" disabled>Launching…</button>
-                                    {% endif %}
-                                {% else %}
-                                    <a class="btn btn-secondary" href="{% url 'workbook-open' workbook_id=workspace.id %}">Open</a>
-                                {% endif %}
-                                {% if row.pipeline_state == "failed-warning" and row.latest_investigation_id and row.latest_run %}
-                                    <a
-                                        class="btn btn-ghost"
-                                        href="{% url 'investigation-detail' workbook_id=workspace.id investigation_id=row.latest_investigation_id %}?open_wizard=1&wizard_step=review&retry_run_id={{ row.latest_run.id }}"
-                                    >
-                                        Try again
-                                    </a>
-                                {% endif %}
-                                {% if not row.pending_run %}
-                                    {% if not active_workspace_id or active_workspace_id != workspace.id|stringformat:"s" %}
-                                        <form method="post" action="{% url 'workspace-activate' workbook_id=workspace.id %}" class="inline-form">
-                                            {% csrf_token %}
-                                            <input type="hidden" name="next_url" value="{% url 'workspace-dashboard' %}">
-                                            <button type="submit" class="btn btn-ghost">Set active</button>
-                                        </form>
-                                    {% endif %}
-                                {% endif %}
-                            </div>
-                        </article>
-                        {% endwith %}
-                    {% endfor %}
-                </div>
-            {% else %}
-                <p class="empty-note">You do not currently have any active workspaces.</p>
-            {% endif %}
-        </section>
+            <div class="ws-grid ws-grid-dashboard">
+                <article class="ws-card ws-card-empty" role="button" tabindex="0" data-open-wizard>
+                    <div class="ws-empty">
+                        <div class="ws-empty-ico">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                        </div>
+                        <h4>Start a new investigation</h4>
+                        <p>A question, a scope, a method. <span class="ws-shortcut">I</span> to launch the wizard.</p>
+                    </div>
+                </article>
 
-        {% if archived_rows %}
-            <section class="card dashboard-section">
-                <div class="dashboard-section__head">
-                    <h3>Archived Workspaces <span class="sr-only">Archived Workbooks</span></h3>
-                    <span class="count-pill">{{ archived_rows|length }}</span>
-                </div>
-                <div class="workbook-list">
-                    {% for row in archived_rows %}
-                        {% with membership=row.membership workspace=row.workspace %}
-                        <article class="workbook-row is-archived">
-                            <div class="workbook-row__main">
-                                <h4><a href="{% url 'workspace-detail' workbook_id=workspace.id %}">{{ workspace.title }}</a></h4>
-                                <div class="workbook-row__meta">
-                                    <span class="tag tag-archived">archived</span>
-                                    {% if workspace.archived_at %}
-                                        <span class="tag">{{ workspace.archived_at|date:"Y-m-d H:i" }}</span>
-                                    {% endif %}
-                                    <span class="tag">{{ membership.role }}</span>
-                                    <span class="tag">{{ membership.access_mode }}</span>
-                                </div>
+                {% for row in active_rows %}
+                    {% with workspace=row.workspace %}
+                    <article class="ws-card ws-card-dashboard{% if active_workspace_id and active_workspace_id == workspace.id|stringformat:'s' %} ws-card-active{% endif %}">
+                        <header class="ws-head">
+                            <div class="ws-meta">
+                                <span class="ws-dot {% if row.pipeline_state == 'pending' %}live{% elif row.pipeline_state == 'complete' %}dim{% elif row.pipeline_state == 'failed-warning' %}pause{% else %}dim{% endif %}"></span>
+                                <span class="ws-tag">{{ row.pipeline_status_label }}</span>
+                                <span class="ws-owner">You</span>
                             </div>
-                            <div class="workbook-row__actions">
-                                {% if row.can_restore %}
-                                    <form method="post" action="{% url 'workspace-restore' workbook_id=workspace.id %}" class="inline-form">
+                            <details class="ws-actions">
+                                <summary class="icon-btn ws-more" aria-label="More actions">
+                                    <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
+                                </summary>
+                                <div class="ws-actions-menu">
+                                    {% if row.can_archive %}
+                                        <button
+                                            class="ws-actions-item"
+                                            type="button"
+                                            data-open-archive-confirm
+                                            data-archive-action="{% url 'workbook-archive' workbook_id=workspace.id %}"
+                                            data-workspace-title="{{ workspace.title }}"
+                                        >
+                                            Archive
+                                        </button>
+                                    {% endif %}
+                                    {% if row.can_hard_delete %}
+                                        <button
+                                            class="ws-actions-item is-danger"
+                                            type="button"
+                                            data-open-delete-confirm
+                                            data-delete-action="{% url 'workbook-delete' workbook_id=workspace.id %}"
+                                            data-workspace-title="{{ workspace.title }}"
+                                        >
+                                            Permanently delete
+                                        </button>
+                                    {% endif %}
+                                    {% if not row.can_archive and not row.can_hard_delete %}
+                                        <span class="ws-actions-empty">No actions available</span>
+                                    {% endif %}
+                                </div>
+                            </details>
+                        </header>
+
+                        <div class="ws-body">
+                            <h3><a class="ws-open-title" href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a></h3>
+                            {% if row.investigation_description %}
+                                <p>{{ row.investigation_description }}</p>
+                            {% endif %}
+                        </div>
+
+                        <div class="ws-metrics ws-metrics-single">
+                            {% if row.show_reports_found_count %}
+                                <div class="wsm"><strong>{{ row.reports_found_count }}</strong><span>Reports found</span></div>
+                            {% else %}
+                                <div class="wsm"><strong>—</strong><span>Reports found</span></div>
+                            {% endif %}
+                            <div class="wsm wsm-spark flat"><svg viewBox="0 0 80 24" preserveAspectRatio="none"><line x1="0" y1="14" x2="80" y2="14" stroke="currentColor" stroke-dasharray="2 3"/></svg></div>
+                        </div>
+
+                        <footer class="ws-foot">
+                            <span class="ws-stamp">
+                                {% if row.last_edited_at %}
+                                    Last edited · {{ row.last_edited_at|timesince }} ago
+                                {% else %}
+                                    Last edited · just now
+                                {% endif %}
+                            </span>
+                            <div class="ws-foot-actions">
+                                {% if row.running_run and row.can_cancel_running_run %}
+                                    <form method="post" action="{% url 'run-cancel' workbook_id=workspace.id run_id=row.running_run.id %}" class="inline-form">
                                         {% csrf_token %}
-                                        <button type="submit" class="btn btn-secondary">Restore</button>
+                                        <input type="hidden" name="cancel_reason" value="Cancelled from workspace dashboard card.">
+                                        <button type="submit" class="btn btn-secondary sm">Cancel</button>
                                     </form>
                                 {% endif %}
-                                <a class="btn btn-ghost" href="{% url 'workspace-detail' workbook_id=workspace.id %}">Open details</a>
+                                <a class="btn btn-ghost sm" href="{% url 'workbook-open' workbook_id=workspace.id %}">Open</a>
                             </div>
-                        </article>
+                        </footer>
+                    </article>
+                    {% endwith %}
+                {% empty %}
+                    <article class="ws-card ws-card-dashboard ws-card-dim">
+                        <div class="ws-body">
+                            <h3>No active workspaces</h3>
+                            <p>Start a new investigation to create your first workspace.</p>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        </section>
+
+        <details class="ws-archive"{% if archived_rows %} open{% endif %}>
+            <summary>
+                <span class="k">Archived · {{ archived_rows|length }}</span>
+                <span class="ws-arrow"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>
+            </summary>
+            {% if archived_rows %}
+                <ul class="ws-arch-list">
+                    {% for row in archived_rows %}
+                        {% with workspace=row.workspace %}
+                        <li>
+                            <span class="ws-dot dim"></span>
+                            <strong><a class="ws-open-title" href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a></strong>
+                            <em>
+                                {% if workspace.archived_at %}
+                                    Archived {{ workspace.archived_at|timesince }} ago
+                                {% else %}
+                                    Archived
+                                {% endif %}
+                            </em>
+                            <div class="ws-arch-actions">
+                                {% if row.can_restore %}
+                                    <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" class="inline-form">
+                                        {% csrf_token %}
+                                        <button class="ws-arch-act" type="submit">Restore</button>
+                                    </form>
+                                {% endif %}
+                                {% if row.can_hard_delete %}
+                                    <button
+                                        class="ws-arch-act ws-arch-act-danger"
+                                        type="button"
+                                        data-open-delete-confirm
+                                        data-delete-action="{% url 'workbook-delete' workbook_id=workspace.id %}"
+                                        data-workspace-title="{{ workspace.title }}"
+                                    >
+                                        Delete
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </li>
                         {% endwith %}
                     {% endfor %}
-                </div>
-            </section>
-        {% endif %}
+                </ul>
+            {% endif %}
+        </details>
     </div>
 </div>
+
+<div class="dlg-back" id="workspace-archive-dialog" aria-hidden="true">
+    <div class="dlg confirm" role="dialog" aria-labelledby="workspace-archive-title">
+        <div class="dlg-head">
+            <div class="k">Confirm action</div>
+            <h3 id="workspace-archive-title">Archive workspace?</h3>
+            <p id="workspace-archive-copy">This workspace will move to archived workspaces.</p>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to cancel</span>
+            <div class="acts">
+                <button class="btn btn-ghost" type="button" data-archive-close>Cancel</button>
+                <form method="post" action="" id="workspace-archive-form">
+                    {% csrf_token %}
+                    <button class="btn btn-primary" type="submit">Confirm archive</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="dlg-back" id="workspace-delete-dialog" aria-hidden="true">
+    <div class="dlg confirm danger" role="dialog" aria-labelledby="workspace-delete-title">
+        <div class="dlg-head">
+            <div class="k"><span class="d"></span>Destructive · cannot be undone</div>
+            <h3 id="workspace-delete-title">Permanently delete workspace?</h3>
+            <p id="workspace-delete-copy">This will permanently remove this workspace and all related data.</p>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to cancel</span>
+            <div class="acts">
+                <button class="btn btn-ghost" type="button" data-delete-close>Cancel</button>
+                <form method="post" action="" id="workspace-delete-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="reason" value="Deleted from workspace dashboard card menu.">
+                    <button class="btn btn-danger" type="submit">Confirm delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const archiveDialog = document.getElementById("workspace-archive-dialog");
+  const archiveForm = document.getElementById("workspace-archive-form");
+  const archiveCopy = document.getElementById("workspace-archive-copy");
+  const deleteDialog = document.getElementById("workspace-delete-dialog");
+  const deleteForm = document.getElementById("workspace-delete-form");
+  const deleteCopy = document.getElementById("workspace-delete-copy");
+
+  const closeDialog = function(dialog) {
+    if (!dialog) return;
+    dialog.classList.remove("on");
+    dialog.setAttribute("aria-hidden", "true");
+  };
+
+  const openDialog = function(dialog) {
+    if (!dialog) return;
+    dialog.classList.add("on");
+    dialog.setAttribute("aria-hidden", "false");
+  };
+
+  document.querySelectorAll("[data-open-archive-confirm]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      if (!archiveDialog || !archiveForm) return;
+      const action = String(button.getAttribute("data-archive-action") || "");
+      const title = String(button.getAttribute("data-workspace-title") || "this workspace");
+      if (!action) return;
+      archiveForm.setAttribute("action", action);
+      if (archiveCopy) archiveCopy.textContent = `Archive ${title}? It will move to the archived section and follow retention rules.`;
+      openDialog(archiveDialog);
+    });
+  });
+
+  document.querySelectorAll("[data-open-delete-confirm]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      if (!deleteDialog || !deleteForm) return;
+      const action = String(button.getAttribute("data-delete-action") || "");
+      const title = String(button.getAttribute("data-workspace-title") || "this workspace");
+      if (!action) return;
+      deleteForm.setAttribute("action", action);
+      if (deleteCopy) deleteCopy.textContent = `Permanently delete ${title}? This cannot be undone.`;
+      openDialog(deleteDialog);
+    });
+  });
+
+  document.querySelectorAll("[data-archive-close]").forEach(function(button) {
+    button.addEventListener("click", function() { closeDialog(archiveDialog); });
+  });
+  document.querySelectorAll("[data-delete-close]").forEach(function(button) {
+    button.addEventListener("click", function() { closeDialog(deleteDialog); });
+  });
+
+  archiveDialog?.addEventListener("click", function(event) {
+    if (event.target === archiveDialog) closeDialog(archiveDialog);
+  });
+  deleteDialog?.addEventListener("click", function(event) {
+    if (event.target === deleteDialog) closeDialog(deleteDialog);
+  });
+
+  document.addEventListener("keydown", function(event) {
+    if (event.key !== "Escape") return;
+    closeDialog(archiveDialog);
+    closeDialog(deleteDialog);
+  });
+
+  document.querySelectorAll(".ws-card-empty").forEach(function(card) {
+    card.addEventListener("keydown", function(event) {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      if (typeof window.__openInvestigationWizard === "function") {
+        window.__openInvestigationWizard();
+      }
+    });
+  });
+});
+</script>
 {% endblock %}

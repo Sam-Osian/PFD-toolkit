@@ -15,7 +15,11 @@ from wb_workspaces.activity import is_human_view_request, should_update_last_vie
 from wb_workspaces.models import RevisionChangeType, WorkspaceLLMProvider
 from wb_workspaces.permissions import can_edit_workspace, can_run_workflows
 from wb_workspaces.revisions import capture_workspace_state, write_workspace_revision
-from wb_workspaces.services import has_workspace_credential, upsert_workspace_credential
+from wb_workspaces.services import (
+    has_workspace_credential,
+    upsert_user_llm_credential,
+    upsert_user_llm_setting,
+)
 
 from .models import Investigation
 
@@ -270,10 +274,17 @@ def launch_investigation_wizard_pipeline(
         custom_end_date=scope_end_date,
     )
 
+    # Keep wizard launch config in sync with global LLM config defaults.
+    upsert_user_llm_setting(
+        actor=actor,
+        provider=review["provider"],
+        model_name=review["model_name"],
+        max_parallel_workers=review["max_parallel_workers"],
+        request=request,
+    )
     if review["execution_mode"] == "real" and credential.get("api_key"):
-        upsert_workspace_credential(
+        upsert_user_llm_credential(
             actor=actor,
-            workspace=investigation.workspace,
             provider=review["provider"],
             api_key=credential["api_key"],
             base_url=credential.get("base_url") or "",

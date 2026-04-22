@@ -17,6 +17,7 @@ from wb_runs.models import (
 from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
+    UserLLMCredential,
     WorkspaceMembership,
     WorkspaceReportExclusion,
     WorkspaceVisibility,
@@ -924,6 +925,29 @@ class InvestigationModalWizardLaunchTests(TestCase):
             [RunType.THEMES, RunType.EXTRACT],
         )
         self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
+
+    def test_modal_launch_updates_user_llm_setting_defaults(self):
+        self._launch_modal(
+            provider="openrouter",
+            model_name="openai/gpt-4.1",
+            max_parallel_workers="7",
+            api_key="sk-or-test-secret-1234",
+        )
+        self.owner.refresh_from_db()
+        self.assertEqual(self.owner.llm_setting.provider, "openrouter")
+        self.assertEqual(self.owner.llm_setting.model_name, "openai/gpt-4.1")
+        self.assertEqual(self.owner.llm_setting.max_parallel_workers, 7)
+
+    def test_modal_launch_saves_user_credential_for_selected_provider(self):
+        self._launch_modal(
+            provider="openrouter",
+            model_name="openai/gpt-4.1-mini",
+            api_key="sk-or-test-secret-5678",
+            base_url="https://openrouter.ai/api/v1",
+        )
+        credential = UserLLMCredential.objects.get(user=self.owner, provider="openrouter")
+        self.assertEqual(credential.key_last4, "5678")
+        self.assertEqual(credential.base_url, "https://openrouter.ai/api/v1")
 
     def test_modal_launch_uses_description_for_workspace_and_investigation(self):
         _, run = self._launch_modal(

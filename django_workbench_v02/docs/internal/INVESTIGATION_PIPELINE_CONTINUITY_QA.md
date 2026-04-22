@@ -109,7 +109,18 @@ Manual gate evidence:
      - `artifact_type`: `filtered_dataset`
      - `status`: `ready`
      - `storage_backend`: `object_storage`
-3. Remaining manual checks still pending:
-   - cancellation terminal `cancelled`
+3. Cancellation path validated (deployed env):
+   - `run_id`: `759ba6b8-51be-4ab9-95f4-6c4c6d7a5b02`
+   - `run_type`: `filter`
+   - `status`: `cancelled`
+   - `worker_id`: `railway-worker-1`
+   - `created_at`: `2026-04-22T17:02:10.719341+00:00`
+   - `cancel_requested_at`: `2026-04-22T17:02:12.941291+00:00`
+   - `finished_at`: `2026-04-22T17:02:13.064278+00:00`
+   - cancellation reason: `Cancelled from workspace dashboard.`
+   - key events:
+     - `cancel_check`: `Cancellation requested.`
+     - terminal stage event: `Run was cancelled before processing started.`
+4. Remaining manual checks still pending:
    - timeout path terminal `timed_out`
    - transient retry path requeue/backoff + terminal outcome
