@@ -24,10 +24,13 @@ from .models import ArtifactStatus, ArtifactType, RunArtifact
 
 OPENROUTER_API_BASE = "https://openrouter.ai/api/v1"
 LLM_REQUEST_TIMEOUT_SECONDS = 1800
+MISSING_UPSTREAM_ARTIFACT_ERROR_CODE = "MISSING_UPSTREAM_ARTIFACT"
 
 
 class AdapterConfigurationError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, error_code: str = "ADAPTER_CONFIGURATION"):
+        super().__init__(message)
+        self.error_code = str(error_code or "ADAPTER_CONFIGURATION")
 
 
 class AdapterCancelledError(RuntimeError):
@@ -158,7 +161,8 @@ def _load_reports_from_upstream_artifact(*, run, config: dict) -> pd.DataFrame |
     if not artifact_id:
         if require_upstream:
             raise AdapterConfigurationError(
-                "Pipeline configuration requires an upstream artifact, but none was provided."
+                "Pipeline configuration requires an upstream artifact, but none was provided.",
+                error_code=MISSING_UPSTREAM_ARTIFACT_ERROR_CODE,
             )
         return None
 
@@ -173,7 +177,8 @@ def _load_reports_from_upstream_artifact(*, run, config: dict) -> pd.DataFrame |
     )
     if artifact is None:
         raise AdapterConfigurationError(
-            "Configured upstream artifact is missing or not ready for this workbook."
+            "Configured upstream artifact is missing or not ready for this workbook.",
+            error_code=MISSING_UPSTREAM_ARTIFACT_ERROR_CODE,
         )
 
     try:

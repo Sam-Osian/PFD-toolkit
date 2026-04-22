@@ -4,6 +4,11 @@ from . import views
 
 
 urlpatterns = [
+    path(
+        "workbooks/llm-config/save/",
+        views.save_active_llm_config,
+        name="workbook-llm-config-save",
+    ),
     path("workbooks/", views.dashboard, name="workbook-dashboard"),
     path(
         "workbooks/<uuid:workbook_id>/activate/",
@@ -160,5 +165,10 @@ urlpatterns = [
         "workspaces/<uuid:workbook_id>/state/revert-reports/",
         views.revert_workspace_reports_view,
         name="workspace-state-revert-reports",
+    ),
+    path(
+        "workspaces/llm-config/save/",
+        views.save_active_llm_config,
+        name="workspace-llm-config-save",
     ),
 ]

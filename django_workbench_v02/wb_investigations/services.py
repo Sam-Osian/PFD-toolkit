@@ -9,10 +9,10 @@ from wb_notifications.models import NotificationTrigger
 from wb_runs.models import RunType
 from wb_runs.services import queue_run
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
-from wb_workspaces.models import RevisionChangeType
-from wb_workspaces.permissions import can_edit_workspace
+from wb_workspaces.models import RevisionChangeType, WorkspaceLLMProvider
+from wb_workspaces.permissions import can_edit_workspace, can_run_workflows
 from wb_workspaces.revisions import capture_workspace_state, write_workspace_revision
-from wb_workspaces.services import has_workspace_credential
+from wb_workspaces.services import has_workspace_credential, upsert_workspace_credential
 
 from .models import Investigation
 
@@ -21,13 +21,42 @@ class InvestigationServiceError(ValidationError):
     pass
 
 
+ALLOWED_REVIEW_PROVIDERS = {
+    WorkspaceLLMProvider.OPENAI,
+    WorkspaceLLMProvider.OPENROUTER,
+}
+
+PROVIDER_MODEL_ALLOWLIST = {
+    WorkspaceLLMProvider.OPENAI: {
+        "gpt-4.1-mini",
+        "gpt-4.1",
+    },
+    WorkspaceLLMProvider.OPENROUTER: {
+        "openai/gpt-4.1-mini",
+        "openai/gpt-4.1",
+    },
+}
+
+
 def _normalise_review_config(review_config: dict | None) -> dict:
     raw = review_config if isinstance(review_config, dict) else {}
     execution_mode = "real"
-    provider = str(raw.get("provider") or "openai").strip().lower()
-    if provider not in {"openai", "openrouter"}:
-        provider = "openai"
-    model_name = str(raw.get("model_name") or "gpt-4.1-mini").strip() or "gpt-4.1-mini"
+    raw_provider = raw.get("provider")
+    if raw_provider is None:
+        provider = WorkspaceLLMProvider.OPENAI
+    else:
+        provider = str(raw_provider).strip().lower()
+
+    raw_model_name = raw.get("model_name")
+    if raw_model_name is None:
+        model_name = "gpt-4.1-mini"
+    else:
+        model_name = str(raw_model_name).strip()
+    try:
+        max_parallel_workers = int(raw.get("max_parallel_workers") or 1)
+    except (TypeError, ValueError):
+        max_parallel_workers = 1
+    max_parallel_workers = min(32, max(1, max_parallel_workers))
     notify_on = str(raw.get("notify_on") or NotificationTrigger.ANY).strip().lower()
     if notify_on not in {
         NotificationTrigger.SUCCESS,
@@ -39,8 +68,129 @@ def _normalise_review_config(review_config: dict | None) -> dict:
         "execution_mode": execution_mode,
         "provider": provider,
         "model_name": model_name,
-        "request_completion_email": bool(raw.get("request_completion_email", False)),
+        "max_parallel_workers": max_parallel_workers,
+        "request_completion_email": bool(raw.get("request_completion_email", True)),
         "notify_on": notify_on,
+    }
+
+
+def _normalise_credential_input(credential_input: dict | None) -> dict:
+    raw = credential_input if isinstance(credential_input, dict) else {}
+    return {
+        "api_key": str(raw.get("api_key") or "").strip(),
+        "base_url": str(raw.get("base_url") or "").strip(),
+        "save_api_key": bool(raw.get("save_api_key", True)),
+    }
+
+
+def evaluate_investigation_launch_readiness(
+    *,
+    actor,
+    investigation: Investigation,
+    wizard_state,
+    credential_input: dict | None = None,
+) -> dict:
+    review = _normalise_review_config(wizard_state.review_config)
+    credential = _normalise_credential_input(credential_input)
+    pipeline_plan = wizard_state.pipeline_plan()
+
+    permission_ready = bool(
+        can_edit_workspace(actor, investigation.workspace)
+        and can_run_workflows(actor, investigation.workspace)
+    )
+    pipeline_ready = bool(pipeline_plan)
+    provider_model_ready = True
+    provider_model_message = "Provider/model combination is valid."
+    if review["provider"] not in ALLOWED_REVIEW_PROVIDERS:
+        provider_model_ready = False
+        provider_model_message = (
+            f"Provider '{review['provider'] or 'unknown'}' is not supported for wizard runs."
+        )
+    elif not review["model_name"]:
+        provider_model_ready = False
+        provider_model_message = "Model name is required before launch."
+    else:
+        allowed_models = PROVIDER_MODEL_ALLOWLIST.get(review["provider"], set())
+        if allowed_models and review["model_name"] not in allowed_models:
+            allowed_models_text = ", ".join(sorted(allowed_models))
+            provider_model_ready = False
+            provider_model_message = (
+                f"Model '{review['model_name']}' is not supported for {review['provider']}. "
+                f"Choose one of: {allowed_models_text}."
+            )
+
+    credential_ready = True
+    credential_block_reason = ""
+    if review["execution_mode"] == "real":
+        if not provider_model_ready:
+            credential_ready = False
+            credential_block_reason = "Resolve provider/model readiness before checking credentials."
+        else:
+            saved = has_workspace_credential(
+                user=actor,
+                workspace=investigation.workspace,
+                provider=review["provider"],
+            )
+            provided = bool(credential.get("api_key"))
+            save_requested = bool(credential.get("save_api_key", True))
+            if provided and not save_requested and not saved:
+                credential_ready = False
+                credential_block_reason = (
+                    "Server-side runs require a saved API key. Enable key saving or use an existing saved key."
+                )
+            elif not saved and not provided:
+                credential_ready = False
+                credential_block_reason = (
+                    f"No saved {review['provider']} API key for this workbook. Add a key before launch."
+                )
+
+    checks = [
+        {
+            "key": "permissions",
+            "label": "Workflow permission",
+            "ready": permission_ready,
+            "message": (
+                "You can launch runs in this workspace."
+                if permission_ready
+                else "You do not have permission to launch workflows in this workspace."
+            ),
+        },
+        {
+            "key": "pipeline",
+            "label": "Pipeline",
+            "ready": pipeline_ready,
+            "message": (
+                f"{len(pipeline_plan)} stage(s) selected."
+                if pipeline_ready
+                else "Select at least one pipeline stage before launching."
+            ),
+        },
+        {
+            "key": "provider_model",
+            "label": "Provider/model",
+            "ready": provider_model_ready,
+            "message": provider_model_message,
+        },
+        {
+            "key": "credential",
+            "label": "Credential",
+            "ready": credential_ready,
+            "message": (
+                f"{review['provider'].title()} key ready for this workspace."
+                if credential_ready
+                else credential_block_reason
+            ),
+        },
+    ]
+
+    blocking_errors = [check["message"] for check in checks if not check["ready"]]
+    return {
+        "can_launch": not blocking_errors,
+        "checks": checks,
+        "blocking_errors": blocking_errors,
+        "review": review,
+        "credential": credential,
+        "pipeline_plan": pipeline_plan,
     }
 
 
@@ -50,34 +200,68 @@ def launch_investigation_wizard_pipeline(
     actor,
     investigation: Investigation,
     wizard_state,
+    credential_input: dict | None = None,
     request=None,
 ):
-    if not can_edit_workspace(actor, investigation.workspace):
+    readiness = evaluate_investigation_launch_readiness(
+        actor=actor,
+        investigation=investigation,
+        wizard_state=wizard_state,
+        credential_input=credential_input,
+    )
+    if not readiness["can_launch"]:
+        raise InvestigationServiceError(" ".join(readiness["blocking_errors"]))
+
+    review = readiness["review"]
+    credential = readiness["credential"]
+    pipeline_plan = readiness["pipeline_plan"]
+    if not (
+        can_edit_workspace(actor, investigation.workspace)
+        and can_run_workflows(actor, investigation.workspace)
+    ):
         raise PermissionDenied("You do not have permission to launch this investigation pipeline.")
 
     from .forms import temporal_scope_parameters
 
-    scope_params = temporal_scope_parameters(scope_option=wizard_state.scope_option)
-    pipeline_plan = wizard_state.pipeline_plan()
-    if not pipeline_plan:
-        raise InvestigationServiceError("Wizard pipeline must include at least one stage.")
+    scope_start_date = (
+        timezone.datetime.fromisoformat(wizard_state.scope_start_date).date()
+        if getattr(wizard_state, "scope_start_date", "")
+        else None
+    )
+    scope_end_date = (
+        timezone.datetime.fromisoformat(wizard_state.scope_end_date).date()
+        if getattr(wizard_state, "scope_end_date", "")
+        else None
+    )
+    scope_params = temporal_scope_parameters(
+        scope_option=wizard_state.scope_option,
+        custom_start_date=scope_start_date,
+        custom_end_date=scope_end_date,
+    )
 
-    review = _normalise_review_config(wizard_state.review_config)
-    if review["execution_mode"] == "real":
-        if not has_workspace_credential(
-            user=actor,
+    if review["execution_mode"] == "real" and credential.get("api_key"):
+        upsert_workspace_credential(
+            actor=actor,
             workspace=investigation.workspace,
             provider=review["provider"],
-        ):
-            raise InvestigationServiceError(
-                f"No saved {review['provider']} API key for this workbook. Save a key before launching."
-            )
+            api_key=credential["api_key"],
+            base_url=credential.get("base_url") or "",
+            request=request,
+        )
 
     scope_json = investigation.scope_json if isinstance(investigation.scope_json, dict) else {}
     scope_json = {
         **scope_json,
         "temporal_scope_option": wizard_state.scope_option,
     }
+    if scope_params.get("query_start_date") is not None:
+        scope_json["query_start_date"] = str(scope_params["query_start_date"])
+    else:
+        scope_json.pop("query_start_date", None)
+    if scope_params.get("query_end_date") is not None:
+        scope_json["query_end_date"] = str(scope_params["query_end_date"])
+    else:
+        scope_json.pop("query_end_date", None)
     if scope_params.get("report_limit"):
         scope_json["report_limit"] = scope_params.get("report_limit")
     else:
@@ -107,6 +291,7 @@ def launch_investigation_wizard_pipeline(
         "execution_mode": review["execution_mode"],
         "provider": review["provider"],
         "model_name": review["model_name"],
+        "max_parallel_workers": int(review.get("max_parallel_workers") or 1),
         "search_query": wizard_state.question_text or investigation.question_text,
         "pipeline_plan": pipeline_plan,
         "pipeline_index": 0,
@@ -121,6 +306,8 @@ def launch_investigation_wizard_pipeline(
         if search_query:
             run_config["search_query"] = search_query
         run_config["filter_df"] = bool(filter_config.get("filter_df", True))
+        run_config["produce_spans"] = bool(filter_config.get("include_supporting_quotes", False))
+        run_config["drop_spans"] = False
         selected_filters = filter_config.get("selected_filters")
         if isinstance(selected_filters, dict):
             run_config["selected_filters"] = {
@@ -148,6 +335,8 @@ def launch_investigation_wizard_pipeline(
         run_config["allow_multiple"] = bool(extract_config.get("allow_multiple", False))
         run_config["force_assign"] = bool(extract_config.get("force_assign", False))
         run_config["skip_if_present"] = bool(extract_config.get("skip_if_present", True))
+        run_config["produce_spans"] = bool(extract_config.get("include_supporting_quotes", False))
+        run_config["drop_spans"] = False
 
     run = queue_run(
         actor=actor,

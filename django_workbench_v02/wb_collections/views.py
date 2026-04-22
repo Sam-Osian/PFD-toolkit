@@ -204,6 +204,10 @@ def _ui_cards(cards: list[dict], *, metrics_by_slug: dict[str, dict[str, int]] |
             # Hide only these two cards per product decision.
             continue
         title = str(item.get("title") or "").strip() or slug.replace("_", " ").title()
+        if slug.lower().startswith("theme-"):
+            lowered = title.casefold()
+            if lowered.startswith("theme-") or lowered.startswith("theme "):
+                title = title[6:].strip() or title
         description = str(item.get("description") or "").strip()
         try:
             count = max(0, int(item.get("count") or 0))
@@ -268,10 +272,31 @@ def _selected_filters_from_request(request) -> dict[str, list[str]]:
 
 
 def _collection_meta(cards: list[dict], slug: str) -> dict:
+    clean_slug = str(slug or "").strip()
+    is_theme_slug = clean_slug.lower().startswith("theme-")
+
+    def _normalized_title(raw_title: str) -> str:
+        title = str(raw_title or "").strip()
+        if not title:
+            return ""
+        if is_theme_slug:
+            lowered = title.casefold()
+            if lowered.startswith("theme-"):
+                return title[6:].strip() or title
+            if lowered.startswith("theme "):
+                return title[6:].strip() or title
+        return title
+
     for card in cards:
         if card.get("slug") == slug:
-            return card
-    return {"slug": slug, "title": slug.replace("_", " ").title(), "description": "Collection"}
+            resolved = dict(card)
+            resolved["title"] = _normalized_title(str(card.get("title") or ""))
+            return resolved
+
+    fallback_title = clean_slug.replace("_", " ").title()
+    if is_theme_slug:
+        fallback_title = clean_slug[6:].replace("_", " ").title()
+    return {"slug": slug, "title": _normalized_title(fallback_title), "description": "Collection"}
 
 
 def _parse_collection_explore_params(request) -> dict[str, object]:

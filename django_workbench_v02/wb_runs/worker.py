@@ -90,6 +90,10 @@ PIPELINE_TERMINAL_CONTINUE_STATUSES = {
     RunStatus.FAILED,
     RunStatus.TIMED_OUT,
 }
+PIPELINE_FAILED_UPSTREAM_STATUSES = {
+    RunStatus.FAILED,
+    RunStatus.TIMED_OUT,
+}
 
 TRANSIENT_ERROR_SNIPPETS = (
     "timeout",
@@ -347,6 +351,9 @@ def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun 
     next_config["pipeline_index"] = next_index
     next_config["pipeline_plan"] = pipeline_plan
     next_config["pipeline_continue_on_fail"] = continue_on_fail
+    continued_after_failed_upstream = bool(
+        continue_on_fail and current_run.status in PIPELINE_FAILED_UPSTREAM_STATUSES
+    )
 
     upstream_artifact = _upstream_chaining_artifact(current_run)
     if upstream_artifact is not None:
@@ -377,6 +384,7 @@ def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun 
             "pipeline_index": next_index,
             "pipeline_plan": pipeline_plan,
             "input_artifact_id": str(upstream_artifact.id) if upstream_artifact else "",
+            "continued_after_failed_upstream": continued_after_failed_upstream,
         },
     )
     return next_run
@@ -546,12 +554,13 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
         )
     except AdapterConfigurationError as exc:
         current = _reload_run(run.id)
+        error_code = str(getattr(exc, "error_code", "") or "ADAPTER_CONFIGURATION")
         return set_run_status(
             run=current,
             status=RunStatus.FAILED,
             message=f"Run failed due to {run_label} adapter configuration error.",
             progress_percent=current.progress_percent or 0,
-            error_code="ADAPTER_CONFIGURATION",
+            error_code=error_code,
             error_message=str(exc),
         )
     except Exception as exc:  # pragma: no cover - defensive fail-safe path

@@ -13,6 +13,7 @@ from wb_sharing.models import ShareMode, WorkspaceShareLink
 
 from .activity import is_human_view_request, should_update_last_viewed
 from .forms import (
+    ActiveLLMConfigForm,
     WorkspaceCreateForm,
     WorkspaceCredentialDeleteForm,
     WorkspaceCredentialUpsertForm,
@@ -48,6 +49,9 @@ from .services import (
     restore_workspace_report_exclusion,
     upsert_workspace_report_exclusion,
     upsert_workspace_credential,
+    upsert_workspace_llm_setting,
+    upsert_user_llm_credential,
+    upsert_user_llm_setting,
     update_workspace_member,
 )
 from .revisions import (
@@ -60,6 +64,37 @@ from .revisions import (
 
 
 User = get_user_model()
+
+
+PIPELINE_PENDING_STATUSES = {
+    RunStatus.QUEUED,
+    RunStatus.STARTING,
+    RunStatus.RUNNING,
+    RunStatus.CANCELLING,
+}
+PIPELINE_FAILED_STATUSES = {
+    RunStatus.FAILED,
+    RunStatus.TIMED_OUT,
+    RunStatus.CANCELLED,
+}
+RUN_TYPE_LABELS = {
+    "filter": "Filtering",
+    "themes": "Themes",
+    "extract": "Extracting",
+    "export": "Exporting",
+}
+
+
+def _pipeline_status_for_run(run: InvestigationRun | None) -> str:
+    if run is None:
+        return ""
+    if run.status in PIPELINE_PENDING_STATUSES:
+        return "pending"
+    if run.status in PIPELINE_FAILED_STATUSES:
+        return "failed-warning"
+    if run.status == RunStatus.SUCCEEDED:
+        return "complete"
+    return ""
 
 
 @require_http_methods(["GET", "POST"])
@@ -98,6 +133,10 @@ def dashboard(request):
                 "can_restore": can_restore,
                 "pending_run": None,
                 "pending_stage_label": "",
+                "pipeline_state": "",
+                "pipeline_stage_label": "",
+                "pipeline_run_status": "",
+                "pipeline_updated_at": None,
             }
         )
     workspace_ids = [row["workspace"].id for row in dashboard_rows]
@@ -113,23 +152,17 @@ def dashboard(request):
             if key not in latest_run_by_workspace_id:
                 latest_run_by_workspace_id[key] = run
 
-    pending_statuses = {
-        RunStatus.QUEUED,
-        RunStatus.STARTING,
-        RunStatus.RUNNING,
-        RunStatus.CANCELLING,
-    }
-    run_type_labels = {
-        "filter": "Filtering",
-        "themes": "Themes",
-        "extract": "Extracting",
-        "export": "Exporting",
-    }
     for row in dashboard_rows:
         run = latest_run_by_workspace_id.get(str(row["workspace"].id))
-        if run and run.status in pending_statuses:
+        if run:
+            stage_label = RUN_TYPE_LABELS.get(str(run.run_type), str(run.run_type).title())
+            row["pipeline_state"] = _pipeline_status_for_run(run)
+            row["pipeline_stage_label"] = stage_label
+            row["pipeline_run_status"] = str(run.status)
+            row["pipeline_updated_at"] = run.updated_at
+        if run and run.status in PIPELINE_PENDING_STATUSES:
             row["pending_run"] = run
-            row["pending_stage_label"] = run_type_labels.get(str(run.run_type), str(run.run_type).title())
+            row["pending_stage_label"] = RUN_TYPE_LABELS.get(str(run.run_type), str(run.run_type).title())
     active_workspace = get_active_workspace_for_user(user=request.user)
     if active_workspace is None and memberships_list:
         for membership in memberships_list:
@@ -273,6 +306,19 @@ def workspace_detail(request, workbook_id):
         ).order_by("provider")
     share_links = WorkspaceShareLink.objects.filter(workspace=workspace).order_by("-created_at")
     investigations = Investigation.objects.filter(workspace=workspace).order_by("-updated_at")
+    latest_workspace_run = (
+        InvestigationRun.objects.filter(workspace=workspace).order_by("-created_at").first()
+    )
+    pipeline_status = _pipeline_status_for_run(latest_workspace_run)
+    pipeline_stage_label = ""
+    pipeline_run_status = ""
+    pipeline_last_update = None
+    if latest_workspace_run is not None:
+        pipeline_stage_label = RUN_TYPE_LABELS.get(
+            str(latest_workspace_run.run_type), str(latest_workspace_run.run_type).title()
+        )
+        pipeline_run_status = str(latest_workspace_run.status)
+        pipeline_last_update = latest_workspace_run.updated_at
     share_create_form = ShareLinkCreateForm(
         initial={"mode": ShareMode.SNAPSHOT, "is_public": True}
     )
@@ -297,6 +343,10 @@ def workspace_detail(request, workbook_id):
             "can_manage_credentials": can_manage_credentials,
             "share_links": share_links,
             "investigations": investigations,
+            "pipeline_status": pipeline_status,
+            "pipeline_stage_label": pipeline_stage_label,
+            "pipeline_run_status": pipeline_run_status,
+            "pipeline_last_update": pipeline_last_update,
             "share_create_form": share_create_form,
             "report_exclusions": report_exclusions,
             "role_choices": MembershipRole.choices,
@@ -459,6 +509,50 @@ def remove_member(request, workbook_id, membership_id):
     else:
         messages.success(request, "Workbook membership removed.")
     return redirect("workbook-detail", workbook_id=workbook_id)
+
+
+@login_required
+@require_POST
+def save_active_llm_config(request):
+    form = ActiveLLMConfigForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid LLM configuration submission.")
+        return redirect("llm-config")
+
+    provider = str(form.cleaned_data.get("provider") or "openai").strip().lower()
+    model_name = str(form.cleaned_data.get("model_name") or "gpt-4.1-mini").strip()
+    max_parallel_workers = int(form.cleaned_data.get("max_parallel_workers") or 1)
+    api_key = str(form.cleaned_data.get("api_key") or "").strip()
+    base_url = str(form.cleaned_data.get("base_url") or "").strip()
+    next_url = str(form.cleaned_data.get("next_url") or "").strip()
+
+    try:
+        upsert_user_llm_setting(
+            actor=request.user,
+            provider=provider,
+            model_name=model_name,
+            max_parallel_workers=max_parallel_workers,
+            request=request,
+        )
+        if api_key:
+            upsert_user_llm_credential(
+                actor=request.user,
+                provider=provider,
+                api_key=api_key,
+                base_url=base_url,
+                request=request,
+            )
+    except (WorkspaceCredentialValidationError, ValidationError) as exc:
+        messages.error(request, str(exc))
+    else:
+        if api_key:
+            messages.success(request, "LLM config and credential saved.")
+        else:
+            messages.success(request, "LLM config saved.")
+
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("llm-config")
 
 
 @login_required

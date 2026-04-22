@@ -728,13 +728,4 @@ def llm_config(request: HttpRequest) -> HttpResponse:
     if not request.user.is_authenticated:
         next_url = reverse("llm-config")
         return redirect(f"{reverse('accounts-login')}?next={next_url}")
-
-    from wb_workspaces.services import get_active_workspace_for_user
-
-    active_workspace = get_active_workspace_for_user(user=request.user)
-    if active_workspace is not None:
-        detail_url = reverse("workbook-detail", kwargs={"workbook_id": active_workspace.id})
-        return redirect(f"{detail_url}#llm-credentials")
-
-    messages.info(request, "Create a workbook first, then add your LLM credential there.")
-    return redirect("workbook-dashboard")
+    return redirect(f"{reverse('landing')}?open_llm_config=1")

@@ -27,6 +27,21 @@
         {% if not workspace.archived_at %}
             <p><a class="btn btn-secondary" href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a></p>
         {% endif %}
+        {% if pipeline_status %}
+            <p>
+                Pipeline status:
+                {% if pipeline_status == "pending" %}
+                    <span class="tag tag-active">pending</span>
+                {% elif pipeline_status == "failed-warning" %}
+                    <span class="tag tag-warn">failed warning</span>
+                {% elif pipeline_status == "complete" %}
+                    <span class="tag tag-good">complete</span>
+                {% endif %}
+                {% if pipeline_stage_label %}<span class="tag">{{ pipeline_stage_label }}</span>{% endif %}
+                {% if pipeline_run_status %}<span class="tag">{{ pipeline_run_status }}</span>{% endif %}
+                {% if pipeline_last_update %}<span class="tag">updated {{ pipeline_last_update|date:"Y-m-d H:i" }}</span>{% endif %}
+            </p>
+        {% endif %}
     </section>
 
     {% if request.user.is_authenticated %}

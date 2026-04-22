@@ -35,10 +35,20 @@
                                         <span class="tag tag-active">active</span>
                                         <span class="sr-only">(active)</span>
                                     {% endif %}
-                                    {% if row.pending_run %}
+                                    {% if row.pipeline_state == "pending" %}
                                         <span class="tag tag-active">pending</span>
-                                        <span class="tag">{{ row.pending_stage_label }}</span>
-                                        <span class="tag">{{ row.pending_run.status }}</span>
+                                        <span class="tag">{{ row.pipeline_stage_label }}</span>
+                                        <span class="tag">{{ row.pipeline_run_status }}</span>
+                                    {% elif row.pipeline_state == "failed-warning" %}
+                                        <span class="tag tag-warn">failed warning</span>
+                                        <span class="tag">{{ row.pipeline_stage_label }}</span>
+                                        <span class="tag">{{ row.pipeline_run_status }}</span>
+                                    {% elif row.pipeline_state == "complete" %}
+                                        <span class="tag tag-good">complete</span>
+                                        <span class="tag">{{ row.pipeline_stage_label }}</span>
+                                    {% endif %}
+                                    {% if row.pipeline_updated_at %}
+                                        <span class="tag">updated {{ row.pipeline_updated_at|date:"Y-m-d H:i" }}</span>
                                     {% endif %}
                                     <span class="tag">{{ membership.role }}</span>
                                     <span class="tag">{{ membership.access_mode }}</span>

@@ -21,6 +21,7 @@ from .models import (
     Workspace,
     WorkspaceCredential,
     WorkspaceMembership,
+    WorkspaceLLMSetting,
     WorkspaceVisibility,
     WorkspaceReportExclusion,
     WorkspaceRevision,
@@ -42,8 +43,10 @@ from .services import (
     restore_workspace,
     restore_workspace_report_exclusion,
     resolve_workspace_credential,
+    get_workspace_llm_setting,
     upsert_workspace_report_exclusion,
     upsert_workspace_credential,
+    upsert_workspace_llm_setting,
     update_workspace_member,
 )
 
@@ -662,6 +665,52 @@ class WorkspaceMemberViewsTests(TestCase):
             },
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_save_active_llm_config_with_optional_credential(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workspace-llm-config-save"),
+            data={
+                "provider": "openrouter",
+                "model_name": "gpt-4.1-mini",
+                "max_parallel_workers": "4",
+                "api_key": "sk-or-example-1234",
+                "base_url": "",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "LLM config and credential saved.")
+        setting = self.owner.llm_setting
+        self.assertEqual(setting.provider, "openrouter")
+        self.assertEqual(setting.model_name, "gpt-4.1-mini")
+        self.assertEqual(setting.max_parallel_workers, 4)
+        self.assertTrue(self.owner.llm_credentials.filter(provider="openrouter", key_last4="1234").exists())
+
+
+class WorkspaceLLMSettingTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(email="owner-llm-setting@example.com", password="x")
+        self.workspace = create_workspace_for_user(
+            user=self.owner,
+            title="LLM Settings Workspace",
+            slug="llm-settings-workspace",
+            description="",
+        )
+
+    def test_upsert_and_get_workspace_llm_setting(self):
+        upsert_workspace_llm_setting(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openrouter",
+            model_name="gpt-4.1-mini",
+            max_parallel_workers=3,
+        )
+        setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
+        self.assertEqual(setting.get("provider"), "openrouter")
+        self.assertEqual(setting.get("model_name"), "gpt-4.1-mini")
+        self.assertEqual(setting.get("max_parallel_workers"), 3)
 
 
 class WorkspaceActiveStateViewTests(TestCase):

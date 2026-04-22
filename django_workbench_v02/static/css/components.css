@@ -350,6 +350,14 @@ main hr {
   border-color: color-mix(in srgb, var(--warn) 50%, var(--line));
   color: color-mix(in srgb, var(--warn) 70%, white);
 }
+.tag-warn {
+  border-color: color-mix(in srgb, var(--warn) 55%, var(--line));
+  color: color-mix(in srgb, var(--warn) 80%, white);
+}
+.tag-good {
+  border-color: color-mix(in srgb, var(--good) 55%, var(--line));
+  color: color-mix(in srgb, var(--good) 85%, white);
+}
 
 .workbook-row__actions {
   display: flex;

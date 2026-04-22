@@ -34,9 +34,9 @@
         {% if can_edit %}
             <h3>Next Action</h3>
             <p>
-                <a class="btn btn-primary" href="{% url 'workbook-investigation-wizard' workbook_id=workspace.id investigation_id=investigation.id %}">
+                <button class="btn btn-primary" type="button" data-open-wizard>
                     Open wizard
-                </a>
+                </button>
                 to configure scope and methods, then launch the sequential pipeline.
             </p>
         {% else %}

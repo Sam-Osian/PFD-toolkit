@@ -11,8 +11,11 @@ from .models import (
     MembershipAccessMode,
     MembershipRole,
     RevisionChangeType,
+    UserLLMCredential,
+    UserLLMSetting,
     Workspace,
     WorkspaceCredential,
+    WorkspaceLLMSetting,
     WorkspaceLLMProvider,
     WorkspaceMembership,
     WorkspaceReportExclusion,
@@ -500,6 +503,19 @@ def _key_last4(api_key: str) -> str:
     return compact[-4:]
 
 
+def _normalise_model_name(model_name: str) -> str:
+    cleaned = str(model_name or "").strip()
+    return cleaned or "gpt-4.1-mini"
+
+
+def _normalise_max_parallel_workers(value) -> int:
+    try:
+        parsed = int(value or 1)
+    except (TypeError, ValueError):
+        parsed = 1
+    return min(32, max(1, parsed))
+
+
 @transaction.atomic
 def upsert_workspace_credential(
     *,
@@ -585,10 +601,15 @@ def resolve_workspace_credential(
         user=user,
         provider=resolved_provider,
     ).first()
+    target_type = "workspace_credential"
     if credential is None:
-        raise WorkspaceCredentialValidationError(
-            f"No saved {resolved_provider} API key for this workbook."
-        )
+        credential = UserLLMCredential.objects.filter(
+            user=user,
+            provider=resolved_provider,
+        ).first()
+        target_type = "user_llm_credential"
+    if credential is None:
+        raise WorkspaceCredentialValidationError(f"No saved {resolved_provider} API key available.")
 
     try:
         api_key = decrypt_secret(credential.encrypted_api_key)
@@ -599,7 +620,7 @@ def resolve_workspace_credential(
     credential.save(update_fields=["last_used_at", "updated_at"])
     log_audit_event(
         action_type="workspace.credential_used",
-        target_type="workspace_credential",
+        target_type=target_type,
         target_id=str(credential.id),
         workspace=workspace,
         user=user if user and getattr(user, "is_authenticated", False) else None,
@@ -611,11 +632,232 @@ def resolve_workspace_credential(
 
 def has_workspace_credential(*, user, workspace: Workspace, provider: str) -> bool:
     resolved_provider = _normalise_provider(provider)
-    return WorkspaceCredential.objects.filter(
+    workspace_saved = WorkspaceCredential.objects.filter(
         workspace=workspace,
         user=user,
         provider=resolved_provider,
     ).exists()
+    if workspace_saved:
+        return True
+    return UserLLMCredential.objects.filter(
+        user=user,
+        provider=resolved_provider,
+    ).exists()
+
+
+def workspace_credential_status_map(*, user, workspace: Workspace) -> dict[str, bool]:
+    if not user or not getattr(user, "is_authenticated", False):
+        return {
+            WorkspaceLLMProvider.OPENAI: False,
+            WorkspaceLLMProvider.OPENROUTER: False,
+        }
+    providers = set(
+        WorkspaceCredential.objects.filter(
+            workspace=workspace,
+            user=user,
+        ).values_list("provider", flat=True)
+    )
+    user_providers = set(
+        UserLLMCredential.objects.filter(
+            user=user,
+        ).values_list("provider", flat=True)
+    )
+    merged = providers | user_providers
+    return {
+        WorkspaceLLMProvider.OPENAI: WorkspaceLLMProvider.OPENAI in merged,
+        WorkspaceLLMProvider.OPENROUTER: WorkspaceLLMProvider.OPENROUTER in merged,
+    }
+
+
+def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object]:
+    provider = WorkspaceLLMProvider.OPENAI
+    model_name = "gpt-4.1-mini"
+    max_parallel_workers = 1
+
+    setting = UserLLMSetting.objects.filter(user=user).first()
+    if setting is not None:
+        provider = _normalise_provider(setting.provider)
+        model_name = _normalise_model_name(setting.model_name)
+        max_parallel_workers = _normalise_max_parallel_workers(setting.max_parallel_workers)
+
+    cred_map = workspace_credential_status_map(user=user, workspace=workspace)
+    provider_credential = WorkspaceCredential.objects.filter(workspace=workspace, user=user, provider=provider).first()
+    if provider_credential is None:
+        provider_credential = UserLLMCredential.objects.filter(user=user, provider=provider).first()
+    return {
+        "provider": provider,
+        "model_name": model_name,
+        "max_parallel_workers": max_parallel_workers,
+        "has_provider_credential": bool(cred_map.get(provider)),
+        "credentials": cred_map,
+        "base_url": str(provider_credential.base_url or "").strip() if provider_credential else "",
+    }
+
+
+@transaction.atomic
+def upsert_workspace_llm_setting(
+    *,
+    actor,
+    workspace: Workspace,
+    provider: str,
+    model_name: str,
+    max_parallel_workers,
+    request=None,
+) -> WorkspaceLLMSetting:
+    # Backward-compatible shim: persist in user-level setting, independent of workspace.
+    user_setting = upsert_user_llm_setting(
+        actor=actor,
+        provider=provider,
+        model_name=model_name,
+        max_parallel_workers=max_parallel_workers,
+        request=request,
+    )
+    # Ensure an object exists for older references; not used for runtime defaults.
+    resolved_provider = _normalise_provider(provider)
+    resolved_model_name = _normalise_model_name(model_name)
+    resolved_workers = _normalise_max_parallel_workers(max_parallel_workers)
+
+    setting, created = WorkspaceLLMSetting.objects.get_or_create(
+        workspace=workspace,
+        user=actor,
+        defaults={
+            "provider": resolved_provider,
+            "model_name": resolved_model_name,
+            "max_parallel_workers": resolved_workers,
+        },
+    )
+    if not created:
+        setting.provider = resolved_provider
+        setting.model_name = resolved_model_name
+        setting.max_parallel_workers = resolved_workers
+        setting.save(
+            update_fields=[
+                "provider",
+                "model_name",
+                "max_parallel_workers",
+                "updated_at",
+            ]
+        )
+
+    log_audit_event(
+        action_type="workspace.llm_setting_saved",
+        target_type="workspace_llm_setting",
+        target_id=str(setting.id),
+        workspace=workspace,
+        user=actor,
+        payload={
+            "provider": setting.provider,
+            "model_name": setting.model_name,
+            "max_parallel_workers": setting.max_parallel_workers,
+            "created": created,
+        },
+        request=request,
+    )
+    log_action_cache_event(
+        workspace=workspace,
+        user=actor,
+        action_key="llm_setting.save",
+        entity_type="workspace_llm_setting",
+        entity_id=str(setting.id),
+        options={"provider": setting.provider},
+        state_before={},
+        state_after={
+            "provider": setting.provider,
+            "model_name": setting.model_name,
+            "max_parallel_workers": setting.max_parallel_workers,
+        },
+        context={"created": created},
+    )
+    setting.provider = user_setting.provider
+    setting.model_name = user_setting.model_name
+    setting.max_parallel_workers = user_setting.max_parallel_workers
+    setting.save(update_fields=["provider", "model_name", "max_parallel_workers", "updated_at"])
+    return setting
+
+
+@transaction.atomic
+def upsert_user_llm_credential(
+    *,
+    actor,
+    provider: str,
+    api_key: str,
+    base_url: str = "",
+    request=None,
+) -> UserLLMCredential:
+    if not api_key or not str(api_key).strip():
+        raise WorkspaceCredentialValidationError("API key is required.")
+    resolved_provider = _normalise_provider(provider)
+    try:
+        encrypted = encrypt_secret(str(api_key))
+    except WorkspaceCredentialError as exc:
+        raise WorkspaceCredentialValidationError(str(exc)) from exc
+
+    credential, created = UserLLMCredential.objects.get_or_create(
+        user=actor,
+        provider=resolved_provider,
+        defaults={
+            "encrypted_api_key": encrypted,
+            "key_last4": _key_last4(str(api_key)),
+            "base_url": (base_url or "").strip(),
+        },
+    )
+    if not created:
+        credential.encrypted_api_key = encrypted
+        credential.key_last4 = _key_last4(str(api_key))
+        credential.base_url = (base_url or "").strip()
+        credential.save(update_fields=["encrypted_api_key", "key_last4", "base_url", "updated_at"])
+    log_audit_event(
+        action_type="user.llm_credential_saved",
+        target_type="user_llm_credential",
+        target_id=str(credential.id),
+        workspace=None,
+        user=actor,
+        payload={"provider": credential.provider, "key_last4": credential.key_last4, "created": created},
+        request=request,
+    )
+    return credential
+
+
+@transaction.atomic
+def upsert_user_llm_setting(
+    *,
+    actor,
+    provider: str,
+    model_name: str,
+    max_parallel_workers,
+    request=None,
+) -> UserLLMSetting:
+    resolved_provider = _normalise_provider(provider)
+    resolved_model_name = _normalise_model_name(model_name)
+    resolved_workers = _normalise_max_parallel_workers(max_parallel_workers)
+    setting, created = UserLLMSetting.objects.get_or_create(
+        user=actor,
+        defaults={
+            "provider": resolved_provider,
+            "model_name": resolved_model_name,
+            "max_parallel_workers": resolved_workers,
+        },
+    )
+    if not created:
+        setting.provider = resolved_provider
+        setting.model_name = resolved_model_name
+        setting.max_parallel_workers = resolved_workers
+        setting.save(update_fields=["provider", "model_name", "max_parallel_workers", "updated_at"])
+    log_audit_event(
+        action_type="user.llm_setting_saved",
+        target_type="user_llm_setting",
+        target_id=str(setting.id),
+        workspace=None,
+        user=actor,
+        payload={
+            "provider": setting.provider,
+            "model_name": setting.model_name,
+            "max_parallel_workers": setting.max_parallel_workers,
+            "created": created,
+        },
+        request=request,
+    )
+    return setting
 
 
 @transaction.atomic

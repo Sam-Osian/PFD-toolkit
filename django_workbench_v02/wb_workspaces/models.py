@@ -237,6 +237,113 @@ class WorkspaceCredential(models.Model):
         return f"{self.workspace} {self.user} {self.provider}"
 
 
+class UserLLMCredential(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="llm_credentials",
+    )
+    provider = models.CharField(max_length=16, choices=WorkspaceLLMProvider.choices)
+    encrypted_api_key = models.TextField()
+    base_url = models.URLField(blank=True)
+    key_last4 = models.CharField(max_length=4)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "provider"],
+                name="uniq_user_llm_credential_scope",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["user"], name="idx_user_llm_cred_user"),
+            models.Index(fields=["provider"], name="idx_user_llm_cred_provider"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} {self.provider}"
+
+
+class UserLLMSetting(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="llm_setting",
+    )
+    provider = models.CharField(
+        max_length=16,
+        choices=WorkspaceLLMProvider.choices,
+        default=WorkspaceLLMProvider.OPENAI,
+    )
+    model_name = models.CharField(max_length=255, default="gpt-4.1-mini")
+    max_parallel_workers = models.PositiveSmallIntegerField(default=1)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(max_parallel_workers__gte=1)
+                & models.Q(max_parallel_workers__lte=32),
+                name="chk_user_llm_setting_workers_bounds",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["provider"], name="idx_user_llm_provider"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user} {self.provider} {self.model_name}"
+
+
+class WorkspaceLLMSetting(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    workspace = models.ForeignKey(
+        "wb_workspaces.Workspace",
+        on_delete=models.CASCADE,
+        related_name="llm_settings",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="workspace_llm_settings",
+    )
+    provider = models.CharField(
+        max_length=16,
+        choices=WorkspaceLLMProvider.choices,
+        default=WorkspaceLLMProvider.OPENAI,
+    )
+    model_name = models.CharField(max_length=255, default="gpt-4.1-mini")
+    max_parallel_workers = models.PositiveSmallIntegerField(default=1)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "user"],
+                name="uniq_workspace_llm_setting_scope",
+            ),
+            models.CheckConstraint(
+                check=models.Q(max_parallel_workers__gte=1)
+                & models.Q(max_parallel_workers__lte=32),
+                name="chk_workspace_llm_setting_workers_bounds",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["workspace", "user"], name="idx_ws_llm_scope"),
+            models.Index(fields=["provider"], name="idx_ws_llm_provider"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.workspace} {self.user} {self.provider} {self.model_name}"
+
+
 class WorkspaceReportExclusion(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     workspace = models.ForeignKey(

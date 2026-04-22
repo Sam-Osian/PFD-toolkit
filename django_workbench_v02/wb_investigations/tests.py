@@ -13,18 +13,28 @@ from wb_workspaces.models import (
     WorkspaceReportExclusion,
     WorkspaceVisibility,
 )
-from wb_workspaces.services import create_workspace_for_user, upsert_workspace_credential
+from wb_workspaces.services import (
+    create_workspace_for_user,
+    has_workspace_credential,
+    upsert_workspace_credential,
+)
 
 from .forms import (
     InvestigationWizardExtractConfigForm,
     InvestigationWizardMethodForm,
+    InvestigationWizardScopeForm,
     InvestigationWizardState,
     InvestigationWizardThemesConfigForm,
     TemporalScopeOption,
     temporal_scope_parameters,
 )
 from .models import Investigation, InvestigationStatus
-from .services import InvestigationServiceError, create_investigation, update_investigation
+from .services import (
+    InvestigationServiceError,
+    create_investigation,
+    evaluate_investigation_launch_readiness,
+    update_investigation,
+)
 
 
 User = get_user_model()
@@ -130,6 +140,93 @@ class InvestigationServiceTests(TestCase):
                 status=InvestigationStatus.DRAFT,
             )
 
+    def test_launch_readiness_blocks_unknown_provider(self):
+        inv = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Provider Guardrail",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        state = InvestigationWizardState(
+            stage="review",
+            title=inv.title,
+            question_text=inv.question_text,
+            run_filter=True,
+            review_config={"provider": "bogus-provider", "model_name": "gpt-4.1-mini"},
+        )
+        readiness = evaluate_investigation_launch_readiness(
+            actor=self.owner,
+            investigation=inv,
+            wizard_state=state,
+        )
+        self.assertFalse(readiness["can_launch"])
+        provider_model_check = next(
+            check for check in readiness["checks"] if check["key"] == "provider_model"
+        )
+        self.assertFalse(provider_model_check["ready"])
+        self.assertIn("not supported", provider_model_check["message"])
+
+    def test_launch_readiness_blocks_empty_model_name(self):
+        inv = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Model Guardrail",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        state = InvestigationWizardState(
+            stage="review",
+            title=inv.title,
+            question_text=inv.question_text,
+            run_filter=True,
+            review_config={"provider": "openai", "model_name": ""},
+        )
+        readiness = evaluate_investigation_launch_readiness(
+            actor=self.owner,
+            investigation=inv,
+            wizard_state=state,
+        )
+        self.assertFalse(readiness["can_launch"])
+        provider_model_check = next(
+            check for check in readiness["checks"] if check["key"] == "provider_model"
+        )
+        self.assertFalse(provider_model_check["ready"])
+        self.assertIn("required", provider_model_check["message"])
+
+    def test_launch_readiness_blocks_model_not_allowed_for_provider(self):
+        inv = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Allowlist Guardrail",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        state = InvestigationWizardState(
+            stage="review",
+            title=inv.title,
+            question_text=inv.question_text,
+            run_filter=True,
+            review_config={"provider": "openrouter", "model_name": "gpt-4.1-mini"},
+        )
+        readiness = evaluate_investigation_launch_readiness(
+            actor=self.owner,
+            investigation=inv,
+            wizard_state=state,
+        )
+        self.assertFalse(readiness["can_launch"])
+        provider_model_check = next(
+            check for check in readiness["checks"] if check["key"] == "provider_model"
+        )
+        self.assertFalse(provider_model_check["ready"])
+        self.assertIn("Choose one of", provider_model_check["message"])
+
 
 class InvestigationViewTests(TestCase):
     def setUp(self):
@@ -201,7 +298,8 @@ class InvestigationViewTests(TestCase):
             reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace.id})
         )
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/wizard/", response.url)
+        self.assertIn("/investigations/", response.url)
+        self.assertIn("open_wizard=1", response.url)
 
     def test_investigation_entry_redirects_read_only_user_to_detail(self):
         self.client.force_login(self.viewer)
@@ -230,7 +328,8 @@ class InvestigationViewTests(TestCase):
             )
         )
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/wizard/", response.url)
+        self.assertIn("/investigations/", response.url)
+        self.assertIn("open_wizard=1", response.url)
         self.assertTrue(
             Investigation.objects.filter(workspace=workspace_without_investigation).exists()
         )
@@ -468,7 +567,7 @@ class InvestigationViewTests(TestCase):
             )
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Continued after previous stage failed/timed out.")
+        self.assertContains(response, "Continued after upstream failure.")
 
 
 class InvestigationWizardFormTests(TestCase):
@@ -496,6 +595,15 @@ class InvestigationWizardFormTests(TestCase):
         )
         self.assertEqual(recent_100["report_limit"], 100)
 
+        custom = temporal_scope_parameters(
+            scope_option=TemporalScopeOption.CUSTOM_RANGE,
+            today=today,
+            custom_start_date=date(2024, 1, 1),
+            custom_end_date=date(2024, 12, 31),
+        )
+        self.assertEqual(custom["query_start_date"], date(2024, 1, 1))
+        self.assertEqual(custom["query_end_date"], date(2024, 12, 31))
+
     def test_method_form_pipeline_plan_fixed_order(self):
         form = InvestigationWizardMethodForm(
             data={"run_filter": "on", "run_themes": "on", "run_extract": "on"}
@@ -505,6 +613,10 @@ class InvestigationWizardFormTests(TestCase):
 
     def test_method_form_requires_at_least_one_stage(self):
         form = InvestigationWizardMethodForm(data={})
+        self.assertFalse(form.is_valid())
+
+    def test_scope_form_custom_requires_dates(self):
+        form = InvestigationWizardScopeForm(data={"scope_option": TemporalScopeOption.CUSTOM_RANGE})
         self.assertFalse(form.is_valid())
 
     def test_themes_config_rejects_invalid_min_max(self):
@@ -559,310 +671,121 @@ class InvestigationWizardFormTests(TestCase):
         self.assertEqual(payload["scope_option"], TemporalScopeOption.LAST_3_YEARS)
 
 
-class InvestigationWizardViewTests(TestCase):
+class InvestigationModalWizardLaunchTests(TestCase):
     def setUp(self):
-        self.owner = User.objects.create_user(email="inv-wiz-owner@example.com", password="x")
-        self.workspace = create_workspace_for_user(
+        self.owner = User.objects.create_user(email="inv-modal-owner@example.com", password="x")
+        self.client.force_login(self.owner)
+
+    def test_start_page_get_redirects_to_dashboard_modal(self):
+        response = self.client.get(reverse("investigation-start"))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse("workspace-dashboard"), response.url)
+        self.assertIn("open_wizard=1", response.url)
+
+    def _modal_launch_payload(self, **overrides):
+        payload = {
+            "wizard_modal_submit": "1",
+            "title": "Updated Investigation",
+            "question_text": "What are medication safety failures?",
+            "scope_option": "last_year",
+            "run_filter": "on",
+            "search_query": "What are medication safety failures?",
+            "filter_df": "on",
+            "execution_mode": "real",
+            "provider": "openai",
+            "model_name": "gpt-4.1-mini",
+            "max_parallel_workers": "4",
+            "api_key": "sk-test-secret-1234",
+            "save_api_key": "on",
+            "notify_on": "any",
+        }
+        for key, value in overrides.items():
+            if value is None:
+                payload.pop(key, None)
+            else:
+                payload[key] = value
+        return payload
+
+    def _launch_modal(self, **overrides):
+        response = self.client.post(
+            reverse("investigation-start"),
+            data=self._modal_launch_payload(**overrides),
+        )
+        self.assertEqual(response.status_code, 302)
+        run = InvestigationRun.objects.latest("created_at")
+        return response, run
+
+    def test_modal_launch_filter_themes_extract_path(self):
+        _, run = self._launch_modal(
+            run_themes="on",
+            run_extract="on",
+            min_themes="2",
+            max_themes="8",
+            seed_topics="medication safety\nhandover",
+            extra_theme_instructions="Focus on actionable prevention patterns.",
+            feature_fields=(
+                '[{"name":"setting","description":"Care setting","type":"text"},'
+                '{"name":"age","description":"Age in years","type":"integer"}]'
+            ),
+            allow_multiple="on",
+        )
+        self.assertEqual(run.run_type, RunType.FILTER)
+        self.assertEqual(
+            run.input_config_json.get("pipeline_plan"),
+            [RunType.FILTER, RunType.THEMES, RunType.EXTRACT],
+        )
+        self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
+        self.assertEqual(run.input_config_json.get("execution_mode"), "real")
+        self.assertEqual(run.input_config_json.get("min_themes"), 2)
+        self.assertEqual(run.input_config_json.get("max_themes"), 8)
+        self.assertTrue(isinstance(run.input_config_json.get("feature_fields"), list))
+        self.assertEqual(run.input_config_json.get("max_parallel_workers"), 4)
+        self.assertTrue(
+            has_workspace_credential(
+                user=self.owner,
+                workspace=run.workspace,
+                provider="openai",
+            )
+        )
+
+    def test_modal_launch_themes_extract_without_filter(self):
+        _, run = self._launch_modal(
+            run_filter=None,
+            run_themes="on",
+            run_extract="on",
+            min_themes="2",
+            max_themes="4",
+            feature_fields='[{"name":"setting","description":"Care setting","type":"text"}]',
+        )
+        self.assertEqual(run.run_type, RunType.THEMES)
+        self.assertEqual(
+            run.input_config_json.get("pipeline_plan"),
+            [RunType.THEMES, RunType.EXTRACT],
+        )
+        self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
+
+    def test_legacy_wizard_route_redirects_to_detail_modal(self):
+        workspace = create_workspace_for_user(
             user=self.owner,
-            title="Wizard Workspace",
-            slug="wizard-workspace",
+            title="Wizard Redirect Workspace",
+            slug="wizard-redirect-workspace",
             description="desc",
         )
-        self.investigation = create_investigation(
+        investigation = create_investigation(
             actor=self.owner,
-            workspace=self.workspace,
-            title="Wizard Investigation",
-            question_text="Initial question",
+            workspace=workspace,
+            title="Wizard Redirect Investigation",
+            question_text="Question",
             scope_json={},
             method_json={},
             status=InvestigationStatus.DRAFT,
         )
-        upsert_workspace_credential(
-            actor=self.owner,
-            workspace=self.workspace,
-            provider="openai",
-            api_key="sk-test-1234567890",
-            base_url="",
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-wizard",
+                kwargs={"workbook_id": workspace.id, "investigation_id": investigation.id},
+            )
         )
-
-    def _wizard_url(self) -> str:
-        return reverse(
-            "workbook-investigation-wizard",
-            kwargs={
-                "workbook_id": self.workspace.id,
-                "investigation_id": self.investigation.id,
-            },
-        )
-
-    def _advance_question_and_scope(self, wizard_url: str):
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "title": "Updated Investigation",
-                "question_text": "What are medication safety failures?",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "scope_option": "last_year",
-            },
-        )
-
-    def _launch_from_review(self, wizard_url: str):
-        return self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "launch",
-                "execution_mode": "real",
-                "provider": "openai",
-                "model_name": "gpt-4.1-mini",
-                "request_completion_email": "",
-                "notify_on": "any",
-            },
-        )
-
-    def _assert_latest_run_pipeline_plan(self, expected_plan: list[str]):
-        self.investigation.refresh_from_db()
-        run = self.investigation.runs.latest("created_at")
-        self.assertEqual(run.run_type, expected_plan[0])
-        self.assertEqual(run.input_config_json.get("pipeline_plan"), expected_plan)
-        self.assertEqual(run.input_config_json.get("pipeline_index"), 0)
-        self.assertEqual(run.input_config_json.get("execution_mode"), "real")
-        return run
-
-    def test_wizard_launch_filter_themes_extract_path(self):
-        self.client.force_login(self.owner)
-        wizard_url = self._wizard_url()
-
-        self.assertEqual(self.client.get(wizard_url).status_code, 200)
-        self._advance_question_and_scope(wizard_url)
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "run_filter": "on",
-                "run_themes": "on",
-                "run_extract": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "search_query": "What are medication safety failures?",
-                "filter_df": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "min_themes": 2,
-                "max_themes": 8,
-                "seed_topics": "medication safety\nhandover",
-                "extra_theme_instructions": "Focus on actionable prevention patterns.",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "feature_fields": (
-                    '[{"name":"setting","description":"Care setting","type":"text"},'
-                    '{"name":"age","description":"Age in years","type":"integer"}]'
-                ),
-                "allow_multiple": "on",
-            },
-        )
-        launch_response = self._launch_from_review(wizard_url)
-        self.assertEqual(launch_response.status_code, 302)
-
-        run = self._assert_latest_run_pipeline_plan(["filter", "themes", "extract"])
-        self.assertEqual(run.input_config_json.get("search_query"), "What are medication safety failures?")
-        self.assertEqual(run.input_config_json.get("min_themes"), 2)
-        self.assertEqual(run.input_config_json.get("max_themes"), 8)
-        self.assertTrue(isinstance(run.input_config_json.get("feature_fields"), list))
-
-
-    def test_wizard_launch_filter_only_path(self):
-        self.client.force_login(self.owner)
-        wizard_url = self._wizard_url()
-        self._advance_question_and_scope(wizard_url)
-        review_response = self.client.post(
-            wizard_url,
-            data={"wizard_action": "next", "run_filter": "on"},
-            follow=True,
-        )
-        self.assertEqual(review_response.status_code, 200)
-        self.assertContains(review_response, "Configure filter stage")
-        review_response = self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "search_query": "What are medication safety failures?",
-                "filter_df": "on",
-            },
-            follow=True,
-        )
-        self.assertEqual(review_response.status_code, 200)
-        self.assertContains(review_response, "Final check before launch")
-        launch_response = self._launch_from_review(wizard_url)
-        self.assertEqual(launch_response.status_code, 302)
-        self._assert_latest_run_pipeline_plan(["filter"])
-
-    def test_wizard_launch_filter_themes_path(self):
-        self.client.force_login(self.owner)
-        wizard_url = self._wizard_url()
-        self._advance_question_and_scope(wizard_url)
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "run_filter": "on",
-                "run_themes": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "search_query": "What are medication safety failures?",
-                "filter_df": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "min_themes": 2,
-                "max_themes": 6,
-                "seed_topics": "medication safety",
-            },
-        )
-        launch_response = self._launch_from_review(wizard_url)
-        self.assertEqual(launch_response.status_code, 302)
-        run = self._assert_latest_run_pipeline_plan(["filter", "themes"])
-        self.assertEqual(run.input_config_json.get("min_themes"), 2)
-        self.assertEqual(run.input_config_json.get("max_themes"), 6)
-        self.assertFalse(isinstance(run.input_config_json.get("feature_fields"), list))
-
-    def test_wizard_launch_filter_extract_path(self):
-        self.client.force_login(self.owner)
-        wizard_url = self._wizard_url()
-        self._advance_question_and_scope(wizard_url)
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "run_filter": "on",
-                "run_extract": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "search_query": "What are medication safety failures?",
-                "filter_df": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "feature_fields": (
-                    '[{"name":"setting","description":"Care setting","type":"text"}]'
-                ),
-                "allow_multiple": "on",
-            },
-        )
-        launch_response = self._launch_from_review(wizard_url)
-        self.assertEqual(launch_response.status_code, 302)
-        run = self._assert_latest_run_pipeline_plan(["filter", "extract"])
-        self.assertTrue(isinstance(run.input_config_json.get("feature_fields"), list))
-
-    def test_method_branching_skips_optional_steps_when_not_selected(self):
-        self.client.force_login(self.owner)
-        wizard_url = self._wizard_url()
-
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "title": "Updated Investigation",
-                "question_text": "Question",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "scope_option": "all_reports",
-            },
-        )
-        response = self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "run_filter": "on",
-            },
-            follow=True,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Configure filter stage")
-
-    def test_wizard_launch_themes_extract_without_filter(self):
-        self.client.force_login(self.owner)
-        wizard_url = self._wizard_url()
-        self._advance_question_and_scope(wizard_url)
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "run_themes": "on",
-                "run_extract": "on",
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "min_themes": 2,
-                "max_themes": 4,
-            },
-        )
-        self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "next",
-                "enabled": "on",
-                "feature_fields": (
-                    '[{"name":"setting","description":"Care setting","type":"text"}]'
-                ),
-            },
-        )
-        launch_response = self.client.post(
-            wizard_url,
-            data={
-                "wizard_action": "launch",
-                "execution_mode": "real",
-                "provider": "openai",
-                "model_name": "gpt-4.1-mini",
-                "notify_on": "any",
-            },
-        )
-        self.assertEqual(launch_response.status_code, 302)
-        run = self._assert_latest_run_pipeline_plan(["themes", "extract"])
-        self.assertEqual(run.run_type, RunType.THEMES)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/investigations/", response.url)
+        self.assertIn("open_wizard=1", response.url)

@@ -1056,6 +1056,32 @@ class RunWorkerTests(TestCase):
             self.investigation.runs.filter(run_type=RunType.THEMES).exclude(id=run.id).exists()
         )
 
+    def test_pipeline_marks_continued_after_failed_upstream_in_queue_event(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "simulate_failure": True,
+                "simulate_failure_stage": 1,
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        process_single_available_run(worker_id="test-worker")
+
+        next_run = (
+            self.investigation.runs.filter(run_type=RunType.THEMES)
+            .exclude(id=run.id)
+            .first()
+        )
+        self.assertIsNotNone(next_run)
+        queue_event = next_run.events.latest("created_at")
+        payload = queue_event.payload_json if isinstance(queue_event.payload_json, dict) else {}
+        self.assertTrue(payload.get("continued_after_failed_upstream"))
+
     def test_pipeline_queues_export_after_extract(self):
         run = queue_run(
             actor=self.owner,
@@ -1095,6 +1121,23 @@ class RunWorkerTests(TestCase):
         self.assertFalse(
             self.investigation.runs.filter(run_type=RunType.THEMES).exclude(id=run.id).exists()
         )
+
+    def test_missing_required_upstream_artifact_uses_explicit_error_code(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.THEMES,
+            input_config_json={
+                "execution_mode": "real",
+                "pipeline_require_upstream_artifact": True,
+                "input_artifact_id": "",
+            },
+        )
+        process_single_available_run(worker_id="test-worker")
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.FAILED)
+        self.assertEqual(run.error_code, "MISSING_UPSTREAM_ARTIFACT")
+        self.assertIn("upstream artifact", (run.error_message or "").lower())
 
     @override_settings(ARTIFACT_STORAGE_BACKEND="object_storage")
     def test_worker_persists_output_using_object_storage_backend(self):

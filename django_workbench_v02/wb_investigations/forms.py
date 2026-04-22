@@ -38,6 +38,7 @@ class TemporalScopeOption(models.TextChoices):
     LAST_YEAR = "last_year", "Last year"
     LAST_6_MONTHS = "last_6_months", "Last 6 months"
     MOST_RECENT_100 = "most_recent_100", "100 most recent reports"
+    CUSTOM_RANGE = "custom_range", "Custom date range"
 
 
 WIZARD_STAGES = (
@@ -59,7 +60,13 @@ def _subtract_years(value: date, years: int) -> date:
         return value.replace(month=2, day=28, year=value.year - years)
 
 
-def temporal_scope_parameters(*, scope_option: str, today: date | None = None) -> dict:
+def temporal_scope_parameters(
+    *,
+    scope_option: str,
+    today: date | None = None,
+    custom_start_date: date | None = None,
+    custom_end_date: date | None = None,
+) -> dict:
     current_date = today or date.today()
     option = str(scope_option or "").strip()
 
@@ -91,6 +98,13 @@ def temporal_scope_parameters(*, scope_option: str, today: date | None = None) -
             "report_limit": 100,
             "scope_option": option,
         }
+    if option == TemporalScopeOption.CUSTOM_RANGE and custom_start_date and custom_end_date:
+        return {
+            "query_start_date": custom_start_date,
+            "query_end_date": custom_end_date,
+            "report_limit": None,
+            "scope_option": option,
+        }
     return {
         "query_start_date": None,
         "query_end_date": None,
@@ -117,13 +131,7 @@ def build_pipeline_plan(
 
 class InvestigationWizardQuestionForm(forms.Form):
     title = forms.CharField(max_length=255)
-    question_text = forms.CharField(widget=forms.Textarea)
-
-    def clean_question_text(self):
-        value = str(self.cleaned_data.get("question_text") or "").strip()
-        if not value:
-            raise forms.ValidationError("Research question is required.")
-        return value
+    question_text = forms.CharField(required=False, widget=forms.Textarea)
 
 
 class InvestigationWizardScopeForm(forms.Form):
@@ -131,10 +139,29 @@ class InvestigationWizardScopeForm(forms.Form):
         choices=TemporalScopeOption.choices,
         initial=TemporalScopeOption.ALL_REPORTS,
     )
+    custom_start_date = forms.DateField(required=False)
+    custom_end_date = forms.DateField(required=False)
+
+    def clean(self):
+        cleaned = super().clean()
+        option = str(cleaned.get("scope_option") or "").strip()
+        start_date = cleaned.get("custom_start_date")
+        end_date = cleaned.get("custom_end_date")
+        if option == TemporalScopeOption.CUSTOM_RANGE:
+            if not start_date or not end_date:
+                raise forms.ValidationError("Custom date range requires a start date and end date.")
+            if end_date < start_date:
+                raise forms.ValidationError("End date must be on or after start date.")
+        return cleaned
 
     def resolved_scope(self, *, today: date | None = None) -> dict:
         option = str(self.cleaned_data.get("scope_option") or "")
-        return temporal_scope_parameters(scope_option=option, today=today)
+        return temporal_scope_parameters(
+            scope_option=option,
+            today=today,
+            custom_start_date=self.cleaned_data.get("custom_start_date"),
+            custom_end_date=self.cleaned_data.get("custom_end_date"),
+        )
 
 
 class InvestigationWizardMethodForm(forms.Form):
@@ -194,6 +221,7 @@ class InvestigationWizardExtractConfigForm(forms.Form):
     allow_multiple = forms.BooleanField(required=False, initial=False)
     force_assign = forms.BooleanField(required=False, initial=False)
     skip_if_present = forms.BooleanField(required=False, initial=True)
+    extract_include_supporting_quotes = forms.BooleanField(required=False, initial=False)
 
     def _parse_feature_fields(self, raw_value) -> list[dict]:
         if isinstance(raw_value, list):
@@ -283,12 +311,25 @@ class InvestigationWizardReviewForm(forms.Form):
         required=False,
     )
     model_name = forms.CharField(required=False, initial="gpt-4.1-mini")
-    request_completion_email = forms.BooleanField(required=False, initial=False)
+    max_parallel_workers = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=32,
+        initial=1,
+    )
+    request_completion_email = forms.BooleanField(required=False, initial=True)
     notify_on = forms.ChoiceField(
         required=False,
         choices=NotificationTrigger.choices,
         initial=NotificationTrigger.ANY,
     )
+    api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=True, attrs={"autocomplete": "off"}),
+        label="API key",
+    )
+    base_url = forms.URLField(required=False, label="Provider base URL override")
+    save_api_key = forms.BooleanField(required=False, initial=True)
 
 
 @dataclass
@@ -297,6 +338,8 @@ class InvestigationWizardState:
     title: str = ""
     question_text: str = ""
     scope_option: str = TemporalScopeOption.ALL_REPORTS
+    scope_start_date: str = ""
+    scope_end_date: str = ""
     run_filter: bool = True
     run_themes: bool = False
     run_extract: bool = False
@@ -316,6 +359,8 @@ class InvestigationWizardState:
             title=str(raw.get("title") or "").strip(),
             question_text=str(raw.get("question_text") or "").strip(),
             scope_option=str(raw.get("scope_option") or TemporalScopeOption.ALL_REPORTS).strip(),
+            scope_start_date=str(raw.get("scope_start_date") or "").strip(),
+            scope_end_date=str(raw.get("scope_end_date") or "").strip(),
             run_filter=bool(raw.get("run_filter", True)),
             run_themes=bool(raw.get("run_themes")),
             run_extract=bool(raw.get("run_extract")),
@@ -333,6 +378,8 @@ class InvestigationWizardState:
             "title": self.title,
             "question_text": self.question_text,
             "scope_option": self.scope_option,
+            "scope_start_date": self.scope_start_date,
+            "scope_end_date": self.scope_end_date,
             "run_filter": self.run_filter,
             "run_themes": self.run_themes,
             "run_extract": self.run_extract,
@@ -354,6 +401,7 @@ class InvestigationWizardFilterConfigForm(forms.Form):
     enabled = forms.BooleanField(required=False, initial=True)
     search_query = forms.CharField(required=False, widget=forms.Textarea)
     filter_df = forms.BooleanField(required=False, initial=True)
+    include_supporting_quotes = forms.BooleanField(required=False, initial=False)
     coroner_filters = forms.CharField(required=False)
     area_filters = forms.CharField(required=False)
     receiver_filters = forms.CharField(required=False)
