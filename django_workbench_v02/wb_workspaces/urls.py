@@ -9,11 +9,31 @@ urlpatterns = [
         views.save_active_llm_config,
         name="workbook-llm-config-save",
     ),
+    path(
+        "workbooks/llm-config/credentials/clear/",
+        views.clear_active_llm_credential,
+        name="workbook-llm-config-credential-clear",
+    ),
     path("workbooks/", views.dashboard, name="workbook-dashboard"),
     path(
         "workbooks/<uuid:workbook_id>/activate/",
         views.activate_workspace,
         name="workbook-activate",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/open/",
+        views.open_workspace,
+        name="workbook-open",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/reports/panel/",
+        views.workspace_reports_panel,
+        name="workbook-reports-panel",
+    ),
+    path(
+        "workbooks/<uuid:workbook_id>/reports/export.csv",
+        views.workspace_export_csv,
+        name="workbook-export-csv",
     ),
     path(
         "workbooks/<uuid:workbook_id>/archive/",
@@ -95,6 +115,21 @@ urlpatterns = [
         name="workspace-activate",
     ),
     path(
+        "workspaces/<uuid:workbook_id>/open/",
+        views.open_workspace,
+        name="workspace-open",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/reports/panel/",
+        views.workspace_reports_panel,
+        name="workspace-reports-panel",
+    ),
+    path(
+        "workspaces/<uuid:workbook_id>/reports/export.csv",
+        views.workspace_export_csv,
+        name="workspace-export-csv",
+    ),
+    path(
         "workspaces/<uuid:workbook_id>/archive/",
         views.archive_workspace_view,
         name="workspace-archive",
@@ -170,5 +205,10 @@ urlpatterns = [
         "workspaces/llm-config/save/",
         views.save_active_llm_config,
         name="workspace-llm-config-save",
+    ),
+    path(
+        "workspaces/llm-config/credentials/clear/",
+        views.clear_active_llm_credential,
+        name="workspace-llm-config-credential-clear",
     ),
 ]

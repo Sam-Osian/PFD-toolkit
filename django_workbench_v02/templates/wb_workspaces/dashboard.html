@@ -12,6 +12,14 @@
 {% block content %}
 <div class="dashboard-layout">
     <div class="stack-md">
+        {% if not worker_ready %}
+            <section class="card dashboard-section">
+                <div class="dashboard-section__head">
+                    <h3>Run Worker</h3>
+                </div>
+                <p class="empty-note">{{ worker_status_message }}</p>
+            </section>
+        {% endif %}
         <section class="card dashboard-section">
             <div class="dashboard-section__head">
                 <h3>Active Workspaces</h3>
@@ -27,7 +35,7 @@
                                     {% if row.pending_run %}
                                         <span>{{ workspace.title }}</span>
                                     {% else %}
-                                        <a href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">{{ workspace.title }}</a>
+                                        <a href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ workspace.title }}</a>
                                     {% endif %}
                                 </h4>
                                 <div class="workbook-row__meta">
@@ -58,7 +66,15 @@
                                 {% if row.pending_run %}
                                     <button type="button" class="btn btn-secondary" disabled>Launching…</button>
                                 {% else %}
-                                    <a class="btn btn-secondary" href="{% url 'workbook-investigation-entry' workbook_id=workspace.id %}">Open investigation</a>
+                                    <a class="btn btn-secondary" href="{% url 'workbook-open' workbook_id=workspace.id %}">Open</a>
+                                {% endif %}
+                                {% if row.pipeline_state == "failed-warning" and row.latest_investigation_id and row.latest_run %}
+                                    <a
+                                        class="btn btn-ghost"
+                                        href="{% url 'investigation-detail' workbook_id=workspace.id investigation_id=row.latest_investigation_id %}?open_wizard=1&wizard_step=review&retry_run_id={{ row.latest_run.id }}"
+                                    >
+                                        Try again
+                                    </a>
                                 {% endif %}
                                 {% if not row.pending_run %}
                                     {% if not active_workspace_id or active_workspace_id != workspace.id|stringformat:"s" %}

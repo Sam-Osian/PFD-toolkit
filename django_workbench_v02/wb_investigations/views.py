@@ -1,3 +1,4 @@
+import json
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -68,12 +69,23 @@ def _next_workspace_slug_for_user(*, user, title: str) -> str:
     return candidate
 
 
-def _investigation_detail_with_open_wizard_url(*, workbook_id, investigation_id) -> str:
+def _investigation_detail_with_open_wizard_url(
+    *,
+    workbook_id,
+    investigation_id,
+    wizard_step: str = "",
+    retry_run_id: str = "",
+) -> str:
     base_url = reverse(
         "investigation-detail",
         kwargs={"workbook_id": workbook_id, "investigation_id": investigation_id},
     )
-    return f"{base_url}?{urlencode({'open_wizard': '1'})}"
+    params = {"open_wizard": "1"}
+    if str(wizard_step or "").strip():
+        params["wizard_step"] = str(wizard_step).strip()
+    if str(retry_run_id or "").strip():
+        params["retry_run_id"] = str(retry_run_id).strip()
+    return f"{base_url}?{urlencode(params)}"
 
 
 def _workspace_dashboard_with_open_wizard_url() -> str:
@@ -250,6 +262,88 @@ def _wizard_initial_state(*, investigation: Investigation) -> InvestigationWizar
         extract_config={},
         review_config={},
     )
+
+
+def _scope_option_from_dates(*, start: str, end: str, report_limit) -> str:
+    if report_limit == 100:
+        return "most_recent_100"
+    start_value = str(start or "").strip()
+    end_value = str(end or "").strip()
+    if start_value and end_value:
+        return "custom_range"
+    return "all_reports"
+
+
+def _wizard_retry_prefill(*, investigation: Investigation, run: InvestigationRun) -> dict:
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    scope_json = investigation.scope_json if isinstance(investigation.scope_json, dict) else {}
+    method_json = investigation.method_json if isinstance(investigation.method_json, dict) else {}
+
+    pipeline_plan = config.get("pipeline_plan") if isinstance(config.get("pipeline_plan"), list) else []
+    has_filter = bool(method_json.get("run_filter", RunType.FILTER in pipeline_plan))
+    has_themes = bool(method_json.get("run_themes", RunType.THEMES in pipeline_plan))
+    has_extract = bool(method_json.get("run_extract", RunType.EXTRACT in pipeline_plan))
+    run_filter = has_filter or RunType.FILTER in pipeline_plan
+    run_themes = has_themes or RunType.THEMES in pipeline_plan
+    run_extract = has_extract or RunType.EXTRACT in pipeline_plan
+
+    scope_start = str(scope_json.get("query_start_date") or "")
+    scope_end = str(scope_json.get("query_end_date") or "")
+    scope_option = str(scope_json.get("temporal_scope_option") or "").strip() or _scope_option_from_dates(
+        start=scope_start,
+        end=scope_end,
+        report_limit=config.get("report_limit"),
+    )
+
+    selected_filters = config.get("selected_filters") if isinstance(config.get("selected_filters"), dict) else {}
+    feature_fields = config.get("feature_fields") if isinstance(config.get("feature_fields"), list) else []
+    sanitised_features = []
+    for row in feature_fields:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or row.get("field_name") or "").strip()
+        description = str(row.get("description") or "").strip()
+        field_type = str(row.get("type") or "text").strip().lower() or "text"
+        if field_type == "integer":
+            field_type = "decimal"
+        if field_type not in {"text", "decimal", "boolean"}:
+            field_type = "text"
+        sanitised_features.append({"name": name, "description": description, "type": field_type})
+
+    try:
+        max_parallel_workers = int(config.get("max_parallel_workers") or 1)
+    except (TypeError, ValueError):
+        max_parallel_workers = 1
+
+    return {
+        "title": str(investigation.title or "").strip(),
+        "question_text": str(investigation.question_text or "").strip(),
+        "scope_option": scope_option,
+        "custom_start_date": scope_start,
+        "custom_end_date": scope_end,
+        "run_filter": bool(run_filter),
+        "run_themes": bool(run_themes),
+        "run_extract": bool(run_extract),
+        "search_query": str(config.get("search_query") or investigation.question_text or "").strip(),
+        "filter_df": bool(config.get("filter_df", True)),
+        "include_supporting_quotes": bool(config.get("produce_spans", False)),
+        "coroner_filters": ", ".join(selected_filters.get("coroner", []) or []),
+        "area_filters": ", ".join(selected_filters.get("area", []) or []),
+        "receiver_filters": ", ".join(selected_filters.get("receiver", []) or []),
+        "seed_topics": str(config.get("seed_topics") or "").strip(),
+        "min_themes": config.get("min_themes"),
+        "max_themes": config.get("max_themes"),
+        "extra_theme_instructions": str(config.get("extra_theme_instructions") or "").strip(),
+        "feature_fields": json.dumps(sanitised_features),
+        "allow_multiple": bool(config.get("allow_multiple", False)),
+        "force_assign": bool(config.get("force_assign", False)),
+        "skip_if_present": bool(config.get("skip_if_present", True)),
+        "extract_include_supporting_quotes": bool(config.get("produce_spans", False)),
+        "provider": str(config.get("provider") or "openai").strip().lower(),
+        "model_name": str(config.get("model_name") or "gpt-4.1-mini").strip(),
+        "max_parallel_workers": max_parallel_workers,
+        "request_completion_email": True,
+    }
 
 
 @login_required
@@ -591,6 +685,14 @@ def investigation_detail(request, workbook_id, investigation_id):
         and can_run_workflows(request.user, investigation.workspace)
     )
     runs = InvestigationRun.objects.filter(investigation=investigation).order_by("-created_at")
+    retry_run_id = str(request.GET.get("retry_run_id") or "").strip()
+    retry_wizard_prefill_json = ""
+    if retry_run_id and can_edit:
+        retry_run = runs.filter(id=retry_run_id).first()
+        if retry_run is not None:
+            retry_wizard_prefill_json = json.dumps(
+                _wizard_retry_prefill(investigation=investigation, run=retry_run)
+            )
     pipeline_timeline = _build_pipeline_timeline(investigation=investigation)
     return render(
         request,
@@ -602,6 +704,7 @@ def investigation_detail(request, workbook_id, investigation_id):
             "can_run": can_run,
             "runs": runs,
             "pipeline_timeline": pipeline_timeline,
+            "retry_wizard_prefill_json": retry_wizard_prefill_json,
             "export_form": InvestigationExportForm(),
         },
     )

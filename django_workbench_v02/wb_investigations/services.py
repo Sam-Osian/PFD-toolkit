@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from datetime import timedelta
+
+from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
 from wb_auditlog.services import log_action_cache_event, log_audit_event
 from wb_notifications.models import NotificationTrigger
-from wb_runs.models import RunType
+from wb_runs.models import RunType, RunWorkerHeartbeat
 from wb_runs.services import queue_run
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
 from wb_workspaces.models import RevisionChangeType, WorkspaceLLMProvider
@@ -83,6 +86,27 @@ def _normalise_credential_input(credential_input: dict | None) -> dict:
     }
 
 
+def _worker_heartbeat_window_seconds() -> int:
+    return max(1, int(getattr(settings, "WORKER_HEARTBEAT_STALE_SECONDS", 120)))
+
+
+def _worker_launch_readiness() -> tuple[bool, str]:
+    stale_seconds = _worker_heartbeat_window_seconds()
+    threshold = timezone.now() - timedelta(seconds=stale_seconds)
+    latest = RunWorkerHeartbeat.objects.order_by("-last_seen_at").first()
+    if latest is None:
+        return (
+            False,
+            "Run worker is not available. Start the run worker before launching investigations.",
+        )
+    if latest.last_seen_at < threshold:
+        return (
+            False,
+            "Run worker heartbeat is stale. Restart the run worker before launching investigations.",
+        )
+    return (True, f"Run worker is active ({latest.worker_id}).")
+
+
 def evaluate_investigation_launch_readiness(
     *,
     actor,
@@ -143,6 +167,7 @@ def evaluate_investigation_launch_readiness(
                 credential_block_reason = (
                     f"No saved {review['provider']} API key for this workbook. Add a key before launch."
                 )
+    worker_ready, worker_message = _worker_launch_readiness()
 
     checks = [
         {
@@ -180,6 +205,12 @@ def evaluate_investigation_launch_readiness(
                 if credential_ready
                 else credential_block_reason
             ),
+        },
+        {
+            "key": "worker",
+            "label": "Worker",
+            "ready": worker_ready,
+            "message": worker_message,
         },
     ]
 

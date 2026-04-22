@@ -11,7 +11,14 @@ from django.utils import timezone
 from wb_auditlog.models import AuditEvent
 from wb_investigations.models import InvestigationStatus
 from wb_investigations.services import create_investigation
-from wb_runs.models import ArtifactStatus, ArtifactStorageBackend, ArtifactType, RunArtifact, RunType
+from wb_runs.models import (
+    ArtifactStatus,
+    ArtifactStorageBackend,
+    ArtifactType,
+    RunArtifact,
+    RunType,
+    RunWorkerHeartbeat,
+)
 from wb_runs.services import queue_run
 
 from .lifecycle import run_lifecycle_maintenance
@@ -47,6 +54,7 @@ from .services import (
     upsert_workspace_report_exclusion,
     upsert_workspace_credential,
     upsert_workspace_llm_setting,
+    upsert_user_llm_credential,
     update_workspace_member,
 )
 
@@ -688,6 +696,28 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(setting.max_parallel_workers, 4)
         self.assertTrue(self.owner.llm_credentials.filter(provider="openrouter", key_last4="1234").exists())
 
+    def test_owner_can_clear_active_llm_credential(self):
+        upsert_user_llm_credential(
+            actor=self.owner,
+            provider="openrouter",
+            api_key="sk-or-example-1234",
+            base_url="",
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workspace-llm-config-credential-clear"),
+            data={
+                "provider": "openrouter",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Cleared openrouter credential from your account defaults.")
+        self.assertFalse(
+            self.owner.llm_credentials.filter(provider="openrouter").exists()
+        )
+
 
 class WorkspaceLLMSettingTests(TestCase):
     def setUp(self):
@@ -716,6 +746,10 @@ class WorkspaceLLMSettingTests(TestCase):
 class WorkspaceActiveStateViewTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="owner-active@example.com", password="x")
+        RunWorkerHeartbeat.objects.update_or_create(
+            worker_id="test-worker",
+            defaults={"state": "idle", "last_seen_at": timezone.now()},
+        )
         self.workspace_a = create_workspace_for_user(
             user=self.owner,
             title="Workspace Active A",
@@ -752,19 +786,36 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertContains(response, "Workspace Active B")
         self.assertContains(response, "(active)")
 
-    def test_dashboard_links_active_workbooks_to_investigation_entry(self):
+    def test_dashboard_links_active_workbooks_to_open_route(self):
         self.client.force_login(self.owner)
         response = self.client.get(reverse("workbook-dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Open investigation")
+        self.assertContains(response, "Open")
         self.assertContains(
             response,
-            reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace_a.id}),
+            reverse("workbook-open", kwargs={"workbook_id": self.workspace_a.id}),
         )
         self.assertContains(
             response,
-            reverse("workbook-investigation-entry", kwargs={"workbook_id": self.workspace_b.id}),
+            reverse("workbook-open", kwargs={"workbook_id": self.workspace_b.id}),
         )
+
+    def test_open_workspace_route_sets_active_and_redirects_to_explore(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            reverse("workbook-open", kwargs={"workbook_id": self.workspace_a.id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Workspace-scoped view of your pipeline result dataset.")
+        state = WorkspaceUserState.objects.get(user=self.owner)
+        self.assertEqual(state.active_workspace_id, self.workspace_a.id)
+
+    def test_dashboard_shows_worker_offline_banner_without_heartbeat(self):
+        RunWorkerHeartbeat.objects.all().delete()
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Worker offline")
 
     def test_workspace_detail_shows_switcher_with_all_user_workbooks(self):
         self.client.force_login(self.owner)

@@ -511,13 +511,32 @@ def execute_filter_workflow(
         include_circumstances=True,
         include_concerns=True,
     )
-    result_df = screener.screen_reports(
+    scored_df = screener.screen_reports(
         search_query=query,
-        filter_df=filter_df,
+        filter_df=False,
         result_col_name="matches_query",
         produce_spans=produce_spans,
         drop_spans=drop_spans,
     )
+    classification_col = "matches_query"
+    if classification_col not in scored_df.columns:
+        raise AdapterConfigurationError("Filter classification results were not produced by the screener.")
+
+    raw_series = scored_df[classification_col]
+    bool_series = raw_series.map(lambda value: value if isinstance(value, bool) else pd.NA)
+    successful_classifications = int(bool_series.notna().sum())
+    failed_classifications = max(0, len(scored_df) - successful_classifications)
+    if len(scored_df) > 0 and successful_classifications == 0:
+        raise AdapterConfigurationError(
+            "Filter classification failed for all reports. Check provider selection and API credential."
+        )
+
+    scored_df[classification_col] = bool_series
+    if filter_df:
+        result_df = scored_df.loc[scored_df[classification_col] == True].copy()  # noqa: E712
+        result_df.drop(columns=[classification_col], errors="ignore", inplace=True)
+    else:
+        result_df = scored_df
 
     if cancellation_check and cancellation_check():
         raise AdapterCancelledError("Run cancelled after screening stage.")
@@ -541,6 +560,8 @@ def execute_filter_workflow(
         "filter_df": filter_df,
         "produce_spans": produce_spans,
         "drop_spans": drop_spans,
+        "failed_classifications": failed_classifications,
+        "successful_classifications": successful_classifications,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),
         "report_limit": n_reports,

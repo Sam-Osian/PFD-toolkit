@@ -68,6 +68,14 @@ class ActiveLLMConfigForm(forms.Form):
     next_url = forms.CharField(required=False)
 
 
+class ActiveLLMCredentialDeleteForm(forms.Form):
+    provider = forms.ChoiceField(
+        choices=WorkspaceLLMProvider.choices,
+        initial=WorkspaceLLMProvider.OPENAI,
+    )
+    next_url = forms.CharField(required=False)
+
+
 class WorkspaceReportExclusionCreateForm(forms.Form):
     report_identity = forms.CharField(max_length=512)
     reason = forms.CharField(required=False)

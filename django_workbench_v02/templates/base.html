@@ -444,6 +444,8 @@
     aria-hidden="true"
     data-cred-openai="{% if active_llm_config and active_llm_config.credentials.openai %}1{% else %}0{% endif %}"
     data-cred-openrouter="{% if active_llm_config and active_llm_config.credentials.openrouter %}1{% else %}0{% endif %}"
+    data-cred-last4-openai="{% if active_llm_config %}{{ active_llm_config.credential_last4.openai|default:'' }}{% endif %}"
+    data-cred-last4-openrouter="{% if active_llm_config %}{{ active_llm_config.credential_last4.openrouter|default:'' }}{% endif %}"
 >
     <div class="llm-pop" role="dialog" aria-labelledby="llm-pop-title">
         <div class="llm-pop-head">
@@ -494,9 +496,36 @@
                         No saved credential for selected provider.
                     {% endif %}
                 </span>
-                <button class="btn btn-primary sm" type="submit">Save</button>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <button class="btn btn-danger sm" type="button" id="llm-pop-clear-open">Clear credentials</button>
+                    <button class="btn btn-primary sm" type="submit">Save</button>
+                </div>
             </div>
         </form>
+    </div>
+</div>
+{% endif %}
+
+{% if request.user.is_authenticated %}
+<div class="dlg-back" id="dlg-llm-clear" aria-hidden="true">
+    <div class="dlg confirm danger" role="dialog" aria-labelledby="llm-clear-title">
+        <div class="dlg-head">
+            <div class="k"><span class="d"></span>Destructive · cannot be undone</div>
+            <h3 id="llm-clear-title">Clear saved credential?</h3>
+            <p>This removes your saved API credential for the selected provider from your account defaults.</p>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to cancel</span>
+            <div class="acts">
+                <button class="btn btn-ghost" type="button" data-llm-clear-close>Cancel</button>
+                <form method="post" action="{% url 'workspace-llm-config-credential-clear' %}" id="llm-clear-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="provider" id="llm-clear-provider" value="{{ active_llm_config.provider|default:'openai' }}">
+                    <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
+                    <button class="btn btn-danger" type="submit">Confirm clear</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -726,6 +755,19 @@ document.addEventListener("DOMContentLoaded", function() {
       return !["checkbox", "radio", "button", "submit", "reset"].includes(type);
     }
     return false;
+  };
+
+  const readCookie = function(name) {
+    const cookieSource = String(document.cookie || "");
+    if (!cookieSource) return "";
+    const needle = `${name}=`;
+    const parts = cookieSource.split(";");
+    for (let i = 0; i < parts.length; i += 1) {
+      const part = String(parts[i] || "").trim();
+      if (!part.startsWith(needle)) continue;
+      return decodeURIComponent(part.slice(needle.length));
+    }
+    return "";
   };
 
   const focusGlobalSearch = function() {
@@ -1107,10 +1149,74 @@ document.addEventListener("DOMContentLoaded", function() {
     updateActionState();
   };
 
-  const openWizard = function() {
+  const setWizardFieldValue = function(name, rawValue) {
+    if (!wizardForm) return;
+    const fields = wizardForm.querySelectorAll(`[name="${CSS.escape(name)}"]`);
+    if (!fields.length) return;
+    fields.forEach(function(field) {
+      if (!(field instanceof HTMLElement)) return;
+      if (field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")) {
+        if (Array.isArray(rawValue)) field.checked = rawValue.map(String).includes(String(field.value));
+        else if (field.type === "checkbox") field.checked = Boolean(rawValue);
+        else field.checked = String(rawValue) === String(field.value);
+        return;
+      }
+      if ("value" in field && rawValue !== null && rawValue !== undefined) {
+        field.value = String(rawValue);
+      }
+    });
+  };
+
+  const applyWizardPrefill = function(prefill) {
+    if (!prefill || typeof prefill !== "object") return;
+    Object.entries(prefill).forEach(function(entry) {
+      setWizardFieldValue(entry[0], entry[1]);
+    });
+
+    const featureFieldsRaw = String(prefill.feature_fields || "").trim();
+    if (extractTable) {
+      extractTable.querySelectorAll(".wet-row").forEach(function(row) { row.remove(); });
+      if (featureFieldsRaw) {
+        try {
+          const rows = JSON.parse(featureFieldsRaw);
+          if (Array.isArray(rows)) {
+            rows.forEach(function(row) {
+              if (!row || typeof row !== "object") return;
+              addExtractRow({
+                name: String(row.name || row.field_name || "").trim(),
+                description: String(row.description || "").trim(),
+                type: String(row.type || "text").trim().toLowerCase() || "text",
+              });
+            });
+          }
+        } catch (error) {}
+      }
+    }
+    syncExtractFeatureRows();
+  };
+
+  const wizardStepIndexFromKey = function(stepKey) {
+    const value = String(stepKey || "").trim().toLowerCase();
+    if (value === "question") return 0;
+    if (value === "scope") return 1;
+    if (value === "method") return 2;
+    if (value === "filter") return 3;
+    if (value === "themes") return 4;
+    if (value === "extract") return 5;
+    if (value === "review") return wizardSteps.length - 1;
+    return 0;
+  };
+
+  const openWizard = function(options) {
     if (!wizardOverlay) return;
     wizardStep = 0;
     restoreWizardDraft();
+    if (options && typeof options === "object" && options.prefill) {
+      applyWizardPrefill(options.prefill);
+    }
+    if (options && typeof options === "object" && options.step) {
+      wizardStep = wizardStepIndexFromKey(options.step);
+    }
     renderWizard();
     wizardOverlay.classList.add("on");
     wizardOverlay.setAttribute("aria-hidden", "false");
@@ -1137,8 +1243,21 @@ document.addEventListener("DOMContentLoaded", function() {
     const params = new URLSearchParams(window.location.search || "");
     const shouldOpen = params.get("open_wizard");
     if (shouldOpen !== "1") return;
-    openWizard();
+    const wizardStepFromQuery = String(params.get("wizard_step") || "").trim().toLowerCase();
+    let retryPrefill = null;
+    try {
+      const retryScript = document.getElementById("wizard-retry-prefill");
+      retryPrefill = retryScript ? JSON.parse(retryScript.textContent || "null") : null;
+    } catch (error) {
+      retryPrefill = null;
+    }
+    openWizard({
+      step: wizardStepFromQuery || "",
+      prefill: retryPrefill,
+    });
     params.delete("open_wizard");
+    params.delete("wizard_step");
+    params.delete("retry_run_id");
     const nextQuery = params.toString();
     const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash || ""}`;
     window.history.replaceState({}, "", nextUrl);
@@ -1173,18 +1292,60 @@ document.addEventListener("DOMContentLoaded", function() {
   const llmConfigOpen = document.getElementById("llm-config-open");
   const llmPopBack = document.getElementById("llm-pop-back");
   const llmPop = document.querySelector("#llm-pop-back .llm-pop");
+  const llmPopForm = llmPopBack ? llmPopBack.querySelector("form") : null;
   const llmPopClose = document.getElementById("llm-pop-close");
   const llmPopProviderPick = document.getElementById("llm-pop-provider-pick");
   const llmPopProvider = document.getElementById("llm-pop-provider");
   const llmPopStatus = document.getElementById("llm-pop-status");
+  const llmPopApiKey = document.getElementById("llm-pop-api-key");
+  const llmPopClearOpen = document.getElementById("llm-pop-clear-open");
+  const llmClearDialog = document.getElementById("dlg-llm-clear");
+  const llmClearProvider = document.getElementById("llm-clear-provider");
+  const llmClearCloseButtons = llmClearDialog ? llmClearDialog.querySelectorAll("[data-llm-clear-close]") : [];
   const credentialMap = {
     openai: String(llmPopBack?.dataset.credOpenai || "0") === "1",
     openrouter: String(llmPopBack?.dataset.credOpenrouter || "0") === "1",
   };
+  const credentialLast4Map = {
+    openai: String(llmPopBack?.dataset.credLast4Openai || "").trim(),
+    openrouter: String(llmPopBack?.dataset.credLast4Openrouter || "").trim(),
+  };
+  const maskedCredentialValue = "********";
 
   const hasSavedCredentialForProvider = function(providerValue) {
     const key = String(providerValue || "").trim().toLowerCase();
     return Boolean(credentialMap[key]);
+  };
+
+  const credentialLast4ForProvider = function(providerValue) {
+    const key = String(providerValue || "").trim().toLowerCase();
+    return String(credentialLast4Map[key] || "").trim();
+  };
+
+  const syncLlmCredentialMaskForProvider = function(providerValue) {
+    if (!llmPopApiKey) return;
+    const hasSaved = hasSavedCredentialForProvider(providerValue);
+    const last4 = credentialLast4ForProvider(providerValue);
+    if (!hasSaved) {
+      llmPopApiKey.value = "";
+      llmPopApiKey.removeAttribute("data-masked");
+      llmPopApiKey.placeholder = "Paste key to update saved credential";
+      return;
+    }
+    llmPopApiKey.value = `${maskedCredentialValue}${last4}`;
+    llmPopApiKey.setAttribute("data-masked", "1");
+    llmPopApiKey.placeholder = `Saved credential ending in ${last4}`;
+  };
+
+  const syncLlmStatusForProvider = function(providerValue) {
+    if (!llmPopStatus) return;
+    const hasSaved = hasSavedCredentialForProvider(providerValue);
+    const last4 = credentialLast4ForProvider(providerValue);
+    if (llmPopClearOpen) llmPopClearOpen.disabled = !hasSaved;
+    llmPopStatus.classList.toggle("ok", hasSaved);
+    llmPopStatus.textContent = hasSaved
+      ? (`Saved credential detected for ${providerValue} ending in ${last4}.`)
+      : "No saved credential for selected provider.";
   };
 
   const applyProviderButtonState = function(container, providerValue) {
@@ -1207,12 +1368,19 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     llmPopBack.classList.add("on");
     llmPopBack.setAttribute("aria-hidden", "false");
+    const selectedProvider = String(llmPopProvider?.value || "openai").toLowerCase();
+    syncLlmCredentialMaskForProvider(selectedProvider);
+    syncLlmStatusForProvider(selectedProvider);
   };
 
   const closeLlmConfig = function() {
     if (!llmPopBack) return;
     llmPopBack.classList.remove("on");
     llmPopBack.setAttribute("aria-hidden", "true");
+    if (llmClearDialog) {
+      llmClearDialog.classList.remove("on");
+      llmClearDialog.setAttribute("aria-hidden", "true");
+    }
   };
 
   llmConfigOpen?.addEventListener("click", openLlmConfig);
@@ -1226,17 +1394,50 @@ document.addEventListener("DOMContentLoaded", function() {
         const selected = String(button.getAttribute("data-provider") || "openai").toLowerCase();
         if (llmPopProvider) llmPopProvider.value = selected;
         applyProviderButtonState(llmPopProviderPick, selected);
-        if (llmPopStatus) {
-          const hasSaved = hasSavedCredentialForProvider(selected);
-          llmPopStatus.classList.toggle("ok", hasSaved);
-          llmPopStatus.textContent = hasSaved
-            ? ("Saved credential detected for " + selected + ".")
-            : "No saved credential for selected provider.";
-        }
+        syncLlmCredentialMaskForProvider(selected);
+        syncLlmStatusForProvider(selected);
       });
     });
   }
   applyProviderButtonState(llmPopProviderPick, llmPopProvider?.value || "openai");
+  syncLlmCredentialMaskForProvider(llmPopProvider?.value || "openai");
+  syncLlmStatusForProvider(llmPopProvider?.value || "openai");
+
+  llmPopApiKey?.addEventListener("focus", function() {
+    if (llmPopApiKey.getAttribute("data-masked") === "1") {
+      llmPopApiKey.value = "";
+      llmPopApiKey.removeAttribute("data-masked");
+    }
+  });
+
+  llmPopForm?.addEventListener("submit", function() {
+    if (!llmPopApiKey) return;
+    if (llmPopApiKey.getAttribute("data-masked") === "1") {
+      llmPopApiKey.value = "";
+      llmPopApiKey.removeAttribute("data-masked");
+    }
+  });
+
+  const openLlmClearDialog = function() {
+    if (!llmClearDialog) return;
+    const selectedProvider = String(llmPopProvider?.value || "openai").toLowerCase();
+    if (!hasSavedCredentialForProvider(selectedProvider)) return;
+    if (llmClearProvider) llmClearProvider.value = selectedProvider;
+    llmClearDialog.classList.add("on");
+    llmClearDialog.setAttribute("aria-hidden", "false");
+  };
+  const closeLlmClearDialog = function() {
+    if (!llmClearDialog) return;
+    llmClearDialog.classList.remove("on");
+    llmClearDialog.setAttribute("aria-hidden", "true");
+  };
+  llmPopClearOpen?.addEventListener("click", openLlmClearDialog);
+  llmClearDialog?.addEventListener("click", function(event) {
+    if (event.target === llmClearDialog) closeLlmClearDialog();
+  });
+  llmClearCloseButtons.forEach(function(btn) {
+    btn.addEventListener("click", closeLlmClearDialog);
+  });
   maybeOpenWizardFromQuery();
   window.addEventListener("resize", function() {
     if (llmPopBack?.classList.contains("on")) openLlmConfig();
@@ -1409,6 +1610,11 @@ document.addEventListener("DOMContentLoaded", function() {
   });
   wizardForm?.addEventListener("submit", function(event) {
     syncExtractFeatureRows();
+    const csrfInput = wizardForm.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (csrfInput instanceof HTMLInputElement) {
+      const cookieToken = readCookie("csrftoken");
+      if (cookieToken) csrfInput.value = cookieToken;
+    }
     if (!isCurrentStepValid()) {
       event.preventDefault();
       return;
@@ -1515,6 +1721,13 @@ document.addEventListener("DOMContentLoaded", function() {
       if (tutorialOverlay?.classList.contains("on")) {
         event.preventDefault();
         closeTutorial();
+      } else if (llmClearDialog?.classList.contains("on")) {
+        event.preventDefault();
+        llmClearDialog.classList.remove("on");
+        llmClearDialog.setAttribute("aria-hidden", "true");
+      } else if (llmPopBack?.classList.contains("on")) {
+        event.preventDefault();
+        closeLlmConfig();
       } else if (wizardOverlay?.classList.contains("on")) {
         event.preventDefault();
         closeWizard();

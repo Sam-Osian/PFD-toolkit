@@ -1,11 +1,19 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
-from datetime import date
+from django.utils import timezone
+from datetime import date, timedelta
 
 from wb_auditlog.models import AuditEvent
-from wb_runs.models import InvestigationRun, RunEvent, RunEventType, RunStatus, RunType
+from wb_runs.models import (
+    InvestigationRun,
+    RunEvent,
+    RunEventType,
+    RunStatus,
+    RunType,
+    RunWorkerHeartbeat,
+)
 from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
@@ -42,6 +50,10 @@ User = get_user_model()
 
 class InvestigationServiceTests(TestCase):
     def setUp(self):
+        RunWorkerHeartbeat.objects.update_or_create(
+            worker_id="test-worker",
+            defaults={"state": "idle", "last_seen_at": timezone.now()},
+        )
         self.owner = User.objects.create_user(email="inv-owner@example.com", password="x")
         self.viewer = User.objects.create_user(email="inv-viewer@example.com", password="x")
         self.workspace = create_workspace_for_user(
@@ -227,9 +239,73 @@ class InvestigationServiceTests(TestCase):
         self.assertFalse(provider_model_check["ready"])
         self.assertIn("Choose one of", provider_model_check["message"])
 
+    def test_launch_readiness_blocks_when_worker_heartbeat_missing(self):
+        RunWorkerHeartbeat.objects.all().delete()
+        inv = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Worker Guardrail",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        state = InvestigationWizardState(
+            stage="review",
+            title=inv.title,
+            question_text=inv.question_text,
+            run_filter=True,
+            review_config={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        readiness = evaluate_investigation_launch_readiness(
+            actor=self.owner,
+            investigation=inv,
+            wizard_state=state,
+        )
+        self.assertFalse(readiness["can_launch"])
+        worker_check = next(check for check in readiness["checks"] if check["key"] == "worker")
+        self.assertFalse(worker_check["ready"])
+        self.assertIn("not available", worker_check["message"])
+
+    @override_settings(WORKER_HEARTBEAT_STALE_SECONDS=30)
+    def test_launch_readiness_blocks_when_worker_heartbeat_stale(self):
+        heartbeat = RunWorkerHeartbeat.objects.get(worker_id="test-worker")
+        heartbeat.last_seen_at = timezone.now() - timedelta(seconds=300)
+        heartbeat.save(update_fields=["last_seen_at", "updated_at"])
+
+        inv = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Worker Stale Guardrail",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        state = InvestigationWizardState(
+            stage="review",
+            title=inv.title,
+            question_text=inv.question_text,
+            run_filter=True,
+            review_config={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        readiness = evaluate_investigation_launch_readiness(
+            actor=self.owner,
+            investigation=inv,
+            wizard_state=state,
+        )
+        self.assertFalse(readiness["can_launch"])
+        worker_check = next(check for check in readiness["checks"] if check["key"] == "worker")
+        self.assertFalse(worker_check["ready"])
+        self.assertIn("stale", worker_check["message"])
+
 
 class InvestigationViewTests(TestCase):
     def setUp(self):
+        RunWorkerHeartbeat.objects.update_or_create(
+            worker_id="test-worker",
+            defaults={"state": "idle", "last_seen_at": timezone.now()},
+        )
         self.owner = User.objects.create_user(email="inv-owner2@example.com", password="x")
         self.viewer = User.objects.create_user(email="inv-viewer2@example.com", password="x")
         self.stranger = User.objects.create_user(email="inv-stranger2@example.com", password="x")
@@ -389,6 +465,36 @@ class InvestigationViewTests(TestCase):
         self.assertContains(response, "Export Bundle")
         self.assertNotContains(response, "Scope JSON")
         self.assertNotContains(response, "Queue Run")
+
+    def test_investigation_detail_shows_try_again_for_failed_runs(self):
+        self.client.force_login(self.owner)
+        failed_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.FAILED,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER],
+                "pipeline_index": 0,
+                "provider": "openai",
+                "model_name": "gpt-4.1-mini",
+            },
+        )
+        response = self.client.get(
+            reverse(
+                "workbook-investigation-detail",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            )
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            f"open_wizard=1&wizard_step=review&retry_run_id={failed_run.id}",
+        )
 
     def test_queue_export_bundle_from_investigation_detail(self):
         self.investigation.scope_json = {
@@ -673,6 +779,10 @@ class InvestigationWizardFormTests(TestCase):
 
 class InvestigationModalWizardLaunchTests(TestCase):
     def setUp(self):
+        RunWorkerHeartbeat.objects.update_or_create(
+            worker_id="test-worker",
+            defaults={"state": "idle", "last_seen_at": timezone.now()},
+        )
         self.owner = User.objects.create_user(email="inv-modal-owner@example.com", password="x")
         self.client.force_login(self.owner)
 

@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 
 {% block page_title %}
-{% if is_collection_view %}
+{% if is_workspace_view %}
+{{ collection_title }} · Workspace · PFD Toolkit Workbench v0.2
+{% elif is_collection_view %}
 {{ collection_title }} · Collection · PFD Toolkit Workbench v0.2
 {% else %}
 Explore · PFD Toolkit Workbench v0.2
@@ -9,7 +11,9 @@ Explore · PFD Toolkit Workbench v0.2
 {% endblock %}
 
 {% block page_header %}
-{% if is_collection_view %}
+{% if is_workspace_view %}
+<div class="eyebrow"><span class="d"></span>Workspace · {{ explore.scope_reports }} reports in view</div>
+{% elif is_collection_view %}
 <div class="eyebrow"><span class="d"></span>Collection · {{ explore.scope_reports }} reports in view</div>
 {% else %}
 <div class="eyebrow"><span class="d"></span>Explore · {{ explore.total_reports }} reports</div>
@@ -20,7 +24,16 @@ Explore · PFD Toolkit Workbench v0.2
 <div class="stack-md">
     <section class="explore-hero">
         <div>
-            {% if is_collection_view %}
+            {% if is_workspace_view %}
+                <h1 class="page-title xl">{{ collection_title }}</h1>
+                <p class="page-lede big">
+                    {% if collection_description %}
+                        {{ collection_description }}
+                    {% else %}
+                        Workspace-scoped view of your pipeline result dataset.
+                    {% endif %}
+                </p>
+            {% elif is_collection_view %}
                 <h1 class="page-title xl">{{ collection_title }}</h1>
                 <p class="page-lede big">
                     {% if collection_description %}
@@ -36,6 +49,9 @@ Explore · PFD Toolkit Workbench v0.2
         </div>
         <div class="explore-hero-actions">
             <button type="button" class="btn btn-secondary" id="explore-export-open">Export</button>
+            {% if is_workspace_view and workspace_investigation %}
+                <a class="btn btn-secondary" href="{% url 'workbook-investigation-detail' workbook_id=workspace_id investigation_id=workspace_investigation.id %}">Open investigation</a>
+            {% endif %}
             {% if request.user.is_authenticated %}
                 <a class="btn btn-primary" href="{% url 'workbook-dashboard' %}">+ New investigation</a>
             {% else %}
@@ -402,6 +418,67 @@ Explore · PFD Toolkit Workbench v0.2
             <div id="explore-reports-panel" class="explore-reports-panel" {% if not show_reports_requested %}hidden{% endif %}></div>
         </div>
     </section>
+
+    {% if is_workspace_view and workspace_theme_summary and workspace_theme_summary.columns %}
+    <section class="panel">
+        <div class="panel-head">
+            <div class="left">
+                <span class="k">03 · Themes output</span>
+                <h3>Theme summary</h3>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="explore-reports-table">
+                <thead>
+                    <tr>
+                        {% for col in workspace_theme_summary.columns %}
+                            <th>{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in workspace_theme_summary.rows %}
+                        <tr>
+                            {% for cell in row %}
+                                <td>{{ cell|default:"-" }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if is_workspace_view %}
+    <details class="panel">
+        <summary class="panel-head" style="cursor:pointer; list-style:none;">
+            <div class="left">
+                <span class="k">Run details</span>
+                <h3>Troubleshooting and support payload</h3>
+            </div>
+        </summary>
+        <div class="stack-sm" style="padding-top:10px;">
+            {% for run in workspace_debug_runs %}
+                <section class="card">
+                    <p><strong>{{ run.type|upper }}</strong> · {{ run.status }} · <a href="{% url 'workbook-run-detail' workbook_id=workspace_id run_id=run.id %}">{{ run.id }}</a></p>
+                    <p>Queued: {{ run.queued_at|date:"Y-m-d H:i:s" }} · Started: {{ run.started_at|date:"Y-m-d H:i:s"|default:"-" }} · Finished: {{ run.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</p>
+                    {% if run.worker_id %}<p>Worker: {{ run.worker_id }}</p>{% endif %}
+                    {% if run.error_code or run.error_message %}
+                        <p>Error code: {{ run.error_code|default:"-" }}</p>
+                        <p>Error message: {{ run.error_message|default:"-" }}</p>
+                    {% endif %}
+                    <details>
+                        <summary>Input config JSON</summary>
+                        <pre>{{ run.input_config_json }}</pre>
+                    </details>
+                </section>
+            {% empty %}
+                <p class="page-subtitle">No runs recorded yet.</p>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
 
     {% if not dataset_available %}
     <section class="panel">

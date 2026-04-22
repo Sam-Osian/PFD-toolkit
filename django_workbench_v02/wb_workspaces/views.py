@@ -1,18 +1,52 @@
+from datetime import timedelta
+import csv
+import json
+from io import StringIO, TextIOWrapper
+
+import pandas as pd
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
+from accounts.views import (
+    EXPLORE_REPORTS_PAGE_SIZE,
+    _coerce_positive_int,
+    _explore_column_label,
+    _explore_ordered_columns,
+    _explore_report_rows,
+    _explore_shared_querydict,
+)
 from wb_investigations.models import Investigation
-from wb_runs.models import InvestigationRun, RunStatus
+from wb_collections.services import (
+    _network_truthy,
+    _split_receivers,
+    _theme_collection_map_from_reports,
+    build_explore_metrics,
+    reports_for_collection,
+)
+from wb_runs.artifact_storage import ArtifactStorageError, open_artifact_for_download
+from wb_runs.models import (
+    ArtifactStatus,
+    ArtifactType,
+    InvestigationRun,
+    RunArtifact,
+    RunStatus,
+    RunType,
+    RunWorkerHeartbeat,
+)
 from wb_sharing.forms import ShareLinkCreateForm
 from wb_sharing.models import ShareMode, WorkspaceShareLink
 
 from .activity import is_human_view_request, should_update_last_viewed
 from .forms import (
+    ActiveLLMCredentialDeleteForm,
     ActiveLLMConfigForm,
     WorkspaceCreateForm,
     WorkspaceCredentialDeleteForm,
@@ -39,6 +73,7 @@ from .services import (
     WorkspaceReportExclusionError,
     add_workspace_member,
     create_workspace_for_user,
+    delete_user_llm_credential,
     delete_workspace_credential,
     delete_workspace_immediately,
     get_active_workspace_for_user,
@@ -95,6 +130,232 @@ def _pipeline_status_for_run(run: InvestigationRun | None) -> str:
     if run.status == RunStatus.SUCCEEDED:
         return "complete"
     return ""
+
+
+def _worker_health() -> tuple[bool, str]:
+    stale_seconds = max(1, int(getattr(settings, "WORKER_HEARTBEAT_STALE_SECONDS", 120)))
+    threshold = timezone.now() - timedelta(seconds=stale_seconds)
+    latest = RunWorkerHeartbeat.objects.order_by("-last_seen_at").first()
+    if latest is None:
+        return (
+            False,
+            "Worker offline: runs will stay queued until `run_runs_worker` is running.",
+        )
+    if latest.last_seen_at < threshold:
+        return (
+            False,
+            "Worker heartbeat is stale: restart `run_runs_worker` to process queued runs.",
+        )
+    return (True, f"Worker online ({latest.worker_id}).")
+
+
+def _artifact_preview(artifact: RunArtifact | None, *, max_rows: int = 10) -> dict:
+    empty = {"columns": [], "rows": [], "error": "", "row_count": 0}
+    if artifact is None:
+        return empty
+    try:
+        file_obj, _ = open_artifact_for_download(artifact)
+    except ArtifactStorageError as exc:
+        return {**empty, "error": str(exc)}
+
+    columns: list[str] = []
+    rows: list[list[str]] = []
+    row_count = 0
+    try:
+        if hasattr(file_obj, "readable") and not isinstance(file_obj, TextIOWrapper):
+            text_stream = TextIOWrapper(file_obj, encoding="utf-8", errors="replace")
+        else:
+            text_stream = file_obj
+        reader = csv.reader(text_stream)
+        for idx, row in enumerate(reader):
+            if idx == 0:
+                columns = [str(cell or "").strip() for cell in row]
+                continue
+            row_count += 1
+            if len(rows) < max_rows:
+                rows.append([str(cell or "").strip() for cell in row])
+    except Exception as exc:
+        return {**empty, "error": f"Could not read artifact preview: {exc}"}
+    finally:
+        try:
+            file_obj.close()
+        except Exception:
+            pass
+    return {"columns": columns, "rows": rows, "error": "", "row_count": row_count}
+
+
+def _artifact_dataframe(artifact: RunArtifact | None) -> pd.DataFrame:
+    if artifact is None:
+        return pd.DataFrame()
+    try:
+        file_obj, _ = open_artifact_for_download(artifact)
+    except ArtifactStorageError:
+        return pd.DataFrame()
+    try:
+        return pd.read_csv(file_obj)
+    except Exception:
+        return pd.DataFrame()
+    finally:
+        try:
+            file_obj.close()
+        except Exception:
+            pass
+
+
+def _pipeline_dashboard_context(*, workspace: Workspace, request) -> dict:
+    investigation = Investigation.objects.filter(workspace=workspace).first()
+    runs = list(
+        InvestigationRun.objects.filter(workspace=workspace)
+        .select_related("investigation")
+        .order_by("-created_at")
+    )
+    latest_run = runs[0] if runs else None
+    latest_success = next((run for run in runs if run.status == RunStatus.SUCCEEDED), None)
+
+    def latest_artifact(artifact_type: str) -> RunArtifact | None:
+        return (
+            RunArtifact.objects.filter(
+                workspace=workspace,
+                status=ArtifactStatus.READY,
+                artifact_type=artifact_type,
+            )
+            .order_by("-created_at")
+            .first()
+        )
+
+    filtered_artifact = latest_artifact(ArtifactType.FILTERED_DATASET)
+    theme_summary_artifact = latest_artifact(ArtifactType.THEME_SUMMARY)
+    extraction_artifact = latest_artifact(ArtifactType.EXTRACTION_TABLE)
+
+    filtered_meta = filtered_artifact.metadata_json if filtered_artifact and isinstance(filtered_artifact.metadata_json, dict) else {}
+    theme_meta = theme_summary_artifact.metadata_json if theme_summary_artifact and isinstance(theme_summary_artifact.metadata_json, dict) else {}
+    extract_meta = extraction_artifact.metadata_json if extraction_artifact and isinstance(extraction_artifact.metadata_json, dict) else {}
+
+    filtered_preview = _artifact_preview(filtered_artifact)
+    theme_preview = _artifact_preview(theme_summary_artifact)
+    extract_preview = _artifact_preview(extraction_artifact)
+    filtered_df = _artifact_dataframe(filtered_artifact)
+
+    reports_count = int(filtered_meta.get("matched_reports") or filtered_preview["row_count"] or 0)
+    themes_count = int(theme_meta.get("discovered_themes") or theme_preview["row_count"] or 0)
+    extract_rows = int(extract_meta.get("output_reports") or extract_preview["row_count"] or 0)
+    if not filtered_df.empty:
+        reports_count = int(len(filtered_df))
+
+    latest_filter_run = next((run for run in runs if run.run_type == "filter"), None)
+    search_query = ""
+    if latest_filter_run and isinstance(latest_filter_run.input_config_json, dict):
+        search_query = str(latest_filter_run.input_config_json.get("search_query") or "").strip()
+
+    if filtered_df.empty:
+        explore = {
+            "query": search_query,
+            "has_query": bool(search_query),
+            "total_reports": 0,
+            "scope_reports": 0,
+            "date_range_label": "Date range unavailable",
+            "scope_label": "Filtered pipeline result",
+            "top_areas": [],
+            "top_receivers": [],
+            "top_themes": [],
+            "temporal_line_path": "",
+            "temporal_area_path": "",
+            "temporal_axis_labels": [],
+            "temporal_start_label": "",
+            "temporal_end_label": "",
+            "temporal_series": {"month": {"points": []}},
+            "unique_receiver_count": 0,
+            "most_common_theme": "No theme signals",
+        }
+    else:
+        explore = build_explore_metrics(
+            reports_df=filtered_df,
+            scoped_reports_df=filtered_df,
+            query=search_query,
+        )
+        explore["scope_label"] = "Filtered pipeline result"
+
+    requested_page = _coerce_positive_int(request.GET.get("page"), default=1)
+    reports_columns: list[str] = []
+    reports_rows: list[dict[str, object]] = []
+    reports_total = int(len(filtered_df))
+    reports_total_pages = 1
+    reports_page_from = 0
+    reports_page_to = 0
+    reports_prev_page = None
+    reports_next_page = None
+    reports_page = 1
+    if reports_total > 0:
+        reports_columns = _explore_ordered_columns(filtered_df)
+        ordered_column_labels = [_explore_column_label(column_name) for column_name in reports_columns]
+        display_df = filtered_df.copy()
+        if "date" in display_df.columns:
+            display_df["_sort_date"] = pd.to_datetime(
+                display_df.get("date", pd.Series(dtype="object")),
+                errors="coerce",
+                dayfirst=True,
+            )
+            display_df = display_df.sort_values(
+                by=["_sort_date"],
+                ascending=False,
+                na_position="last",
+            ).drop(columns=["_sort_date"], errors="ignore")
+
+        reports_total_pages = max(1, int((reports_total + EXPLORE_REPORTS_PAGE_SIZE - 1) / EXPLORE_REPORTS_PAGE_SIZE))
+        reports_page = max(1, min(requested_page, reports_total_pages))
+        start_index = (reports_page - 1) * EXPLORE_REPORTS_PAGE_SIZE
+        end_index = min(start_index + EXPLORE_REPORTS_PAGE_SIZE, reports_total)
+        page_df = display_df.iloc[start_index:end_index].copy()
+        reports_rows = _explore_report_rows(reports_df=page_df, ordered_columns=reports_columns)
+        reports_columns = ordered_column_labels
+        reports_page_from = start_index + 1
+        reports_page_to = end_index
+        reports_prev_page = reports_page - 1 if reports_page > 1 else None
+        reports_next_page = reports_page + 1 if reports_page < reports_total_pages else None
+
+    run_detail_items = []
+    for run in runs[:12]:
+        run_detail_items.append(
+            {
+                "id": str(run.id),
+                "status": run.status,
+                "type": run.run_type,
+                "queued_at": run.queued_at,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "worker_id": run.worker_id,
+                "error_code": run.error_code,
+                "error_message": run.error_message,
+                "input_config_json": json.dumps(run.input_config_json or {}, indent=2, sort_keys=True),
+            }
+        )
+
+    return {
+        "workspace": workspace,
+        "investigation": investigation,
+        "latest_run": latest_run,
+        "latest_success": latest_success,
+        "runs": runs[:8],
+        "reports_count": reports_count,
+        "themes_count": themes_count,
+        "extract_rows": extract_rows,
+        "filtered_preview": filtered_preview,
+        "themes_preview": theme_preview,
+        "extract_preview": extract_preview,
+        "has_results": bool(filtered_artifact or theme_summary_artifact or extraction_artifact),
+        "explore": explore,
+        "reports_columns": reports_columns,
+        "reports_rows": reports_rows,
+        "reports_count": reports_total,
+        "reports_page": reports_page,
+        "reports_total_pages": reports_total_pages,
+        "reports_page_from": reports_page_from,
+        "reports_page_to": reports_page_to,
+        "reports_prev_page": reports_prev_page,
+        "reports_next_page": reports_next_page,
+        "debug_runs": run_detail_items,
+        "search_query": search_query,
+    }
 
 
 @require_http_methods(["GET", "POST"])
@@ -154,6 +415,8 @@ def dashboard(request):
 
     for row in dashboard_rows:
         run = latest_run_by_workspace_id.get(str(row["workspace"].id))
+        row["latest_run"] = run
+        row["latest_investigation_id"] = str(run.investigation_id) if run else ""
         if run:
             stage_label = RUN_TYPE_LABELS.get(str(run.run_type), str(run.run_type).title())
             row["pipeline_state"] = _pipeline_status_for_run(run)
@@ -176,6 +439,8 @@ def dashboard(request):
                 break
     active_workspace_id = str(active_workspace.id) if active_workspace is not None else ""
 
+    worker_ready, worker_status_message = _worker_health()
+
     return render(
         request,
         "wb_workspaces/dashboard.html",
@@ -184,8 +449,443 @@ def dashboard(request):
             "active_rows": [row for row in dashboard_rows if not row["is_archived"]],
             "archived_rows": [row for row in dashboard_rows if row["is_archived"]],
             "active_workspace_id": active_workspace_id,
+            "worker_ready": worker_ready,
+            "worker_status_message": worker_status_message,
         },
     )
+
+
+def _dedupe_values(raw_values: list[str]) -> list[str]:
+    values: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_values:
+        cleaned = str(raw or "").strip()
+        if not cleaned:
+            continue
+        lowered = cleaned.casefold()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        values.append(cleaned)
+    return values
+
+
+def _workspace_explore_params(request) -> dict[str, object]:
+    return {
+        "query": str(request.GET.get("q") or "").strip(),
+        "selected_receivers": _dedupe_values(request.GET.getlist("receiver")),
+        "selected_areas": _dedupe_values(request.GET.getlist("area")),
+        "date_start_raw": str(request.GET.get("date_start") or "").strip(),
+        "date_end_raw": str(request.GET.get("date_end") or "").strip(),
+    }
+
+
+def _latest_workspace_artifact(*, workspace: Workspace, artifact_type: str) -> RunArtifact | None:
+    return (
+        RunArtifact.objects.filter(
+            workspace=workspace,
+            status=ArtifactStatus.READY,
+            artifact_type=artifact_type,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _workspace_dataset_artifact(*, workspace: Workspace) -> RunArtifact | None:
+    return (
+        RunArtifact.objects.filter(
+            workspace=workspace,
+            status=ArtifactStatus.READY,
+            artifact_type__in=(
+                ArtifactType.EXTRACTION_TABLE,
+                ArtifactType.THEME_ASSIGNMENTS,
+                ArtifactType.FILTERED_DATASET,
+            ),
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def _pipeline_theme_column_allowlist(*, workspace: Workspace) -> set[str]:
+    theme_summary_artifact = _latest_workspace_artifact(
+        workspace=workspace,
+        artifact_type=ArtifactType.THEME_SUMMARY,
+    )
+    summary_df = _artifact_dataframe(theme_summary_artifact)
+    if summary_df.empty or "theme" not in summary_df.columns:
+        return set()
+    allowlist: set[str] = set()
+    for raw in summary_df["theme"].tolist():
+        cleaned = str(raw or "").strip()
+        if not cleaned:
+            continue
+        allowlist.add(cleaned)
+        allowlist.add(cleaned.casefold())
+        if not cleaned.startswith("theme_"):
+            allowlist.add(f"theme_{cleaned}")
+            allowlist.add(f"theme_{cleaned}".casefold())
+    return allowlist
+
+
+def _pipeline_theme_label_map(*, workspace: Workspace) -> dict[str, str]:
+    theme_summary_artifact = _latest_workspace_artifact(
+        workspace=workspace,
+        artifact_type=ArtifactType.THEME_SUMMARY,
+    )
+    summary_df = _artifact_dataframe(theme_summary_artifact)
+    if summary_df.empty or "theme" not in summary_df.columns:
+        return {}
+    label_map: dict[str, str] = {}
+    for raw in summary_df["theme"].tolist():
+        cleaned = str(raw or "").strip()
+        if not cleaned:
+            continue
+        normalized = cleaned.casefold()
+        prefixed = cleaned if cleaned.startswith("theme_") else f"theme_{cleaned}"
+        label = cleaned
+        label_map[cleaned] = label
+        label_map[normalized] = label
+        label_map[prefixed] = label
+        label_map[prefixed.casefold()] = label
+    return label_map
+
+
+def _prune_non_pipeline_theme_columns(*, workspace: Workspace, reports_df: pd.DataFrame) -> pd.DataFrame:
+    if reports_df.empty:
+        return reports_df
+    theme_columns = [str(column) for column in reports_df.columns if str(column).startswith("theme_")]
+    if not theme_columns:
+        return reports_df
+    allowlist = _pipeline_theme_column_allowlist(workspace=workspace)
+    if not allowlist:
+        return reports_df.drop(columns=theme_columns, errors="ignore")
+
+    drop_columns = [
+        column
+        for column in theme_columns
+        if column not in allowlist and column.casefold() not in allowlist
+    ]
+    if not drop_columns:
+        return reports_df
+    return reports_df.drop(columns=drop_columns, errors="ignore")
+
+
+def _theme_rows_from_pipeline_scope(*, workspace: Workspace, scoped_reports: pd.DataFrame) -> list[tuple[str, int]]:
+    if scoped_reports.empty:
+        return []
+    label_map = _pipeline_theme_label_map(workspace=workspace)
+    rows: list[tuple[str, int]] = []
+    for column in scoped_reports.columns:
+        column_name = str(column or "").strip()
+        if not column_name.startswith("theme_"):
+            continue
+        count = int(scoped_reports[column_name].map(_network_truthy).sum())
+        if count <= 0:
+            continue
+        default_label = column_name.replace("theme_", "").replace("_", " ").strip().title()
+        label = (
+            label_map.get(column_name)
+            or label_map.get(column_name.casefold())
+            or label_map.get(column_name.replace("theme_", ""))
+            or label_map.get(column_name.replace("theme_", "").casefold())
+            or default_label
+        )
+        rows.append((str(label), count))
+    rows.sort(key=lambda item: (-int(item[1]), str(item[0]).casefold()))
+    return rows
+
+
+def _theme_rows_from_generic_scope(*, reports_df: pd.DataFrame, scoped_reports: pd.DataFrame) -> list[tuple[str, int]]:
+    if reports_df.empty or scoped_reports.empty:
+        return []
+    rows: list[tuple[str, int]] = []
+    for _, meta in _theme_collection_map_from_reports(reports_df).items():
+        column_name = str(meta.get("collection_column") or "").strip()
+        if not column_name or column_name not in scoped_reports.columns:
+            continue
+        count = int(scoped_reports[column_name].map(_network_truthy).sum())
+        if count <= 0:
+            continue
+        title = str(meta.get("title") or column_name.replace("_", " ").title())
+        rows.append((title, count))
+    rows.sort(key=lambda item: (-int(item[1]), str(item[0]).casefold()))
+    return rows
+
+
+def _workspace_ordered_columns(filtered_reports: pd.DataFrame) -> list[str]:
+    preferred_columns = (
+        "id",
+        "url",
+        "date",
+        "coroner",
+        "area",
+        "receiver",
+        "title",
+        "investigation",
+        "circumstances",
+        "concerns",
+        "actions",
+        "response",
+        "response_date",
+    )
+    internal_exact = {"_score", "__report_identity"}
+    ordered_columns: list[str] = []
+    for column in preferred_columns:
+        if column in filtered_reports.columns and column not in ordered_columns:
+            ordered_columns.append(column)
+    for column in filtered_reports.columns:
+        name = str(column)
+        if name in internal_exact or name.startswith("collection_"):
+            continue
+        if name not in ordered_columns:
+            ordered_columns.append(name)
+    return ordered_columns
+
+
+def _workspace_build_explore_payload(*, workspace: Workspace, request):
+    params = _workspace_explore_params(request)
+    base_artifact = _workspace_dataset_artifact(workspace=workspace)
+    base_df_raw = _artifact_dataframe(base_artifact)
+    base_df = _prune_non_pipeline_theme_columns(workspace=workspace, reports_df=base_df_raw)
+    dataset_available = base_artifact is not None
+    if base_df.empty:
+        explore = {
+            "query": str(params["query"]),
+            "has_query": bool(params["query"]),
+            "total_reports": 0,
+            "scope_reports": 0,
+            "date_range_label": "Date range unavailable",
+            "scope_label": "Workspace pipeline results",
+            "top_areas": [],
+            "top_receivers": [],
+            "top_themes": [],
+            "selected_ai_filter": "custom",
+            "selected_ai_filter_title": workspace.title,
+            "selected_receivers": list(params["selected_receivers"]),
+            "selected_areas": list(params["selected_areas"]),
+            "date_start": str(params["date_start_raw"]),
+            "date_end": str(params["date_end_raw"]),
+            "ai_filter_options": [],
+            "receiver_options": [],
+            "area_options": [],
+            "all_areas": [],
+            "all_receivers": [],
+            "all_themes": [],
+            "temporal_line_path": "",
+            "temporal_area_path": "",
+            "temporal_axis_labels": [],
+            "temporal_start_label": "",
+            "temporal_end_label": "",
+            "temporal_series": {"month": {"points": []}},
+            "unique_receiver_count": 0,
+            "most_common_theme": "No theme signals",
+            "dataset_min_date": "",
+            "dataset_max_date": timezone.now().date().isoformat(),
+            "date_start_effective": "",
+            "date_end_effective": timezone.now().date().isoformat(),
+        }
+        return {"dataset_available": dataset_available, "explore": explore, "scoped_reports": base_df}
+
+    scoped_reports = reports_for_collection(
+        reports_df=base_df,
+        collection_slug="custom",
+        query=str(params["query"]),
+        selected_filters={
+            "coroner": [],
+            "area": list(params["selected_areas"]),
+            "receiver": list(params["selected_receivers"]),
+        },
+    )
+
+    date_start_raw = str(params["date_start_raw"])
+    date_end_raw = str(params["date_end_raw"])
+    if date_start_raw or date_end_raw:
+        date_series = pd.to_datetime(
+            scoped_reports.get("date", pd.Series(dtype="object")),
+            errors="coerce",
+            dayfirst=True,
+        )
+        mask = pd.Series(True, index=scoped_reports.index)
+        if date_start_raw:
+            start_ts = pd.to_datetime(date_start_raw, errors="coerce")
+            if pd.notna(start_ts):
+                mask = mask & (date_series >= start_ts)
+        if date_end_raw:
+            end_ts = pd.to_datetime(date_end_raw, errors="coerce")
+            if pd.notna(end_ts):
+                mask = mask & (date_series <= end_ts)
+        scoped_reports = scoped_reports.loc[mask].reset_index(drop=True)
+
+    explore = build_explore_metrics(reports_df=base_df, scoped_reports_df=scoped_reports, query=str(params["query"]))
+    scope_area_counts = (
+        scoped_reports.get("area", pd.Series(dtype="object"))
+        .map(lambda value: str(value or "").strip())
+        .loc[lambda series: series != ""]
+        .value_counts()
+    )
+    scope_receiver_counter: dict[str, int] = {}
+    for raw in scoped_reports.get("receiver", pd.Series(dtype="object")).tolist():
+        for receiver in _split_receivers(raw):
+            if receiver:
+                scope_receiver_counter[receiver] = scope_receiver_counter.get(receiver, 0) + 1
+
+    latest_filter_run = (
+        InvestigationRun.objects.filter(
+            workspace=workspace,
+            run_type=RunType.FILTER,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+    latest_filter_config = (
+        latest_filter_run.input_config_json
+        if latest_filter_run and isinstance(latest_filter_run.input_config_json, dict)
+        else {}
+    )
+    pipeline_themes_selected = bool(latest_filter_config.get("run_themes", False))
+
+    if pipeline_themes_selected:
+        scope_theme_rows = _theme_rows_from_pipeline_scope(
+            workspace=workspace,
+            scoped_reports=scoped_reports,
+        )
+    else:
+        scope_theme_rows = _theme_rows_from_generic_scope(
+            reports_df=base_df_raw,
+            scoped_reports=scoped_reports,
+        )
+
+    top_theme_rows = scope_theme_rows[:8]
+    top_theme_denominator = max(1, top_theme_rows[0][1]) if top_theme_rows else 1
+    top_themes = [
+        {
+            "label": str(label),
+            "count": int(count),
+            "percent_of_top": int(round((int(count) / float(top_theme_denominator)) * 100)),
+        }
+        for label, count in top_theme_rows
+    ]
+    all_themes = [{"label": str(label), "count": int(count)} for label, count in scope_theme_rows]
+    receiver_counter: dict[str, int] = {}
+    for raw in base_df.get("receiver", []):
+        for receiver in _split_receivers(raw):
+            receiver_counter[receiver] = receiver_counter.get(receiver, 0) + 1
+    area_values = {
+        str(value or "").strip()
+        for value in base_df.get("area", [])
+        if str(value or "").strip()
+    }
+    dataset_date_series = pd.to_datetime(
+        base_df.get("date", pd.Series(dtype="object")),
+        errors="coerce",
+        dayfirst=True,
+    ).dropna()
+    default_start = dataset_date_series.min().date().isoformat() if not dataset_date_series.empty else ""
+    default_end = timezone.now().date().isoformat()
+    explore.update(
+        {
+            "selected_ai_filter": "custom",
+            "selected_ai_filter_title": workspace.title,
+            "selected_receivers": list(params["selected_receivers"]),
+            "selected_areas": list(params["selected_areas"]),
+            "date_start": date_start_raw,
+            "date_end": date_end_raw,
+            "ai_filter_options": [],
+            "receiver_options": sorted(receiver_counter.keys(), key=lambda value: value.casefold()),
+            "area_options": sorted(area_values, key=lambda value: value.casefold()),
+            "dataset_min_date": default_start,
+            "dataset_max_date": default_end,
+            "date_start_effective": date_start_raw or default_start,
+            "date_end_effective": date_end_raw or default_end,
+            "scope_label": "Workspace pipeline results",
+            "all_areas": [
+                {"label": str(label), "count": int(count)}
+                for label, count in scope_area_counts.items()
+            ],
+            "all_receivers": [
+                {"label": str(label), "count": int(count)}
+                for label, count in sorted(
+                    scope_receiver_counter.items(),
+                    key=lambda item: (-int(item[1]), str(item[0]).casefold()),
+                )
+            ],
+            "all_themes": all_themes,
+            "top_themes": top_themes,
+            "most_common_theme": top_themes[0]["label"] if top_themes else "No theme signals",
+        }
+    )
+    return {"dataset_available": dataset_available, "explore": explore, "scoped_reports": scoped_reports}
+
+
+def _workspace_reports_panel_context(*, workspace: Workspace, request) -> dict:
+    payload = _workspace_build_explore_payload(workspace=workspace, request=request)
+    dataset_available = bool(payload["dataset_available"])
+    explore_data = payload["explore"]
+    scoped_reports: pd.DataFrame = payload["scoped_reports"]
+
+    ordered_columns: list[str] = []
+    ordered_column_labels: list[str] = []
+    rows: list[dict[str, object]] = []
+    reports_count = int(len(scoped_reports))
+    page = _coerce_positive_int(request.GET.get("page"), default=1)
+    total_pages = 1
+    page_from = 0
+    page_to = 0
+    prev_page: int | None = None
+    next_page: int | None = None
+    if dataset_available and reports_count > 0:
+        ordered_columns = _workspace_ordered_columns(scoped_reports)
+        ordered_column_labels = [_explore_column_label(column_name) for column_name in ordered_columns]
+        display_df = scoped_reports.copy()
+        if "date" in display_df.columns:
+            display_df["_sort_date"] = pd.to_datetime(
+                display_df.get("date", pd.Series(dtype="object")),
+                errors="coerce",
+                dayfirst=True,
+            )
+            display_df = display_df.sort_values(
+                by=["_sort_date"],
+                ascending=False,
+                na_position="last",
+            ).drop(columns=["_sort_date"], errors="ignore")
+        total_pages = max(1, int((reports_count + EXPLORE_REPORTS_PAGE_SIZE - 1) / EXPLORE_REPORTS_PAGE_SIZE))
+        page = max(1, min(page, total_pages))
+        start_index = (page - 1) * EXPLORE_REPORTS_PAGE_SIZE
+        end_index = min(start_index + EXPLORE_REPORTS_PAGE_SIZE, reports_count)
+        page_df = display_df.iloc[start_index:end_index].copy()
+        rows = _explore_report_rows(reports_df=page_df, ordered_columns=ordered_columns)
+        page_from = start_index + 1 if reports_count else 0
+        page_to = end_index
+        prev_page = page - 1 if page > 1 else None
+        next_page = page + 1 if page < total_pages else None
+
+    shared_query = _explore_shared_querydict(
+        query=str(explore_data.get("query") or ""),
+        ai_filter="",
+        date_start=str(explore_data.get("date_start") or ""),
+        date_end=str(explore_data.get("date_end") or ""),
+        selected_receivers=list(explore_data.get("selected_receivers") or []),
+        selected_areas=list(explore_data.get("selected_areas") or []),
+    ).urlencode()
+
+    return {
+        "dataset_available": dataset_available,
+        "reports_columns": ordered_column_labels,
+        "reports_rows": rows,
+        "reports_count": reports_count,
+        "reports_page": page,
+        "reports_total_pages": total_pages,
+        "reports_page_from": page_from,
+        "reports_page_to": page_to,
+        "reports_prev_page": prev_page,
+        "reports_next_page": next_page,
+        "dataset_panel_base": reverse("workbook-reports-panel", kwargs={"workbook_id": workspace.id}),
+        "dataset_browser_base": reverse("workbook-open", kwargs={"workbook_id": workspace.id}),
+        "dataset_shared_query": shared_query,
+        "scope_label": "workspace pipeline",
+    }
 
 
 @login_required
@@ -204,6 +904,118 @@ def activate_workspace(request, workbook_id):
     if next_url.startswith("/"):
         return redirect(next_url)
     return redirect("workbook-dashboard")
+
+
+@login_required
+@require_GET
+def open_workspace(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    if not can_view_workspace(request.user, workspace):
+        raise PermissionDenied("You do not have access to this workbook.")
+    try:
+        set_active_workspace_for_user(user=request.user, workspace=workspace, request=request)
+    except WorkspaceLifecycleError as exc:
+        messages.error(request, str(exc))
+        return redirect("workbook-dashboard")
+    payload = _workspace_build_explore_payload(workspace=workspace, request=request)
+    explore_data = payload["explore"]
+    dataset_available = bool(payload["dataset_available"])
+
+    show_reports_requested = True
+    panel_query = _explore_shared_querydict(
+        query=str(explore_data.get("query") or ""),
+        ai_filter="",
+        date_start=str(explore_data.get("date_start") or ""),
+        date_end=str(explore_data.get("date_end") or ""),
+        selected_receivers=list(explore_data.get("selected_receivers") or []),
+        selected_areas=list(explore_data.get("selected_areas") or []),
+        page=_coerce_positive_int(request.GET.get("page"), default=1),
+    )
+    panel_base = reverse("workbook-reports-panel", kwargs={"workbook_id": workspace.id})
+    panel_url = f"{panel_base}?{panel_query.urlencode()}" if panel_query else panel_base
+
+    runs = list(
+        InvestigationRun.objects.filter(workspace=workspace)
+        .select_related("investigation")
+        .order_by("-created_at")
+    )
+    latest_run = runs[0] if runs else None
+    investigation = Investigation.objects.filter(workspace=workspace).first()
+    theme_summary_artifact = _latest_workspace_artifact(workspace=workspace, artifact_type=ArtifactType.THEME_SUMMARY)
+    theme_summary_preview = _artifact_preview(theme_summary_artifact)
+    run_detail_items = []
+    for run in runs[:15]:
+        run_detail_items.append(
+            {
+                "id": str(run.id),
+                "status": run.status,
+                "type": run.run_type,
+                "queued_at": run.queued_at,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "worker_id": run.worker_id,
+                "error_code": run.error_code,
+                "error_message": run.error_message,
+                "input_config_json": json.dumps(run.input_config_json or {}, indent=2, sort_keys=True),
+            }
+        )
+
+    return render(
+        request,
+        "accounts/explore.html",
+        {
+            "explore": explore_data,
+            "dataset_available": dataset_available,
+            "explore_reports_panel_url": panel_url,
+            "show_reports_requested": show_reports_requested and dataset_available,
+            "is_collection_view": True,
+            "is_workspace_view": True,
+            "collection": {"title": workspace.title, "description": workspace.description},
+            "collection_slug": f"workspace-{workspace.id}",
+            "collection_title": workspace.title,
+            "collection_description": str(workspace.description or "").strip(),
+            "filter_action_url": reverse("workbook-open", kwargs={"workbook_id": workspace.id}),
+            "filter_reset_url": reverse("workbook-open", kwargs={"workbook_id": workspace.id}),
+            "explore_export_url": reverse("workbook-export-csv", kwargs={"workbook_id": workspace.id}),
+            "workspace_id": str(workspace.id),
+            "workspace_investigation": investigation,
+            "workspace_latest_run": latest_run,
+            "workspace_theme_summary": theme_summary_preview,
+            "workspace_debug_runs": run_detail_items,
+        },
+    )
+
+
+@login_required
+@require_GET
+def workspace_reports_panel(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    if not can_view_workspace(request.user, workspace):
+        raise PermissionDenied("You do not have access to this workbook.")
+    context = _workspace_reports_panel_context(workspace=workspace, request=request)
+    return render(request, "accounts/_explore_reports_panel.html", context)
+
+
+@login_required
+@require_GET
+def workspace_export_csv(request, workbook_id):
+    workspace = get_object_or_404(Workspace, id=workbook_id)
+    if not can_view_workspace(request.user, workspace):
+        raise PermissionDenied("You do not have access to this workbook.")
+
+    payload = _workspace_build_explore_payload(workspace=workspace, request=request)
+    scoped_reports: pd.DataFrame = payload["scoped_reports"]
+    if scoped_reports.empty:
+        return HttpResponseBadRequest("No workspace reports available for export.")
+
+    ordered_columns = _workspace_ordered_columns(scoped_reports)
+    export_df = scoped_reports[ordered_columns].copy() if ordered_columns else scoped_reports.copy()
+    buffer = StringIO()
+    export_df.to_csv(buffer, index=False)
+    response = HttpResponse(buffer.getvalue(), content_type="text/csv; charset=utf-8")
+    slug = str(workspace.slug or workspace.title or "workspace").strip().replace(" ", "-").lower()
+    response["Content-Disposition"] = f'attachment; filename="{slug}-pipeline-reports.csv"'
+    return response
 
 
 @login_required
@@ -549,6 +1361,31 @@ def save_active_llm_config(request):
             messages.success(request, "LLM config and credential saved.")
         else:
             messages.success(request, "LLM config saved.")
+
+    if next_url.startswith("/"):
+        return redirect(next_url)
+    return redirect("llm-config")
+
+
+@login_required
+@require_POST
+def clear_active_llm_credential(request):
+    form = ActiveLLMCredentialDeleteForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Invalid credential delete submission.")
+        return redirect("llm-config")
+
+    provider = str(form.cleaned_data.get("provider") or "openai").strip().lower()
+    next_url = str(form.cleaned_data.get("next_url") or "").strip()
+    deleted = delete_user_llm_credential(
+        actor=request.user,
+        provider=provider,
+        request=request,
+    )
+    if deleted:
+        messages.success(request, f"Cleared {provider} credential from your account defaults.")
+    else:
+        messages.warning(request, f"No saved {provider} credential was found.")
 
     if next_url.startswith("/"):
         return redirect(next_url)

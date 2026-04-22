@@ -503,6 +503,20 @@ def _key_last4(api_key: str) -> str:
     return compact[-4:]
 
 
+def _validate_api_key_format(*, provider: str, api_key: str) -> None:
+    compact = str(api_key or "").strip()
+    if not compact:
+        raise WorkspaceCredentialValidationError("API key is required.")
+    if provider == WorkspaceLLMProvider.OPENAI and not compact.startswith("sk-"):
+        raise WorkspaceCredentialValidationError(
+            "OpenAI API keys must start with 'sk-'. Please paste a valid OpenAI API key."
+        )
+    if provider == WorkspaceLLMProvider.OPENROUTER and not compact.startswith("sk-or-"):
+        raise WorkspaceCredentialValidationError(
+            "OpenRouter API keys must start with 'sk-or-'. Please paste a valid OpenRouter API key."
+        )
+
+
 def _normalise_model_name(model_name: str) -> str:
     cleaned = str(model_name or "").strip()
     return cleaned or "gpt-4.1-mini"
@@ -526,9 +540,8 @@ def upsert_workspace_credential(
     base_url: str = "",
     request=None,
 ) -> WorkspaceCredential:
-    if not api_key or not str(api_key).strip():
-        raise WorkspaceCredentialValidationError("API key is required.")
     resolved_provider = _normalise_provider(provider)
+    _validate_api_key_format(provider=resolved_provider, api_key=str(api_key))
     try:
         encrypted = encrypt_secret(str(api_key))
     except WorkspaceCredentialError as exc:
@@ -681,6 +694,24 @@ def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object
         max_parallel_workers = _normalise_max_parallel_workers(setting.max_parallel_workers)
 
     cred_map = workspace_credential_status_map(user=user, workspace=workspace)
+    credential_last4 = {
+        WorkspaceLLMProvider.OPENAI: "",
+        WorkspaceLLMProvider.OPENROUTER: "",
+    }
+    for provider_key in (WorkspaceLLMProvider.OPENAI, WorkspaceLLMProvider.OPENROUTER):
+        provider_credential = WorkspaceCredential.objects.filter(
+            workspace=workspace,
+            user=user,
+            provider=provider_key,
+        ).first()
+        if provider_credential is None:
+            provider_credential = UserLLMCredential.objects.filter(
+                user=user,
+                provider=provider_key,
+            ).first()
+        if provider_credential is not None:
+            credential_last4[provider_key] = str(provider_credential.key_last4 or "").strip()
+
     provider_credential = WorkspaceCredential.objects.filter(workspace=workspace, user=user, provider=provider).first()
     if provider_credential is None:
         provider_credential = UserLLMCredential.objects.filter(user=user, provider=provider).first()
@@ -690,6 +721,7 @@ def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object
         "max_parallel_workers": max_parallel_workers,
         "has_provider_credential": bool(cred_map.get(provider)),
         "credentials": cred_map,
+        "credential_last4": credential_last4,
         "base_url": str(provider_credential.base_url or "").strip() if provider_credential else "",
     }
 
@@ -784,9 +816,8 @@ def upsert_user_llm_credential(
     base_url: str = "",
     request=None,
 ) -> UserLLMCredential:
-    if not api_key or not str(api_key).strip():
-        raise WorkspaceCredentialValidationError("API key is required.")
     resolved_provider = _normalise_provider(provider)
+    _validate_api_key_format(provider=resolved_provider, api_key=str(api_key))
     try:
         encrypted = encrypt_secret(str(api_key))
     except WorkspaceCredentialError as exc:
@@ -899,6 +930,36 @@ def delete_workspace_credential(
         state_before={"key_last4": key_last4},
         state_after={},
         context={},
+    )
+    return True
+
+
+@transaction.atomic
+def delete_user_llm_credential(
+    *,
+    actor,
+    provider: str,
+    request=None,
+) -> bool:
+    resolved_provider = _normalise_provider(provider)
+    credential = UserLLMCredential.objects.filter(
+        user=actor,
+        provider=resolved_provider,
+    ).first()
+    if credential is None:
+        return False
+
+    credential_id = str(credential.id)
+    key_last4 = credential.key_last4
+    credential.delete()
+    log_audit_event(
+        action_type="user.llm_credential_deleted",
+        target_type="user_llm_credential",
+        target_id=credential_id,
+        workspace=None,
+        user=actor,
+        payload={"provider": resolved_provider, "key_last4": key_last4},
+        request=request,
     )
     return True
 

@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% block page_title %}{{ workspace.title }} · Workspace Results · PFD Toolkit Workbench v0.2{% endblock %}
+
+{% block page_header %}
+<div class="eyebrow"><span class="d"></span>Workspace · {{ explore.scope_reports|default:0 }} reports in view</div>
+{% endblock %}
+
+{% block content %}
+<div class="stack-md">
+    <section class="explore-hero">
+        <div>
+            <h1 class="page-title xl">{{ workspace.title }}</h1>
+            <p class="page-lede big">{{ workspace.description|default:"No description provided." }}</p>
+        </div>
+        <div class="explore-hero-actions">
+            {% if investigation %}
+                <a class="btn btn-secondary" href="{% url 'workbook-investigation-detail' workbook_id=workspace.id investigation_id=investigation.id %}">Open investigation</a>
+            {% endif %}
+            <a class="btn btn-primary" href="{% url 'explore' %}">Global Explore</a>
+        </div>
+    </section>
+
+    <section class="hud">
+        <div class="hud-q">Pipeline scope</div>
+        <div class="hud-chips">
+            <div class="chip-filter readonly"><em>Filter query:</em><b>{{ search_query|default:"Not set" }}</b></div>
+            <div class="chip-filter readonly"><em>Latest status:</em><b>{{ latest_run.status|default:"-" }}</b></div>
+            <div class="chip-filter readonly"><em>Themes rows:</em><b>{{ themes_count }}</b></div>
+            <div class="chip-filter readonly"><em>Extract rows:</em><b>{{ extract_rows }}</b></div>
+        </div>
+        <div class="hud-stats">
+            <div class="hud-stat">
+                <div class="lbl">Reports in view</div>
+                <div class="val">{{ explore.scope_reports|default:0 }}</div>
+            </div>
+            <div class="hud-stat">
+                <div class="lbl">Receiver count</div>
+                <div class="val">{{ explore.unique_receiver_count|default:0 }}</div>
+            </div>
+            <div class="hud-stat">
+                <div class="lbl">Most common receiver</div>
+                <div class="val theme">{{ explore.top_receivers.0.label|default:"No receiver signals" }}</div>
+            </div>
+            <div class="hud-stat">
+                <div class="lbl">Most common theme</div>
+                <div class="val theme">{{ explore.most_common_theme|default:"No theme signals" }}</div>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel" style="margin-bottom: 16px;">
+        <div class="panel-head">
+            <div class="left">
+                <span class="k">01 · Temporal overview</span>
+                <h3>
+                    Reports in view ·
+                    {% if explore.temporal_start_label and explore.temporal_end_label %}
+                        {{ explore.temporal_start_label }} → {{ explore.temporal_end_label }}
+                    {% else %}
+                        Date range unavailable
+                    {% endif %}
+                </h3>
+            </div>
+        </div>
+        {% if explore.temporal_line_path %}
+        <div class="timeline">
+            <svg class="timeline-svg" viewBox="0 0 900 200" preserveAspectRatio="none" role="img" aria-label="Report counts over time">
+                <defs>
+                    <linearGradient id="tl-fill-workspace" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" style="stop-color:var(--accent); stop-opacity:0.3"/>
+                        <stop offset="100%" style="stop-color:var(--accent); stop-opacity:0"/>
+                    </linearGradient>
+                </defs>
+                <g class="axis">
+                    <line class="gl" x1="0" y1="40" x2="900" y2="40"/>
+                    <line class="gl" x1="0" y1="90" x2="900" y2="90"/>
+                    <line class="gl" x1="0" y1="140" x2="900" y2="140"/>
+                </g>
+                <path class="area" d="{{ explore.temporal_area_path }}" fill="url(#tl-fill-workspace)"/>
+                <path class="line" pathLength="100" d="{{ explore.temporal_line_path }}"/>
+            </svg>
+            <div class="tl-labels">
+                {% for label in explore.temporal_axis_labels %}
+                    <span>{{ label }}</span>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <p class="page-subtitle">No temporal data available for current scope.</p>
+        {% endif %}
+    </section>
+
+    <div class="charts-3">
+        <section class="panel">
+            <div class="panel-head">
+                <div class="left"><span class="k">Area</span><h3>Most common areas</h3></div>
+            </div>
+            <ul class="ex-metric-list">
+                {% for item in explore.top_areas %}
+                    <li>
+                        <div class="ex-metric-row">
+                            <span class="lbl">{{ item.label }}</span>
+                            <span class="cnt">{{ item.count }}</span>
+                        </div>
+                        <div class="ex-metric-bar"><i style="--w: {{ item.percent_of_top }}%;"></i></div>
+                    </li>
+                {% empty %}
+                    <li class="empty">No area data for current scope.</li>
+                {% endfor %}
+            </ul>
+        </section>
+        <section class="panel">
+            <div class="panel-head">
+                <div class="left"><span class="k">Receiver</span><h3>Most common receivers</h3></div>
+            </div>
+            <ul class="ex-metric-list">
+                {% for item in explore.top_receivers %}
+                    <li>
+                        <div class="ex-metric-row">
+                            <span class="lbl">{{ item.label }}</span>
+                            <span class="cnt">{{ item.count }}</span>
+                        </div>
+                        <div class="ex-metric-bar"><i style="--w: {{ item.percent_of_top }}%;"></i></div>
+                    </li>
+                {% empty %}
+                    <li class="empty">No receiver data for current scope.</li>
+                {% endfor %}
+            </ul>
+        </section>
+        <section class="panel">
+            <div class="panel-head">
+                <div class="left"><span class="k">Theme</span><h3>Most common themes</h3></div>
+            </div>
+            <ul class="ex-metric-list">
+                {% for item in explore.top_themes %}
+                    <li>
+                        <div class="ex-metric-row">
+                            <span class="lbl">{{ item.label }}</span>
+                            <span class="cnt">{{ item.count }}</span>
+                        </div>
+                        <div class="ex-metric-bar"><i style="--w: {{ item.percent_of_top }}%;"></i></div>
+                    </li>
+                {% empty %}
+                    <li class="empty">No theme signals in current scope.</li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+
+    <section class="panel explore-reports-shell">
+        <div class="panel-head">
+            <div class="left">
+                <span class="k">02 · Report dataset</span>
+                <h3>Pipeline report list</h3>
+            </div>
+        </div>
+        <div class="explore-reports-body">
+            {% if reports_count == 0 %}
+                <p class="page-subtitle">No reports matched this workspace pipeline.</p>
+            {% else %}
+                <div class="table-wrap explore-reports-table-wrap">
+                    <table class="explore-reports-table">
+                        <thead>
+                            <tr>
+                                {% for column in reports_columns %}
+                                    <th>{{ column }}</th>
+                                {% endfor %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in reports_rows %}
+                                <tr>
+                                    {% for cell in row.cells %}
+                                        <td>{{ cell|default:"-" }}</td>
+                                    {% endfor %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="reports-pagination">
+                    <span class="reports-pagination__meta">Showing {{ reports_page_from }}-{{ reports_page_to }} of {{ reports_count }}</span>
+                    <div class="reports-pagination__actions">
+                        {% if reports_page > 1 %}
+                            <a class="btn btn-secondary sm" href="{{ request.path }}?page=1">First</a>
+                        {% else %}
+                            <span class="btn btn-secondary sm is-disabled">First</span>
+                        {% endif %}
+                        {% if reports_prev_page %}
+                            <a class="btn btn-secondary sm" href="{{ request.path }}?page={{ reports_prev_page }}">←</a>
+                        {% else %}
+                            <span class="btn btn-secondary sm is-disabled">←</span>
+                        {% endif %}
+                        <span class="reports-pagination__page">Page {{ reports_page }} of {{ reports_total_pages }}</span>
+                        {% if reports_next_page %}
+                            <a class="btn btn-secondary sm" href="{{ request.path }}?page={{ reports_next_page }}">→</a>
+                        {% else %}
+                            <span class="btn btn-secondary sm is-disabled">→</span>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </section>
+
+    <details class="panel">
+        <summary class="panel-head" style="cursor:pointer; list-style:none;">
+            <div class="left">
+                <span class="k">Run details</span>
+                <h3>Troubleshooting and support payload</h3>
+            </div>
+        </summary>
+        <div class="stack-sm" style="padding-top: 10px;">
+            {% if debug_runs %}
+                {% for run in debug_runs %}
+                    <section class="card">
+                        <p><strong>{{ run.type|upper }}</strong> · {{ run.status }} · <a href="{% url 'workbook-run-detail' workbook_id=workspace.id run_id=run.id %}">{{ run.id }}</a></p>
+                        <p>Queued: {{ run.queued_at|date:"Y-m-d H:i:s" }} · Started: {{ run.started_at|date:"Y-m-d H:i:s"|default:"-" }} · Finished: {{ run.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</p>
+                        {% if run.worker_id %}<p>Worker: {{ run.worker_id }}</p>{% endif %}
+                        {% if run.error_code or run.error_message %}
+                            <p>Error code: {{ run.error_code|default:"-" }}</p>
+                            <p>Error message: {{ run.error_message|default:"-" }}</p>
+                        {% endif %}
+                        <details>
+                            <summary>Input config JSON</summary>
+                            <pre>{{ run.input_config_json }}</pre>
+                        </details>
+                    </section>
+                {% endfor %}
+            {% else %}
+                <p class="page-subtitle">No runs recorded yet.</p>
+            {% endif %}
+        </div>
+    </details>
+</div>
+{% endblock %}
