@@ -39,7 +39,7 @@ sys.modules['openai'] = dummy_openai
 import importlib
 import pfd_toolkit.llm as llm_module
 importlib.reload(llm_module)
-from pfd_toolkit.llm import LLM, _strip_json_markdown
+from pfd_toolkit.llm import LLM, _is_insufficient_quota_error, _strip_json_markdown
 
 
 def test_generate_sequential(monkeypatch):
@@ -190,3 +190,14 @@ def test_call_llm_fallback_missing_field(monkeypatch):
 
     out = llm._call_llm_fallback(None, {"foo": "prompt"})
     assert out == {"foo": str(llm_module.GeneralConfig.NOT_FOUND_TEXT) + " in LLM response"}
+
+
+def test_is_insufficient_quota_error_from_message():
+    exc = Exception("RateLimitError: code=insufficient_quota")
+    assert _is_insufficient_quota_error(exc) is True
+
+
+def test_is_insufficient_quota_error_from_body():
+    exc = Exception("rate limit")
+    exc.body = {"error": {"code": "insufficient_quota", "message": "quota exhausted"}}
+    assert _is_insufficient_quota_error(exc) is True

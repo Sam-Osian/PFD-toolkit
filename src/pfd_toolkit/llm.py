@@ -22,6 +22,51 @@ logging.basicConfig(level=logging.INFO, force=True)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
+def _is_insufficient_quota_error(exc: Exception) -> bool:
+    """Return True when an API error indicates provider quota is exhausted."""
+    if exc is None:
+        return False
+
+    message = str(exc).strip().lower()
+    if "insufficient_quota" in message or "insufficient quota" in message:
+        return True
+
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        err = body.get("error", body)
+        if isinstance(err, dict):
+            code = str(err.get("code") or "").strip().lower()
+            err_type = str(err.get("type") or "").strip().lower()
+            err_message = str(err.get("message") or "").strip().lower()
+            if code == "insufficient_quota":
+                return True
+            if "insufficient_quota" in err_type or "insufficient quota" in err_type:
+                return True
+            if "insufficient_quota" in err_message or "insufficient quota" in err_message:
+                return True
+
+    response = getattr(exc, "response", None)
+    if response is not None:
+        try:
+            payload = response.json()
+        except Exception:
+            payload = None
+        if isinstance(payload, dict):
+            err = payload.get("error", payload)
+            if isinstance(err, dict):
+                code = str(err.get("code") or "").strip().lower()
+                err_type = str(err.get("type") or "").strip().lower()
+                err_message = str(err.get("message") or "").strip().lower()
+                if code == "insufficient_quota":
+                    return True
+                if "insufficient_quota" in err_type or "insufficient quota" in err_type:
+                    return True
+                if "insufficient_quota" in err_message or "insufficient quota" in err_message:
+                    return True
+
+    return False
+
+
 def _strip_json_markdown(text: str) -> str:
     """Return ``text`` with any surrounding markdown code fences removed.
 
@@ -146,6 +191,7 @@ class LLM:
             backoff.expo,
             (RateLimitError, APIConnectionError, APITimeoutError),
             max_time=60,
+            giveup=_is_insufficient_quota_error,
             jitter=backoff.full_jitter,
         )
         def _parse_with_backoff(**kwargs):
@@ -287,6 +333,7 @@ class LLM:
             backoff.expo,
             (RateLimitError, APIConnectionError, APITimeoutError),
             max_time=60,
+            giveup=_is_insufficient_quota_error,
             jitter=backoff.full_jitter,
         )
         def _call_llm(messages: List[Dict]) -> str:
@@ -330,6 +377,8 @@ class LLM:
                         )
                         return idx, validated
                     except Exception as e:
+                        if _is_insufficient_quota_error(e):
+                            raise
                         if attempt == self.validation_attempts - 1:
                             logger.error(
                                 f"Batch pydantic parse failed for item {idx}: {e}"

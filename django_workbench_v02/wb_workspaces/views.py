@@ -190,9 +190,13 @@ def _worker_health(*, workspace_ids: list | None = None) -> tuple[bool, str]:
     if not pending_qs.exists():
         return (True, "")
 
-    # If any active run has recent updates, treat worker as effectively online for this scope.
-    # This avoids false stale-heartbeat warnings during long-running adapter stages.
-    if active_qs.filter(updated_at__gte=threshold).exists():
+    # If any active run has recent updates, treat worker as effectively online.
+    # Use a global active-run check (not workspace-scoped), because a single worker can
+    # be healthy while currently busy on a different workspace.
+    if InvestigationRun.objects.filter(
+        status__in=[RunStatus.STARTING, RunStatus.RUNNING, RunStatus.CANCELLING],
+        updated_at__gte=threshold,
+    ).exists():
         return (True, "")
 
     latest = RunWorkerHeartbeat.objects.order_by("-last_seen_at").first()

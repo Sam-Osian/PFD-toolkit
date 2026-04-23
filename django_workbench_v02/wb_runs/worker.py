@@ -112,6 +112,11 @@ TRANSIENT_ERROR_SNIPPETS = (
     "network is unreachable",
 )
 
+NON_TRANSIENT_ERROR_SNIPPETS = (
+    "insufficient_quota",
+    "insufficient quota",
+)
+
 
 def _reload_run(run_id):
     return InvestigationRun.objects.select_related("workspace", "investigation").get(id=run_id)
@@ -160,6 +165,8 @@ def _is_transient_exception(exc: Exception) -> bool:
         return True
     message = str(exc).strip().lower()
     if not message:
+        return False
+    if any(snippet in message for snippet in NON_TRANSIENT_ERROR_SNIPPETS):
         return False
     return any(snippet in message for snippet in TRANSIENT_ERROR_SNIPPETS)
 
