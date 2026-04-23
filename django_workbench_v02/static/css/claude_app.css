@@ -3671,6 +3671,30 @@ body:not([data-auth="user"]) #screen-workspaces .ws-pinned-head-2 { display: non
     flex-wrap: wrap;
   }
 
+  /* Filter chips: promote local popovers to centered dialogs on mobile */
+  .chip-menu {
+    position: static;
+  }
+  .chip-popover {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    min-width: 0;
+    width: min(92vw, 440px);
+    max-width: 92vw;
+    max-height: min(74vh, 620px);
+    transform: translate(-50%, -50%);
+    margin: 0;
+    padding: 12px;
+    z-index: 60;
+    border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.52);
+  }
+  .chip-popover .menu-options {
+    max-height: min(46vh, 320px);
+  }
+
   /* Dashboard charts: stack vertically on mobile to prevent squishing */
   .charts-3 {
     grid-template-columns: 1fr;
