@@ -462,7 +462,7 @@ def execute_filter_workflow(
         n_reports = None
     else:
         n_reports = int(n_reports)
-    refresh = _as_bool(config.get("refresh"), default=False)
+    refresh = True
 
     if progress_callback:
         progress_callback(8, "Loading report dataset...")
@@ -585,7 +585,7 @@ def execute_themes_workflow(
         n_reports = None
     else:
         n_reports = int(n_reports)
-    refresh = _as_bool(config.get("refresh"), default=False)
+    refresh = True
     reports_df = _load_reports_from_upstream_artifact(run=run, config=config)
     if reports_df is None:
         if progress_callback:
@@ -730,7 +730,7 @@ def execute_extract_workflow(
         n_reports = None
     else:
         n_reports = int(n_reports)
-    refresh = _as_bool(config.get("refresh"), default=False)
+    refresh = True
     reports_df = _load_reports_from_upstream_artifact(run=run, config=config)
     if reports_df is None:
         if progress_callback:
