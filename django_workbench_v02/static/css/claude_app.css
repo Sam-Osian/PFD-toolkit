@@ -3675,6 +3675,14 @@ body:not([data-auth="user"]) #screen-workspaces .ws-pinned-head-2 { display: non
   .chip-menu {
     position: static;
   }
+  body.mobile-chip-open::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    background: color-mix(in srgb, var(--bg) 76%, transparent);
+    backdrop-filter: blur(2px);
+  }
   .chip-popover {
     position: fixed;
     top: 50%;

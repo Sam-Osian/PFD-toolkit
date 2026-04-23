@@ -866,6 +866,13 @@ Explore · PFD Toolkit Workbench v0.2
     menus.forEach((menu) => {
       if (menu !== exceptMenu) menu.removeAttribute('open');
     });
+    syncMobileMenuState();
+  };
+
+  const syncMobileMenuState = () => {
+    const mobileViewport = window.matchMedia('(max-width: 960px)').matches;
+    const hasOpenMenu = Array.from(menus).some((menu) => menu.hasAttribute('open'));
+    document.body.classList.toggle('mobile-chip-open', mobileViewport && hasOpenMenu);
   };
 
   menus.forEach((menu) => {
@@ -873,6 +880,7 @@ Explore · PFD Toolkit Workbench v0.2
       if (menu.hasAttribute('open')) {
         closeAllMenus(menu);
       }
+      syncMobileMenuState();
     });
   });
 
@@ -891,6 +899,7 @@ Explore · PFD Toolkit Workbench v0.2
       event.preventDefault();
       const menu = button.closest('.chip-menu');
       if (menu) menu.removeAttribute('open');
+      syncMobileMenuState();
     });
   });
 
@@ -1028,6 +1037,9 @@ Explore · PFD Toolkit Workbench v0.2
 
   dateStartDisplayInput.value = formatDateForInput(dateStartInput.value);
   dateEndDisplayInput.value = formatDateForInput(dateEndInput.value);
+  window.addEventListener('resize', syncMobileMenuState);
+  window.addEventListener('orientationchange', syncMobileMenuState);
+  syncMobileMenuState();
   refreshUi();
 })();
 
