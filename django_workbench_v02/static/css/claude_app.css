@@ -1807,13 +1807,7 @@ body[data-auth="user"] .about-signup { display: none !important; }
 /* ═════════════════════════════════════════════════════════
    PAGE TITLE size variants
    ═════════════════════════════════════════════════════════ */
-.page-title.xl { font-size: clamp(46px, 5.2vw, 68px); margin-bottom: 20px; }
-
-/* Dashboard hero titles (Explore / Collection / Workspace) */
-.explore-hero .page-title.xl {
-  font-size: clamp(48px, 6vw, 74px);
-  line-height: 0.98;
-}
+.page-title.xl { font-size: clamp(40px, 4.5vw, 56px); margin-bottom: 20px; }
 .page-lede.big { font-size: 17px; max-width: 72ch; line-height: 1.55; color: var(--text-2); }
 
 /* ═════════════════════════════════════════════════════════
@@ -3660,7 +3654,7 @@ body:not([data-auth="user"]) #screen-workspaces .ws-pinned-head-2 { display: non
     min-width: 0;
   }
   .explore-hero .page-title {
-    font-size: clamp(26px, 7vw, 34px);
+    font-size: clamp(34px, 9vw, 48px);
     margin-bottom: 6px;
   }
   .explore-hero .page-lede {
