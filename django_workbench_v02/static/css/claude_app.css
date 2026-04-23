@@ -1806,7 +1806,13 @@ body[data-auth="user"] .about-signup { display: none !important; }
 /* ═════════════════════════════════════════════════════════
    PAGE TITLE size variants
    ═════════════════════════════════════════════════════════ */
-.page-title.xl { font-size: clamp(40px, 4.5vw, 56px); margin-bottom: 20px; }
+.page-title.xl { font-size: clamp(46px, 5.2vw, 68px); margin-bottom: 20px; }
+
+/* Dashboard hero titles (Explore / Collection / Workspace) */
+.explore-hero .page-title.xl {
+  font-size: clamp(48px, 6vw, 74px);
+  line-height: 0.98;
+}
 .page-lede.big { font-size: 17px; max-width: 72ch; line-height: 1.55; color: var(--text-2); }
 
 /* ═════════════════════════════════════════════════════════

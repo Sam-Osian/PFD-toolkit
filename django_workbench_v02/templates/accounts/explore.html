@@ -76,7 +76,8 @@ Explore · PFD Toolkit Workbench v0.2
                 <input type="hidden" name="ai_filter" value="{{ collection_slug }}">
             {% endif %}
             <div class="hud-chips">
-                {% if is_collection_view %}
+                {% if is_workspace_view %}
+                {% elif is_collection_view %}
                 <div class="chip-filter readonly">
                     <em>Collection:</em>
                     <b>{{ collection_title }}</b>
