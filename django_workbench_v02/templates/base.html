@@ -17,12 +17,34 @@
 <div class="grid-bg"></div>
 
 <div class="app">
-    <aside class="side">
+    <aside class="side" id="app-side-nav" aria-label="Sidebar navigation">
         {% include "includes/nav.html" %}
     </aside>
+    <button
+        type="button"
+        class="app-mobile-backdrop"
+        id="app-mobile-backdrop"
+        aria-label="Close navigation"
+        aria-hidden="true"
+        tabindex="-1"
+    ></button>
 
     <main class="main">
         <div class="topbar">
+            <button
+                class="icon-btn mobile-nav-toggle"
+                id="mobile-nav-toggle"
+                type="button"
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="app-side-nav"
+            >
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+                    <path d="M2.5 4h11"></path>
+                    <path d="M2.5 8h11"></path>
+                    <path d="M2.5 12h11"></path>
+                </svg>
+            </button>
             {% with p=request.path %}
             <div class="topbar-crumbs">
                 <span class="mono">Workspace</span>
@@ -323,8 +345,8 @@
                         <button type="button" class="wet-add" id="wz-add-field">+ Add field</button>
                         <textarea id="wz-feature-fields" name="feature_fields" style="display:none;"></textarea>
                     </div>
-                    <div class="wz-field" style="margin-top:14px">
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div class="wz-field wz-extract-toggles">
+                        <div class="wz-toggle-grid">
                             <label class="wz-toggle"><input type="checkbox" name="force_assign" value="on"><span>Force assign <em>(optional)</em></span><span class="wz-help" tabindex="0" aria-label="Force assign help">?<span class="wz-help-tip">When on, the model must fill every field even if uncertain. When off, it can leave missing values as not found.</span></span></label>
                             <label class="wz-toggle"><input type="checkbox" name="allow_multiple" value="on"><span>Allow multiple values <em>(optional)</em></span><span class="wz-help" tabindex="0" aria-label="Allow multiple values help">?<span class="wz-help-tip">Allows a field to return multiple values in one cell (separated by semicolons).</span></span></label>
                             <label class="wz-toggle"><input type="checkbox" name="skip_if_present" value="on" checked><span>Skip if already present <em>(optional)</em></span><span class="wz-help" tabindex="0" aria-label="Skip if already present help">?<span class="wz-help-tip">If a value is already in the output column, extraction leaves it unchanged instead of overwriting it.</span></span></label>
@@ -776,6 +798,9 @@ document.addEventListener("DOMContentLoaded", function() {
   const addFieldButton = document.getElementById("wz-add-field");
   const extractTable = document.getElementById("wz-extract-table");
   const searchInput = document.getElementById("global-search-input");
+  const mobileNavToggle = document.getElementById("mobile-nav-toggle");
+  const mobileNavBackdrop = document.getElementById("app-mobile-backdrop");
+  const sideNav = document.getElementById("app-side-nav");
   const wizardDraftKey = "pfd_investigation_wizard_draft_v1";
   const floatingTooltip = document.createElement("div");
   floatingTooltip.className = "wz-floating-tip";
@@ -818,6 +843,25 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!searchInput) return;
     searchInput.focus({ preventScroll: true });
     if (typeof searchInput.select === "function") searchInput.select();
+  };
+
+  const syncMobileNavState = function(isOpen) {
+    document.body.classList.toggle("mobile-nav-open", Boolean(isOpen));
+    if (mobileNavToggle) {
+      mobileNavToggle.setAttribute("aria-expanded", isOpen ? "true" : "false");
+      mobileNavToggle.setAttribute("aria-label", isOpen ? "Close navigation menu" : "Open navigation menu");
+    }
+    if (mobileNavBackdrop) {
+      mobileNavBackdrop.setAttribute("aria-hidden", isOpen ? "false" : "true");
+    }
+  };
+
+  const openMobileNav = function() {
+    syncMobileNavState(true);
+  };
+
+  const closeMobileNav = function() {
+    syncMobileNavState(false);
   };
 
   const showFloatingTooltip = function(helpNode) {
@@ -1554,6 +1598,9 @@ document.addEventListener("DOMContentLoaded", function() {
   maybeOpenWizardFromQuery();
   window.addEventListener("resize", function() {
     if (llmPopBack?.classList.contains("on")) openLlmConfig();
+    if (window.innerWidth > 960 && document.body.classList.contains("mobile-nav-open")) {
+      closeMobileNav();
+    }
   });
   try {
     const params = new URLSearchParams(window.location.search || "");
@@ -1857,6 +1904,9 @@ document.addEventListener("DOMContentLoaded", function() {
       } else if (startOverDialog?.classList.contains("on")) {
         event.preventDefault();
         closeStartOverDialog();
+      } else if (document.body.classList.contains("mobile-nav-open")) {
+        event.preventDefault();
+        closeMobileNav();
       }
     }
     if (wizardOverlay?.classList.contains("on")) {
@@ -1879,6 +1929,22 @@ document.addEventListener("DOMContentLoaded", function() {
         tutorialNext?.click();
       }
     }
+  });
+
+  mobileNavToggle?.addEventListener("click", function() {
+    if (document.body.classList.contains("mobile-nav-open")) {
+      closeMobileNav();
+      return;
+    }
+    openMobileNav();
+  });
+
+  mobileNavBackdrop?.addEventListener("click", closeMobileNav);
+
+  sideNav?.addEventListener("click", function(event) {
+    const navTarget = event.target.closest("a, button");
+    if (!navTarget) return;
+    closeMobileNav();
   });
 });
 </script>
