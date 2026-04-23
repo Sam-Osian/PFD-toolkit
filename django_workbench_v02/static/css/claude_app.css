@@ -3631,6 +3631,46 @@ body:not([data-auth="user"]) #screen-workspaces .ws-pinned-head-2 { display: non
    MOBILE PASS 2 — workspaces + wizard fit
    ═════════════════════════════════════════════════════════ */
 @media (max-width: 960px) {
+  /* Page hero/header should stack above actions on mobile */
+  .page-head {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: start;
+    margin-bottom: 18px;
+  }
+  .page-actions {
+    justify-self: start;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .explore-hero {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    align-items: start;
+    margin-bottom: 12px;
+  }
+  .explore-hero > * {
+    min-width: 0;
+  }
+  .explore-hero .page-title {
+    font-size: clamp(26px, 7vw, 34px);
+    margin-bottom: 6px;
+  }
+  .explore-hero .page-lede {
+    max-width: none;
+  }
+  .explore-hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  /* Dashboard charts: stack vertically on mobile to prevent squishing */
+  .charts-3 {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
   /* Workspaces cards: single-column and reduced density */
   .dashboard-layout { gap: 14px; }
   .dashboard-section__head { margin-bottom: 10px; }
