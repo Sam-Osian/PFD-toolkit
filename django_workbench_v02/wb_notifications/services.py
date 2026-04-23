@@ -51,9 +51,7 @@ def _should_send_for_trigger(*, notify_on: str, run_status: str) -> bool:
 
 
 def _run_detail_url(run) -> str:
-    return (
-        f"{settings.WORKBENCH_BASE_URL}/workbooks/{run.workspace_id}/runs/{run.id}/"
-    )
+    return f"{settings.WORKBENCH_BASE_URL}/workbooks/{run.workspace_id}/open/"
 
 
 def _workspace_detail_url(run) -> str:

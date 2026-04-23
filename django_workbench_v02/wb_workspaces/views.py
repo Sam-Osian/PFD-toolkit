@@ -173,9 +173,28 @@ def _active_public_share_link_for_workspace(*, workspace: Workspace) -> Workspac
     )
 
 
-def _worker_health() -> tuple[bool, str]:
+def _worker_health(*, workspace_ids: list | None = None) -> tuple[bool, str]:
     stale_seconds = max(1, int(getattr(settings, "WORKER_HEARTBEAT_STALE_SECONDS", 120)))
     threshold = timezone.now() - timedelta(seconds=stale_seconds)
+    scope_ids = [workspace_id for workspace_id in (workspace_ids or []) if workspace_id]
+
+    pending_qs = InvestigationRun.objects.filter(status__in=PIPELINE_PENDING_STATUSES)
+    active_qs = InvestigationRun.objects.filter(
+        status__in=[RunStatus.STARTING, RunStatus.RUNNING, RunStatus.CANCELLING]
+    )
+    if scope_ids:
+        pending_qs = pending_qs.filter(workspace_id__in=scope_ids)
+        active_qs = active_qs.filter(workspace_id__in=scope_ids)
+
+    # If there are no in-flight runs for this dashboard scope, do not show worker warnings.
+    if not pending_qs.exists():
+        return (True, "")
+
+    # If any active run has recent updates, treat worker as effectively online for this scope.
+    # This avoids false stale-heartbeat warnings during long-running adapter stages.
+    if active_qs.filter(updated_at__gte=threshold).exists():
+        return (True, "")
+
     latest = RunWorkerHeartbeat.objects.order_by("-last_seen_at").first()
     if latest is None:
         return (
@@ -531,7 +550,7 @@ def dashboard(request):
                 break
     active_workspace_id = str(active_workspace.id) if active_workspace is not None else ""
 
-    worker_ready, worker_status_message = _worker_health()
+    worker_ready, worker_status_message = _worker_health(workspace_ids=workspace_ids)
 
     return render(
         request,

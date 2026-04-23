@@ -575,6 +575,22 @@
     </div>
 </div>
 
+{% if user_notice.enabled %}
+{# User notice modal (global one-time event). Remove cleanly by disabling USER_NOTICE_ENABLED. #}
+<div class="usr-notice-back" id="user-notice-back" aria-hidden="true" data-notice-version="{{ user_notice.version|default:'v1' }}">
+    <div class="usr-notice" role="dialog" aria-modal="true" aria-labelledby="user-notice-title">
+        <div class="usr-notice-k">Service notice</div>
+        <h3 id="user-notice-title">{{ user_notice.title }}</h3>
+        {% for line in user_notice.body %}
+            <p>{{ line }}</p>
+        {% endfor %}
+        <div class="usr-notice-foot">
+            <button class="btn btn-primary" type="button" id="user-notice-ack">{{ user_notice.button_label|default:"I understand" }}</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="tut-back" id="tut-back" aria-hidden="true">
     <div class="tut" role="dialog" aria-labelledby="tut-title">
         <div class="tut-bar">
@@ -1379,6 +1395,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const llmClearDialog = document.getElementById("dlg-llm-clear");
   const llmClearProvider = document.getElementById("llm-clear-provider");
   const llmClearCloseButtons = llmClearDialog ? llmClearDialog.querySelectorAll("[data-llm-clear-close]") : [];
+  const userNoticeBack = document.getElementById("user-notice-back");
+  const userNoticeAck = document.getElementById("user-notice-ack");
+  const userNoticeVersion = String(userNoticeBack?.dataset.noticeVersion || "v1").trim() || "v1";
+  const userNoticeSeenKey = `pfd_user_notice_${userNoticeVersion}_seen`;
   const credentialMap = {
     openai: String(llmPopBack?.dataset.credOpenai || "0") === "1",
     openrouter: String(llmPopBack?.dataset.credOpenrouter || "0") === "1",
@@ -1438,8 +1458,14 @@ document.addEventListener("DOMContentLoaded", function() {
     if (llmPop && llmConfigOpen) {
       const triggerRect = llmConfigOpen.getBoundingClientRect();
       const top = Math.round(triggerRect.bottom + 12);
-      const maxLeft = Math.max(16, window.innerWidth - llmPop.offsetWidth - 16);
-      const preferredLeft = Math.round(triggerRect.right - llmPop.offsetWidth + 6);
+      const measuredWidth = Math.max(
+        1,
+        Math.round(llmPop.getBoundingClientRect().width || 0),
+        Math.round(llmPop.offsetWidth || 0),
+        360
+      );
+      const maxLeft = Math.max(16, window.innerWidth - measuredWidth - 16);
+      const preferredLeft = Math.round(triggerRect.right - measuredWidth + 6);
       llmPop.style.top = top + "px";
       llmPop.style.left = Math.max(16, Math.min(preferredLeft, maxLeft)) + "px";
     }
@@ -1479,6 +1505,26 @@ document.addEventListener("DOMContentLoaded", function() {
   applyProviderButtonState(llmPopProviderPick, llmPopProvider?.value || "openai");
   syncLlmCredentialMaskForProvider(llmPopProvider?.value || "openai");
   syncLlmStatusForProvider(llmPopProvider?.value || "openai");
+
+  const openUserNotice = function() {
+    if (!userNoticeBack) return;
+    userNoticeBack.classList.add("on");
+    userNoticeBack.setAttribute("aria-hidden", "false");
+  };
+  const closeUserNotice = function() {
+    if (!userNoticeBack) return;
+    userNoticeBack.classList.remove("on");
+    userNoticeBack.setAttribute("aria-hidden", "true");
+    try { localStorage.setItem(userNoticeSeenKey, "1"); } catch (error) {}
+  };
+  userNoticeAck?.addEventListener("click", closeUserNotice);
+  try {
+    if (!localStorage.getItem(userNoticeSeenKey)) {
+      openUserNotice();
+    }
+  } catch (error) {
+    openUserNotice();
+  }
 
   llmPopApiKey?.addEventListener("focus", function() {
     if (llmPopApiKey.getAttribute("data-masked") === "1") {
@@ -1798,6 +1844,12 @@ document.addEventListener("DOMContentLoaded", function() {
   } catch (error) {}
 
   window.addEventListener("keydown", function(event) {
+    if (userNoticeBack?.classList.contains("on")) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+      }
+      return;
+    }
     if (event.key === "Escape") {
       if (tutorialOverlay?.classList.contains("on")) {
         event.preventDefault();

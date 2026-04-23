@@ -839,11 +839,64 @@ class WorkspaceActiveStateViewTests(TestCase):
         )
 
     def test_dashboard_shows_worker_offline_banner_without_heartbeat(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Queued investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
         RunWorkerHeartbeat.objects.all().delete()
         self.client.force_login(self.owner)
         response = self.client.get(reverse("workbook-dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Worker offline")
+
+    def test_dashboard_hides_worker_offline_banner_without_pending_runs(self):
+        RunWorkerHeartbeat.objects.all().delete()
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Worker offline")
+
+    def test_dashboard_hides_stale_banner_when_running_run_is_recently_updated(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Running investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        run.status = RunStatus.RUNNING
+        run.save(update_fields=["status", "updated_at"])
+        heartbeat = RunWorkerHeartbeat.objects.create(
+            worker_id="stale-worker",
+            state="claimed",
+            last_run=run,
+        )
+        heartbeat.last_seen_at = timezone.now() - timedelta(seconds=600)
+        heartbeat.save(update_fields=["last_seen_at", "updated_at"])
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Worker heartbeat is stale")
 
     def test_dashboard_shows_cancel_button_for_running_run(self):
         investigation = create_investigation(

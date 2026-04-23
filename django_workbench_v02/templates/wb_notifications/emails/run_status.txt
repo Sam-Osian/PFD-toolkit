@@ -11,5 +11,5 @@ Queued at: {{ queued_at }}
 Started at: {{ started_at }}
 Finished at: {{ finished_at }}
 
-View run details: {{ run_detail_url }}
+View dashboard: {{ run_detail_url }}
 Manage notification preferences: {{ notification_preferences_url }}

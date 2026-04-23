@@ -93,6 +93,10 @@ class NotificationDispatchTests(TestCase):
                 target_id=str(notification.id),
             ).exists()
         )
+        expected_dashboard_url = f"https://pfdtoolkit.org/workbooks/{self.workspace.id}/open/"
+        self.assertIn(expected_dashboard_url, mail.outbox[0].body)
+        self.assertIn(expected_dashboard_url, mail.outbox[0].alternatives[0][0])
+        self.assertNotIn(f"/runs/{self.run.id}/", mail.outbox[0].body)
 
     def test_dispatch_cancels_when_trigger_does_not_match(self):
         self.run.status = RunStatus.SUCCEEDED

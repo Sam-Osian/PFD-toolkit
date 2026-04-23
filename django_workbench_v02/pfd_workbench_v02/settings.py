@@ -318,6 +318,29 @@ RUN_LAUNCH_RATE_LIMIT_IP_PER_MINUTE = _env_int("RUN_LAUNCH_RATE_LIMIT_IP_PER_MIN
 
 RUN_RETRY_ENABLED = _env_bool("RUN_RETRY_ENABLED", True)
 RUN_RETRY_MAX_ATTEMPTS = _env_int("RUN_RETRY_MAX_ATTEMPTS", 3)
+
+# Global user notice (one-time modal + optional home-page banner)
+USER_NOTICE_ENABLED = _env_bool("USER_NOTICE_ENABLED", True)
+USER_NOTICE_SHOW_ON_HOME = _env_bool("USER_NOTICE_SHOW_ON_HOME", True)
+USER_NOTICE_VERSION = str(os.getenv("USER_NOTICE_VERSION", "v1") or "v1").strip() or "v1"
+USER_NOTICE_TITLE = str(
+    os.getenv("USER_NOTICE_TITLE", "Notice: PFD Toolkit migration in progress")
+).strip()
+USER_NOTICE_BODY = tuple(
+    part.strip()
+    for part in str(
+        os.getenv(
+            "USER_NOTICE_BODY",
+            (
+                "We’re currently migrating PFD Toolkit to a new version and may see an elevated number of temporary bugs."
+                "|You can continue using the tool as normal, but you may occasionally encounter glitches while we finalise updates."
+                "|We’re actively monitoring and patching issues as quickly as possible."
+            ),
+        )
+    ).split("|")
+    if part.strip()
+)
+USER_NOTICE_BUTTON_LABEL = str(os.getenv("USER_NOTICE_BUTTON_LABEL", "I understand")).strip()
 RUN_RETRY_BACKOFF_SECONDS = _env_int_list("RUN_RETRY_BACKOFF_SECONDS", (30, 120, 600))
 RUN_RETRY_JITTER_PCT = _env_int("RUN_RETRY_JITTER_PCT", 20)
 RUN_STAGE_TIMEOUT_SECONDS = _env_int("RUN_STAGE_TIMEOUT_SECONDS", 1800)
