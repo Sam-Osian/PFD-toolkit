@@ -63,15 +63,15 @@
                         </form>
                     {% endif %}
                 {% endif %}
-                {% if request.user.is_superuser %}
+                {% if manage_members_allowed %}
                     <form method="post" action="{% url 'workbook-delete' workbook_id=workspace.id %}" class="inline-form">
                         {% csrf_token %}
                         <input type="text" name="reason" placeholder="Reason (optional)">
-                        <button type="submit" class="btn btn-ghost">Admin hard-delete</button>
+                        <button type="submit" class="btn btn-ghost">Permanently delete</button>
                     </form>
                 {% endif %}
             </div>
-            {% if manage_members_allowed or request.user.is_superuser %}
+            {% if manage_members_allowed %}
                 <p><a href="{% url 'workbook-action-cache' workbook_id=workspace.id %}">Inspect workbook action cache</a></p>
             {% endif %}
         </section>

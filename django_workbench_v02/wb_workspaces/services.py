@@ -165,8 +165,8 @@ def restore_workspace(*, actor, workspace: Workspace, request=None) -> Workspace
 
 @transaction.atomic
 def delete_workspace_immediately(*, actor, workspace: Workspace, reason: str = "", request=None) -> None:
-    if not actor or not getattr(actor, "is_superuser", False):
-        raise PermissionDenied("Only admin can permanently delete a workbook.")
+    if not can_manage_members(actor, workspace):
+        raise PermissionDenied("Only owners with member-management access can permanently delete this workbook.")
 
     workspace_id = str(workspace.id)
     workspace_title = workspace.title

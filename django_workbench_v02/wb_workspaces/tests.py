@@ -1004,12 +1004,22 @@ class WorkspaceActiveStateViewTests(TestCase):
 class WorkspaceLifecycleControlTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="owner-lifecycle-ui@example.com", password="x")
+        self.editor = User.objects.create_user(email="editor-lifecycle-ui@example.com", password="x")
         self.admin = User.objects.create_superuser(email="admin-lifecycle-ui@example.com", password="x")
         self.workspace = create_workspace_for_user(
             user=self.owner,
             title="Lifecycle UI Workspace",
             slug="lifecycle-ui-workspace",
             description="",
+        )
+        WorkspaceMembership.objects.create(
+            workspace=self.workspace,
+            user=self.editor,
+            role=MembershipRole.EDITOR,
+            access_mode=MembershipAccessMode.EDIT,
+            can_manage_members=False,
+            can_manage_shares=False,
+            can_run_workflows=True,
         )
 
     def test_owner_can_archive_and_restore_via_views(self):
@@ -1032,11 +1042,21 @@ class WorkspaceLifecycleControlTests(TestCase):
         self.workspace.refresh_from_db()
         self.assertIsNone(self.workspace.archived_at)
 
-    def test_non_admin_cannot_hard_delete_via_view(self):
+    def test_owner_can_hard_delete_via_view(self):
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse("workbook-delete", kwargs={"workbook_id": self.workspace.id}),
             data={"reason": "owner attempt"},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Workspace.objects.filter(id=self.workspace.id).exists())
+
+    def test_editor_cannot_hard_delete_via_view(self):
+        self.client.force_login(self.editor)
+        response = self.client.post(
+            reverse("workbook-delete", kwargs={"workbook_id": self.workspace.id}),
+            data={"reason": "editor attempt"},
             follow=True,
         )
         self.assertEqual(response.status_code, 200)

@@ -110,6 +110,14 @@ def _workspace_dashboard_with_open_wizard_url() -> str:
     return f"{base_url}?{urlencode({'open_wizard': '1'})}"
 
 
+def _workspace_open_url(*, workbook_id, params: dict[str, str] | None = None) -> str:
+    base_url = reverse("workbook-open", kwargs={"workbook_id": workbook_id})
+    query = {k: str(v) for k, v in (params or {}).items() if str(v or "").strip()}
+    if not query:
+        return base_url
+    return f"{base_url}?{urlencode(query)}"
+
+
 def _active_public_share_link_for_workspace(*, workspace: Workspace) -> WorkspaceShareLink | None:
     now = timezone.now()
     return (
@@ -537,9 +545,9 @@ def investigation_start(request):
                     except (PermissionDenied, ValidationError, InvestigationServiceError) as exc:
                         messages.error(request, str(exc))
                         return redirect(
-                            _investigation_detail_with_open_wizard_url(
+                            _workspace_open_url(
                                 workbook_id=workspace.id,
-                                investigation_id=investigation.id,
+                                params={"open_wizard": "1"},
                             )
                         )
 
@@ -561,9 +569,9 @@ def investigation_start(request):
 
                 messages.success(request, "Workspace created. Open the investigation wizard to continue.")
                 return redirect(
-                    _investigation_detail_with_open_wizard_url(
+                    _workspace_open_url(
                         workbook_id=workspace.id,
-                        investigation_id=investigation.id,
+                        params={"open_wizard": "1"},
                     )
                 )
     return redirect(_workspace_dashboard_with_open_wizard_url())
@@ -580,9 +588,9 @@ def investigation_wizard(request, workbook_id, investigation_id):
     if not can_edit_workspace(request.user, investigation.workspace):
         raise PermissionDenied("You do not have permission to run this investigation wizard.")
     return redirect(
-        _investigation_detail_with_open_wizard_url(
+        _workspace_open_url(
             workbook_id=workbook_id,
-            investigation_id=investigation_id,
+            params={"open_wizard": "1"},
         )
     )
 
@@ -592,63 +600,8 @@ def investigation_list(request, workbook_id):
     workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
-
-    can_edit = bool(request.user.is_authenticated and can_edit_workspace(request.user, workspace))
-    existing_investigation = Investigation.objects.filter(workspace=workspace).first()
-    if request.method == "POST":
-        if not request.user.is_authenticated:
-            return redirect("accounts-login")
-        form = InvestigationCreateForm(request.POST)
-        if not can_edit:
-            messages.error(request, "You do not have permission to create investigations.")
-            return redirect("investigation-list", workbook_id=workspace.id)
-        if existing_investigation is not None:
-            messages.info(
-                request,
-                "This workspace already has an investigation. Opening it now.",
-            )
-            return redirect(
-                "investigation-detail",
-                workbook_id=workspace.id,
-                investigation_id=existing_investigation.id,
-            )
-        if form.is_valid():
-            try:
-                investigation = create_investigation(
-                    actor=request.user,
-                    workspace=workspace,
-                    title=form.cleaned_data["title"],
-                    question_text=form.cleaned_data["question_text"],
-                    scope_json=form.cleaned_data["scope_json"],
-                    method_json=form.cleaned_data["method_json"],
-                    status=form.cleaned_data["status"],
-                    request=request,
-                )
-            except (PermissionDenied, ValidationError) as exc:
-                messages.error(request, str(exc))
-            else:
-                messages.success(request, "Investigation created.")
-                return redirect(
-                    "investigation-detail",
-                    workbook_id=workspace.id,
-                    investigation_id=investigation.id,
-                )
-            return redirect("investigation-list", workbook_id=workspace.id)
-    else:
-        form = InvestigationCreateForm()
-
-    investigations = Investigation.objects.filter(workspace=workspace).order_by("-updated_at")
-    return render(
-        request,
-        "wb_investigations/investigation_list.html",
-        {
-            "workspace": workspace,
-            "investigations": investigations,
-            "has_investigation": investigations.exists(),
-            "can_edit": can_edit,
-            "create_form": form,
-        },
-    )
+    # Retired user-facing investigation list page: canonical user view is workbook-open.
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @require_GET
@@ -656,43 +609,9 @@ def investigation_entry(request, workbook_id):
     workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
-
-    can_edit = bool(
-        request.user.is_authenticated and can_edit_workspace(request.user, workspace)
-    )
-    investigation = Investigation.objects.filter(workspace=workspace).first()
-
-    if investigation is None:
-        if not can_edit:
-            messages.info(request, "No investigation exists yet for this workspace.")
-            return redirect("workspace-detail", workbook_id=workspace.id)
-        try:
-            investigation = create_investigation(
-                actor=request.user,
-                workspace=workspace,
-                title=f"{workspace.title} investigation",
-                question_text="",
-                scope_json={},
-                method_json={},
-                status="draft",
-                request=request,
-            )
-        except (PermissionDenied, ValidationError, InvestigationServiceError) as exc:
-            messages.error(request, str(exc))
-            return redirect("workspace-detail", workbook_id=workspace.id)
-
-    if can_edit:
-        return redirect(
-            _investigation_detail_with_open_wizard_url(
-                workbook_id=workspace.id,
-                investigation_id=investigation.id,
-            )
-        )
-    return redirect(
-        "investigation-detail",
-        workbook_id=workspace.id,
-        investigation_id=investigation.id,
-    )
+    can_edit = bool(request.user.is_authenticated and can_edit_workspace(request.user, workspace))
+    params = {"open_wizard": "1"} if can_edit else {}
+    return redirect(_workspace_open_url(workbook_id=workspace.id, params=params))
 
 
 @require_GET
@@ -704,59 +623,14 @@ def investigation_detail(request, workbook_id, investigation_id):
     )
     if not can_view_workspace(request.user, investigation.workspace):
         return redirect("accounts-login")
-
-    record_investigation_view(investigation=investigation, user=request.user, request=request)
-
-    can_edit = bool(
-        request.user.is_authenticated
-        and can_edit_workspace(request.user, investigation.workspace)
-    )
-    can_run = bool(
-        request.user.is_authenticated
-        and can_run_workflows(request.user, investigation.workspace)
-    )
-    can_share = bool(
-        request.user.is_authenticated
-        and can_edit_workspace(request.user, investigation.workspace)
-    )
-    active_public_share = _active_public_share_link_for_workspace(workspace=investigation.workspace)
-    public_share_url = (
-        request.build_absolute_uri(
-            reverse("share-link-detail", kwargs={"share_id": active_public_share.id})
-        )
-        if active_public_share is not None
-        else ""
-    )
-    runs = list(InvestigationRun.objects.filter(investigation=investigation).order_by("-created_at"))
-    for run in runs:
-        run.can_request_cancellation = _can_request_run_cancellation(run=run, can_run=can_run)
+    params: dict[str, str] = {}
+    if str(request.GET.get("open_wizard") or "").strip() == "1":
+        params["open_wizard"] = "1"
     retry_run_id = str(request.GET.get("retry_run_id") or "").strip()
-    retry_wizard_prefill_json = ""
-    if retry_run_id and can_edit:
-        retry_run = next((item for item in runs if str(item.id) == retry_run_id), None)
-        if retry_run is not None:
-            retry_wizard_prefill_json = json.dumps(
-                _wizard_retry_prefill(investigation=investigation, run=retry_run)
-            )
-    pipeline_timeline = _build_pipeline_timeline(investigation=investigation)
-    return render(
-        request,
-        "wb_investigations/investigation_detail.html",
-        {
-            "investigation": investigation,
-            "workspace": investigation.workspace,
-            "can_edit": can_edit,
-            "can_run": can_run,
-            "can_share": can_share,
-            "runs": runs,
-            "pipeline_timeline": pipeline_timeline,
-            "retry_wizard_prefill_json": retry_wizard_prefill_json,
-            "export_form": InvestigationExportForm(),
-            "public_share_url": public_share_url,
-            "read_only_shared": False,
-            "shared_export_url": "",
-        },
-    )
+    if retry_run_id:
+        params["run_id"] = retry_run_id
+        params["open_run_logs"] = "1"
+    return redirect(_workspace_open_url(workbook_id=investigation.workspace.id, params=params))
 
 
 @login_required
@@ -783,11 +657,7 @@ def share_investigation_public_link(request, workbook_id, investigation_id):
             request,
             "You do not have permission to create public share links for this workspace.",
         )
-        return redirect(
-            "investigation-detail",
-            workbook_id=workspace.id,
-            investigation_id=investigation.id,
-        )
+        return redirect("workbook-open", workbook_id=workspace.id)
 
     wants_json = (
         str(request.headers.get("X-Requested-With") or "").lower() == "xmlhttprequest"
@@ -876,11 +746,7 @@ def share_investigation_public_link(request, workbook_id, investigation_id):
             return JsonResponse({"ok": True, "public_url": public_url})
         messages.success(request, f"Public share link ready: {public_url}")
 
-    return redirect(
-        "investigation-detail",
-        workbook_id=workspace.id,
-        investigation_id=investigation.id,
-    )
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @login_required
@@ -894,11 +760,7 @@ def queue_export_bundle(request, workbook_id, investigation_id):
     form = InvestigationExportForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid export configuration.")
-        return redirect(
-            "investigation-detail",
-            workbook_id=workbook_id,
-            investigation_id=investigation_id,
-        )
+        return redirect("workbook-open", workbook_id=workbook_id)
     try:
         config = {
             "bundle_name": form.cleaned_data.get("bundle_name") or "",
@@ -942,11 +804,7 @@ def queue_export_bundle(request, workbook_id, investigation_id):
                 messages.success(request, "Export queued. Completion email notification requested.")
         else:
             messages.success(request, "Export queued.")
-    return redirect(
-        "investigation-detail",
-        workbook_id=workbook_id,
-        investigation_id=investigation_id,
-    )
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -960,11 +818,7 @@ def investigation_update(request, workbook_id, investigation_id):
     form = InvestigationUpdateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid investigation update form.")
-        return redirect(
-            "investigation-detail",
-            workbook_id=workbook_id,
-            investigation_id=investigation_id,
-        )
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     try:
         update_investigation(
@@ -982,8 +836,4 @@ def investigation_update(request, workbook_id, investigation_id):
     else:
         messages.success(request, "Investigation updated.")
 
-    return redirect(
-        "investigation-detail",
-        workbook_id=workbook_id,
-        investigation_id=investigation_id,
-    )
+    return redirect("workbook-open", workbook_id=workbook_id)

@@ -55,8 +55,8 @@ Explore · PFD Toolkit Workbench v0.2
                     <button type="submit" class="btn btn-secondary">Share</button>
                 </form>
             {% endif %}
-            {% if is_workspace_view and workspace_investigation and not is_shared_read_only %}
-                <a class="btn btn-secondary" href="{% url 'workbook-investigation-detail' workbook_id=workspace_id investigation_id=workspace_investigation.id %}">Open investigation</a>
+            {% if is_workspace_view and not is_shared_read_only %}
+                <button type="button" class="btn btn-secondary" id="explore-runlogs-open">Run logs</button>
             {% endif %}
             {% if request.user.is_authenticated and not is_shared_read_only %}
                 <a class="btn btn-primary" href="{% url 'workbook-dashboard' %}">+ New investigation</a>
@@ -458,38 +458,6 @@ Explore · PFD Toolkit Workbench v0.2
     </section>
     {% endif %}
 
-    {% if is_workspace_view %}
-    {% if not is_shared_read_only %}
-    <details class="panel">
-        <summary class="panel-head" style="cursor:pointer; list-style:none;">
-            <div class="left">
-                <span class="k">Run details</span>
-                <h3>Troubleshooting and support payload</h3>
-            </div>
-        </summary>
-        <div class="stack-sm" style="padding-top:10px;">
-            {% for run in workspace_debug_runs %}
-                <section class="card">
-                    <p><strong>{{ run.type|upper }}</strong> · {{ run.status }} · <a href="{% url 'workbook-run-detail' workbook_id=workspace_id run_id=run.id %}">{{ run.id }}</a></p>
-                    <p>Queued: {{ run.queued_at|date:"Y-m-d H:i:s" }} · Started: {{ run.started_at|date:"Y-m-d H:i:s"|default:"-" }} · Finished: {{ run.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</p>
-                    {% if run.worker_id %}<p>Worker: {{ run.worker_id }}</p>{% endif %}
-                    {% if run.error_code or run.error_message %}
-                        <p>Error code: {{ run.error_code|default:"-" }}</p>
-                        <p>Error message: {{ run.error_message|default:"-" }}</p>
-                    {% endif %}
-                    <details>
-                        <summary>Input config JSON</summary>
-                        <pre>{{ run.input_config_json }}</pre>
-                    </details>
-                </section>
-            {% empty %}
-                <p class="page-subtitle">No runs recorded yet.</p>
-            {% endfor %}
-        </div>
-    </details>
-    {% endif %}
-    {% endif %}
-
     {% if not dataset_available %}
     <section class="panel">
         <div class="panel-head">
@@ -585,6 +553,45 @@ Explore · PFD Toolkit Workbench v0.2
         </div>
     </div>
 
+    {% if is_workspace_view and not is_shared_read_only %}
+    <div class="dlg-back" id="explore-runlogs-dialog" aria-hidden="true">
+        <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="explore-runlogs-title">
+            <div class="dlg-head">
+                <div class="k"><span class="d"></span>Run logs</div>
+                <h3 id="explore-runlogs-title">Critical run troubleshooting logs</h3>
+                <p>Technical payload for run status, worker metadata, and input config snapshots.</p>
+            </div>
+            <div class="dlg-body">
+                <div class="stack-sm">
+                    {% for run in workspace_debug_runs %}
+                        <section class="card" id="run-log-{{ run.id }}">
+                            <p><strong>{{ run.type|upper }}</strong> · {{ run.status }} · {{ run.id }}</p>
+                            <p>Queued: {{ run.queued_at|date:"Y-m-d H:i:s" }} · Started: {{ run.started_at|date:"Y-m-d H:i:s"|default:"-" }} · Finished: {{ run.finished_at|date:"Y-m-d H:i:s"|default:"-" }}</p>
+                            {% if run.worker_id %}<p>Worker: {{ run.worker_id }}</p>{% endif %}
+                            {% if run.error_code or run.error_message %}
+                                <p>Error code: {{ run.error_code|default:"-" }}</p>
+                                <p>Error message: {{ run.error_message|default:"-" }}</p>
+                            {% endif %}
+                            <details>
+                                <summary>Input config JSON</summary>
+                                <pre>{{ run.input_config_json }}</pre>
+                            </details>
+                        </section>
+                    {% empty %}
+                        <p class="page-subtitle">No runs recorded yet.</p>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="dlg-foot">
+                <div class="meta">Support-focused technical diagnostics</div>
+                <div class="acts">
+                    <button type="button" class="btn btn-secondary" id="explore-runlogs-close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     {{ explore.all_areas|json_script:"explore-all-areas" }}
     {{ explore.all_receivers|json_script:"explore-all-receivers" }}
     {{ explore.all_themes|json_script:"explore-all-themes" }}
@@ -593,6 +600,45 @@ Explore · PFD Toolkit Workbench v0.2
 
 {% block extra_js %}
 <script>
+(() => {
+  const runLogsOpen = document.getElementById('explore-runlogs-open');
+  const runLogsDialog = document.getElementById('explore-runlogs-dialog');
+  const runLogsClose = document.getElementById('explore-runlogs-close');
+  if (!runLogsOpen || !runLogsDialog || !runLogsClose) return;
+
+  const closeRunLogs = () => {
+    runLogsDialog.classList.remove('on');
+    runLogsDialog.setAttribute('aria-hidden', 'true');
+  };
+
+  const openRunLogs = () => {
+    runLogsDialog.classList.add('on');
+    runLogsDialog.setAttribute('aria-hidden', 'false');
+    const params = new URLSearchParams(window.location.search || '');
+    const runId = String(params.get('run_id') || '').trim();
+    if (!runId) return;
+    const runNode = document.getElementById(`run-log-${runId}`);
+    runNode?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  };
+
+  runLogsOpen.addEventListener('click', openRunLogs);
+  runLogsClose.addEventListener('click', closeRunLogs);
+  runLogsDialog.addEventListener('click', (event) => {
+    if (event.target === runLogsDialog) closeRunLogs();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (runLogsDialog.classList.contains('on')) closeRunLogs();
+  });
+
+  try {
+    const params = new URLSearchParams(window.location.search || '');
+    if (params.get('open_run_logs') === '1' || params.get('run_id')) {
+      openRunLogs();
+    }
+  } catch (_) {}
+})();
+
 (() => {
   const timeline = document.querySelector('.timeline[data-interactive="true"]');
   if (!timeline) return;

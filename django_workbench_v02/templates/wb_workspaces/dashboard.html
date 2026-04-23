@@ -8,7 +8,7 @@
 
 {% block content %}
 <div class="dashboard-layout">
-    <div class="stack-md">
+    <div class="stack-md" id="workspace-dashboard-sections">
         {% if not worker_ready %}
             <section class="card dashboard-section">
                 <div class="dashboard-section__head">
@@ -23,6 +23,9 @@
                 <h3>Active Workspaces</h3>
                 <span class="count-pill">{{ active_rows|length }}</span>
             </div>
+            {% if not active_rows %}
+                <p class="ws-empty-inline">No active workspaces. Start a new investigation to create your first workspace.</p>
+            {% endif %}
             <div class="ws-grid ws-grid-dashboard">
                 <article class="ws-card ws-card-empty" role="button" tabindex="0" data-open-wizard>
                     <div class="ws-empty">
@@ -40,7 +43,14 @@
                         <header class="ws-head">
                             <div class="ws-meta">
                                 <span class="ws-dot {% if row.pipeline_state == 'pending' %}live{% elif row.pipeline_state == 'complete' %}dim{% elif row.pipeline_state == 'failed-warning' %}pause{% else %}dim{% endif %}"></span>
-                                <span class="ws-tag">{{ row.pipeline_status_label }}</span>
+                                {% if row.pipeline_state == 'pending' %}
+                                    <span class="ws-tag ws-tag-loading">
+                                        <span class="ws-spinner" aria-hidden="true"></span>
+                                        <span>Loading</span>
+                                    </span>
+                                {% else %}
+                                    <span class="ws-tag">{{ row.pipeline_status_label }}</span>
+                                {% endif %}
                                 <span class="ws-owner">You</span>
                             </div>
                             <details class="ws-actions">
@@ -109,23 +119,18 @@
                                         <button type="submit" class="btn btn-secondary sm">Cancel</button>
                                     </form>
                                 {% endif %}
-                                <a class="btn btn-ghost sm" href="{% url 'workbook-open' workbook_id=workspace.id %}">Open</a>
+                                {% if row.pipeline_state != 'pending' %}
+                                    <a class="btn btn-ghost sm" href="{% url 'workbook-open' workbook_id=workspace.id %}">Open</a>
+                                {% endif %}
                             </div>
                         </footer>
                     </article>
                     {% endwith %}
-                {% empty %}
-                    <article class="ws-card ws-card-dashboard ws-card-dim">
-                        <div class="ws-body">
-                            <h3>No active workspaces</h3>
-                            <p>Start a new investigation to create your first workspace.</p>
-                        </div>
-                    </article>
                 {% endfor %}
             </div>
         </section>
 
-        <details class="ws-archive"{% if archived_rows %} open{% endif %}>
+        <details class="ws-archive">
             <summary>
                 <span class="k">Archived · {{ archived_rows|length }}</span>
                 <span class="ws-arrow"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6l4 4 4-4"/></svg></span>
@@ -136,7 +141,7 @@
                         {% with workspace=row.workspace %}
                         <li>
                             <span class="ws-dot dim"></span>
-                            <strong><a class="ws-open-title" href="{% url 'workbook-detail' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a></strong>
+                            <strong><a class="ws-open-title" href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a></strong>
                             <em>
                                 {% if workspace.archived_at %}
                                     Archived {{ workspace.archived_at|timesince }} ago
@@ -144,25 +149,38 @@
                                     Archived
                                 {% endif %}
                             </em>
-                            <div class="ws-arch-actions">
-                                {% if row.can_restore %}
-                                    <form method="post" action="{% url 'workbook-restore' workbook_id=workspace.id %}" class="inline-form">
-                                        {% csrf_token %}
-                                        <button class="ws-arch-act" type="submit">Restore</button>
-                                    </form>
-                                {% endif %}
-                                {% if row.can_hard_delete %}
-                                    <button
-                                        class="ws-arch-act ws-arch-act-danger"
-                                        type="button"
-                                        data-open-delete-confirm
-                                        data-delete-action="{% url 'workbook-delete' workbook_id=workspace.id %}"
-                                        data-workspace-title="{{ workspace.title }}"
-                                    >
-                                        Delete
-                                    </button>
-                                {% endif %}
-                            </div>
+                            <details class="ws-actions ws-arch-actions">
+                                <summary class="icon-btn ws-more" aria-label="More actions">
+                                    <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
+                                </summary>
+                                <div class="ws-actions-menu">
+                                    {% if row.can_restore %}
+                                        <button
+                                            class="ws-actions-item"
+                                            type="button"
+                                            data-open-restore-confirm
+                                            data-restore-action="{% url 'workbook-restore' workbook_id=workspace.id %}"
+                                            data-workspace-title="{{ workspace.title }}"
+                                        >
+                                            Restore
+                                        </button>
+                                    {% endif %}
+                                    {% if row.can_hard_delete %}
+                                        <button
+                                            class="ws-actions-item is-danger"
+                                            type="button"
+                                            data-open-delete-confirm
+                                            data-delete-action="{% url 'workbook-delete' workbook_id=workspace.id %}"
+                                            data-workspace-title="{{ workspace.title }}"
+                                        >
+                                            Permanently delete
+                                        </button>
+                                    {% endif %}
+                                    {% if not row.can_restore and not row.can_hard_delete %}
+                                        <span class="ws-actions-empty">No actions available</span>
+                                    {% endif %}
+                                </div>
+                            </details>
                         </li>
                         {% endwith %}
                     {% endfor %}
@@ -213,14 +231,52 @@
     </div>
 </div>
 
+<div class="dlg-back" id="workspace-restore-dialog" aria-hidden="true">
+    <div class="dlg confirm" role="dialog" aria-labelledby="workspace-restore-title">
+        <div class="dlg-head">
+            <div class="k">Confirm action</div>
+            <h3 id="workspace-restore-title">Restore workspace?</h3>
+            <p id="workspace-restore-copy">This workspace will move back to active workspaces.</p>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to cancel</span>
+            <div class="acts">
+                <button class="btn btn-ghost" type="button" data-restore-close>Cancel</button>
+                <form method="post" action="" id="workspace-restore-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'workbook-dashboard' %}">
+                    <button class="btn btn-primary" type="submit">Confirm restore</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener("DOMContentLoaded", function() {
+  const dashboardSections = document.getElementById("workspace-dashboard-sections");
   const archiveDialog = document.getElementById("workspace-archive-dialog");
   const archiveForm = document.getElementById("workspace-archive-form");
   const archiveCopy = document.getElementById("workspace-archive-copy");
   const deleteDialog = document.getElementById("workspace-delete-dialog");
   const deleteForm = document.getElementById("workspace-delete-form");
   const deleteCopy = document.getElementById("workspace-delete-copy");
+  const restoreDialog = document.getElementById("workspace-restore-dialog");
+  const restoreForm = document.getElementById("workspace-restore-form");
+  const restoreCopy = document.getElementById("workspace-restore-copy");
+  let refreshInFlight = false;
+
+  const closeActionMenu = function(menu) {
+    if (!menu || !menu.hasAttribute("open")) return;
+    menu.removeAttribute("open");
+  };
+
+  const closeAllActionMenus = function(exceptMenu) {
+    document.querySelectorAll("details.ws-actions[open]").forEach(function(menu) {
+      if (exceptMenu && menu === exceptMenu) return;
+      closeActionMenu(menu);
+    });
+  };
 
   const closeDialog = function(dialog) {
     if (!dialog) return;
@@ -234,58 +290,149 @@ document.addEventListener("DOMContentLoaded", function() {
     dialog.setAttribute("aria-hidden", "false");
   };
 
-  document.querySelectorAll("[data-open-archive-confirm]").forEach(function(button) {
-    button.addEventListener("click", function() {
+  document.addEventListener("click", function(event) {
+    const actionMenuSummary = event.target.closest("details.ws-actions > summary");
+    if (actionMenuSummary) {
+      event.preventDefault();
+      const menu = actionMenuSummary.closest("details.ws-actions");
+      const isOpen = menu?.hasAttribute("open");
+      closeAllActionMenus();
+      if (!isOpen && menu) menu.setAttribute("open", "");
+      return;
+    }
+
+    const archiveButton = event.target.closest("[data-open-archive-confirm]");
+    if (archiveButton) {
+      closeAllActionMenus();
       if (!archiveDialog || !archiveForm) return;
-      const action = String(button.getAttribute("data-archive-action") || "");
-      const title = String(button.getAttribute("data-workspace-title") || "this workspace");
+      const action = String(archiveButton.getAttribute("data-archive-action") || "");
+      const title = String(archiveButton.getAttribute("data-workspace-title") || "this workspace");
       if (!action) return;
       archiveForm.setAttribute("action", action);
       if (archiveCopy) archiveCopy.textContent = `Archive ${title}? It will move to the archived section and follow retention rules.`;
       openDialog(archiveDialog);
-    });
-  });
+      return;
+    }
 
-  document.querySelectorAll("[data-open-delete-confirm]").forEach(function(button) {
-    button.addEventListener("click", function() {
+    const deleteButton = event.target.closest("[data-open-delete-confirm]");
+    if (deleteButton) {
+      closeAllActionMenus();
       if (!deleteDialog || !deleteForm) return;
-      const action = String(button.getAttribute("data-delete-action") || "");
-      const title = String(button.getAttribute("data-workspace-title") || "this workspace");
+      const action = String(deleteButton.getAttribute("data-delete-action") || "");
+      const title = String(deleteButton.getAttribute("data-workspace-title") || "this workspace");
       if (!action) return;
       deleteForm.setAttribute("action", action);
       if (deleteCopy) deleteCopy.textContent = `Permanently delete ${title}? This cannot be undone.`;
       openDialog(deleteDialog);
-    });
+      return;
+    }
+
+    const restoreButton = event.target.closest("[data-open-restore-confirm]");
+    if (restoreButton) {
+      closeAllActionMenus();
+      if (!restoreDialog || !restoreForm) return;
+      const action = String(restoreButton.getAttribute("data-restore-action") || "");
+      const title = String(restoreButton.getAttribute("data-workspace-title") || "this workspace");
+      if (!action) return;
+      restoreForm.setAttribute("action", action);
+      if (restoreCopy) restoreCopy.textContent = `Restore ${title}? It will move back to active workspaces.`;
+      openDialog(restoreDialog);
+      return;
+    }
+
+    if (event.target.closest("[data-archive-close]")) {
+      closeDialog(archiveDialog);
+      return;
+    }
+    if (event.target.closest("[data-delete-close]")) {
+      closeDialog(deleteDialog);
+      return;
+    }
+    if (event.target.closest("[data-restore-close]")) {
+      closeDialog(restoreDialog);
+      return;
+    }
+
+    if (event.target === archiveDialog) {
+      closeDialog(archiveDialog);
+      return;
+    }
+    if (event.target === deleteDialog) {
+      closeDialog(deleteDialog);
+      return;
+    }
+    if (event.target === restoreDialog) {
+      closeDialog(restoreDialog);
+      return;
+    }
+
+    if (event.target.closest("details.ws-actions")) return;
+    closeAllActionMenus();
   });
 
-  document.querySelectorAll("[data-archive-close]").forEach(function(button) {
-    button.addEventListener("click", function() { closeDialog(archiveDialog); });
-  });
-  document.querySelectorAll("[data-delete-close]").forEach(function(button) {
-    button.addEventListener("click", function() { closeDialog(deleteDialog); });
-  });
-
-  archiveDialog?.addEventListener("click", function(event) {
-    if (event.target === archiveDialog) closeDialog(archiveDialog);
-  });
-  deleteDialog?.addEventListener("click", function(event) {
-    if (event.target === deleteDialog) closeDialog(deleteDialog);
+  document.addEventListener("mousemove", function(event) {
+    const openMenu = document.querySelector("details.ws-actions[open]");
+    if (!openMenu) return;
+    const rect = openMenu.getBoundingClientRect();
+    const distance = 120;
+    const isFarAway =
+      event.clientX < rect.left - distance ||
+      event.clientX > rect.right + distance ||
+      event.clientY < rect.top - distance ||
+      event.clientY > rect.bottom + distance;
+    if (isFarAway) closeActionMenu(openMenu);
   });
 
   document.addEventListener("keydown", function(event) {
-    if (event.key !== "Escape") return;
-    closeDialog(archiveDialog);
-    closeDialog(deleteDialog);
+    if (event.key === "Escape") {
+      closeAllActionMenus();
+      closeDialog(archiveDialog);
+      closeDialog(deleteDialog);
+      closeDialog(restoreDialog);
+      return;
+    }
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const emptyCard = event.target.closest(".ws-card-empty");
+    if (!emptyCard) return;
+    event.preventDefault();
+    if (typeof window.__openInvestigationWizard === "function") {
+      window.__openInvestigationWizard();
+    }
   });
 
-  document.querySelectorAll(".ws-card-empty").forEach(function(card) {
-    card.addEventListener("keydown", function(event) {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      if (typeof window.__openInvestigationWizard === "function") {
-        window.__openInvestigationWizard();
-      }
-    });
+  const refreshDashboardSections = async function() {
+    if (!dashboardSections || refreshInFlight) return;
+    if (document.querySelector(".dlg-back.on")) return;
+    refreshInFlight = true;
+    try {
+      const response = await fetch(window.location.href, {
+        method: "GET",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+          "Cache-Control": "no-cache"
+        },
+        credentials: "same-origin"
+      });
+      if (!response.ok) return;
+      const html = await response.text();
+      const parser = new DOMParser();
+      const nextDoc = parser.parseFromString(html, "text/html");
+      const nextSections = nextDoc.getElementById("workspace-dashboard-sections");
+      if (!nextSections) return;
+      closeAllActionMenus();
+      dashboardSections.innerHTML = nextSections.innerHTML;
+    } catch (error) {
+      // Keep dashboard usable if refresh fails transiently.
+    } finally {
+      refreshInFlight = false;
+    }
+  };
+
+  window.setInterval(refreshDashboardSections, 10000);
+  document.addEventListener("visibilitychange", function() {
+    if (document.visibilityState === "visible") {
+      refreshDashboardSections();
+    }
   });
 });
 </script>

@@ -14,6 +14,7 @@ from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from accounts.views import (
@@ -441,7 +442,6 @@ def dashboard(request):
     )
     memberships_list = list(memberships)
     dashboard_rows: list[dict] = []
-    can_hard_delete = bool(request.user.is_superuser)
     for membership in memberships_list:
         workspace = membership.workspace
         can_manage_lifecycle = bool(request.user.is_superuser) or (
@@ -456,7 +456,7 @@ def dashboard(request):
                 "is_archived": workspace.archived_at is not None,
                 "can_restore": can_manage_lifecycle,
                 "can_archive": can_manage_lifecycle and workspace.archived_at is None,
-                "can_hard_delete": can_hard_delete,
+                "can_hard_delete": can_manage_lifecycle,
                 "can_cancel_running_run": False,
                 "running_run": None,
                 "pending_stage_label": "",
@@ -1155,8 +1155,6 @@ def archive_workspace_view(request, workbook_id):
         archive_workspace(actor=request.user, workspace=workspace, request=request)
     except (PermissionDenied, ValidationError, WorkspaceLifecycleError) as exc:
         messages.error(request, str(exc))
-    else:
-        messages.success(request, "Workbook archived. It will be auto-deleted after 60 days.")
     return redirect("workbook-dashboard")
 
 
@@ -1164,13 +1162,20 @@ def archive_workspace_view(request, workbook_id):
 @require_POST
 def restore_workspace_view(request, workbook_id):
     workspace = get_object_or_404(Workspace, id=workbook_id)
+    next_url = str(request.POST.get("next") or "").strip()
+    if next_url and not url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        next_url = ""
     try:
         restore_workspace(actor=request.user, workspace=workspace, request=request)
     except (PermissionDenied, ValidationError, WorkspaceLifecycleError) as exc:
         messages.error(request, str(exc))
-    else:
-        messages.success(request, "Workbook restored.")
-    return redirect("workbook-detail", workbook_id=workspace.id)
+    if next_url:
+        return redirect(next_url)
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @login_required
@@ -1187,8 +1192,7 @@ def delete_workspace_view(request, workbook_id):
         )
     except (PermissionDenied, ValidationError) as exc:
         messages.error(request, str(exc))
-        return redirect("workbook-detail", workbook_id=workspace.id)
-    messages.success(request, "Workbook permanently deleted.")
+        return redirect("workbook-open", workbook_id=workspace.id)
     return redirect("workbook-dashboard")
 
 
@@ -1197,6 +1201,8 @@ def workspace_detail(request, workbook_id):
     workspace = get_object_or_404(Workspace, id=workbook_id)
     if not can_view_workspace(request.user, workspace):
         return redirect("accounts-login")
+    # Retired user-facing workspace detail page: canonical user view is workbook-open.
+    return redirect("workbook-open", workbook_id=workspace.id)
     if request.user.is_authenticated and workspace.archived_at is None:
         set_active_workspace_for_user(user=request.user, workspace=workspace, request=request)
 
@@ -1308,7 +1314,7 @@ def undo_workspace_state_view(request, workbook_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Undid workbook state to previous revision.")
-    return redirect("workbook-detail", workbook_id=workspace.id)
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @login_required
@@ -1321,7 +1327,7 @@ def redo_workspace_state_view(request, workbook_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Redid workbook state to next revision.")
-    return redirect("workbook-detail", workbook_id=workspace.id)
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @login_required
@@ -1334,7 +1340,7 @@ def start_over_workspace_state_view(request, workbook_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Workbook reset to baseline revision.")
-    return redirect("workbook-detail", workbook_id=workspace.id)
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @login_required
@@ -1347,7 +1353,7 @@ def revert_workspace_reports_view(request, workbook_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Excluded reports have been reverted.")
-    return redirect("workbook-detail", workbook_id=workspace.id)
+    return redirect("workbook-open", workbook_id=workspace.id)
 
 
 @require_GET
@@ -1369,13 +1375,13 @@ def add_member(request, workbook_id):
     form = WorkspaceMemberAddForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid member form submission.")
-        return redirect("workbook-detail", workbook_id=workbook_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     target_email = form.cleaned_data["email"].strip().lower()
     target_user = User.objects.filter(email__iexact=target_email).first()
     if target_user is None:
         messages.error(request, f"No account exists for {target_email}.")
-        return redirect("workbook-detail", workbook_id=workbook_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     try:
         add_workspace_member(
@@ -1393,7 +1399,7 @@ def add_member(request, workbook_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, f"{target_user.email} added to workbook.")
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -1408,7 +1414,7 @@ def update_member(request, workbook_id, membership_id):
     form = WorkspaceMemberUpdateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid member update form submission.")
-        return redirect("workbook-detail", workbook_id=workbook_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     try:
         update_workspace_member(
@@ -1426,7 +1432,7 @@ def update_member(request, workbook_id, membership_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, f"{membership.user.email} membership updated.")
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -1449,7 +1455,7 @@ def remove_member(request, workbook_id, membership_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Workbook membership removed.")
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -1537,7 +1543,7 @@ def save_credential(request, workbook_id):
     form = WorkspaceCredentialUpsertForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid credential submission.")
-        return redirect("workbook-detail", workbook_id=workbook_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     try:
         credential = upsert_workspace_credential(
@@ -1555,7 +1561,7 @@ def save_credential(request, workbook_id):
             request,
             f"Saved {credential.provider} credential ending in {credential.key_last4}.",
         )
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -1574,7 +1580,7 @@ def remove_credential(request, workbook_id):
     form = WorkspaceCredentialDeleteForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid credential delete submission.")
-        return redirect("workbook-detail", workbook_id=workbook_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     deleted = delete_workspace_credential(
         actor=request.user,
@@ -1586,7 +1592,7 @@ def remove_credential(request, workbook_id):
         messages.success(request, f"Deleted {form.cleaned_data['provider']} credential.")
     else:
         messages.warning(request, f"No {form.cleaned_data['provider']} credential found.")
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -1596,7 +1602,7 @@ def exclude_report(request, workbook_id):
     form = WorkspaceReportExclusionCreateForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid excluded-report submission.")
-        return redirect("workbook-detail", workbook_id=workbook_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
     next_url = str(form.cleaned_data.get("next_url") or "").strip()
 
     try:
@@ -1617,7 +1623,7 @@ def exclude_report(request, workbook_id):
 
     if next_url.startswith("/"):
         return redirect(next_url)
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @login_required
@@ -1644,4 +1650,4 @@ def restore_excluded_report(request, workbook_id, exclusion_id):
 
     if next_url.startswith("/"):
         return redirect(next_url)
-    return redirect("workbook-detail", workbook_id=workbook_id)
+    return redirect("workbook-open", workbook_id=workbook_id)

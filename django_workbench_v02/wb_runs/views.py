@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from wb_investigations.models import Investigation
@@ -280,11 +281,7 @@ def queue_investigation_run(request, workbook_id, investigation_id):
     form = RunQueueForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid run configuration.")
-        return redirect(
-            "workbook-investigation-detail",
-            workbook_id=workbook_id,
-            investigation_id=investigation_id,
-        )
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     try:
         run_config = form.cleaned_data["input_config_json"] or {}
@@ -348,11 +345,7 @@ def queue_investigation_run(request, workbook_id, investigation_id):
         else:
             messages.success(request, "Run queued.")
 
-    return redirect(
-        "workbook-investigation-detail",
-        workbook_id=workbook_id,
-        investigation_id=investigation_id,
-    )
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @require_GET
@@ -364,32 +357,8 @@ def run_detail(request, workbook_id, run_id):
     )
     if not can_view_workspace(request.user, run.workspace):
         return redirect("accounts-login")
-
-    record_run_view(run=run, user=request.user, request=request)
-    can_request_cancellation = run.status not in TERMINAL_STATUSES and run.status != RunStatus.CANCELLING
-    cancel_form = RunCancelForm() if can_request_cancellation else None
-    artifacts = list(run.artifacts.order_by("-created_at"))
-    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
-    return render(
-        request,
-        "wb_runs/run_detail.html",
-        {
-            "run": run,
-            "investigation": run.investigation,
-            "workspace": run.workspace,
-            "cancel_form": cancel_form,
-            "can_request_cancellation": can_request_cancellation,
-            "cancellation_message": _build_cancellation_message(run),
-            "run_journey": _build_run_journey(run),
-            "config_summary_rows": _build_config_summary(run),
-            "raw_config_json": json.dumps(config, indent=2, sort_keys=True),
-            "outcome": _build_outcome_summary(run, len(artifacts)),
-            "events": run.events.order_by("-created_at"),
-            "artifacts": artifacts,
-            "artifact_groups": _build_artifact_groups(artifacts),
-            "notifications": run.notification_requests.select_related("user").order_by("-created_at"),
-        },
-    )
+    # Retired user-facing run detail page: canonical user view is workbook-open.
+    return redirect(f"{reverse('workbook-open', kwargs={'workbook_id': workbook_id})}?open_run_logs=1&run_id={run_id}")
 
 
 @login_required
@@ -403,7 +372,7 @@ def cancel_run(request, workbook_id, run_id):
     form = RunCancelForm(request.POST)
     if not form.is_valid():
         messages.error(request, "Invalid cancellation payload.")
-        return redirect("workbook-run-detail", workbook_id=workbook_id, run_id=run_id)
+        return redirect("workbook-open", workbook_id=workbook_id)
 
     try:
         request_run_cancellation(
@@ -416,7 +385,7 @@ def cancel_run(request, workbook_id, run_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Run cancellation requested.")
-    return redirect("workbook-run-detail", workbook_id=workbook_id, run_id=run_id)
+    return redirect("workbook-open", workbook_id=workbook_id)
 
 
 @require_GET

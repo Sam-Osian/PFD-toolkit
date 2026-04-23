@@ -57,7 +57,7 @@
                     id="global-search-input"
                     type="search"
                     name="q"
-                    placeholder="Search reports, themes, coroners..."
+                    placeholder="Quick search reports"
                     aria-label="Search"
                     autocomplete="off"
                     autocapitalize="off"
@@ -392,11 +392,11 @@
                     </div>
                     <select id="wz-model-select" name="model_name" class="wz-review-control">
                         {% if active_llm_config and active_llm_config.provider == "openrouter" %}
-                            <option value="openai/gpt-4.1-mini" {% if active_llm_config.model_name == "openai/gpt-4.1-mini" or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>openai/gpt-4.1-mini (recommended - lower cost)</option>
-                            <option value="openai/gpt-4.1" {% if active_llm_config.model_name == "openai/gpt-4.1" or active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>openai/gpt-4.1 (higher accuracy)</option>
+                            <option value="openai/gpt-4.1-mini" {% if active_llm_config.model_name == "openai/gpt-4.1-mini" or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
+                            <option value="openai/gpt-4.1" {% if active_llm_config.model_name == "openai/gpt-4.1" or active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
                         {% else %}
-                            <option value="gpt-4.1-mini" {% if not active_llm_config or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>gpt-4.1-mini (recommended - lower cost)</option>
-                            <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>gpt-4.1 (higher accuracy)</option>
+                            <option value="gpt-4.1-mini" {% if not active_llm_config or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
+                            <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
                         {% endif %}
                     </select>
                     <div class="wz-review-inline">
@@ -492,8 +492,8 @@
                 <div class="field">
                     <label for="llm-pop-model">Preferred model</label>
                     <select id="llm-pop-model" name="model_name">
-                        <option value="gpt-4.1-mini" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>gpt-4.1-mini (recommended - lower cost)</option>
-                        <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>gpt-4.1 (higher accuracy)</option>
+                        <option value="gpt-4.1-mini" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
+                        <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
                     </select>
                 </div>
                 <div class="field">
@@ -1104,9 +1104,9 @@ document.addEventListener("DOMContentLoaded", function() {
     const provider = String(providerValue || "openai").trim().toLowerCase();
     const selectedModel = normaliseModelForProvider(provider, preferredModel);
     if (provider === "openrouter") {
-      modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">openai/gpt-4.1-mini (recommended - lower cost)</option><option value="openai/gpt-4.1">openai/gpt-4.1 (higher accuracy)</option>';
+      modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">Standard (faster, lower cost)</option><option value="openai/gpt-4.1">Advanced (best quality)</option>';
     } else {
-      modelSelect.innerHTML = '<option value="gpt-4.1-mini">gpt-4.1-mini (recommended - lower cost)</option><option value="gpt-4.1">gpt-4.1 (higher accuracy)</option>';
+      modelSelect.innerHTML = '<option value="gpt-4.1-mini">Standard (faster, lower cost)</option><option value="gpt-4.1">Advanced (best quality)</option>';
     }
     modelSelect.value = selectedModel;
     if (!modelSelect.value) {
@@ -1127,7 +1127,7 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     apiKeyInput.value = `${maskedCredentialValue}${last4}`;
     apiKeyInput.setAttribute("data-masked", "1");
-    apiKeyInput.placeholder = `Saved credential ending in ${last4}`;
+    apiKeyInput.placeholder = "Saved credential detected";
   };
 
   const updateActionState = function() {
@@ -1436,17 +1436,16 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     llmPopApiKey.value = `${maskedCredentialValue}${last4}`;
     llmPopApiKey.setAttribute("data-masked", "1");
-    llmPopApiKey.placeholder = `Saved credential ending in ${last4}`;
+    llmPopApiKey.placeholder = "Saved credential detected";
   };
 
   const syncLlmStatusForProvider = function(providerValue) {
     if (!llmPopStatus) return;
     const hasSaved = hasSavedCredentialForProvider(providerValue);
-    const last4 = credentialLast4ForProvider(providerValue);
     if (llmPopClearOpen) llmPopClearOpen.disabled = !hasSaved;
     llmPopStatus.classList.toggle("ok", hasSaved);
     llmPopStatus.textContent = hasSaved
-      ? (`Saved credential detected for ${providerValue} ending in ${last4}.`)
+      ? (`Saved credential detected for ${providerValue}.`)
       : "No saved credential for selected provider.";
   };
 
@@ -1460,20 +1459,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const openLlmConfig = function() {
     if (!llmPopBack) return;
-    if (llmPop && llmConfigOpen) {
-      const triggerRect = llmConfigOpen.getBoundingClientRect();
-      const top = Math.round(triggerRect.bottom + 12);
-      const measuredWidth = Math.max(
-        1,
-        Math.round(llmPop.getBoundingClientRect().width || 0),
-        Math.round(llmPop.offsetWidth || 0),
-        360
-      );
-      const maxLeft = Math.max(16, window.innerWidth - measuredWidth - 16);
-      const preferredLeft = Math.round(triggerRect.right - measuredWidth + 6);
-      llmPop.style.top = top + "px";
-      llmPop.style.left = Math.max(16, Math.min(preferredLeft, maxLeft)) + "px";
-    }
     llmPopBack.classList.add("on");
     llmPopBack.setAttribute("aria-hidden", "false");
     const selectedProvider = String(llmPopProvider?.value || "openai").toLowerCase();
