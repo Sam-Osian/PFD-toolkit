@@ -10,21 +10,23 @@
 {% block content %}
 <div class="home-stage">
     <div class="eyebrow"><span class="d"></span><span>PFD Toolkit Workbench</span></div>
-    <h1 class="home-h1">
-        A <span class="accent">toolkit</span> for<br>
-        coroner-report research.
-    </h1>
+    <div class="home-hero-top">
+        <h1 class="home-h1">
+            A <span class="accent">toolkit</span> for<br>
+            coroner-report research.
+        </h1>
+        {% if user_notice.enabled and user_notice.show_on_home %}
+        <section class="home-user-notice home-user-notice-side" aria-label="User notice">
+            <div class="home-user-notice__k">Notice</div>
+            {% for line in user_notice.body %}
+                <p>{{ line }}</p>
+            {% endfor %}
+        </section>
+        {% endif %}
+    </div>
     <p class="home-sub">
         PFD Toolkit makes Prevention of Future Death reports searchable, filterable, and analysable with AI workflows.
     </p>
-    {% if user_notice.enabled and user_notice.show_on_home %}
-    <section class="home-user-notice" aria-label="User notice">
-        <div class="home-user-notice__k">Notice</div>
-        {% for line in user_notice.body %}
-            <p>{{ line }}</p>
-        {% endfor %}
-    </section>
-    {% endif %}
     <div class="home-ctas">
         {% if request.user.is_authenticated %}
             <a class="btn btn-primary lg" href="{% url 'workbook-dashboard' %}">Open your workbooks</a>

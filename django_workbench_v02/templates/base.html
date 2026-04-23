@@ -577,15 +577,20 @@
 
 {% if user_notice.enabled %}
 {# User notice modal (global one-time event). Remove cleanly by disabling USER_NOTICE_ENABLED. #}
-<div class="usr-notice-back" id="user-notice-back" aria-hidden="true" data-notice-version="{{ user_notice.version|default:'v1' }}">
-    <div class="usr-notice" role="dialog" aria-modal="true" aria-labelledby="user-notice-title">
-        <div class="usr-notice-k">Service notice</div>
-        <h3 id="user-notice-title">{{ user_notice.title }}</h3>
-        {% for line in user_notice.body %}
-            <p>{{ line }}</p>
-        {% endfor %}
-        <div class="usr-notice-foot">
-            <button class="btn btn-primary" type="button" id="user-notice-ack">{{ user_notice.button_label|default:"I understand" }}</button>
+<div class="dlg-back" id="user-notice-back" aria-hidden="true" data-notice-version="{{ user_notice.version|default:'v1' }}">
+    <div class="dlg confirm" role="dialog" aria-modal="true" aria-labelledby="user-notice-title">
+        <div class="dlg-head">
+            <div class="k"><span class="d"></span>User notice</div>
+            <h3 id="user-notice-title">{{ user_notice.title }}</h3>
+            {% for line in user_notice.body %}
+                <p>{{ line }}</p>
+            {% endfor %}
+        </div>
+        <div class="dlg-foot">
+            <span class="meta">This is shown once per notice version.</span>
+            <div class="acts">
+                <button class="btn btn-primary" type="button" id="user-notice-ack">{{ user_notice.button_label|default:"I understand" }}</button>
+            </div>
         </div>
     </div>
 </div>
