@@ -160,7 +160,8 @@ body.wizard-open .main { overflow: hidden; }
 .topbar-search svg { width: 13px; height: 13px; }
 .topbar-search .k { font-family: var(--ff-mono); font-size: 9.5px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; color: var(--text-3); }
 .topbar-actions { display: flex; gap: 6px; }
-.mobile-nav-toggle { display: none; }
+/* Keep hamburger strictly mobile-only; .icon-btn sets display:grid by default. */
+.topbar .mobile-nav-toggle { display: none; }
 
 /* buttons */
 .btn { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 8px; font-size: 12.5px; font-weight: 500; transition: all var(--dur-fast) var(--ease); border: 1px solid transparent; white-space: nowrap; }
@@ -212,7 +213,7 @@ svg:not([width]):not([height]) {
     height: 100dvh;
   }
 
-  .mobile-nav-toggle {
+  .topbar .mobile-nav-toggle {
     display: grid;
   }
 
@@ -248,7 +249,7 @@ svg:not([width]):not([height]) {
     padding: 10px 14px;
   }
 
-  .mobile-nav-toggle { grid-area: menu; }
+  .topbar .mobile-nav-toggle { grid-area: menu; }
 
   .topbar-crumbs {
     grid-area: crumbs;
