@@ -295,3 +295,43 @@ class CollectionMetricsTests(TestCase):
         self.assertGreater(len(month_points), 2)
         self.assertTrue(any(int(point["count"]) == 0 for point in week_points))
         self.assertTrue(any(int(point["count"]) == 0 for point in month_points))
+
+    def test_temporal_mode_defaults_by_date_span(self):
+        long_span_df = pd.DataFrame(
+            [
+                {"date": "2020-01-01", "receiver": "A", "area": "X"},
+                {"date": "2024-02-01", "receiver": "B", "area": "Y"},
+            ]
+        )
+        medium_span_df = pd.DataFrame(
+            [
+                {"date": "2024-01-01", "receiver": "A", "area": "X"},
+                {"date": "2024-08-15", "receiver": "B", "area": "Y"},
+            ]
+        )
+        short_span_df = pd.DataFrame(
+            [
+                {"date": "2024-01-01", "receiver": "A", "area": "X"},
+                {"date": "2024-02-15", "receiver": "B", "area": "Y"},
+            ]
+        )
+
+        long_span_metrics = build_explore_metrics(
+            reports_df=long_span_df,
+            scoped_reports_df=long_span_df,
+            query="",
+        )
+        medium_span_metrics = build_explore_metrics(
+            reports_df=medium_span_df,
+            scoped_reports_df=medium_span_df,
+            query="",
+        )
+        short_span_metrics = build_explore_metrics(
+            reports_df=short_span_df,
+            scoped_reports_df=short_span_df,
+            query="",
+        )
+
+        self.assertEqual(long_span_metrics["temporal_mode"], "year")
+        self.assertEqual(medium_span_metrics["temporal_mode"], "month")
+        self.assertEqual(short_span_metrics["temporal_mode"], "week")

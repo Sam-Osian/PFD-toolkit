@@ -572,6 +572,18 @@ def build_explore_metrics(
         )
         return counts.reindex(full_index, fill_value=0).astype("int64")
 
+    def _default_temporal_mode(*, source_dates: pd.Series) -> str:
+        if source_dates.empty:
+            return "month"
+        min_date = source_dates.min()
+        max_date = source_dates.max()
+        span_days = int((max_date - min_date).days)
+        if span_days >= (365 * 3):
+            return "year"
+        if span_days >= 90:
+            return "month"
+        return "week"
+
     def _year_axis_labels(*, start_year: int, end_year: int, max_labels: int = 6) -> list[str]:
         if end_year <= start_year:
             return [str(start_year), "Now"]
@@ -667,6 +679,7 @@ def build_explore_metrics(
         return result
 
     if not date_series.empty:
+        temporal_mode = _default_temporal_mode(source_dates=date_series)
         temporal_series["week"] = _build_temporal_series(
             _complete_period_counts(source_dates=date_series, freq="W-SUN"),
             mode="week",

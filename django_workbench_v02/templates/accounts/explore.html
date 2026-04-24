@@ -286,14 +286,14 @@ Explore · PFD Toolkit Workbench v0.2
             </div>
             <div class="right">
                 <div class="seg">
-                    <button type="button" data-temporal-mode="week">Week</button>
-                    <button type="button" data-temporal-mode="month" class="on">Month</button>
-                    <button type="button" data-temporal-mode="year">Year</button>
+                    <button type="button" data-temporal-mode="week" {% if explore.temporal_mode|default:'month' == 'week' %}class="on"{% endif %}>Week</button>
+                    <button type="button" data-temporal-mode="month" {% if explore.temporal_mode|default:'month' == 'month' %}class="on"{% endif %}>Month</button>
+                    <button type="button" data-temporal-mode="year" {% if explore.temporal_mode|default:'month' == 'year' %}class="on"{% endif %}>Year</button>
                 </div>
             </div>
         </div>
         {% if explore.temporal_line_path %}
-        <div class="timeline" data-interactive="true">
+        <div class="timeline" data-interactive="true" data-default-mode="{{ explore.temporal_mode|default:'month' }}">
             <svg class="timeline-svg" viewBox="0 0 900 200" preserveAspectRatio="none" role="img" aria-label="Monthly report counts over time">
                 <defs>
                     <linearGradient id="tl-fill" x1="0" y1="0" x2="0" y2="1">
@@ -646,7 +646,8 @@ Explore · PFD Toolkit Workbench v0.2
   if (!svg || !areaPath || !linePath || !guide || !dot || !tip || !axisLabels || !titleNode) return;
 
   const VIEWBOX_WIDTH = 900;
-  let activeMode = 'month';
+  let activeMode = String(timeline.getAttribute('data-default-mode') || 'month').trim().toLowerCase();
+  if (!['week', 'month', 'year'].includes(activeMode)) activeMode = 'month';
   let activePoints = [];
 
   const renderAxisLabels = (labels) => {
@@ -727,6 +728,9 @@ Explore · PFD Toolkit Workbench v0.2
     });
   });
 
+  if (!series[activeMode] || !Array.isArray(series[activeMode].points) || !series[activeMode].line_path) {
+    activeMode = series.month?.line_path ? 'month' : (series.year?.line_path ? 'year' : 'week');
+  }
   setMode(activeMode);
 })();
 
