@@ -97,6 +97,10 @@
   display: grid;
   gap: var(--space-2);
 }
+.message-list:empty {
+  display: none;
+  margin: 0;
+}
 
 .message {
   border: 1px solid var(--line);

@@ -1,10 +1,3 @@
 {% if messages %}
-    <ul class="message-list" role="status" aria-live="polite">
-        {% for message in messages %}
-            <li class="message {{ message.tags|default:'info' }}">
-                <strong class="message-kicker">{{ message.tags|default:"info"|upper }}</strong>
-                <span>{{ message }}</span>
-            </li>
-        {% endfor %}
-    </ul>
+    <ul class="message-list" role="status" aria-live="polite">{% for message in messages %}{% if 'success' not in message.tags %}<li class="message {{ message.tags|default:'info' }}"><strong class="message-kicker">{{ message.tags|default:"info"|upper }}</strong><span>{{ message }}</span></li>{% endif %}{% endfor %}</ul>
 {% endif %}

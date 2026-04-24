@@ -780,7 +780,6 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         state = WorkspaceUserState.objects.get(user=self.owner)
         self.assertEqual(state.active_workspace_id, self.workspace_a.id)
-        self.assertContains(response, "Active workbook set")
 
     def test_dashboard_shows_active_indicator(self):
         self.client.force_login(self.owner)
