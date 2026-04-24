@@ -382,7 +382,7 @@
                         <div class="wz-pv-row" id="wz-review-details-row">
                             <div class="wz-pv" id="wz-preview-filter-card" style="display:none;">
                                 <div class="pk">Filter query</div>
-                                <div class="pv" id="wz-preview-filter-query">—</div>
+                                <div class="pv pv-truncated" id="wz-preview-filter-query">—</div>
                             </div>
                             <div class="wz-pv" id="wz-preview-theme-guidance-card" style="display:none;">
                                 <div class="pk">Theme guidance</div>
@@ -1038,7 +1038,13 @@ document.addEventListener("DOMContentLoaded", function() {
     if (reviewFilterCard && reviewFilterQuery) {
       const showFilter = Boolean(runFilterInput?.checked && filterText);
       reviewFilterCard.style.display = showFilter ? "block" : "none";
-      reviewFilterQuery.textContent = filterText || "—";
+      const maxChars = 420;
+      const previewText =
+        filterText.length > maxChars
+          ? `${filterText.slice(0, maxChars - 3).trimEnd()}...`
+          : filterText;
+      reviewFilterQuery.textContent = previewText || "—";
+      reviewFilterQuery.setAttribute("title", filterText || "");
     }
     const themeGuidanceInput = wizardOverlay?.querySelector('textarea[name="extra_theme_instructions"]');
     const themeGuidanceText = String(themeGuidanceInput?.value || "").trim();

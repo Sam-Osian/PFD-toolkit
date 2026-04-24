@@ -132,6 +132,26 @@ RUN_STATUS_CARD_LABELS = {
 }
 
 
+def _pending_status_label_for_run(run: InvestigationRun | None) -> str:
+    if run is None:
+        return ""
+    if run.status == RunStatus.QUEUED:
+        return "Queued"
+    if run.status == RunStatus.STARTING:
+        return "Starting"
+    if run.status == RunStatus.CANCELLING:
+        return "Cancelling"
+    if run.status == RunStatus.RUNNING:
+        if run.run_type == RunType.FILTER:
+            return "Filtering"
+        if run.run_type == RunType.THEMES:
+            return "Finding themes"
+        if run.run_type == RunType.EXTRACT:
+            return "Extracting"
+        return RUN_TYPE_LABELS.get(str(run.run_type), "Running")
+    return RUN_STATUS_CARD_LABELS.get(run.status, str(run.status).replace("_", " ").title())
+
+
 def _scope_option_from_dates(*, start: str, end: str, report_limit) -> str:
     if report_limit == 100:
         return "most_recent_100"
@@ -574,6 +594,7 @@ def dashboard(request):
                 "pipeline_stage_label": "",
                 "pipeline_run_status": "",
                 "pipeline_status_label": "Not started",
+                "pending_status_label": "",
                 "pipeline_updated_at": None,
                 "investigation_title": workspace.title,
                 "investigation_description": "",
@@ -637,6 +658,7 @@ def dashboard(request):
             row["pipeline_stage_label"] = stage_label
             row["pipeline_run_status"] = str(run.status)
             row["pipeline_status_label"] = RUN_STATUS_CARD_LABELS.get(run.status, str(run.status).replace("_", " ").title())
+            row["pending_status_label"] = _pending_status_label_for_run(run)
             row["pipeline_updated_at"] = run.updated_at
             if run.updated_at and run.updated_at > row["last_edited_at"]:
                 row["last_edited_at"] = run.updated_at

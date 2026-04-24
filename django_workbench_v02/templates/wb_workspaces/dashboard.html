@@ -46,7 +46,7 @@
                                 {% if row.pipeline_state == 'pending' %}
                                     <span class="ws-tag ws-tag-loading">
                                         <span class="ws-spinner" aria-hidden="true"></span>
-                                        <span>Loading</span>
+                                        <span>{{ row.pending_status_label|default:row.pipeline_status_label }}</span>
                                     </span>
                                 {% else %}
                                     <span class="ws-tag">{{ row.pipeline_status_label }}</span>
@@ -308,6 +308,21 @@ document.addEventListener("DOMContentLoaded", function() {
     dialog.setAttribute("aria-hidden", "false");
   };
 
+  const captureDashboardUiState = function() {
+    const archiveNode = document.querySelector("details.ws-archive");
+    return {
+      archiveOpen: Boolean(archiveNode?.hasAttribute("open")),
+    };
+  };
+
+  const restoreDashboardUiState = function(state) {
+    if (!state || typeof state !== "object") return;
+    const archiveNode = document.querySelector("details.ws-archive");
+    if (!archiveNode) return;
+    if (state.archiveOpen) archiveNode.setAttribute("open", "");
+    else archiveNode.removeAttribute("open");
+  };
+
   document.addEventListener("click", function(event) {
     const actionMenuSummary = event.target.closest("details.ws-actions > summary");
     if (actionMenuSummary) {
@@ -448,8 +463,11 @@ document.addEventListener("DOMContentLoaded", function() {
   const refreshDashboardSections = async function() {
     if (!dashboardSections || refreshInFlight) return;
     if (document.querySelector(".dlg-back.on")) return;
+    if (document.querySelector("details.ws-actions[open]")) return;
+    if (document.activeElement?.closest("details.ws-archive")) return;
     refreshInFlight = true;
     try {
+      const uiState = captureDashboardUiState();
       const response = await fetch(window.location.href, {
         method: "GET",
         headers: {
@@ -466,6 +484,7 @@ document.addEventListener("DOMContentLoaded", function() {
       if (!nextSections) return;
       closeAllActionMenus();
       dashboardSections.innerHTML = nextSections.innerHTML;
+      restoreDashboardUiState(uiState);
     } catch (error) {
       // Keep dashboard usable if refresh fails transiently.
     } finally {

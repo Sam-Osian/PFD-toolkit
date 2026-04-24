@@ -1556,6 +1556,23 @@ svg:not([width]):not([height]) {
   resize: none; font-family: inherit; min-height: 120px;
 }
 .wz-input-big textarea::placeholder { color: var(--text-3); }
+#wz-filter-query {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(178, 195, 255, 0.38) transparent;
+}
+#wz-filter-query::-webkit-scrollbar {
+  width: 9px;
+}
+#wz-filter-query::-webkit-scrollbar-track {
+  background: transparent;
+}
+#wz-filter-query::-webkit-scrollbar-thumb {
+  background: rgba(178, 195, 255, 0.38);
+  border-radius: 999px;
+}
+#wz-filter-query::-webkit-scrollbar-thumb:hover {
+  background: rgba(188, 206, 255, 0.58);
+}
 
 .wz-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
 .wz-chips .c-lbl { font-family: var(--ff-mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase; padding: 6px 0 6px 4px; }
@@ -1635,6 +1652,17 @@ svg:not([width]):not([height]) {
 }
 .wz-pv .pk { font-family: var(--ff-mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
 .wz-pv .pv { font-size: 13.5px; color: var(--text); line-height: 1.5; }
+.wz-pv .pv.pv-truncated {
+  min-height: 5.4em;
+  max-height: 5.4em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
 .wz-pv-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .wz-pv-log ol { list-style: none; counter-reset: step; display: grid; gap: 6px; margin-top: 6px; }
 .wz-pv-log ol li { counter-increment: step; position: relative; padding-left: 22px; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
@@ -3376,6 +3404,12 @@ body[data-auth="user"] .home-guest-nudge { display: none; }
 [data-wz-step="review"] .wz-pv { padding: 12px 14px; }
 [data-wz-step="review"] .wz-pv .pk { margin-bottom: 3px; font-size: 9.5px; }
 [data-wz-step="review"] .wz-pv .pv { font-size: 13px; line-height: 1.35; }
+[data-wz-step="review"] .wz-pv .pv.pv-truncated {
+  min-height: 5.4em;
+  max-height: 5.4em;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
 [data-wz-step="review"] .wz-field input,
 [data-wz-step="review"] .wz-field select { padding: 7px 10px; }
 [data-wz-step="review"] .wz-toggle { padding: 5px 9px; font-size: 12px; }

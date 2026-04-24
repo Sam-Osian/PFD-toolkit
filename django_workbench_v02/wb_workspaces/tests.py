@@ -1045,6 +1045,50 @@ class WorkspaceActiveStateViewTests(TestCase):
             reverse("run-cancel", kwargs={"workbook_id": self.workspace_a.id, "run_id": run.id}),
         )
 
+    def test_dashboard_pending_badge_uses_queue_and_stage_labels(self):
+        queued_investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Queued Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        queued_run = queue_run(
+            actor=self.owner,
+            investigation=queued_investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        queued_run.status = RunStatus.QUEUED
+        queued_run.save(update_fields=["status"])
+
+        themes_investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_b,
+            title="Themes Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        themes_run = queue_run(
+            actor=self.owner,
+            investigation=themes_investigation,
+            run_type=RunType.THEMES,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        themes_run.status = RunStatus.RUNNING
+        themes_run.save(update_fields=["status"])
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Queued")
+        self.assertContains(response, "Finding themes")
+        self.assertNotContains(response, ">Loading<")
+
     def test_dashboard_shows_complete_reports_found_metric(self):
         investigation = create_investigation(
             actor=self.owner,
