@@ -1545,6 +1545,7 @@ Explore · PFD Toolkit Workbench v0.2
       copy: '{% if is_workspace_view and explore.themes_from_investigation %}Discovered investigation themes in the current workspace scope, including definitions.{% else %}Most common themes in the current {% if is_collection_view %}collection{% else %}Explore{% endif %} scope.{% endif %}',
       rows: readJson('explore-all-themes'),
       cap: null,
+      showDescriptions: {% if is_workspace_view and explore.themes_from_investigation %}true{% else %}false{% endif %},
     },
   };
 
@@ -1584,7 +1585,7 @@ Explore · PFD Toolkit Workbench v0.2
           li.appendChild(top);
 
           const description = String(row.description || '').trim();
-          if (description) {
+          if (config.showDescriptions && description) {
             const detail = document.createElement('p');
             detail.className = 'theme-detail-row__description';
             detail.textContent = description;

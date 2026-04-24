@@ -1008,30 +1008,36 @@ svg:not([width]):not([height]) {
 
 .explore-metric-list li.theme-detail-row {
   display: grid;
-  gap: 7px;
+  gap: 4px;
 }
 
 .theme-detail-row__top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  column-gap: 10px;
 }
 
 .theme-detail-row__label {
   font-size: 13px;
   color: var(--text-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .theme-detail-row__count {
   font: 500 12px/1 var(--ff-mono);
   color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .theme-detail-row__description {
-  margin: 0;
+  margin: -1px 0 0;
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.25;
   color: var(--text-3);
 }
 
