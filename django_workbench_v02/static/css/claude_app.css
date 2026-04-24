@@ -1009,11 +1009,15 @@ svg:not([width]):not([height]) {
 .explore-metric-list li.theme-detail-row {
   display: grid;
   gap: 4px;
+  width: 100%;
+  justify-content: initial;
+  align-items: stretch;
 }
 
 .theme-detail-row__top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 48px;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   column-gap: 10px;
 }
@@ -1030,7 +1034,9 @@ svg:not([width]):not([height]) {
 .theme-detail-row__count {
   font: 500 12px/1 var(--ff-mono);
   color: var(--text);
+  justify-self: end;
   text-align: right;
+  min-width: 3ch;
   font-variant-numeric: tabular-nums;
 }
 

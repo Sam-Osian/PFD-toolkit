@@ -45,11 +45,13 @@
                     <path d="M2.5 12h11"></path>
                 </svg>
             </button>
-            {% with p=request.path %}
+            {% with p=request.path route=request.resolver_match.url_name %}
             <div class="topbar-crumbs">
-                <span class="mono">Workspace</span>
-                <span>/</span>
-                {% if "/collections/" in p %}
+                {% if route == "workbook-open" and collection_title %}
+                    <span class="mono">Workspace</span>
+                    <span>/</span>
+                    <span class="cur">{{ collection_title }}</span>
+                {% elif "/collections/" in p %}
                     <span class="cur">Collections</span>
                 {% elif "/explore/" in p %}
                     <span class="cur">Explore</span>
