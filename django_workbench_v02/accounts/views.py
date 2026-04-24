@@ -190,17 +190,42 @@ def _explore_report_rows(
     preview_records = preview_df.to_dict(orient="records")
     rows: list[dict[str, object]] = []
     date_columns = {"date", "response_date"}
+    truthy_values = {"true", "yes", "1"}
+    falsy_values = {"false", "no", "0"}
 
     for row in preview_records:
-        cells: list[str] = []
+        cells: list[dict[str, object]] = []
         for column in ordered_columns:
             value = row.get(column)
+            is_theme_boolean = False
+            bool_value = False
             if column in date_columns:
                 parsed = _parse_report_dates(pd.Series([value])).iloc[0]
                 if pd.notna(parsed):
-                    cells.append(parsed.date().isoformat())
+                    cells.append(
+                        {
+                            "value": parsed.date().isoformat(),
+                            "is_theme_boolean": False,
+                            "bool_value": False,
+                        }
+                    )
                     continue
-            cells.append(_normalise_dashboard_value(value))
+            normalized = _normalise_dashboard_value(value)
+            if str(column).startswith("theme_"):
+                lowered = normalized.strip().casefold()
+                if lowered in truthy_values:
+                    is_theme_boolean = True
+                    bool_value = True
+                elif lowered in falsy_values:
+                    is_theme_boolean = True
+                    bool_value = False
+            cells.append(
+                {
+                    "value": normalized,
+                    "is_theme_boolean": is_theme_boolean,
+                    "bool_value": bool_value,
+                }
+            )
         rows.append({"cells": cells})
     return rows
 

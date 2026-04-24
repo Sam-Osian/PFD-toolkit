@@ -408,9 +408,12 @@ def _theme_summary_from_dataframe(result_df: pd.DataFrame, theme_model: type[Bas
     schema = theme_model.model_json_schema()
     properties = schema.get("properties") or {}
     rows = []
-    for field_name in properties.keys():
+    for field_name, field_meta in properties.items():
         if field_name not in result_df.columns:
             continue
+        description = ""
+        if isinstance(field_meta, dict):
+            description = str(field_meta.get("description") or "").strip()
         series = result_df[field_name]
         matched = int(
             series.fillna(False)
@@ -420,8 +423,14 @@ def _theme_summary_from_dataframe(result_df: pd.DataFrame, theme_model: type[Bas
             .isin({"true", "yes", "1"})
             .sum()
         )
-        rows.append({"theme": field_name, "matched_reports": matched})
-    summary_df = pd.DataFrame(rows, columns=["theme", "matched_reports"])
+        rows.append(
+            {
+                "theme": field_name,
+                "description": description,
+                "matched_reports": matched,
+            }
+        )
+    summary_df = pd.DataFrame(rows, columns=["theme", "description", "matched_reports"])
     if not summary_df.empty:
         summary_df = summary_df.sort_values("matched_reports", ascending=False).reset_index(drop=True)
     return summary_df

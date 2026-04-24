@@ -667,6 +667,33 @@ def _pipeline_theme_label_map(*, workspace: Workspace) -> dict[str, str]:
     return label_map
 
 
+def _pipeline_theme_metadata_map(*, workspace: Workspace) -> dict[str, dict[str, str]]:
+    theme_summary_artifact = _latest_workspace_artifact(
+        workspace=workspace,
+        artifact_type=ArtifactType.THEME_SUMMARY,
+    )
+    summary_df = _artifact_dataframe(theme_summary_artifact)
+    if summary_df.empty or "theme" not in summary_df.columns:
+        return {}
+    metadata_map: dict[str, dict[str, str]] = {}
+    for _, row in summary_df.iterrows():
+        cleaned = str(row.get("theme") or "").strip()
+        if not cleaned:
+            continue
+        description = str(row.get("description") or "").strip()
+        normalized = cleaned.casefold()
+        prefixed = cleaned if cleaned.startswith("theme_") else f"theme_{cleaned}"
+        payload = {
+            "label": cleaned,
+            "description": description,
+        }
+        metadata_map[cleaned] = payload
+        metadata_map[normalized] = payload
+        metadata_map[prefixed] = payload
+        metadata_map[prefixed.casefold()] = payload
+    return metadata_map
+
+
 def _prune_non_pipeline_theme_columns(*, workspace: Workspace, reports_df: pd.DataFrame) -> pd.DataFrame:
     if reports_df.empty:
         return reports_df
@@ -687,11 +714,12 @@ def _prune_non_pipeline_theme_columns(*, workspace: Workspace, reports_df: pd.Da
     return reports_df.drop(columns=drop_columns, errors="ignore")
 
 
-def _theme_rows_from_pipeline_scope(*, workspace: Workspace, scoped_reports: pd.DataFrame) -> list[tuple[str, int]]:
+def _theme_rows_from_pipeline_scope(*, workspace: Workspace, scoped_reports: pd.DataFrame) -> list[dict[str, object]]:
     if scoped_reports.empty:
         return []
     label_map = _pipeline_theme_label_map(workspace=workspace)
-    rows: list[tuple[str, int]] = []
+    metadata_map = _pipeline_theme_metadata_map(workspace=workspace)
+    rows: list[dict[str, object]] = []
     for column in scoped_reports.columns:
         column_name = str(column or "").strip()
         if not column_name.startswith("theme_"):
@@ -707,15 +735,28 @@ def _theme_rows_from_pipeline_scope(*, workspace: Workspace, scoped_reports: pd.
             or label_map.get(column_name.replace("theme_", "").casefold())
             or default_label
         )
-        rows.append((str(label), count))
-    rows.sort(key=lambda item: (-int(item[1]), str(item[0]).casefold()))
+        metadata = (
+            metadata_map.get(column_name)
+            or metadata_map.get(column_name.casefold())
+            or metadata_map.get(column_name.replace("theme_", ""))
+            or metadata_map.get(column_name.replace("theme_", "").casefold())
+            or {}
+        )
+        rows.append(
+            {
+                "label": str(label),
+                "count": count,
+                "description": str(metadata.get("description") or "").strip(),
+            }
+        )
+    rows.sort(key=lambda item: (-int(item["count"]), str(item["label"]).casefold()))
     return rows
 
 
-def _theme_rows_from_generic_scope(*, reports_df: pd.DataFrame, scoped_reports: pd.DataFrame) -> list[tuple[str, int]]:
+def _theme_rows_from_generic_scope(*, reports_df: pd.DataFrame, scoped_reports: pd.DataFrame) -> list[dict[str, object]]:
     if reports_df.empty or scoped_reports.empty:
         return []
-    rows: list[tuple[str, int]] = []
+    rows: list[dict[str, object]] = []
     for _, meta in _theme_collection_map_from_reports(reports_df).items():
         column_name = str(meta.get("collection_column") or "").strip()
         if not column_name or column_name not in scoped_reports.columns:
@@ -724,8 +765,14 @@ def _theme_rows_from_generic_scope(*, reports_df: pd.DataFrame, scoped_reports: 
         if count <= 0:
             continue
         title = str(meta.get("title") or column_name.replace("_", " ").title())
-        rows.append((title, count))
-    rows.sort(key=lambda item: (-int(item[1]), str(item[0]).casefold()))
+        rows.append(
+            {
+                "label": title,
+                "count": count,
+                "description": str(meta.get("description") or "").strip(),
+            }
+        )
+    rows.sort(key=lambda item: (-int(item["count"]), str(item["label"]).casefold()))
     return rows
 
 
@@ -795,7 +842,7 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
             "temporal_end_label": "",
             "temporal_series": {"month": {"points": []}},
             "unique_receiver_count": 0,
-            "most_common_theme": "No theme signals",
+            "themes_from_investigation": False,
             "dataset_min_date": "",
             "dataset_max_date": timezone.now().date().isoformat(),
             "date_start_effective": "",
@@ -867,8 +914,10 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
         else {}
     )
     pipeline_themes_selected = bool(latest_filter_config.get("run_themes", False))
+    pipeline_theme_metadata_available = bool(_pipeline_theme_metadata_map(workspace=workspace))
+    use_pipeline_themes = bool(pipeline_themes_selected and pipeline_theme_metadata_available)
 
-    if pipeline_themes_selected:
+    if use_pipeline_themes:
         scope_theme_rows = _theme_rows_from_pipeline_scope(
             workspace=workspace,
             scoped_reports=scoped_reports,
@@ -880,16 +929,26 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
         )
 
     top_theme_rows = scope_theme_rows[:8]
-    top_theme_denominator = max(1, top_theme_rows[0][1]) if top_theme_rows else 1
+    top_theme_denominator = max(1, int(top_theme_rows[0]["count"])) if top_theme_rows else 1
     top_themes = [
         {
-            "label": str(label),
-            "count": int(count),
-            "percent_of_top": int(round((int(count) / float(top_theme_denominator)) * 100)),
+            "label": str(item.get("label") or ""),
+            "count": int(item.get("count") or 0),
+            "description": str(item.get("description") or "").strip(),
+            "percent_of_top": int(
+                round((int(item.get("count") or 0) / float(top_theme_denominator)) * 100)
+            ),
         }
-        for label, count in top_theme_rows
+        for item in top_theme_rows
     ]
-    all_themes = [{"label": str(label), "count": int(count)} for label, count in scope_theme_rows]
+    all_themes = [
+        {
+            "label": str(item.get("label") or ""),
+            "count": int(item.get("count") or 0),
+            "description": str(item.get("description") or "").strip(),
+        }
+        for item in scope_theme_rows
+    ]
     receiver_counter: dict[str, int] = {}
     for raw in base_df.get("receiver", []):
         for receiver in _split_receivers(raw):
@@ -933,7 +992,7 @@ def _workspace_build_explore_payload(*, workspace: Workspace, request):
             ],
             "all_themes": all_themes,
             "top_themes": top_themes,
-            "most_common_theme": top_themes[0]["label"] if top_themes else "No theme signals",
+            "themes_from_investigation": use_pipeline_themes,
         }
     )
     return {"dataset_available": dataset_available, "explore": explore, "scoped_reports": scoped_reports}
@@ -1068,8 +1127,6 @@ def open_workspace(request, workbook_id):
         public_share_url = request.build_absolute_uri(
             reverse("share-link-detail", kwargs={"share_id": active_public_share.id})
         )
-    theme_summary_artifact = _latest_workspace_artifact(workspace=workspace, artifact_type=ArtifactType.THEME_SUMMARY)
-    theme_summary_preview = _artifact_preview(theme_summary_artifact)
     run_detail_items = []
     for run in runs[:15]:
         run_detail_items.append(
@@ -1109,7 +1166,6 @@ def open_workspace(request, workbook_id):
             "can_share_workspace_investigation": can_share_workspace_investigation,
             "workspace_public_share_url": public_share_url,
             "workspace_latest_run": latest_run,
-            "workspace_theme_summary": theme_summary_preview,
             "workspace_debug_runs": run_detail_items,
         },
     )

@@ -567,6 +567,7 @@ svg:not([width]):not([height]) {
 }
 
 .hud-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding-top: 18px; border-top: 1px solid var(--line); }
+.hud-stats.hud-stats-three { grid-template-columns: repeat(3, 1fr); }
 .hud-stat { position: relative; }
 .hud-stat .lbl { font-family: var(--ff-mono); font-size: 10px; color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; }
 .hud-stat .val { font-family: var(--ff-mono); font-size: 20px; font-weight: 500; letter-spacing: -0.01em; color: var(--text); }
@@ -745,6 +746,38 @@ svg:not([width]):not([height]) {
 
 .explore-reports-table tbody tr:hover td {
   background: rgba(25, 33, 74, 0.5);
+}
+
+.explore-reports-table td.report-theme-bool-cell {
+  text-align: center;
+  vertical-align: middle;
+}
+
+.report-theme-bool {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid rgba(167, 178, 255, 0.42);
+  background: rgba(18, 24, 58, 0.85);
+  position: relative;
+}
+
+.report-theme-bool.is-true {
+  border-color: color-mix(in srgb, var(--good) 65%, rgba(167, 178, 255, 0.42));
+  background: color-mix(in srgb, var(--good) 16%, rgba(18, 24, 58, 0.85));
+}
+
+.report-theme-bool.is-true::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid color-mix(in srgb, var(--good) 75%, white 25%);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .explore-reports-table th.dataset-col-id,
@@ -971,6 +1004,50 @@ svg:not([width]):not([height]) {
 .explore-metric-list li.empty {
   font-size: 12px;
   color: var(--text-3);
+}
+
+.explore-metric-list li.theme-detail-row {
+  display: grid;
+  gap: 7px;
+}
+
+.theme-detail-row__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.theme-detail-row__label {
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.theme-detail-row__count {
+  font: 500 12px/1 var(--ff-mono);
+  color: var(--text);
+}
+
+.theme-detail-row__description {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.theme-detail-row__track {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.theme-detail-row__track i {
+  display: block;
+  height: 100%;
+  width: var(--w, 0%);
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  border-radius: 999px;
 }
 
 #explore-metric-search {

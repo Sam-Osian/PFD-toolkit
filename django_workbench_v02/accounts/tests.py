@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pandas as pd
 
+from accounts.views import _explore_report_rows
+
 
 User = get_user_model()
 
@@ -156,6 +158,35 @@ class AccountsViewTests(TestCase):
         self.assertNotContains(response, "2026-04-14 00:00:00")
         self.assertContains(response, "2026-04-20")
         self.assertNotContains(response, "2026-04-20 00:00:00")
+
+    def test_explore_report_rows_marks_theme_booleans_for_checkbox_rendering(self):
+        reports_df = pd.DataFrame(
+            [
+                {
+                    "id": "2026-0001",
+                    "date": "2026-04-14 00:00:00",
+                    "coroner": "Coroner A",
+                    "area": "North",
+                    "receiver": "NHS Trust",
+                    "title": "Report A",
+                    "url": "https://example.com/a",
+                    "theme_care_coordination": True,
+                    "theme_discharge_failures": False,
+                },
+            ]
+        )
+        rows = _explore_report_rows(
+            reports_df=reports_df,
+            ordered_columns=["id", "theme_care_coordination", "theme_discharge_failures"],
+        )
+        self.assertEqual(len(rows), 1)
+        cells = rows[0]["cells"]
+        self.assertEqual(cells[0]["value"], "2026-0001")
+        self.assertFalse(cells[0]["is_theme_boolean"])
+        self.assertTrue(cells[1]["is_theme_boolean"])
+        self.assertTrue(cells[1]["bool_value"])
+        self.assertTrue(cells[2]["is_theme_boolean"])
+        self.assertFalse(cells[2]["bool_value"])
 
     @patch("accounts.views.load_collections_dataset")
     def test_explore_export_csv_downloads_filtered_scope(self, mock_load_collections):

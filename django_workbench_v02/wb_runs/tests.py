@@ -3,6 +3,7 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -10,6 +11,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pydantic import Field, create_model
 
 from wb_auditlog.models import AuditEvent
 from wb_investigations.models import InvestigationStatus
@@ -34,6 +36,7 @@ from .models import (
     RunType,
     RunWorkerHeartbeat,
 )
+from .pfd_toolkit_adapter import _theme_summary_from_dataframe
 from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run, reconcile_timed_out_runs
 
@@ -939,6 +942,42 @@ class RunWorkerTests(TestCase):
             ).exists()
         )
         mocked.assert_called_once()
+
+    def test_theme_summary_includes_theme_descriptions(self):
+        theme_model = create_model(
+            "ThemeModel",
+            care_coordination=(bool, Field(description="Coordination gaps between services.")),
+            discharge_failures=(bool, Field(description="Unsafe or delayed discharge processes.")),
+        )
+        themed_df = pd.DataFrame(
+            [
+                {"care_coordination": True, "discharge_failures": False},
+                {"care_coordination": False, "discharge_failures": True},
+                {"care_coordination": True, "discharge_failures": True},
+            ]
+        )
+
+        summary_df = _theme_summary_from_dataframe(themed_df, theme_model)
+
+        self.assertEqual(
+            list(summary_df.columns),
+            ["theme", "description", "matched_reports"],
+        )
+        self.assertEqual(
+            summary_df.to_dict(orient="records"),
+            [
+                {
+                    "theme": "care_coordination",
+                    "description": "Coordination gaps between services.",
+                    "matched_reports": 2,
+                },
+                {
+                    "theme": "discharge_failures",
+                    "description": "Unsafe or delayed discharge processes.",
+                    "matched_reports": 2,
+                },
+            ],
+        )
 
     def test_worker_uses_real_extract_adapter_when_enabled(self):
         output_path = Path("/tmp/test-run-extract-output.csv")

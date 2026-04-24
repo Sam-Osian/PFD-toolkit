@@ -20,7 +20,18 @@
             {% for row in reports_rows %}
                 <tr>
                     {% for cell in row.cells %}
-                        <td>{{ cell|default:"-" }}</td>
+                        {% if cell.is_theme_boolean %}
+                            <td class="report-theme-bool-cell">
+                                <span
+                                    class="report-theme-bool{% if cell.bool_value %} is-true{% else %} is-false{% endif %}"
+                                    role="img"
+                                    aria-label="{% if cell.bool_value %}True{% else %}False{% endif %}"
+                                    title="{% if cell.bool_value %}True{% else %}False{% endif %}"
+                                ></span>
+                            </td>
+                        {% else %}
+                            <td>{{ cell.value|default:"-" }}</td>
+                        {% endif %}
                     {% endfor %}
                 </tr>
             {% endfor %}
