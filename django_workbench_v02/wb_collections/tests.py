@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from wb_investigations.models import Investigation
-from wb_collections.services import refresh_collection_cards_snapshot
+from wb_collections.services import build_explore_metrics, refresh_collection_cards_snapshot
 from wb_workspaces.models import Workspace
 
 User = get_user_model()
@@ -272,3 +272,26 @@ class CollectionViewTests(TestCase):
         self.assertEqual(second.status_code, 302)
 
         self.assertEqual(self.user.created_workspaces.count(), 2)
+
+
+class CollectionMetricsTests(TestCase):
+    def test_temporal_series_includes_zero_count_periods(self):
+        reports_df = pd.DataFrame(
+            [
+                {"date": "2024-01-01", "receiver": "A", "area": "X"},
+                {"date": "2024-03-01", "receiver": "A", "area": "X"},
+            ]
+        )
+
+        metrics = build_explore_metrics(
+            reports_df=reports_df,
+            scoped_reports_df=reports_df,
+            query="",
+        )
+
+        week_points = metrics["temporal_series"]["week"]["points"]
+        month_points = metrics["temporal_series"]["month"]["points"]
+        self.assertGreater(len(week_points), 2)
+        self.assertGreater(len(month_points), 2)
+        self.assertTrue(any(int(point["count"]) == 0 for point in week_points))
+        self.assertTrue(any(int(point["count"]) == 0 for point in month_points))

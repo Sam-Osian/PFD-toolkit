@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import json
+import math
 from collections import Counter
 from pathlib import Path
 from threading import Lock
@@ -559,11 +560,35 @@ def build_explore_metrics(
         "year": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
     }
 
+    def _complete_period_counts(*, source_dates: pd.Series, freq: str) -> pd.Series:
+        period_series = source_dates.dt.to_period(freq)
+        if period_series.empty:
+            return pd.Series(dtype="int64")
+        counts = period_series.value_counts().sort_index()
+        full_index = pd.period_range(
+            start=period_series.min(),
+            end=period_series.max(),
+            freq=freq,
+        )
+        return counts.reindex(full_index, fill_value=0).astype("int64")
+
+    def _year_axis_labels(*, start_year: int, end_year: int, max_labels: int = 6) -> list[str]:
+        if end_year <= start_year:
+            return [str(start_year), "Now"]
+        span_years = max(1, end_year - start_year)
+        step = max(1, int(math.ceil(span_years / max(1, max_labels - 2))))
+        labels = [str(year) for year in range(start_year, end_year + 1, step)]
+        if labels[-1] != str(end_year):
+            labels.append(str(end_year))
+        if labels[-1] != "Now":
+            labels.append("Now")
+        return labels
+
     def _build_temporal_series(
         counts_by_period: pd.Series,
         *,
+        mode: str,
         max_points: int | None,
-        smooth_window: int,
     ) -> dict[str, Any]:
         result: dict[str, Any] = {
             "points": [],
@@ -578,13 +603,20 @@ def build_explore_metrics(
         if counts_by_period.empty:
             return result
 
+        period_values = [period for period in counts_by_period.index.tolist()]
         counts = [int(value) for value in counts_by_period.tolist()]
-        labels = [str(period) for period in counts_by_period.index.tolist()]
-        count_series = pd.Series(counts, dtype="float64")
-        smoothed_series = count_series.rolling(window=max(1, smooth_window), min_periods=1).mean()
-        smoothed_counts = [float(value) for value in smoothed_series.tolist()]
+        labels: list[str] = []
+        for period in period_values:
+            if mode == "week":
+                labels.append(
+                    f"{period.start_time.date().isoformat()} to {period.end_time.date().isoformat()}"
+                )
+            elif mode == "month":
+                labels.append(period.strftime("%Y-%m"))
+            else:
+                labels.append(str(period.year))
 
-        point_pairs = list(zip(labels, counts, smoothed_counts))
+        point_pairs = list(zip(period_values, labels, counts))
         if max_points is not None and len(point_pairs) > max_points:
             sampled_indexes = sorted(
                 {
@@ -594,12 +626,12 @@ def build_explore_metrics(
             )
             point_pairs = [point_pairs[index] for index in sampled_indexes]
 
-        smoothed_only = [float(smoothed) for _, _, smoothed in point_pairs]
-        clip_low = float(pd.Series(smoothed_only).quantile(0.05))
-        clip_high = float(pd.Series(smoothed_only).quantile(0.95))
-        if clip_high <= clip_low:
-            clip_high = clip_low + 1.0
-        span = clip_high - clip_low
+        plotted_counts = [float(count) for _, _, count in point_pairs]
+        count_low = min(plotted_counts)
+        count_high = max(plotted_counts)
+        if count_high <= count_low:
+            count_high = count_low + 1.0
+        span = count_high - count_low
 
         point_count = len(point_pairs)
         raw_points: list[tuple[float, float]] = []
@@ -609,10 +641,9 @@ def build_explore_metrics(
         chart_range = chart_bottom - chart_top
         area_bottom = 200.0
 
-        for index, (label, count, smoothed) in enumerate(point_pairs):
+        for index, (_, label, count) in enumerate(point_pairs):
             x = chart_width / 2.0 if point_count == 1 else (index * chart_width / (point_count - 1))
-            clipped_count = min(max(float(smoothed), clip_low), clip_high)
-            y = chart_bottom - ((clipped_count - clip_low) * chart_range / span)
+            y = chart_bottom - ((float(count) - count_low) * chart_range / span)
             raw_points.append((x, y))
             result["points"].append(
                 {"label": label, "count": count, "x": round(x, 2), "y": round(y, 2)}
@@ -625,38 +656,31 @@ def build_explore_metrics(
         first_x = raw_points[0][0]
         last_x = raw_points[-1][0]
         result["area_path"] = f'{result["line_path"]} L{last_x:.2f} {area_bottom:.2f} L{first_x:.2f} {area_bottom:.2f} Z'
-        result["latest_label"] = point_pairs[-1][0]
-        result["latest_count"] = point_pairs[-1][1]
-        result["start_label"] = point_pairs[0][0][:4]
-        result["end_label"] = point_pairs[-1][0][:4]
+        result["latest_label"] = point_pairs[-1][1]
+        result["latest_count"] = point_pairs[-1][2]
+        result["start_label"] = str(point_pairs[0][0].year)
+        result["end_label"] = str(point_pairs[-1][0].year)
 
-        start_year = int(result["start_label"])
-        end_year = int(result["end_label"])
-        if end_year - start_year >= 2:
-            axis_labels = [str(year) for year in range(start_year, end_year, 2)]
-            if str(end_year - 1) not in axis_labels:
-                axis_labels.append(str(end_year - 1))
-            axis_labels.append("Now")
-            result["axis_labels"] = axis_labels
-        else:
-            result["axis_labels"] = [result["start_label"], "Now"]
+        start_year = int(point_pairs[0][0].year)
+        end_year = int(point_pairs[-1][0].year)
+        result["axis_labels"] = _year_axis_labels(start_year=start_year, end_year=end_year)
         return result
 
     if not date_series.empty:
         temporal_series["week"] = _build_temporal_series(
-            date_series.dt.to_period("W-SUN").value_counts().sort_index(),
+            _complete_period_counts(source_dates=date_series, freq="W-SUN"),
+            mode="week",
             max_points=None,
-            smooth_window=2,
         )
         temporal_series["month"] = _build_temporal_series(
-            date_series.dt.to_period("M").value_counts().sort_index(),
+            _complete_period_counts(source_dates=date_series, freq="M"),
+            mode="month",
             max_points=None,
-            smooth_window=3,
         )
         temporal_series["year"] = _build_temporal_series(
-            date_series.dt.to_period("Y").value_counts().sort_index(),
+            _complete_period_counts(source_dates=date_series, freq="Y"),
+            mode="year",
             max_points=20,
-            smooth_window=1,
         )
 
         chosen = temporal_series[temporal_mode]
