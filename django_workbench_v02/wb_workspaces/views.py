@@ -132,6 +132,116 @@ RUN_STATUS_CARD_LABELS = {
 }
 
 
+def _scope_option_from_dates(*, start: str, end: str, report_limit) -> str:
+    if report_limit == 100:
+        return "most_recent_100"
+    start_value = str(start or "").strip()
+    end_value = str(end or "").strip()
+    if start_value and end_value:
+        return "custom_range"
+    return "all_reports"
+
+
+def _wizard_copy_prefill(
+    *,
+    workspace: Workspace,
+    investigation: Investigation | None,
+    latest_run: InvestigationRun | None,
+) -> dict:
+    config = latest_run.input_config_json if latest_run and isinstance(latest_run.input_config_json, dict) else {}
+    scope_json = (
+        investigation.scope_json
+        if investigation is not None and isinstance(investigation.scope_json, dict)
+        else {}
+    )
+    method_json = (
+        investigation.method_json
+        if investigation is not None and isinstance(investigation.method_json, dict)
+        else {}
+    )
+
+    pipeline_plan = (
+        config.get("pipeline_plan")
+        if isinstance(config.get("pipeline_plan"), list)
+        else (method_json.get("pipeline_plan") if isinstance(method_json.get("pipeline_plan"), list) else [])
+    )
+    has_filter = bool(method_json.get("run_filter", RunType.FILTER in pipeline_plan))
+    has_themes = bool(method_json.get("run_themes", RunType.THEMES in pipeline_plan))
+    has_extract = bool(method_json.get("run_extract", RunType.EXTRACT in pipeline_plan))
+    run_filter = has_filter or RunType.FILTER in pipeline_plan
+    run_themes = has_themes or RunType.THEMES in pipeline_plan
+    run_extract = has_extract or RunType.EXTRACT in pipeline_plan
+
+    scope_start = str(scope_json.get("query_start_date") or "")
+    scope_end = str(scope_json.get("query_end_date") or "")
+    scope_option = str(scope_json.get("temporal_scope_option") or "").strip() or _scope_option_from_dates(
+        start=scope_start,
+        end=scope_end,
+        report_limit=config.get("report_limit") or scope_json.get("report_limit"),
+    )
+
+    selected_filters = config.get("selected_filters") if isinstance(config.get("selected_filters"), dict) else {}
+    feature_fields = config.get("feature_fields") if isinstance(config.get("feature_fields"), list) else []
+    sanitised_features: list[dict[str, str]] = []
+    for row in feature_fields:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or row.get("field_name") or "").strip()
+        description = str(row.get("description") or "").strip()
+        field_type = str(row.get("type") or "text").strip().lower() or "text"
+        if field_type == "integer":
+            field_type = "decimal"
+        if field_type not in {"text", "decimal", "boolean"}:
+            field_type = "text"
+        sanitised_features.append({"name": name, "description": description, "type": field_type})
+
+    try:
+        max_parallel_workers = int(config.get("max_parallel_workers") or 1)
+    except (TypeError, ValueError):
+        max_parallel_workers = 1
+
+    title = (
+        str(investigation.title).strip()
+        if investigation is not None and str(investigation.title or "").strip()
+        else str(workspace.title or "").strip()
+    )
+    question_text = (
+        str(investigation.question_text).strip()
+        if investigation is not None and str(investigation.question_text or "").strip()
+        else str(workspace.description or "").strip()
+    )
+
+    return {
+        "title": title,
+        "question_text": question_text,
+        "scope_option": scope_option,
+        "custom_start_date": scope_start,
+        "custom_end_date": scope_end,
+        "run_filter": bool(run_filter),
+        "run_themes": bool(run_themes),
+        "run_extract": bool(run_extract),
+        "search_query": str(config.get("search_query") or question_text).strip(),
+        "filter_df": bool(config.get("filter_df", True)),
+        "include_supporting_quotes": bool(config.get("produce_spans", False)),
+        "coroner_filters": ", ".join(selected_filters.get("coroner", []) or []),
+        "area_filters": ", ".join(selected_filters.get("area", []) or []),
+        "receiver_filters": ", ".join(selected_filters.get("receiver", []) or []),
+        "seed_topics": str(config.get("seed_topics") or "").strip(),
+        "min_themes": config.get("min_themes"),
+        "max_themes": config.get("max_themes"),
+        "extra_theme_instructions": str(config.get("extra_theme_instructions") or "").strip(),
+        "feature_fields": json.dumps(sanitised_features),
+        "allow_multiple": bool(config.get("allow_multiple", False)),
+        "force_assign": bool(config.get("force_assign", False)),
+        "skip_if_present": bool(config.get("skip_if_present", True)),
+        "extract_include_supporting_quotes": bool(config.get("produce_spans", False)),
+        "provider": str(config.get("provider") or "openai").strip().lower(),
+        "model_name": str(config.get("model_name") or "gpt-4.1-mini").strip(),
+        "max_parallel_workers": max_parallel_workers,
+        "request_completion_email": True,
+    }
+
+
 def _pipeline_status_for_run(run: InvestigationRun | None) -> str:
     if run is None:
         return ""
@@ -456,7 +566,7 @@ def dashboard(request):
                 "is_archived": workspace.archived_at is not None,
                 "can_restore": can_manage_lifecycle,
                 "can_archive": can_manage_lifecycle and workspace.archived_at is None,
-                "can_hard_delete": can_manage_lifecycle,
+                "can_hard_delete": can_manage_lifecycle and workspace.archived_at is not None,
                 "can_cancel_running_run": False,
                 "running_run": None,
                 "pending_stage_label": "",
@@ -541,6 +651,14 @@ def dashboard(request):
 
         if row["pipeline_updated_at"] and row["pipeline_updated_at"] > row["last_edited_at"]:
             row["last_edited_at"] = row["pipeline_updated_at"]
+
+        copy_prefill = _wizard_copy_prefill(
+            workspace=row["workspace"],
+            investigation=investigation,
+            latest_run=run,
+        )
+        row["copy_prefill"] = copy_prefill
+        row["copy_prefill_id"] = f"workspace-copy-prefill-{workspace_id}"
     active_workspace = get_active_workspace_for_user(user=request.user)
     if active_workspace is None and memberships_list:
         for membership in memberships_list:

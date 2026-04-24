@@ -58,6 +58,14 @@
                                     <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
                                 </summary>
                                 <div class="ws-actions-menu">
+                                    <button
+                                        class="ws-actions-item"
+                                        type="button"
+                                        data-copy-investigation
+                                        data-copy-prefill-id="{{ row.copy_prefill_id }}"
+                                    >
+                                        Copy into new investigation
+                                    </button>
                                     {% if row.can_archive %}
                                         <button
                                             class="ws-actions-item"
@@ -86,6 +94,7 @@
                                 </div>
                             </details>
                         </header>
+                        {{ row.copy_prefill|json_script:row.copy_prefill_id }}
 
                         <div class="ws-body">
                             <h3><a class="ws-open-title" href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a></h3>
@@ -154,6 +163,14 @@
                                     <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
                                 </summary>
                                 <div class="ws-actions-menu">
+                                    <button
+                                        class="ws-actions-item"
+                                        type="button"
+                                        data-copy-investigation
+                                        data-copy-prefill-id="{{ row.copy_prefill_id }}"
+                                    >
+                                        Copy into new investigation
+                                    </button>
                                     {% if row.can_restore %}
                                         <button
                                             class="ws-actions-item"
@@ -181,6 +198,7 @@
                                     {% endif %}
                                 </div>
                             </details>
+                            {{ row.copy_prefill|json_script:row.copy_prefill_id }}
                         </li>
                         {% endwith %}
                     {% endfor %}
@@ -340,6 +358,26 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
 
+    const copyButton = event.target.closest("[data-copy-investigation]");
+    if (copyButton) {
+      closeAllActionMenus();
+      if (typeof window.__openInvestigationWizard !== "function") return;
+      const prefillId = String(copyButton.getAttribute("data-copy-prefill-id") || "").trim();
+      let prefill = {};
+      if (prefillId) {
+        const script = document.getElementById(prefillId);
+        if (script) {
+          try {
+            prefill = JSON.parse(script.textContent || "{}");
+          } catch (error) {
+            prefill = {};
+          }
+        }
+      }
+      window.__openInvestigationWizard({ prefill: prefill });
+      return;
+    }
+
     if (event.target.closest("[data-archive-close]")) {
       closeDialog(archiveDialog);
       return;
@@ -373,13 +411,20 @@ document.addEventListener("DOMContentLoaded", function() {
   document.addEventListener("mousemove", function(event) {
     const openMenu = document.querySelector("details.ws-actions[open]");
     if (!openMenu) return;
-    const rect = openMenu.getBoundingClientRect();
-    const distance = 120;
+    const triggerRect = openMenu.getBoundingClientRect();
+    const popup = openMenu.querySelector(".ws-actions-menu");
+    const popupRect = popup ? popup.getBoundingClientRect() : null;
+    const left = popupRect ? Math.min(triggerRect.left, popupRect.left) : triggerRect.left;
+    const right = popupRect ? Math.max(triggerRect.right, popupRect.right) : triggerRect.right;
+    const top = popupRect ? Math.min(triggerRect.top, popupRect.top) : triggerRect.top;
+    const bottom = popupRect ? Math.max(triggerRect.bottom, popupRect.bottom) : triggerRect.bottom;
+    const distanceX = 64;
+    const distanceY = 96;
     const isFarAway =
-      event.clientX < rect.left - distance ||
-      event.clientX > rect.right + distance ||
-      event.clientY < rect.top - distance ||
-      event.clientY > rect.bottom + distance;
+      event.clientX < left - distanceX ||
+      event.clientX > right + distanceX ||
+      event.clientY < top - distanceY ||
+      event.clientY > bottom + distanceY;
     if (isFarAway) closeActionMenu(openMenu);
   });
 

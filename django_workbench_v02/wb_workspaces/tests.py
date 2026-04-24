@@ -1,5 +1,7 @@
 from datetime import timedelta
+import re
 import io
+import json
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
@@ -800,6 +802,124 @@ class WorkspaceActiveStateViewTests(TestCase):
             response,
             reverse("workbook-open", kwargs={"workbook_id": self.workspace_b.id}),
         )
+
+    def test_dashboard_only_shows_permanent_delete_for_archived_workspaces(self):
+        self.client.force_login(self.owner)
+        active_response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(active_response.status_code, 200)
+        active_html = active_response.content.decode("utf-8")
+        self.assertIsNone(re.search(r"<button[^>]*data-open-delete-confirm", active_html))
+
+        self.client.post(
+            reverse("workbook-archive", kwargs={"workbook_id": self.workspace_a.id}),
+            follow=True,
+        )
+        archived_response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(archived_response.status_code, 200)
+        archived_html = archived_response.content.decode("utf-8")
+        self.assertIsNotNone(re.search(r"<button[^>]*data-open-delete-confirm", archived_html))
+
+    def test_dashboard_copy_action_embeds_wizard_prefill_payload(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Copied investigation",
+            question_text="Original investigation description",
+            scope_json={
+                "temporal_scope_option": "custom_range",
+                "query_start_date": "2024-01-01",
+                "query_end_date": "2024-12-31",
+            },
+            method_json={
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES, RunType.EXTRACT],
+                "run_filter": True,
+                "run_themes": True,
+                "run_extract": True,
+            },
+            status=InvestigationStatus.ACTIVE,
+        )
+        queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES, RunType.EXTRACT],
+                "search_query": "screening query from run config",
+                "filter_df": False,
+                "selected_filters": {
+                    "coroner": ["Area Coroner"],
+                    "area": ["South West"],
+                    "receiver": ["NHS England"],
+                },
+                "seed_topics": "handoffs\nrisk ownership",
+                "min_themes": 4,
+                "max_themes": 10,
+                "extra_theme_instructions": "Prioritise process-level failures.",
+                "feature_fields": [
+                    {"name": "age_at_death", "description": "Age in years", "type": "integer"},
+                    {"name": "had_safeguarding_referral", "description": "Safeguarding referral", "type": "boolean"},
+                ],
+                "allow_multiple": True,
+                "force_assign": True,
+                "skip_if_present": False,
+                "produce_spans": True,
+                "provider": "openrouter",
+                "model_name": "gpt-4.1-mini",
+                "max_parallel_workers": 3,
+            },
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Copy into new investigation")
+
+        html = response.content.decode("utf-8")
+        script_match = re.search(
+            rf'<script id="workspace-copy-prefill-{self.workspace_a.id}" type="application/json">(?P<payload>.*?)</script>',
+            html,
+            re.S,
+        )
+        self.assertIsNotNone(script_match)
+        payload = json.loads(script_match.group("payload"))
+
+        self.assertEqual(payload.get("title"), "Copied investigation")
+        self.assertEqual(payload.get("question_text"), "Original investigation description")
+        self.assertEqual(payload.get("scope_option"), "custom_range")
+        self.assertEqual(payload.get("custom_start_date"), "2024-01-01")
+        self.assertEqual(payload.get("custom_end_date"), "2024-12-31")
+        self.assertTrue(payload.get("run_filter"))
+        self.assertTrue(payload.get("run_themes"))
+        self.assertTrue(payload.get("run_extract"))
+        self.assertEqual(payload.get("search_query"), "screening query from run config")
+        self.assertFalse(payload.get("filter_df"))
+        self.assertEqual(payload.get("seed_topics"), "handoffs\nrisk ownership")
+        self.assertEqual(payload.get("min_themes"), 4)
+        self.assertEqual(payload.get("max_themes"), 10)
+        self.assertEqual(payload.get("extra_theme_instructions"), "Prioritise process-level failures.")
+        self.assertEqual(payload.get("provider"), "openrouter")
+        self.assertEqual(payload.get("model_name"), "gpt-4.1-mini")
+        self.assertEqual(payload.get("max_parallel_workers"), 3)
+        self.assertNotIn("api_key", payload)
+        parsed_features = json.loads(payload.get("feature_fields"))
+        self.assertEqual(parsed_features[0]["type"], "decimal")
+        self.assertEqual(parsed_features[1]["type"], "boolean")
+
+    def test_dashboard_copy_action_is_available_for_archived_workspaces(self):
+        self.client.force_login(self.owner)
+        self.client.post(
+            reverse("workbook-archive", kwargs={"workbook_id": self.workspace_a.id}),
+            follow=True,
+        )
+        self.client.post(
+            reverse("workbook-archive", kwargs={"workbook_id": self.workspace_b.id}),
+            follow=True,
+        )
+
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertGreaterEqual(html.count("Copy into new investigation"), 2)
 
     def test_open_workspace_route_sets_active_and_redirects_to_explore(self):
         self.client.force_login(self.owner)
