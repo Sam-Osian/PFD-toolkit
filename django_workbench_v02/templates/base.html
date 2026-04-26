@@ -4,12 +4,24 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block page_title %}PFD Toolkit v0.2{% endblock %}</title>
+    <title>{% block page_title %}PFD Toolkit{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}{{ seo_default_description }}{% endblock %}">
+    <meta name="robots" content="{% block meta_robots %}index, follow{% endblock %}">
+    <link rel="canonical" href="{% block canonical_url %}{{ seo_canonical_url }}{% endblock %}">
+    <meta property="og:site_name" content="PFD Toolkit">
+    <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+    <meta property="og:title" content="{% block og_title %}PFD Toolkit{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}{{ seo_default_description }}{% endblock %}">
+    <meta property="og:url" content="{% block og_url %}{{ seo_canonical_url }}{% endblock %}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{% block twitter_title %}PFD Toolkit{% endblock %}">
+    <meta name="twitter:description" content="{% block twitter_description %}{{ seo_default_description }}{% endblock %}">
     <link rel="icon" type="image/svg+xml" href="{% static 'brand/logo-lens.svg' %}">
     <link rel="stylesheet" href="{% static 'css/tokens.css' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     <link rel="stylesheet" href="{% static 'css/components.css' %}">
     <link rel="stylesheet" href="{% static 'css/claude_app.css' %}">
+    {% block structured_data %}{% endblock %}
     {% block extra_head %}{% endblock %}
 </head>
 <body class="app-body {% block body_class %}{% endblock %}" data-auth="{% if request.user.is_authenticated %}user{% else %}guest{% endif %}">

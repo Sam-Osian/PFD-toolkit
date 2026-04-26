@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 
-{% block page_title %}{{ collection.title }} · Collections · PFD Toolkit v0.2{% endblock %}
+{% block page_title %}{{ collection.title }} · Collections · PFD Toolkit{% endblock %}
+{% block meta_description %}Browse the {{ collection.title }} Prevention of Future Death report collection in PFD Toolkit.{% endblock %}
+{% block og_title %}{{ collection.title }} · PFD Report Collection{% endblock %}
+{% block og_description %}{{ collection.description|default:"Browse this Prevention of Future Death report collection in PFD Toolkit." }}{% endblock %}
+{% block twitter_title %}{{ collection.title }} · PFD Toolkit{% endblock %}
+{% block twitter_description %}{{ collection.description|default:"Browse this Prevention of Future Death report collection in PFD Toolkit." }}{% endblock %}
 
 {% block page_header %}
 <div class="stack-sm">

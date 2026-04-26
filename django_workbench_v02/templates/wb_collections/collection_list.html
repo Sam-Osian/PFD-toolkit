@@ -1,6 +1,22 @@
 {% extends "base.html" %}
 
-{% block page_title %}Collections · PFD Toolkit v0.2{% endblock %}
+{% block page_title %}PFD Report Collections · PFD Toolkit{% endblock %}
+{% block meta_description %}Browse curated Prevention of Future Death report collections, including Wales, NHS bodies, government departments, prisons, regulators, and local government.{% endblock %}
+{% block og_title %}PFD Report Collections · PFD Toolkit{% endblock %}
+{% block og_description %}Browse curated Prevention of Future Death report collections by policy area and receiver type.{% endblock %}
+{% block twitter_title %}PFD Report Collections{% endblock %}
+{% block twitter_description %}Browse curated Prevention of Future Death report collections by policy area and receiver type.{% endblock %}
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "PFD Report Collections",
+  "url": "{{ seo_canonical_url }}",
+  "description": "Curated Prevention of Future Death report collections by policy area and receiver type."
+}
+</script>
+{% endblock %}
 
 {% block page_header %}
 <div class="eyebrow"><span class="d"></span>Collections · {{ collections|length }} curated</div>

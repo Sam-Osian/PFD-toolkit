@@ -1,6 +1,22 @@
 {% extends "base.html" %}
 
-{% block page_title %}About · PFD Toolkit v0.2{% endblock %}
+{% block page_title %}About PFD Toolkit · Prevention of Future Death Report Research{% endblock %}
+{% block meta_description %}Learn how PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable for research, policy, and service improvement.{% endblock %}
+{% block og_title %}About PFD Toolkit{% endblock %}
+{% block og_description %}PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable at scale.{% endblock %}
+{% block twitter_title %}About PFD Toolkit{% endblock %}
+{% block twitter_description %}PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable at scale.{% endblock %}
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "AboutPage",
+  "name": "About PFD Toolkit",
+  "url": "{{ seo_canonical_url }}",
+  "description": "PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable at scale."
+}
+</script>
+{% endblock %}
 
 {% block page_header %}
 <div class="eyebrow"><span class="d"></span>About · The story</div>

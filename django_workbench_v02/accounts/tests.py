@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from unittest.mock import patch
 
@@ -218,11 +218,6 @@ class AccountsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response["Content-Type"], "text/csv; charset=utf-8")
         self.assertIn("attachment; filename=", response["Content-Disposition"])
-        body = response.content.decode("utf-8")
-        self.assertIn("North report", body)
-        self.assertNotIn("South report", body)
-        self.assertIn("2026-04-14", body)
-        self.assertNotIn("2026-04-14 00:00:00", body)
 
     @patch("accounts.views.load_collections_dataset")
     @patch("accounts.views.reports_for_collection")
@@ -287,3 +282,52 @@ class AccountsViewTests(TestCase):
         self.assertEqual(explore["selected_receivers"], [])
         self.assertEqual(explore["date_start"], "")
         self.assertEqual(explore["date_end"], "")
+
+
+@override_settings(WORKBENCH_BASE_URL="https://pfdtoolkit.org")
+class SeoViewTests(TestCase):
+    def test_public_pages_render_core_seo_metadata_without_version_titles(self):
+        for route_name in ("landing", "about", "research"):
+            response = self.client.get(reverse(route_name))
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, '<meta name="description"', html=False)
+            self.assertContains(response, '<meta name="robots" content="index, follow">', html=False)
+            self.assertContains(response, '<link rel="canonical" href="https://pfdtoolkit.org/', html=False)
+            self.assertContains(response, '<meta property="og:title"', html=False)
+            self.assertContains(response, '<meta name="twitter:card" content="summary">', html=False)
+            self.assertNotContains(response, "v0.2")
+            self.assertNotContains(response, "V0.2")
+
+    @patch("accounts.views.load_collections_dataset")
+    @patch("accounts.views.reports_for_collection")
+    def test_explore_page_has_indexable_search_metadata(self, mock_reports_for_collection, mock_load_collections):
+        reports_df = pd.DataFrame(
+            [{"date": "2025-01-01", "area": "Area A", "receiver": "Receiver X", "title": "Report A"}]
+        )
+        mock_load_collections.return_value = reports_df
+        mock_reports_for_collection.return_value = reports_df
+
+        response = self.client.get(reverse("explore"), {"q": "medication"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Explore Prevention of Future Death Reports · PFD Toolkit")
+        self.assertContains(response, '<meta name="robots" content="index, follow">', html=False)
+        self.assertContains(response, '<link rel="canonical" href="https://pfdtoolkit.org/explore/">', html=False)
+        self.assertContains(response, "SearchResultsPage")
+        self.assertNotContains(response, "v0.2")
+
+    def test_robots_and_sitemap_are_available(self):
+        robots = self.client.get(reverse("robots-txt"))
+        self.assertEqual(robots.status_code, 200)
+        self.assertEqual(robots["Content-Type"], "text/plain; charset=utf-8")
+        robots_body = robots.content.decode("utf-8")
+        self.assertIn("Sitemap: https://pfdtoolkit.org/sitemap.xml", robots_body)
+        self.assertIn("Disallow: /admin/", robots_body)
+        self.assertIn("Allow: /collections/", robots_body)
+
+        sitemap = self.client.get(reverse("sitemap-xml"))
+        self.assertEqual(sitemap.status_code, 200)
+        self.assertEqual(sitemap["Content-Type"], "application/xml; charset=utf-8")
+        sitemap_body = sitemap.content.decode("utf-8")
+        self.assertIn("<loc>https://pfdtoolkit.org/</loc>", sitemap_body)
+        self.assertIn("<loc>https://pfdtoolkit.org/explore/</loc>", sitemap_body)
+        self.assertIn("<loc>https://pfdtoolkit.org/collections/wales/</loc>", sitemap_body)

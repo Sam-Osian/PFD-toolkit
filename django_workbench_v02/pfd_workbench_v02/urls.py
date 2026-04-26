@@ -18,8 +18,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 from accounts.views import admin_login_proxy
+from pfd_workbench_v02.seo_views import robots_txt, sitemap_xml
 
 urlpatterns = [
+    path("robots.txt", robots_txt, name="robots-txt"),
+    path("sitemap.xml", sitemap_xml, name="sitemap-xml"),
     path("admin/login/", admin_login_proxy, name="admin-login-proxy"),
     path("admin/", admin.site.urls),
     path("", include("accounts.urls")),

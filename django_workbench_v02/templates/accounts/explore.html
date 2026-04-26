@@ -2,11 +2,42 @@
 
 {% block page_title %}
 {% if is_workspace_view %}
-{{ collection_title }} · Workspace · PFD Toolkit v0.2
+{{ collection_title }} · Shared Report View · PFD Toolkit
 {% elif is_collection_view %}
-{{ collection_title }} · Collection · PFD Toolkit v0.2
+{{ collection_title }} · Collection · PFD Toolkit
 {% else %}
-Explore · PFD Toolkit v0.2
+Explore Prevention of Future Death Reports · PFD Toolkit
+{% endif %}
+{% endblock %}
+{% block meta_description %}
+{% if is_workspace_view %}
+Shared PFD Toolkit report view for {{ collection_title }}.
+{% elif is_collection_view %}
+Browse the {{ collection_title }} Prevention of Future Death report collection in PFD Toolkit.
+{% else %}
+Search and filter the Prevention of Future Death report archive by question, receiver, coroner area, and date.
+{% endif %}
+{% endblock %}
+{% block meta_robots %}{% if is_workspace_view or is_shared_read_only %}noindex, nofollow{% else %}index, follow{% endif %}{% endblock %}
+{% block og_title %}
+{% if is_workspace_view %}{{ collection_title }} · Shared Report View{% elif is_collection_view %}{{ collection_title }} · PFD Report Collection{% else %}Explore Prevention of Future Death Reports{% endif %}
+{% endblock %}
+{% block og_description %}
+{% if is_collection_view and collection_description %}{{ collection_description }}{% else %}Search and filter the Prevention of Future Death report archive with PFD Toolkit.{% endif %}
+{% endblock %}
+{% block twitter_title %}{% if is_collection_view %}{{ collection_title }} · PFD Toolkit{% else %}Explore PFD Reports{% endif %}{% endblock %}
+{% block twitter_description %}{% if is_collection_view and collection_description %}{{ collection_description }}{% else %}Search and filter the Prevention of Future Death report archive with PFD Toolkit.{% endif %}{% endblock %}
+{% block structured_data %}
+{% if not is_workspace_view and not is_shared_read_only %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "{% if is_collection_view %}CollectionPage{% else %}SearchResultsPage{% endif %}",
+  "name": "{% if is_collection_view %}{{ collection_title|escapejs }}{% else %}Explore Prevention of Future Death Reports{% endif %}",
+  "url": "{{ seo_canonical_url }}",
+  "description": "{% if is_collection_view and collection_description %}{{ collection_description|escapejs }}{% else %}Search and filter the Prevention of Future Death report archive with PFD Toolkit.{% endif %}"
+}
+</script>
 {% endif %}
 {% endblock %}
 

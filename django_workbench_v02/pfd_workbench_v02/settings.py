@@ -138,6 +138,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "pfd_workbench_v02.seo.seo_defaults",
                 "wb_workspaces.context_processors.active_workbook",
             ],
         },

@@ -49,6 +49,16 @@ class CollectionViewTests(TestCase):
             ]
         )
 
+    def _collection_grid_html(self, response) -> str:
+        body = response.content.decode("utf-8")
+        start = body.find('<section class="coll-grid"')
+        if start < 0:
+            return ""
+        end = body.find("</section>", start)
+        if end < 0:
+            return body[start:]
+        return body[start : end + len("</section>")]
+
     @patch("wb_collections.services.load_reports")
     def test_collection_list_renders(self, mock_load_reports):
         mock_load_reports.return_value = self.dataset.copy()
@@ -57,8 +67,9 @@ class CollectionViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Wales")
         self.assertContains(response, "NHS Bodies")
-        self.assertNotContains(response, "All reports")
-        self.assertNotContains(response, "Custom collection")
+        grid_html = self._collection_grid_html(response)
+        self.assertNotIn("All reports", grid_html)
+        self.assertNotIn("Custom collection", grid_html)
 
     @patch("wb_collections.services.load_reports")
     def test_collection_detail_custom_search_filters_rows(self, mock_load_reports):
@@ -151,8 +162,9 @@ class CollectionViewTests(TestCase):
         self.assertContains(response, "NHS Bodies")
         self.assertContains(response, "Government departments")
         self.assertContains(response, "Prisons")
-        self.assertNotContains(response, "All reports")
-        self.assertNotContains(response, "Custom collection")
+        grid_html = self._collection_grid_html(response)
+        self.assertNotIn("All reports", grid_html)
+        self.assertNotIn("Custom collection", grid_html)
         self.assertContains(response, "Medication Safety")
 
     @patch("wb_collections.services._approved_theme_columns_with_status")
@@ -251,7 +263,7 @@ class CollectionViewTests(TestCase):
         response = self.client.get(reverse("collection-list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Wales")
-        self.assertNotContains(response, "All reports")
+        self.assertNotIn("All reports", self._collection_grid_html(response))
         mock_load_collections_dataset.assert_called_once_with(force_refresh=False)
         mock_collection_cards.assert_called_once()
 

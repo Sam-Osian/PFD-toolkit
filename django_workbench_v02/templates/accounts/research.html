@@ -1,6 +1,35 @@
 {% extends "base.html" %}
 
-{% block page_title %}Research · PFD Toolkit v0.2{% endblock %}
+{% block page_title %}PFD Toolkit Research · BMJ Mental Health Evaluation{% endblock %}
+{% block meta_description %}Read the BMJ Mental Health evaluation of PFD Toolkit, including clinical validation of AI-assisted national thematic review of Prevention of Future Death reports.{% endblock %}
+{% block og_type %}article{% endblock %}
+{% block og_title %}PFD Toolkit Research · BMJ Mental Health Evaluation{% endblock %}
+{% block og_description %}Clinical validation of AI-assisted national thematic review of Prevention of Future Death reports.{% endblock %}
+{% block twitter_title %}PFD Toolkit Research{% endblock %}
+{% block twitter_description %}Clinical validation of AI-assisted national thematic review of Prevention of Future Death reports.{% endblock %}
+{% block structured_data %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "ScholarlyArticle",
+  "headline": "PFD Toolkit's foundation evaluation research",
+  "url": "{{ seo_canonical_url }}",
+  "sameAs": "https://mentalhealth.bmj.com/content/29/1/e302212",
+  "identifier": "https://doi.org/10.1136/bmjment-2025-302212",
+  "publisher": {
+    "@type": "Organization",
+    "name": "BMJ Mental Health"
+  },
+  "author": [
+    {"@type": "Person", "name": "Sam Osian"},
+    {"@type": "Person", "name": "Arpan Dutta"},
+    {"@type": "Person", "name": "Sahil Bhandari"},
+    {"@type": "Person", "name": "Iain E Buchan"},
+    {"@type": "Person", "name": "Dan W Joyce"}
+  ]
+}
+</script>
+{% endblock %}
 
 {% block page_header %}
 <div class="eyebrow"><span class="d"></span>Research</div>
@@ -11,7 +40,7 @@
     <section class="rs-feature">
         <div class="rs-feature-tag"><span class="d"></span>Foundation research</div>
         <div class="rs-feature-journal">BMJ Mental Health · Evaluation study · 2026</div>
-        <h2 class="rs-feature-title">PFD Toolkit's foundation evaluation research.</h2>
+        <h1 class="rs-feature-title">PFD Toolkit's foundation evaluation research.</h1>
         <div class="rs-feature-authors">Sam Osian, Arpan Dutta, Sahil Bhandari, Iain E Buchan, Dan W Joyce · University of Liverpool and Mersey Care NHS Foundation Trust</div>
         <p class="rs-feature-lede">Independent clinical adjudication showed that PFD Toolkit can automate national thematic review of PFD reports with high agreement, high speed, and materially improved case capture.</p>
 
