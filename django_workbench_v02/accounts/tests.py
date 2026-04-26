@@ -31,6 +31,50 @@ class AccountsViewTests(TestCase):
         response = self.client.get(reverse("landing"))
         self.assertEqual(response.status_code, 200)
 
+    def test_services_page_loads_and_is_linked_from_navigation(self):
+        response = self.client.get(reverse("services"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Custom PFD analysis")
+        self.assertContains(response, "Dedicated dashboard")
+
+        landing = self.client.get(reverse("landing"))
+        self.assertContains(landing, reverse("services"))
+
+    def test_legal_pages_load_and_are_linked_from_navigation(self):
+        privacy = self.client.get(reverse("privacy-policy"))
+        self.assertEqual(privacy.status_code, 200)
+        self.assertContains(privacy, "Privacy Policy")
+        self.assertContains(privacy, reverse("cookie-policy"))
+
+        cookies = self.client.get(reverse("cookie-policy"))
+        self.assertEqual(cookies.status_code, 200)
+        self.assertContains(cookies, "Cookie Policy")
+        self.assertContains(cookies, reverse("privacy-policy"))
+
+        landing = self.client.get(reverse("landing"))
+        self.assertContains(landing, reverse("privacy-policy"))
+        self.assertContains(landing, reverse("cookie-policy"))
+        self.assertNotContains(landing, "Toolkit ready")
+        self.assertNotContains(landing, "pfd_toolkit adapters connected")
+
+    def test_signed_in_sidebar_account_panel_still_renders(self):
+        user = User.objects.create_user(
+            email="signed-in@example.com",
+            password="example-pass-123",
+            first_name="Signed",
+            last_name="In",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("landing"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Signed In")
+        self.assertContains(response, "signed-in@example.com")
+        self.assertContains(response, reverse("privacy-policy"))
+        self.assertContains(response, reverse("cookie-policy"))
+        self.assertNotContains(response, "Toolkit ready")
+        self.assertNotContains(response, "pfd_toolkit adapters connected")
+
     def test_login_redirects_to_auth0_when_configured(self):
         response = self.client.get(reverse("accounts-login"))
         self.assertEqual(response.status_code, 302)
@@ -287,7 +331,7 @@ class AccountsViewTests(TestCase):
 @override_settings(WORKBENCH_BASE_URL="https://pfdtoolkit.org")
 class SeoViewTests(TestCase):
     def test_public_pages_render_core_seo_metadata_without_version_titles(self):
-        for route_name in ("landing", "about", "research"):
+        for route_name in ("landing", "about", "research", "services", "privacy-policy", "cookie-policy"):
             response = self.client.get(reverse(route_name))
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, '<meta name="description"', html=False)
@@ -323,6 +367,9 @@ class SeoViewTests(TestCase):
         self.assertIn("Sitemap: https://pfdtoolkit.org/sitemap.xml", robots_body)
         self.assertIn("Disallow: /admin/", robots_body)
         self.assertIn("Allow: /collections/", robots_body)
+        self.assertIn("Allow: /services/", robots_body)
+        self.assertIn("Allow: /privacy/", robots_body)
+        self.assertIn("Allow: /cookies/", robots_body)
 
         sitemap = self.client.get(reverse("sitemap-xml"))
         self.assertEqual(sitemap.status_code, 200)
@@ -330,4 +377,7 @@ class SeoViewTests(TestCase):
         sitemap_body = sitemap.content.decode("utf-8")
         self.assertIn("<loc>https://pfdtoolkit.org/</loc>", sitemap_body)
         self.assertIn("<loc>https://pfdtoolkit.org/explore/</loc>", sitemap_body)
+        self.assertIn("<loc>https://pfdtoolkit.org/services/</loc>", sitemap_body)
+        self.assertIn("<loc>https://pfdtoolkit.org/privacy/</loc>", sitemap_body)
+        self.assertIn("<loc>https://pfdtoolkit.org/cookies/</loc>", sitemap_body)
         self.assertIn("<loc>https://pfdtoolkit.org/collections/wales/</loc>", sitemap_body)

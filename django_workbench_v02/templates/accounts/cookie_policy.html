@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block page_title %}Cookie Policy · PFD Toolkit{% endblock %}
+{% block meta_description %}Cookie and browser storage information for PFD Toolkit, including strictly necessary cookies and local storage used by the application.{% endblock %}
+{% block og_title %}Cookie Policy · PFD Toolkit{% endblock %}
+{% block og_description %}Cookie and browser storage information for PFD Toolkit.{% endblock %}
+{% block twitter_title %}Cookie Policy · PFD Toolkit{% endblock %}
+{% block twitter_description %}Cookie and browser storage information for PFD Toolkit.{% endblock %}
+
+{% block page_header %}
+<div class="eyebrow"><span class="d"></span>Legal</div>
+{% endblock %}
+
+{% block content %}
+<div class="legal-page">
+    <section class="legal-hero">
+        <p class="legal-k">Last updated: 26 April 2026</p>
+        <h1 class="page-title xl">Cookie Policy</h1>
+        <p class="page-lede big">This page explains the cookies and browser storage used when Orelian Ltd operates PFD Toolkit. It covers cookies and similar technologies such as local storage.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Summary</h2>
+        <p>Orelian Ltd currently uses first-party cookies in PFD Toolkit that are necessary for authentication, session handling, security, and one-off messages. The app does not currently load advertising cookies or known third-party analytics tags.</p>
+        <p>The app also uses browser local storage for interface state, user notices, the product tour, and investigation wizard drafts.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Cookies</h2>
+        <div class="legal-table-wrap">
+            <table class="legal-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Set by</th>
+                        <th>Purpose</th>
+                        <th>Category</th>
+                        <th>Typical duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>sessionid</code></td>
+                        <td>Orelian Ltd</td>
+                        <td>Keeps you signed in and ties server-side session state to your browser, including login state and saved Explore filters.</td>
+                        <td>Strictly necessary</td>
+                        <td>Up to 2 weeks by Django default, unless cleared earlier.</td>
+                    </tr>
+                    <tr>
+                        <td><code>csrftoken</code></td>
+                        <td>Orelian Ltd</td>
+                        <td>Helps protect forms and authenticated actions against cross-site request forgery.</td>
+                        <td>Strictly necessary</td>
+                        <td>About 1 year by Django default, unless cleared earlier.</td>
+                    </tr>
+                    <tr>
+                        <td><code>messages</code></td>
+                        <td>Orelian Ltd</td>
+                        <td>May be used by Django to carry short success or error messages between page loads.</td>
+                        <td>Strictly necessary</td>
+                        <td>Short lived; normally cleared after the message is shown.</td>
+                    </tr>
+                    <tr>
+                        <td>Auth0 cookies</td>
+                        <td>Auth0</td>
+                        <td>Used on Auth0-hosted login/logout pages to authenticate users and protect the sign-in flow.</td>
+                        <td>Authentication/security</td>
+                        <td>Controlled by Auth0 and the user's browser/session settings.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="legal-section">
+        <h2>Browser Storage</h2>
+        <div class="legal-table-wrap">
+            <table class="legal-table">
+                <thead>
+                    <tr>
+                        <th>Name or pattern</th>
+                        <th>Purpose</th>
+                        <th>Category</th>
+                        <th>Typical duration</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>pfd_investigation_wizard_draft_v1</code></td>
+                        <td>Saves an in-progress investigation wizard draft on your device so closing and reopening the wizard does not lose the draft. API keys and CSRF tokens are excluded.</td>
+                        <td>Functionality</td>
+                        <td>Until the investigation launches successfully or you clear browser storage.</td>
+                    </tr>
+                    <tr>
+                        <td><code>pfd_user_notice_*_seen</code></td>
+                        <td>Remembers that you acknowledged the current site notice version.</td>
+                        <td>Functionality</td>
+                        <td>Until you clear browser storage or the notice version changes.</td>
+                    </tr>
+                    <tr>
+                        <td><code>pfd_tut_v1_seen</code></td>
+                        <td>Remembers that you have seen or dismissed the product tour.</td>
+                        <td>Functionality</td>
+                        <td>Until you clear browser storage.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="legal-section">
+        <h2>Third-party Analytics and Advertising</h2>
+        <p>We did not find Google Analytics, Meta Pixel, advertising tags, or similar analytics/tracking scripts in the current codebase. If analytics or advertising cookies are added later, this policy should be updated and consent controls should be implemented before they are set.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Managing Cookies and Storage</h2>
+        <p>You can block or delete cookies and local storage in your browser settings. Blocking strictly necessary cookies will prevent login and may break form submissions or other core app features.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Related Policy</h2>
+        <p>For wider information about personal data, lawful bases, sharing, retention, and rights, read the <a href="{% url 'privacy-policy' %}">Privacy Policy</a>.</p>
+    </section>
+</div>
+{% endblock %}

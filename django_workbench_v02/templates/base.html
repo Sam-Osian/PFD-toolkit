@@ -71,6 +71,10 @@
                     <span class="cur">About</span>
                 {% elif "/research/" in p %}
                     <span class="cur">Research</span>
+                {% elif "/privacy/" in p %}
+                    <span class="cur">Privacy</span>
+                {% elif "/cookies/" in p %}
+                    <span class="cur">Cookies</span>
                 {% elif "/settings/llm/" in p %}
                     <span class="cur">LLM config</span>
                 {% elif "/workbooks/public/" in p %}
@@ -105,14 +109,6 @@
             </div>
 
             <div class="topbar-actions">
-                <button
-                    class="icon-btn"
-                    id="start-over-open"
-                    title="{% if can_start_over_active_workbook %}Start over{% else %}Start over unavailable{% endif %}"
-                    {% if not can_start_over_active_workbook %}disabled{% endif %}
-                >
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 8a5 5 0 1 1 1.5 3.6"/><path d="M3 4v4h4"/></svg>
-                </button>
                 <button class="icon-btn tut-reopen" id="tut-reopen" title="Take the tour">
                     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6 6.2a2 2 0 1 1 3 1.7c-.7.4-1 .7-1 1.4M8 11.5v.1"/></svg>
                 </button>
@@ -587,30 +583,6 @@
 </div>
 {% endif %}
 
-<div class="dlg-back" id="dlg-start-over" aria-hidden="true">
-    <div class="dlg confirm danger" role="dialog" aria-labelledby="start-over-title">
-        <div class="dlg-head">
-            <div class="k"><span class="d"></span>Destructive · cannot be undone</div>
-            <h3 id="start-over-title">Start over?</h3>
-            <p>This clears the active workbook state and returns to the loaded dataset baseline.</p>
-        </div>
-        <div class="dlg-foot">
-            <span class="meta"><span class="k">Esc</span> to cancel</span>
-            <div class="acts">
-                <button class="btn btn-ghost" type="button" data-start-over-close>Cancel</button>
-                {% if can_start_over_active_workbook and active_workbook %}
-                <form method="post" action="{% url 'workbook-state-start-over' workbook_id=active_workbook.id %}">
-                    {% csrf_token %}
-                    <button class="btn btn-danger" type="submit">Confirm start over</button>
-                </form>
-                {% else %}
-                <button class="btn btn-danger" type="button" disabled>Confirm start over</button>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
 {% if user_notice.enabled %}
 {# User notice modal (global one-time event). Remove cleanly by disabling USER_NOTICE_ENABLED. #}
 <div class="dlg-back" id="user-notice-back" aria-hidden="true" data-notice-version="{{ user_notice.version|default:'v1' }}">
@@ -984,7 +956,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!wizardOverlay || !wizardForm) return;
     const data = new FormData(wizardForm);
     const payload = {};
+    const skippedDraftFields = new Set(["api_key", "csrfmiddlewaretoken"]);
     data.forEach(function(value, key) {
+      if (skippedDraftFields.has(String(key))) return;
       if (payload[key] !== undefined) {
         if (Array.isArray(payload[key])) payload[key].push(value);
         else payload[key] = [payload[key], value];
@@ -1808,27 +1782,6 @@ document.addEventListener("DOMContentLoaded", function() {
     closeWizard();
   });
 
-  const startOverDialog = document.getElementById("dlg-start-over");
-  const startOverOpen = document.getElementById("start-over-open");
-  const startOverCloseButtons = startOverDialog ? startOverDialog.querySelectorAll("[data-start-over-close]") : [];
-  const openStartOverDialog = function() {
-    if (!startOverDialog || startOverOpen?.disabled) return;
-    startOverDialog.classList.add("on");
-    startOverDialog.setAttribute("aria-hidden", "false");
-  };
-  const closeStartOverDialog = function() {
-    if (!startOverDialog) return;
-    startOverDialog.classList.remove("on");
-    startOverDialog.setAttribute("aria-hidden", "true");
-  };
-  startOverOpen?.addEventListener("click", openStartOverDialog);
-  startOverDialog?.addEventListener("click", function(event) {
-    if (event.target === startOverDialog) closeStartOverDialog();
-  });
-  startOverCloseButtons.forEach(function(btn) {
-    btn.addEventListener("click", closeStartOverDialog);
-  });
-
   const tutorialOverlay = document.getElementById("tut-back");
   const tutorialOpen = document.getElementById("tut-reopen");
   const tutorialSkip = document.getElementById("tut-skip");
@@ -1921,9 +1874,6 @@ document.addEventListener("DOMContentLoaded", function() {
       } else if (wizardOverlay?.classList.contains("on")) {
         event.preventDefault();
         closeWizard();
-      } else if (startOverDialog?.classList.contains("on")) {
-        event.preventDefault();
-        closeStartOverDialog();
       } else if (document.body.classList.contains("mobile-nav-open")) {
         event.preventDefault();
         closeMobileNav();

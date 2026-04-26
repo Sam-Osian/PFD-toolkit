@@ -738,6 +738,21 @@ def research(request: HttpRequest) -> HttpResponse:
 
 
 @require_GET
+def services(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/services.html")
+
+
+@require_GET
+def privacy_policy(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/privacy_policy.html")
+
+
+@require_GET
+def cookie_policy(request: HttpRequest) -> HttpResponse:
+    return render(request, "accounts/cookie_policy.html")
+
+
+@require_GET
 def llm_config(request: HttpRequest) -> HttpResponse:
     if not request.user.is_authenticated:
         next_url = reverse("llm-config")

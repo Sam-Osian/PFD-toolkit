@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block page_title %}Privacy Policy · PFD Toolkit{% endblock %}
+{% block meta_description %}Privacy information for PFD Toolkit, including what personal data is processed, why it is used, who it may be shared with, and retention periods.{% endblock %}
+{% block og_title %}Privacy Policy · PFD Toolkit{% endblock %}
+{% block og_description %}Privacy information for PFD Toolkit users and visitors.{% endblock %}
+{% block twitter_title %}Privacy Policy · PFD Toolkit{% endblock %}
+{% block twitter_description %}Privacy information for PFD Toolkit users and visitors.{% endblock %}
+
+{% block page_header %}
+<div class="eyebrow"><span class="d"></span>Legal</div>
+{% endblock %}
+
+{% block content %}
+<div class="legal-page">
+    <section class="legal-hero">
+        <p class="legal-k">Last updated: 26 April 2026</p>
+        <h1 class="page-title xl">Privacy Policy</h1>
+        <p class="page-lede big">This notice explains how Orelian Ltd handles personal data when you use PFD Toolkit to browse the website, sign in, create workbooks, run investigations, or use email notifications.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Who We Are</h2>
+        <p>Orelian Ltd operates PFD Toolkit and is the controller for personal data processed through this service. PFD Toolkit is the product name, not a separate legal entity. For privacy questions, email <a href="mailto:sam.osian@oreliandata.co.uk">sam.osian@oreliandata.co.uk</a>.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Information We Process</h2>
+        <div class="legal-table-wrap">
+            <table class="legal-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Examples</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Account data</td>
+                        <td>Email address, first name, last name, Auth0 account identifier, account status and admin flags.</td>
+                    </tr>
+                    <tr>
+                        <td>Authentication and session data</td>
+                        <td>Session identifiers, CSRF tokens, OAuth state values, and saved Explore filter state in the server session.</td>
+                    </tr>
+                    <tr>
+                        <td>Workbook and investigation data</td>
+                        <td>Workbook titles, descriptions, membership records, user roles, investigation titles/questions, method settings, report exclusions, revision history, share links, and public/private visibility choices.</td>
+                    </tr>
+                    <tr>
+                        <td>Run and artifact data</td>
+                        <td>Run configuration, status, progress events, errors, generated CSV/ZIP artifacts, artifact metadata, and timestamps.</td>
+                    </tr>
+                    <tr>
+                        <td>LLM configuration and credentials</td>
+                        <td>Selected provider, model name, concurrency setting, optional base URL, encrypted API keys, last four API key characters, and credential use timestamps.</td>
+                    </tr>
+                    <tr>
+                        <td>Audit, security, and operational data</td>
+                        <td>Action logs, hashed IP addresses, user agent strings, rate-limit identifiers, worker health records, slow request/query logs, and email notification records.</td>
+                    </tr>
+                    <tr>
+                        <td>Public-source PFD report data</td>
+                        <td>Published Prevention of Future Death report metadata and text used for search, filtering, thematic analysis, and generated outputs. Information that relates only to a deceased person is outside UK GDPR, but report content may still include information about identifiable living people such as officials, respondents, or report recipients.</td>
+                    </tr>
+                    <tr>
+                        <td>Browser storage data</td>
+                        <td>Local draft wizard content, tutorial/notice acknowledgement flags, and strictly necessary cookies described in the <a href="{% url 'cookie-policy' %}">Cookie Policy</a>.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="legal-section">
+        <h2>Why We Use It</h2>
+        <ul>
+            <li>To provide the website, account login, workbooks, investigations, sharing, downloads, and notification features.</li>
+            <li>To authenticate users, manage access rights, secure the service, prevent misuse, and maintain audit trails.</li>
+            <li>To run user-requested workflows over public PFD report data and produce artifacts for the requesting user or workspace members.</li>
+            <li>To store user-selected LLM provider settings and encrypted credentials so workflows can run without repeatedly pasting API keys.</li>
+            <li>To operate, debug, maintain, and improve reliability and performance.</li>
+            <li>To comply with legal obligations where applicable.</li>
+        </ul>
+    </section>
+
+    <section class="legal-section">
+        <h2>Lawful Bases</h2>
+        <p>Depending on the processing purpose, we rely on one or more UK GDPR lawful bases: performance of a contract or steps requested by you to provide the service; legitimate interests in operating, securing, improving, and supporting the service; consent where we ask for it; and legal obligation where the law requires processing.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Who We Share Data With</h2>
+        <p>We use service providers for authentication, hosting, database/storage infrastructure, email delivery, and operational support. Authentication is handled through Auth0. Email notifications may be sent through the configured SMTP provider. Run artifacts may be stored in S3-compatible object storage in production.</p>
+        <p>When you run an LLM workflow, relevant prompt text, selected PFD report content, and workflow instructions are sent to the LLM provider you select, currently OpenAI or OpenRouter. Your API key is used to authenticate to that provider and is not intentionally displayed after saving.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>International Transfers</h2>
+        <p>Some providers may process data outside the UK. Where this happens, transfers need appropriate safeguards such as provider terms, data processing agreements, adequacy arrangements, or transfer mechanisms. Orelian Ltd is reviewing these arrangements for the providers used to operate PFD Toolkit.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Retention</h2>
+        <div class="legal-table-wrap">
+            <table class="legal-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Current retention approach in the app</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Accounts and membership data</td>
+                        <td>Kept while the account or workspace membership is active, unless deletion is requested and no overriding reason requires retention.</td>
+                    </tr>
+                    <tr>
+                        <td>Workbooks, investigations, revisions, and share links</td>
+                        <td>Kept until deleted by an authorised user or lifecycle maintenance applies. The configured inactivity window is 365 days; inactive workbooks may be archived, then purged after a further 60 days.</td>
+                    </tr>
+                    <tr>
+                        <td>Run artifacts</td>
+                        <td>Created with a 365-day retention/expiry window. Human views refresh a sliding inactivity date; lifecycle maintenance marks stale artifacts as expired. Deletion of the underlying file or object-storage item depends on the configured storage backend and operational lifecycle rules.</td>
+                    </tr>
+                    <tr>
+                        <td>LLM API credentials</td>
+                        <td>Stored encrypted until replaced, deleted by the user, or deleted with the related account/workspace data.</td>
+                    </tr>
+                    <tr>
+                        <td>Audit and security records</td>
+                        <td>Kept as needed for security, integrity, support, and accountability. Some audit records may remain after a workbook is deleted.</td>
+                    </tr>
+                    <tr>
+                        <td>Browser storage</td>
+                        <td>Stored on your device until the workflow clears it or you clear browser storage. Wizard drafts are cleared when a launch succeeds.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="legal-section">
+        <h2>Your Rights</h2>
+        <p>If UK data protection law applies, you may have rights to access, rectify, erase, restrict, object to processing, and receive certain data in a portable format. Some rights depend on the lawful basis and are not absolute.</p>
+        <p>You can raise a privacy request using <a href="mailto:sam.osian@oreliandata.co.uk">sam.osian@oreliandata.co.uk</a>. You also have the right to complain to the UK Information Commissioner's Office.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Automated Decisions</h2>
+        <p>Orelian Ltd makes LLM-assisted analysis available in PFD Toolkit to help users analyse public PFD report content. The service does not use automated processing to make legal or similarly significant decisions about users.</p>
+    </section>
+
+    <section class="legal-section">
+        <h2>Changes</h2>
+        <p>We may update this policy when the service, providers, retention settings, or legal requirements change. The current version will be published on this page.</p>
+    </section>
+</div>
+{% endblock %}

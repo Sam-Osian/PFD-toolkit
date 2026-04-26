@@ -16,6 +16,9 @@ SITEMAP_ROUTES: tuple[tuple[str, str, str], ...] = (
     ("collection-list", "daily", "0.8"),
     ("about", "monthly", "0.7"),
     ("research", "monthly", "0.7"),
+    ("services", "monthly", "0.7"),
+    ("privacy-policy", "monthly", "0.3"),
+    ("cookie-policy", "monthly", "0.3"),
     ("workbook-public-list", "weekly", "0.5"),
 )
 
@@ -38,6 +41,9 @@ def robots_txt(request: HttpRequest) -> HttpResponse:
             "Allow: /$",
             "Allow: /about/",
             "Allow: /research/",
+            "Allow: /services/",
+            "Allow: /privacy/",
+            "Allow: /cookies/",
             "Allow: /explore/",
             "Allow: /collections/",
             "Allow: /workbooks/public/",

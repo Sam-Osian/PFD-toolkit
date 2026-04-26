@@ -56,6 +56,10 @@
         <span>Research</span>
         <span class="nav-badge">New</span>
     </a>
+    <a class="nav-item{% if '/services/' in p %} on{% endif %}" href="{% url 'services' %}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13V4a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v9"/><path d="M5.5 6.5h5M5.5 9h5M2 13h12"/></svg>
+        <span>Services</span>
+    </a>
 
     <div class="nav-group">Advanced</div>
     {% if request.user.is_authenticated and request.user.is_staff %}
@@ -94,12 +98,10 @@
         </div>
     {% endif %}
 
-    <div class="foot-card">
-        <div class="fc-row"><span class="d"></span><span>Toolkit ready</span></div>
-        <div class="fc-body">pfd_toolkit adapters connected</div>
-    </div>
-    <div class="foot-meta">
+    <div class="foot-meta" aria-label="Legal links">
         <a href="{% url 'landing' %}">pfdtoolkit.org</a>
+        <a href="{% url 'privacy-policy' %}">Privacy</a>
+        <a href="{% url 'cookie-policy' %}">Cookies</a>
         <span>beta</span>
     </div>
 </div>

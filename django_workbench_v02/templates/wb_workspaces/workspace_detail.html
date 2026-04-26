@@ -96,10 +96,6 @@
                         {% csrf_token %}
                         <button type="submit" class="btn btn-ghost">Redo</button>
                     </form>
-                    <form method="post" action="{% url 'workbook-state-start-over' workbook_id=workspace.id %}" class="inline-form">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-ghost">Start Over</button>
-                    </form>
                     <form method="post" action="{% url 'workbook-state-revert-reports' workbook_id=workspace.id %}" class="inline-form">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-ghost">Revert Reports</button>
