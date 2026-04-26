@@ -1,0 +1,100 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops User · PFD Toolkit{% endblock %}
+{% block content %}
+<section class="ops-panel">
+    <div class="ops-panel-head">
+        <h1>{{ target_user.email }}</h1>
+        <p>User job history and workspace access.</p>
+    </div>
+    <div class="ops-stats-grid">
+        <article class="stat-card"><h3>Name</h3><p>{{ target_user.get_full_name|default:"-" }}</p><small>auth0: {{ target_user.auth0_sub|default:"-" }}</small></article>
+        <article class="stat-card"><h3>Permissions</h3><p>{% if target_user.is_superuser %}superuser{% elif target_user.is_staff %}staff{% else %}standard{% endif %}</p><small>active: {{ target_user.is_active|yesno:"yes,no" }}</small></article>
+        <article class="stat-card"><h3>Runs</h3><p>{{ run_total }}</p><small>showing latest {{ run_rows|length }}</small></article>
+    </div>
+</section>
+
+<section class="ops-panel">
+    <h2>Workspace memberships</h2>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Workspace</th>
+                <th>Role</th>
+                <th>Access mode</th>
+                <th>Run workflows</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for membership in memberships %}
+                <tr>
+                    <td><a href="{% url 'ops-workspace-detail' workspace_id=membership.workspace_id %}">{{ membership.workspace.title }}</a></td>
+                    <td>{{ membership.role }}</td>
+                    <td>{{ membership.access_mode }}</td>
+                    <td>{{ membership.can_run_workflows|yesno:"yes,no" }}</td>
+                    <td>{{ membership.updated_at|date:"Y-m-d H:i" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5">No workspace memberships.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Run status totals</h2>
+    <table class="ops-table compact">
+        <thead>
+            <tr>
+                <th>Status</th>
+                <th>Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in run_status_counts %}
+                <tr>
+                    <td>{{ row.status }}</td>
+                    <td>{{ row.total }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="2">No runs found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Recent jobs for this user</h2>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Created</th>
+                <th>Run</th>
+                <th>Workspace</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Pipeline JSON</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in run_rows %}
+                <tr>
+                    <td>{{ row.run.created_at|date:"Y-m-d H:i" }}</td>
+                    <td><code>{{ row.run.id }}</code></td>
+                    <td><a href="{% url 'ops-workspace-detail' workspace_id=row.run.workspace_id %}">{{ row.run.workspace.title }}</a></td>
+                    <td>{{ row.run.run_type }}</td>
+                    <td>{{ row.run.status }}</td>
+                    <td>
+                        <details>
+                            <summary>View JSON</summary>
+                            <pre class="json-block">{{ row.input_config_json }}</pre>
+                        </details>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6">No runs found for this user.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

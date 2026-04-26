@@ -25,6 +25,7 @@ urlpatterns = [
     path("sitemap.xml", sitemap_xml, name="sitemap-xml"),
     path("admin/login/", admin_login_proxy, name="admin-login-proxy"),
     path("admin/", admin.site.urls),
+    path("", include("wb_ops.urls")),
     path("", include("accounts.urls")),
     path("", include("wb_workspaces.urls")),
     path("", include("wb_sharing.urls")),

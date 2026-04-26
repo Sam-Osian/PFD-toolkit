@@ -3,6 +3,7 @@ import types
 import pytest
 import backoff
 import time
+import threading
 from pydantic import BaseModel
 
 # Provide a minimal openai stub before importing LLM
@@ -39,7 +40,12 @@ sys.modules['openai'] = dummy_openai
 import importlib
 import pfd_toolkit.llm as llm_module
 importlib.reload(llm_module)
-from pfd_toolkit.llm import LLM, _is_insufficient_quota_error, _strip_json_markdown
+from pfd_toolkit.llm import (
+    LLM,
+    GenerationCancelledError,
+    _is_insufficient_quota_error,
+    _strip_json_markdown,
+)
 
 
 def test_generate_sequential(monkeypatch):
@@ -190,6 +196,79 @@ def test_call_llm_fallback_missing_field(monkeypatch):
 
     out = llm._call_llm_fallback(None, {"foo": "prompt"})
     assert out == {"foo": str(llm_module.GeneralConfig.NOT_FOUND_TEXT) + " in LLM response"}
+
+
+def test_generate_can_cancel_before_submission(monkeypatch):
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+    call_counter = {"n": 0}
+
+    def fake_create(model, messages, temperature=0.0, seed=None):
+        call_counter["n"] += 1
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=messages[0]["content"][0]["text"].upper())
+                )
+            ],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
+
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
+    with pytest.raises(GenerationCancelledError):
+        llm.generate(
+            ["one", "two"],
+            cancellation_check=lambda: True,
+        )
+
+    assert call_counter["n"] == 0
+
+
+def test_generate_stops_submitting_after_cancellation(monkeypatch):
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+    call_counter = {"n": 0}
+    cancel_state = {"value": False}
+
+    def fake_create(model, messages, temperature=0.0, seed=None):
+        call_counter["n"] += 1
+        return types.SimpleNamespace(
+            choices=[
+                types.SimpleNamespace(
+                    message=types.SimpleNamespace(content=messages[0]["content"][0]["text"].upper())
+                )
+            ],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
+
+    def progress_callback(done, total, desc):
+        if done >= 1:
+            cancel_state["value"] = True
+
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
+    with pytest.raises(GenerationCancelledError):
+        llm.generate(
+            ["one", "two", "three"],
+            max_workers=1,
+            progress_callback=progress_callback,
+            cancellation_check=lambda: cancel_state["value"],
+        )
+
+    assert call_counter["n"] == 1
+
+
+def test_request_cancellation_marks_state_and_closes_client():
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+    closed = threading.Event()
+
+    def fake_close():
+        closed.set()
+
+    llm.client.close = fake_close
+    llm.request_cancellation()
+
+    assert llm._cancel_requested.is_set()
+    assert closed.is_set()
 
 
 def test_is_insufficient_quota_error_from_message():

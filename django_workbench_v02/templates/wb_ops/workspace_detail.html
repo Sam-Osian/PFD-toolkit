@@ -1,0 +1,214 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops Workspace · PFD Toolkit{% endblock %}
+{% block content %}
+<section class="ops-panel">
+    <div class="ops-panel-head">
+        <h1>{{ workspace.title }}</h1>
+        <p>Workspace operations and moderation view.</p>
+    </div>
+    <div class="ops-stats-grid">
+        <article class="stat-card">
+            <h3>Workspace</h3>
+            <p>{{ workspace.id }}</p>
+            <small>slug: {{ workspace.slug }}</small>
+        </article>
+        <article class="stat-card">
+            <h3>Owner</h3>
+            <p>{{ workspace.created_by.email }}</p>
+            <small>created {{ workspace.created_at|date:"Y-m-d H:i" }}</small>
+        </article>
+        <article class="stat-card">
+            <h3>Visibility</h3>
+            <p>{{ workspace.visibility }}</p>
+            <small>{% if workspace.is_listed %}listed{% else %}not listed{% endif %}</small>
+        </article>
+        <article class="stat-card">
+            <h3>Dashboard links</h3>
+            <p><a href="{{ workspace_dashboard_url }}">Authenticated workspace dashboard</a></p>
+            <small>Public links listed below.</small>
+        </article>
+    </div>
+</section>
+
+<section class="ops-panel">
+    <h2>Public workspace views</h2>
+    <table class="ops-table compact">
+        <thead>
+            <tr>
+                <th>Share link</th>
+                <th>Mode</th>
+                <th>Created</th>
+                <th>Expires</th>
+                <th>Last viewed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in public_share_rows %}
+                <tr>
+                    <td><a href="{{ row.url }}" target="_blank" rel="noreferrer">{{ row.url }}</a></td>
+                    <td>{{ row.share.mode }}</td>
+                    <td>{{ row.share.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>{{ row.share.expires_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                    <td>{{ row.share.last_viewed_at|date:"Y-m-d H:i"|default:"-" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5">No active public share links.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Investigation pipeline JSON</h2>
+    {% if investigation %}
+        <p><strong>Investigation:</strong> {{ investigation.title }} · status {{ investigation.status }}</p>
+    {% else %}
+        <p>No investigation attached to this workspace.</p>
+    {% endif %}
+    <pre class="json-block">{{ investigation_payload_json }}</pre>
+</section>
+
+<section class="ops-panel">
+    <h2>Dataset moderation</h2>
+    {% if dataset_preview.error %}
+        <p class="ops-alert">{{ dataset_preview.error }}</p>
+    {% else %}
+        <p class="ops-meta">
+            Source artifact:
+            {% if dataset_preview.artifact %}
+                <code>{{ dataset_preview.artifact.id }}</code> · {{ dataset_preview.artifact.artifact_type }}
+            {% else %}
+                none
+            {% endif %}
+            · total rows {{ dataset_preview.total_rows }}
+            · showing first {{ dataset_preview.rows|length }}
+        </p>
+    {% endif %}
+
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Title</th>
+                <th>Area</th>
+                <th>Receiver</th>
+                <th>URL</th>
+                <th>Report identity</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in dataset_preview.rows %}
+                <tr>
+                    <td>{{ row.date|default:"-" }}</td>
+                    <td>{{ row.title|default:"-" }}</td>
+                    <td>{{ row.area|default:"-" }}</td>
+                    <td>{{ row.receiver|default:"-" }}</td>
+                    <td>
+                        {% if row.url %}
+                            <a href="{{ row.url }}" target="_blank" rel="noreferrer">open</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td><code>{{ row.report_identity }}</code></td>
+                    <td>
+                        {% if row.is_excluded %}
+                            <span class="badge muted">already excluded</span>
+                        {% elif user_can_moderate %}
+                            <form method="post" action="{% url 'ops-workspace-exclude-row' workspace_id=workspace.id %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="report_identity" value="{{ row.report_identity }}">
+                                <input type="hidden" name="report_title" value="{{ row.title }}">
+                                <input type="hidden" name="report_date" value="{{ row.date }}">
+                                <input type="hidden" name="report_url" value="{{ row.url }}">
+                                <button type="submit">Exclude row</button>
+                            </form>
+                        {% else %}
+                            <span class="badge muted">read only</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7">No dataset rows available.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Current exclusions</h2>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Created</th>
+                <th>Identity</th>
+                <th>Title</th>
+                <th>Reason</th>
+                <th>By</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for exclusion in exclusions %}
+                <tr>
+                    <td>{{ exclusion.created_at|date:"Y-m-d H:i" }}</td>
+                    <td><code>{{ exclusion.report_identity }}</code></td>
+                    <td>{{ exclusion.report_title|default:"-" }}</td>
+                    <td>{{ exclusion.reason|default:"-" }}</td>
+                    <td>{{ exclusion.excluded_by.email|default:"-" }}</td>
+                    <td>
+                        {% if user_can_moderate %}
+                            <form method="post" action="{% url 'ops-workspace-restore-exclusion' workspace_id=workspace.id exclusion_id=exclusion.id %}">
+                                {% csrf_token %}
+                                <button type="submit">Restore row</button>
+                            </form>
+                        {% else %}
+                            <span class="badge muted">read only</span>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6">No exclusions recorded.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Recent jobs in this workspace</h2>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Created</th>
+                <th>Run</th>
+                <th>User</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Worker</th>
+                <th>Pipeline JSON</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in run_rows %}
+                <tr>
+                    <td>{{ row.run.created_at|date:"Y-m-d H:i" }}</td>
+                    <td><code>{{ row.run.id }}</code></td>
+                    <td>{{ row.run.requested_by.email }}</td>
+                    <td>{{ row.run.run_type }}</td>
+                    <td>{{ row.run.status }}</td>
+                    <td>{{ row.run.worker_id|default:"-" }}</td>
+                    <td>
+                        <details>
+                            <summary>View JSON</summary>
+                            <pre class="json-block">{{ row.input_config_json }}</pre>
+                        </details>
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7">No runs in this workspace.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

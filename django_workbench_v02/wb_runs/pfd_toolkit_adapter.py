@@ -13,6 +13,7 @@ from django.utils import timezone
 import pandas as pd
 from pydantic import BaseModel, Field, create_model
 from pfd_toolkit import Extractor, LLM, Screener, load_reports
+from pfd_toolkit.llm import GenerationCancelledError
 from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
 from wb_workspaces.models import WorkspaceReportExclusion
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
@@ -333,7 +334,12 @@ def _patch_generate_with_progress(
                 user_callback(done, total, description)
 
         kwargs["progress_callback"] = _callback
-        return original_generate(*args, **kwargs)
+        if cancellation_check and "cancellation_check" not in kwargs:
+            kwargs["cancellation_check"] = cancellation_check
+        try:
+            return original_generate(*args, **kwargs)
+        except GenerationCancelledError as exc:
+            raise AdapterCancelledError("Run cancelled during LLM generation.") from exc
 
     llm_client.generate = _generate_with_progress
     return llm_client

@@ -8,9 +8,9 @@ import re
 from typing import Callable, List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model, ConfigDict
 import pymupdf
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import backoff
-from threading import Semaphore
+from threading import Semaphore, Event
 from tqdm import tqdm
 
 from .config import GeneralConfig
@@ -105,6 +105,10 @@ def _strip_json_markdown(text: str) -> str:
     return text.replace("```", "").strip()
 
 
+class GenerationCancelledError(RuntimeError):
+    """Raised when an LLM batch is cancelled before completion."""
+
+
 class LLM:
     """Wrapper around the OpenAI Python SDK for batch prompting.
 
@@ -184,6 +188,7 @@ class LLM:
 
         # Global semaphore to throttle calls based on max_workers
         self._sem = Semaphore(self.max_workers)
+        self._cancel_requested = Event()
 
         # Backoff for parse endpoint, handles OpenAI connection errors
         # Adding jitter avoids thundering-herd retries
@@ -191,15 +196,34 @@ class LLM:
             backoff.expo,
             (RateLimitError, APIConnectionError, APITimeoutError),
             max_time=60,
-            giveup=_is_insufficient_quota_error,
+            giveup=lambda exc: _is_insufficient_quota_error(exc) or self._cancel_requested.is_set(),
             jitter=backoff.full_jitter,
         )
         def _parse_with_backoff(**kwargs):
+            if self._cancel_requested.is_set():
+                raise GenerationCancelledError("LLM generation cancelled.")
             with self._sem:
+                if self._cancel_requested.is_set():
+                    raise GenerationCancelledError("LLM generation cancelled.")
                 # Call the client's parse method directly
                 return self.client.beta.chat.completions.parse(**kwargs)
 
         self._parse_with_backoff = _parse_with_backoff
+
+    def request_cancellation(self) -> None:
+        """Request cancellation for current/future generation calls."""
+        self._cancel_requested.set()
+        close_client = getattr(self.client, "close", None)
+        if callable(close_client):
+            try:
+                close_client()
+            except Exception:
+                # Best effort: caller is already cancelling.
+                pass
+
+    def reset_cancellation(self) -> None:
+        """Clear any prior cancellation request."""
+        self._cancel_requested.clear()
 
     def _pdf_bytes_to_base64_images(
         self, pdf_bytes: bytes, dpi: int = 200
@@ -265,6 +289,7 @@ class LLM:
         max_workers: Optional[int] = None,
         tqdm_extra_kwargs: Optional[Dict[str, Any]] = None,
         progress_callback: Optional[Callable[[int, int, str], None]] = None,
+        cancellation_check: Optional[Callable[[], bool]] = None,
     ) -> List[BaseModel | str]:
         """Run many prompts either sequentially or in parallel.
 
@@ -285,6 +310,11 @@ class LLM:
         max_workers : int or None, optional
             Thread count just for this batch. ``None`` uses the instance-wide
             ``max_workers`` value. Defaults to ``None``.
+
+        cancellation_check : callable or None, optional
+            Optional callback returning ``True`` when cancellation is requested.
+            Pending tasks are cancelled immediately and in-flight requests are
+            interrupted best-effort.
 
         Returns:
         -------
@@ -308,6 +338,7 @@ class LLM:
         tqdm_kwargs = dict(tqdm_extra_kwargs or {})
         if len(prompts) == 1:
             tqdm_kwargs.setdefault("disable", True)
+        self.reset_cancellation()
 
         def _build_messages(prompt: str, imgs: Optional[List[bytes]]):
             content = [{"type": "text", "text": prompt}]
@@ -329,15 +360,31 @@ class LLM:
         else:
             effective_workers = self.max_workers
 
+        def _is_cancelled() -> bool:
+            if self._cancel_requested.is_set():
+                return True
+            if cancellation_check is None:
+                return False
+            if cancellation_check():
+                self.request_cancellation()
+                return True
+            return False
+
+        def _raise_if_cancelled() -> None:
+            if _is_cancelled():
+                raise GenerationCancelledError("LLM generation cancelled.")
+
         @backoff.on_exception(
             backoff.expo,
             (RateLimitError, APIConnectionError, APITimeoutError),
             max_time=60,
-            giveup=_is_insufficient_quota_error,
+            giveup=lambda exc: _is_insufficient_quota_error(exc) or self._cancel_requested.is_set(),
             jitter=backoff.full_jitter,
         )
         def _call_llm(messages: List[Dict]) -> str:
+            _raise_if_cancelled()
             with self._sem:
+                _raise_if_cancelled()
                 resp = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -354,6 +401,7 @@ class LLM:
         results: List[BaseModel | str] = [None] * len(prompts)
 
         def _worker(idx: int, prompt_text: str):
+            _raise_if_cancelled()
             current_images = (
                 images_list[idx] if images_list and idx < len(images_list) else None
             )
@@ -361,6 +409,7 @@ class LLM:
 
             if response_format:
                 for attempt in range(self.validation_attempts):
+                    _raise_if_cancelled()
                     try:
                         resp = self._parse_with_backoff(
                             model=self.model,
@@ -376,6 +425,8 @@ class LLM:
                             strict=True,
                         )
                         return idx, validated
+                    except GenerationCancelledError:
+                        raise
                     except Exception as e:
                         if _is_insufficient_quota_error(e):
                             raise
@@ -394,24 +445,66 @@ class LLM:
                 txt = _call_llm(messages)
                 return idx, txt
 
-        with ThreadPoolExecutor(max_workers=effective_workers) as executor:
-            futures = [executor.submit(_worker, i, p) for i, p in enumerate(prompts)]
-            bar_kwargs = dict(tqdm_kwargs)
-            current_desc = bar_kwargs.pop(
-                "desc", "Sending requests to the LLM"
-            )
-            completed_count = 0
-            for fut in tqdm(
-                as_completed(futures),
-                total=len(prompts),
-                desc=current_desc,
-                **bar_kwargs,
-            ):
-                i, out = fut.result()
-                results[i] = out
-                completed_count += 1
-                if progress_callback is not None:
-                    progress_callback(completed_count, len(prompts), current_desc)
+        if not prompts:
+            return results
+
+        bar_kwargs = dict(tqdm_kwargs)
+        current_desc = bar_kwargs.pop("desc", "Sending requests to the LLM")
+        progress_bar = tqdm(total=len(prompts), desc=current_desc, **bar_kwargs)
+        executor = ThreadPoolExecutor(max_workers=effective_workers)
+        futures: dict = {}
+        next_idx = 0
+        completed_count = 0
+        cancelled = False
+        try:
+            while next_idx < len(prompts) and len(futures) < effective_workers:
+                _raise_if_cancelled()
+                fut = executor.submit(_worker, next_idx, prompts[next_idx])
+                futures[fut] = next_idx
+                next_idx += 1
+
+            while futures:
+                _raise_if_cancelled()
+                done, _ = wait(
+                    set(futures.keys()),
+                    timeout=0.1,
+                    return_when=FIRST_COMPLETED,
+                )
+                if not done:
+                    continue
+
+                for fut in done:
+                    futures.pop(fut, None)
+                    try:
+                        i, out = fut.result()
+                    except GenerationCancelledError:
+                        cancelled = True
+                        self.request_cancellation()
+                        raise
+                    results[i] = out
+                    completed_count += 1
+                    progress_bar.update(1)
+                    if progress_callback is not None:
+                        progress_callback(completed_count, len(prompts), current_desc)
+
+                while next_idx < len(prompts) and len(futures) < effective_workers:
+                    _raise_if_cancelled()
+                    fut = executor.submit(_worker, next_idx, prompts[next_idx])
+                    futures[fut] = next_idx
+                    next_idx += 1
+        except GenerationCancelledError:
+            cancelled = True
+            for fut in list(futures.keys()):
+                fut.cancel()
+            futures.clear()
+            raise
+        finally:
+            progress_bar.close()
+            if cancelled:
+                self.request_cancellation()
+                executor.shutdown(wait=False, cancel_futures=True)
+            else:
+                executor.shutdown(wait=True)
 
         return results
 

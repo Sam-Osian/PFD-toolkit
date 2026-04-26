@@ -1,0 +1,356 @@
+:root {
+  --ops-bg: #f2f5f4;
+  --ops-surface: #ffffff;
+  --ops-surface-muted: #f8faf9;
+  --ops-border: #d8e0dc;
+  --ops-text: #18221f;
+  --ops-text-muted: #50615a;
+  --ops-accent: #0f766e;
+  --ops-accent-soft: #d1f1ed;
+  --ops-warning-soft: #fff5d9;
+  --ops-font: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+  --ops-font-mono: "IBM Plex Mono", "Consolas", "Menlo", monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--ops-font);
+  color: var(--ops-text);
+  background:
+    radial-gradient(1200px 500px at -10% -20%, #d7e8e4, transparent 60%),
+    radial-gradient(900px 420px at 110% -10%, #f0e9dc, transparent 50%),
+    var(--ops-bg);
+}
+
+a {
+  color: #0b5c94;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.ops-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.ops-header {
+  border: 1px solid var(--ops-border);
+  background: var(--ops-surface);
+  border-radius: 14px;
+  padding: 14px 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+}
+
+.ops-brand {
+  display: flex;
+  flex-direction: column;
+}
+
+.ops-brand a {
+  color: var(--ops-text);
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+
+.ops-brand span {
+  color: var(--ops-text-muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ops-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ops-nav a {
+  border: 1px solid var(--ops-border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  color: var(--ops-text);
+  font-size: 0.88rem;
+  background: var(--ops-surface-muted);
+}
+
+.ops-nav a.is-active {
+  border-color: var(--ops-accent);
+  background: var(--ops-accent-soft);
+}
+
+.ops-user {
+  text-align: right;
+  font-size: 0.84rem;
+}
+
+.ops-user strong {
+  display: block;
+  font-weight: 600;
+}
+
+.ops-main {
+  margin-top: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+.ops-panel {
+  border: 1px solid var(--ops-border);
+  border-radius: 14px;
+  background: var(--ops-surface);
+  padding: 16px;
+}
+
+.ops-panel h1,
+.ops-panel h2,
+.ops-panel h3 {
+  margin: 0;
+}
+
+.ops-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.ops-inline-filter {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.ops-inline-filter label {
+  font-size: 0.86rem;
+  color: var(--ops-text-muted);
+}
+
+input,
+button {
+  font: inherit;
+}
+
+input[type="number"],
+input[type="text"] {
+  border: 1px solid var(--ops-border);
+  background: var(--ops-surface);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+button {
+  border: 1px solid #0b5c94;
+  background: #0b5c94;
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+button:hover {
+  filter: brightness(1.05);
+}
+
+.ops-stats-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.stat-card {
+  border: 1px solid var(--ops-border);
+  background: var(--ops-surface-muted);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.stat-card h3 {
+  color: var(--ops-text-muted);
+  font-size: 0.84rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-card p {
+  margin: 7px 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.stat-card small {
+  color: var(--ops-text-muted);
+}
+
+.ops-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.ops-table th,
+.ops-table td {
+  border-bottom: 1px solid var(--ops-border);
+  text-align: left;
+  padding: 9px 8px;
+  vertical-align: top;
+}
+
+.ops-table th {
+  font-size: 0.8rem;
+  color: var(--ops-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ops-table.compact th,
+.ops-table.compact td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid transparent;
+  margin-right: 4px;
+}
+
+.badge.ok {
+  background: var(--ops-accent-soft);
+  border-color: #7dc8bf;
+}
+
+.badge.warn {
+  background: var(--ops-warning-soft);
+  border-color: #f2cf7a;
+}
+
+.badge.muted {
+  background: #eef1f0;
+  border-color: var(--ops-border);
+  color: var(--ops-text-muted);
+}
+
+.ops-kv-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ops-kv-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid var(--ops-border);
+  padding: 9px 0;
+}
+
+.ops-kv-list span {
+  color: var(--ops-text-muted);
+}
+
+.ops-kv-list b {
+  font-weight: 700;
+}
+
+.ops-split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.ops-meta {
+  color: var(--ops-text-muted);
+  margin: 8px 0 14px 0;
+}
+
+.ops-alert {
+  background: #fff3e8;
+  border: 1px solid #f6c8a0;
+  border-radius: 10px;
+  padding: 9px 12px;
+  margin-bottom: 12px;
+}
+
+.json-block {
+  white-space: pre-wrap;
+  font-family: var(--ops-font-mono);
+  font-size: 0.8rem;
+  background: #101816;
+  color: #eaf4f2;
+  border-radius: 10px;
+  padding: 10px;
+  margin: 8px 0 0 0;
+}
+
+.ops-messages {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.msg {
+  border-radius: 8px;
+  border: 1px solid var(--ops-border);
+  background: var(--ops-surface);
+  padding: 8px 10px;
+  font-size: 0.88rem;
+}
+
+.msg.success {
+  border-color: #8fd2c8;
+  background: #e8f7f4;
+}
+
+.msg.error {
+  border-color: #f2b0b6;
+  background: #fdecef;
+}
+
+.msg.warning {
+  border-color: #f0cd80;
+  background: #fff6dc;
+}
+
+code {
+  font-family: var(--ops-font-mono);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 980px) {
+  .ops-header {
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .ops-user {
+    text-align: left;
+  }
+
+  .ops-panel-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

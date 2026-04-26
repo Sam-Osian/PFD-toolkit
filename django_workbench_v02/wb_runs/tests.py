@@ -11,6 +11,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from pfd_toolkit.llm import GenerationCancelledError
 from pydantic import Field, create_model
 
 from wb_auditlog.models import AuditEvent
@@ -36,7 +37,11 @@ from .models import (
     RunType,
     RunWorkerHeartbeat,
 )
-from .pfd_toolkit_adapter import _theme_summary_from_dataframe
+from .pfd_toolkit_adapter import (
+    AdapterCancelledError,
+    _patch_generate_with_progress,
+    _theme_summary_from_dataframe,
+)
 from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run, reconcile_timed_out_runs
 
@@ -772,6 +777,34 @@ class RunViewTests(TestCase):
         mocked.assert_called_once()
 
 
+class RunAdapterTests(TestCase):
+    def test_patch_generate_maps_toolkit_cancellation_to_adapter_cancellation(self):
+        captured = {}
+
+        class DummyLLMClient:
+            def generate(self, *args, **kwargs):
+                captured["args"] = args
+                captured["kwargs"] = kwargs
+                raise GenerationCancelledError("cancelled")
+
+        llm_client = DummyLLMClient()
+        wrapped = _patch_generate_with_progress(
+            llm_client=llm_client,
+            progress_start=10,
+            progress_end=90,
+            progress_callback=None,
+            cancellation_check=lambda: False,
+            default_message="Testing cancellation",
+        )
+
+        with self.assertRaises(AdapterCancelledError):
+            wrapped.generate(["prompt"])
+
+        self.assertIn("progress_callback", captured["kwargs"])
+        self.assertIn("cancellation_check", captured["kwargs"])
+        self.assertTrue(callable(captured["kwargs"]["cancellation_check"]))
+
+
 class RunWorkerTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="worker-owner@example.com", password="x")
@@ -889,6 +922,23 @@ class RunWorkerTests(TestCase):
         self.assertEqual(artifact.storage_uri, str(output_path))
         self.assertEqual(artifact.status, "ready")
         mocked.assert_called_once()
+
+    def test_worker_marks_real_run_cancelled_when_adapter_raises_cancelled(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "real", "search_query": "medication safety"},
+        )
+
+        with patch(
+            "wb_runs.worker.execute_filter_workflow",
+            side_effect=AdapterCancelledError("cancelled by test"),
+        ):
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.CANCELLED)
 
     def test_worker_uses_real_themes_adapter_when_enabled(self):
         summary_path = Path("/tmp/test-run-theme-summary.csv")

@@ -1,0 +1,209 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops Dashboard · PFD Toolkit{% endblock %}
+{% block content %}
+<section class="ops-panel">
+    <div class="ops-panel-head">
+        <h1>Operations dashboard</h1>
+        <form method="get" class="ops-inline-filter">
+            <label for="ops-days">Analytics window (days)</label>
+            <input id="ops-days" name="days" type="number" min="1" max="90" value="{{ lookback_days }}">
+            <button type="submit">Apply</button>
+        </form>
+    </div>
+    <div class="ops-stats-grid">
+        <article class="stat-card"><h3>Users</h3><p>{{ users_total }}</p><small>{{ users_staff }} staff</small></article>
+        <article class="stat-card"><h3>Workspaces</h3><p>{{ workspaces_total }}</p><small>{{ workspaces_public }} public + listed</small></article>
+        <article class="stat-card"><h3>Runs (24h)</h3><p>{{ runs_last_24h }}</p><small>{{ runs_total }} all-time</small></article>
+        <article class="stat-card"><h3>Worker Fleet</h3><p>{{ worker_snapshot.online_count }}/{{ worker_snapshot.worker_count }}</p><small>{{ worker_snapshot.busy_count }} busy now</small></article>
+        <article class="stat-card"><h3>Queue</h3><p>{{ worker_snapshot.queued_runs }}</p><small>{{ worker_snapshot.active_runs }} active now</small></article>
+        <article class="stat-card"><h3>3 Busy %</h3><p>{{ concurrency.all_three_busy_percent|floatformat:1 }}%</p><small>window {{ lookback_days }} days</small></article>
+    </div>
+</section>
+
+<section class="ops-panel">
+    <div class="ops-panel-head">
+        <h2>Worker status</h2>
+        <p>Heartbeat stale threshold: {{ worker_snapshot.stale_seconds }}s</p>
+    </div>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Worker</th>
+                <th>State</th>
+                <th>Last seen</th>
+                <th>Seconds ago</th>
+                <th>Last run</th>
+                <th>Run status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in worker_snapshot.rows %}
+                <tr>
+                    <td>{{ row.heartbeat.worker_id }}</td>
+                    <td>
+                        <span class="badge {% if row.is_online %}ok{% else %}warn{% endif %}">
+                            {% if row.is_online %}online{% else %}stale{% endif %}
+                        </span>
+                        {{ row.heartbeat.state|default:"unknown" }}
+                    </td>
+                    <td>{{ row.heartbeat.last_seen_at|date:"Y-m-d H:i:s" }}</td>
+                    <td>{{ row.seconds_since_seen }}</td>
+                    <td>
+                        {% if row.heartbeat.last_run_id %}
+                            <a href="{% url 'ops-workspace-detail' workspace_id=row.heartbeat.last_run.workspace_id %}">
+                                {{ row.heartbeat.last_run_id }}
+                            </a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ row.heartbeat.last_run_status|default:"-" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6">No worker heartbeats recorded yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel ops-split">
+    <article>
+        <h2>Run concurrency</h2>
+        <p class="ops-meta">Percentage of time at least three workers were busy in the selected window.</p>
+        <ul class="ops-kv-list">
+            <li><span>All-3-busy duration</span><b>{{ concurrency.all_three_busy_seconds|floatformat:0 }} sec</b></li>
+            <li><span>All-3-busy percent</span><b>{{ concurrency.all_three_busy_percent|floatformat:2 }}%</b></li>
+            <li><span>Peak concurrency</span><b>{{ concurrency.peak_concurrency }}</b></li>
+            <li><span>Average concurrency</span><b>{{ concurrency.average_concurrency|floatformat:2 }}</b></li>
+        </ul>
+    </article>
+    <article>
+        <h2>Human visitor tracking</h2>
+        <p class="ops-meta">Derived from audit events with <code>is_human_view=true</code>.</p>
+        <ul class="ops-kv-list">
+            <li><span>Human views</span><b>{{ visitors.human_views }}</b></li>
+            <li><span>Unique IP visitors</span><b>{{ visitors.unique_ip_visitors }}</b></li>
+            <li><span>Unique authenticated visitors</span><b>{{ visitors.unique_authenticated_visitors }}</b></li>
+            <li><span>Anonymous views</span><b>{{ visitors.anonymous_views }}</b></li>
+        </ul>
+    </article>
+</section>
+
+<section class="ops-panel">
+    <h2>Visitor timeline</h2>
+    <table class="ops-table compact">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Human views</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in visitors.daily_rows %}
+                <tr>
+                    <td>{{ row.date }}</td>
+                    <td>{{ row.views }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Top users in window</h2>
+    <table class="ops-table compact">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Runs in window</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in top_users %}
+                <tr>
+                    <td><a href="{% url 'ops-user-detail' user_id=user.id %}">{{ user.email }}</a></td>
+                    <td>{{ user.runs_in_window }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="2">No runs launched in this window.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Recent jobs</h2>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Created</th>
+                <th>Run</th>
+                <th>User</th>
+                <th>Workspace</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Worker</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for run in recent_runs %}
+                <tr>
+                    <td>{{ run.created_at|date:"Y-m-d H:i" }}</td>
+                    <td><code>{{ run.id }}</code></td>
+                    <td><a href="{% url 'ops-user-detail' user_id=run.requested_by_id %}">{{ run.requested_by.email }}</a></td>
+                    <td><a href="{% url 'ops-workspace-detail' workspace_id=run.workspace_id %}">{{ run.workspace.title }}</a></td>
+                    <td>{{ run.run_type }}</td>
+                    <td>{{ run.status }}</td>
+                    <td>{{ run.worker_id|default:"-" }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7">No runs found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+
+<section class="ops-panel">
+    <h2>Workspaces</h2>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Workspace</th>
+                <th>Owner</th>
+                <th>Visibility</th>
+                <th>Members</th>
+                <th>Runs</th>
+                <th>Latest run</th>
+                <th>Public view</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in workspace_rows %}
+                <tr>
+                    <td><a href="{% url 'ops-workspace-detail' workspace_id=row.workspace.id %}">{{ row.workspace.title }}</a></td>
+                    <td>{{ row.workspace.created_by.email }}</td>
+                    <td>{{ row.workspace.visibility }}{% if row.workspace.is_listed %} · listed{% endif %}</td>
+                    <td>{{ row.workspace.member_count }}</td>
+                    <td>{{ row.workspace.run_count }}</td>
+                    <td>
+                        {% if row.latest_run %}
+                            <code>{{ row.latest_run.id }}</code> · {{ row.latest_run.status }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.public_share_url %}
+                            <a href="{{ row.public_share_url }}" target="_blank" rel="noreferrer">Open public share</a>
+                        {% else %}
+                            no active public share
+                        {% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7">No workspaces found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

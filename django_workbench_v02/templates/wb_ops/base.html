@@ -1,0 +1,42 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block page_title %}PFD Toolkit Ops{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/wb_ops.css' %}">
+</head>
+<body>
+<div class="ops-shell">
+    <header class="ops-header">
+        <div class="ops-brand">
+            <a href="{% url 'ops-dashboard' %}">PFD Toolkit Ops</a>
+            <span>staff interface</span>
+        </div>
+        <nav class="ops-nav">
+            <a href="{% url 'ops-dashboard' %}" {% if request.resolver_match.url_name == 'ops-dashboard' %}class="is-active"{% endif %}>Dashboard</a>
+            <a href="{% url 'ops-users' %}" {% if request.resolver_match.url_name == 'ops-users' or request.resolver_match.url_name == 'ops-user-detail' %}class="is-active"{% endif %}>Users</a>
+            <a href="/admin/">Django Admin</a>
+            <a href="{% url 'landing' %}">Main App</a>
+        </nav>
+        <div class="ops-user">
+            <strong>{{ request.user.email }}</strong>
+            <a href="{% url 'accounts-logout' %}">Log out</a>
+        </div>
+    </header>
+
+    {% if messages %}
+        <section class="ops-messages">
+            {% for message in messages %}
+                <div class="msg {{ message.tags }}">{{ message }}</div>
+            {% endfor %}
+        </section>
+    {% endif %}
+
+    <main class="ops-main">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+</body>
+</html>

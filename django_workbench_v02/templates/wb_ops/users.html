@@ -1,0 +1,44 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops Users · PFD Toolkit{% endblock %}
+{% block content %}
+<section class="ops-panel">
+    <div class="ops-panel-head">
+        <h1>Users</h1>
+        <p>All accounts in this deployment.</p>
+    </div>
+    <table class="ops-table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Staff</th>
+                <th>Superuser</th>
+                <th>Joined</th>
+                <th>Last login</th>
+                <th>Workspaces</th>
+                <th>Owned</th>
+                <th>Runs</th>
+                <th>Active runs</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+                <tr>
+                    <td><a href="{% url 'ops-user-detail' user_id=user.id %}">{{ user.email }}</a></td>
+                    <td>{{ user.get_full_name|default:"-" }}</td>
+                    <td>{{ user.is_staff|yesno:"yes,no" }}</td>
+                    <td>{{ user.is_superuser|yesno:"yes,no" }}</td>
+                    <td>{{ user.date_joined|date:"Y-m-d H:i" }}</td>
+                    <td>{{ user.last_login|date:"Y-m-d H:i"|default:"-" }}</td>
+                    <td>{{ user.workspace_count }}</td>
+                    <td>{{ user.owned_workspace_count }}</td>
+                    <td>{{ user.run_count }}</td>
+                    <td>{{ user.active_run_count }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="10">No users found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}
