@@ -87,6 +87,10 @@ class NotificationDispatchTests(TestCase):
         self.assertEqual(len(mail.outbox[0].alternatives), 1)
         self.assertIn("text/html", mail.outbox[0].alternatives[0][1])
         self.assertIn("PFD Toolkit", mail.outbox[0].alternatives[0][0])
+        self.assertNotIn("Workbench", mail.outbox[0].subject)
+        self.assertNotIn("Workbench", mail.outbox[0].body)
+        self.assertNotIn("WORKBENCH", mail.outbox[0].alternatives[0][0])
+        self.assertNotIn("Workbench", mail.outbox[0].alternatives[0][0])
         self.assertTrue(
             AuditEvent.objects.filter(
                 action_type="notification.sent",
