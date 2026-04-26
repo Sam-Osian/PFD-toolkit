@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from unittest.mock import patch
@@ -36,9 +37,74 @@ class AccountsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Custom PFD analysis")
         self.assertContains(response, "Dedicated dashboard")
+        self.assertContains(response, 'method="post"')
 
         landing = self.client.get(reverse("landing"))
         self.assertContains(landing, reverse("services"))
+
+    @override_settings(
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+        DEFAULT_FROM_EMAIL="noreply@oreliandata.co.uk",
+        SERVICES_ENQUIRY_EMAIL="sam.osian@oreliandata.co.uk",
+    )
+    def test_services_enquiry_sends_email(self):
+        response = self.client.post(
+            reverse("services"),
+            {
+                "name": "Alex Researcher",
+                "organisation": "Example NHS Trust",
+                "email": "alex@example.org",
+                "work_type": "Dedicated dashboard",
+                "project_summary": (
+                    "We want to understand repeated medication safety concerns in "
+                    "Prevention of Future Death reports."
+                ),
+                "website": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Enquiry sent.")
+        self.assertEqual(len(mail.outbox), 1)
+        message = mail.outbox[0]
+        self.assertEqual(message.to, ["sam.osian@oreliandata.co.uk"])
+        self.assertEqual(message.reply_to, ["alex@example.org"])
+        self.assertIn("Dedicated dashboard", message.subject)
+        self.assertIn("Example NHS Trust", message.body)
+        self.assertIn("medication safety concerns", message.body)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_services_enquiry_validation_blocks_invalid_submission(self):
+        response = self.client.post(
+            reverse("services"),
+            {
+                "name": "",
+                "organisation": "",
+                "email": "not-an-email",
+                "work_type": "Dedicated dashboard",
+                "project_summary": "Too short",
+                "website": "",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "This field is required")
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
+    def test_services_enquiry_honeypot_does_not_send_email(self):
+        response = self.client.post(
+            reverse("services"),
+            {
+                "name": "Spam Bot",
+                "organisation": "Noise",
+                "email": "bot@example.org",
+                "work_type": "Rapid scoping review",
+                "project_summary": "This appears valid but the hidden field is filled in.",
+                "website": "https://spam.example",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Enquiry sent.")
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_legal_pages_load_and_are_linked_from_navigation(self):
         privacy = self.client.get(reverse("privacy-policy"))

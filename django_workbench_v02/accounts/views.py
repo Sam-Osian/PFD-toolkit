@@ -11,13 +11,16 @@ import requests
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
+from django.core.mail import EmailMessage
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_http_methods
 
+from .forms import ServicesEnquiryForm
 from .services import normalize_auth0_profile, sync_user_from_auth0
 from wb_collections.services import (
     collection_cards,
@@ -737,9 +740,53 @@ def research(request: HttpRequest) -> HttpResponse:
     return render(request, "accounts/research.html")
 
 
-@require_GET
+@require_http_methods(["GET", "POST"])
 def services(request: HttpRequest) -> HttpResponse:
-    return render(request, "accounts/services.html")
+    submitted = False
+    initial = {}
+    if request.user.is_authenticated:
+        initial = {
+            "name": request.user.get_full_name(),
+            "email": request.user.email,
+        }
+
+    if request.method == "POST":
+        form = ServicesEnquiryForm(request.POST)
+        if form.is_valid():
+            submitted = True
+            if not form.is_spam:
+                recipient = getattr(settings, "SERVICES_ENQUIRY_EMAIL", settings.PFD_ADMIN_EMAIL)
+                try:
+                    message = EmailMessage(
+                        subject=form.email_subject(),
+                        body=form.email_body(),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        to=[recipient],
+                        reply_to=[form.cleaned_data["email"]],
+                    )
+                    message.send(fail_silently=False)
+                except Exception:
+                    logger.exception("services enquiry email failed")
+                    messages.error(
+                        request,
+                        "The enquiry could not be sent. Please email sam.osian@oreliandata.co.uk directly.",
+                    )
+                    submitted = False
+                else:
+                    form = ServicesEnquiryForm(initial=initial)
+            else:
+                form = ServicesEnquiryForm(initial=initial)
+    else:
+        form = ServicesEnquiryForm(initial=initial)
+
+    return render(
+        request,
+        "accounts/services.html",
+        {
+            "services_form": form,
+            "services_enquiry_submitted": submitted,
+        },
+    )
 
 
 @require_GET

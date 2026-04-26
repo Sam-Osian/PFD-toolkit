@@ -2151,24 +2151,29 @@ body[data-auth="user"] .about-signup { display: none !important; }
 .cons-meta { display: flex; gap: 8px; font: 500 11px/1 var(--ff-mono); color: var(--text-3); letter-spacing: 0.02em; padding-top: 12px; border-top: 1px solid var(--line); }
 .cons-meta span:first-child { color: var(--text); }
 
-.cons-past { margin-bottom: 48px; }
-.cons-past-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
-.cp {
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius);
-  padding: 20px;
+.cons-past {
+  margin-bottom: 56px;
+  padding-top: 36px;
+  border-top: 1px solid var(--line);
 }
-.cp-tag { font: 500 10px/1 var(--ff-mono); color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 12px; }
+.cons-past-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin-top: 20px;
+}
+.cp {
+  padding: 0 0 0 16px;
+  border-left: 1px solid var(--line-2);
+}
+.cp-tag { font: 500 10px/1 var(--ff-mono); color: var(--accent); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px; }
 .cp h4 { font-size: 14px; font-weight: 600; margin-bottom: 8px; letter-spacing: -0.01em; }
 .cp p { font-size: 12.5px; color: var(--text-2); line-height: 1.55; }
 
 .cons-contact {
   display: grid; grid-template-columns: 1fr 1fr; gap: 40px;
-  padding: 32px;
-  background: var(--surface);
-  border: 1px solid var(--line-2);
-  border-radius: var(--radius-lg);
+  padding: 40px 0 8px;
+  border-top: 1px solid var(--line);
   margin-bottom: 32px;
 }
 .cc-l h2 { font-size: 26px; letter-spacing: -0.02em; margin: 10px 0 12px; font-weight: 600; }
@@ -2178,7 +2183,14 @@ body[data-auth="user"] .about-signup { display: none !important; }
 .cc-meta .k { font: 500 10px/1 var(--ff-mono); color: var(--text-3); letter-spacing: 0.08em; text-transform: uppercase; }
 .cc-meta strong { color: var(--text); font-weight: 500; }
 
-.cc-form { display: grid; gap: 10px; }
+.cc-form {
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius-lg);
+}
 .cc-form label { display: grid; gap: 4px; font: 500 10px/1 var(--ff-mono); color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
 .cc-form input, .cc-form select, .cc-form textarea {
   padding: 10px 12px; font: 400 13px/1.4 var(--ff-sans);
@@ -2187,6 +2199,39 @@ body[data-auth="user"] .about-signup { display: none !important; }
   resize: vertical;
 }
 .cc-form input:focus, .cc-form select:focus, .cc-form textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.cc-alert {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.cc-alert strong { color: var(--text); font-weight: 600; }
+.cc-alert span { color: var(--text-2); }
+.cc-alert.success {
+  border-color: color-mix(in srgb, var(--good) 36%, var(--line-2));
+  background: color-mix(in srgb, var(--good) 8%, var(--surface));
+}
+.cc-alert.error {
+  border-color: color-mix(in srgb, var(--bad) 36%, var(--line-2));
+  background: color-mix(in srgb, var(--bad) 8%, var(--surface));
+}
+.cc-field-error {
+  color: var(--bad);
+  font: 500 11px/1.4 var(--ff-sans);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.cc-hp {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
 .cc-foot { font-size: 11px; color: var(--text-3); margin-top: 4px; }
 .cc-foot a { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
 
@@ -2195,7 +2240,7 @@ body[data-auth="user"] .about-signup { display: none !important; }
   .av-grid { grid-template-columns: repeat(2, 1fr); }
   .cons-grid { grid-template-columns: 1fr; }
   .cons-past-grid { grid-template-columns: 1fr; }
-  .cons-contact { grid-template-columns: 1fr; gap: 24px; padding: 24px; }
+  .cons-contact { grid-template-columns: 1fr; gap: 24px; }
   .context-grid { grid-template-columns: 1fr; }
   .about-cta-row { flex-direction: column; align-items: flex-start; gap: 16px; }
 }

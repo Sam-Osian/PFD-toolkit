@@ -307,6 +307,7 @@ EMAIL_USE_TLS = _env_bool("EMAIL_USE_TLS", False)
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@pfdtoolkit.org")
+SERVICES_ENQUIRY_EMAIL = os.getenv("SERVICES_ENQUIRY_EMAIL", PFD_ADMIN_EMAIL)
 
 # Run guardrails and reliability controls
 RUN_GUARDRAILS_ENABLED = _env_bool("RUN_GUARDRAILS_ENABLED", True)

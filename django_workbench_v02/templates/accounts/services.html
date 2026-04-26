@@ -115,23 +115,55 @@
                 <div><span class="k">Delivery</span><strong>Briefing, dataset, dashboard, or all three</strong></div>
             </div>
         </div>
-        <form class="cc-form" method="get" action="mailto:sam.osian@oreliandata.co.uk" enctype="text/plain">
+        <form class="cc-form" method="post" action="{% url 'services' %}">
+            {% csrf_token %}
+            {% if services_enquiry_submitted %}
+                <div class="cc-alert success" role="status">
+                    <strong>Enquiry sent.</strong>
+                    <span>Thanks. We will reply by email if the project looks like a good fit.</span>
+                </div>
+            {% endif %}
+            {% if services_form.non_field_errors %}
+                <div class="cc-alert error" role="alert">
+                    <strong>Check the enquiry.</strong>
+                    <span>{{ services_form.non_field_errors|striptags }}</span>
+                </div>
+            {% endif %}
+            <label>
+                Name
+                <input type="text" name="name" value="{{ services_form.name.value|default:'' }}" autocomplete="name" required>
+                {% if services_form.name.errors %}<span class="cc-field-error">{{ services_form.name.errors|striptags }}</span>{% endif %}
+            </label>
             <label>
                 Organisation
-                <input type="text" name="organisation" autocomplete="organization">
+                <input type="text" name="organisation" value="{{ services_form.organisation.value|default:'' }}" autocomplete="organization">
+                {% if services_form.organisation.errors %}<span class="cc-field-error">{{ services_form.organisation.errors|striptags }}</span>{% endif %}
+            </label>
+            <label>
+                Email
+                <input type="email" name="email" value="{{ services_form.email.value|default:'' }}" autocomplete="email" required>
+                {% if services_form.email.errors %}<span class="cc-field-error">{{ services_form.email.errors|striptags }}</span>{% endif %}
             </label>
             <label>
                 Work type
+                {% with selected_work_type=services_form.work_type.value %}
                 <select name="work_type">
-                    <option>Rapid scoping review</option>
-                    <option>Full custom analysis</option>
-                    <option>Dedicated dashboard</option>
-                    <option>Publication or grant support</option>
+                    <option{% if selected_work_type == "Rapid scoping review" %} selected{% endif %}>Rapid scoping review</option>
+                    <option{% if selected_work_type == "Full custom analysis" %} selected{% endif %}>Full custom analysis</option>
+                    <option{% if selected_work_type == "Dedicated dashboard" %} selected{% endif %}>Dedicated dashboard</option>
+                    <option{% if selected_work_type == "Publication or grant support" %} selected{% endif %}>Publication or grant support</option>
                 </select>
+                {% endwith %}
+                {% if services_form.work_type.errors %}<span class="cc-field-error">{{ services_form.work_type.errors|striptags }}</span>{% endif %}
             </label>
             <label>
                 Question or domain
-                <textarea name="project_summary" rows="5" placeholder="Briefly describe the PFD question, policy area, or report domain."></textarea>
+                <textarea name="project_summary" rows="5" placeholder="Briefly describe the PFD question, policy area, or report domain." required>{{ services_form.project_summary.value|default:'' }}</textarea>
+                {% if services_form.project_summary.errors %}<span class="cc-field-error">{{ services_form.project_summary.errors|striptags }}</span>{% endif %}
+            </label>
+            <label class="cc-hp" aria-hidden="true">
+                Website
+                <input type="text" name="website" value="" tabindex="-1" autocomplete="off">
             </label>
             <button class="btn btn-primary" type="submit">Send enquiry</button>
             <p class="cc-foot">Prefer email? Contact <a href="mailto:sam.osian@oreliandata.co.uk">sam.osian@oreliandata.co.uk</a>.</p>
