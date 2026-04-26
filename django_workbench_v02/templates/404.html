@@ -11,235 +11,79 @@
   .not-found-wrap {
     min-height: calc(100vh - 210px);
     display: grid;
-    align-items: center;
-    padding: 18px 0 44px;
+    place-items: center;
+    padding: 24px 0 56px;
   }
 
   .not-found-panel {
-    position: relative;
-    overflow: hidden;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
-    gap: 34px;
-    width: min(1120px, 100%);
-    border: 1px solid var(--line-2);
-    border-radius: var(--radius-lg);
-    background:
-      radial-gradient(circle at 16% 8%, var(--accent-soft), transparent 34%),
-      linear-gradient(135deg, color-mix(in srgb, var(--surface) 86%, transparent), color-mix(in srgb, var(--bg-2) 94%, transparent));
-    box-shadow: var(--shadow-2);
-    padding: clamp(22px, 4vw, 44px);
-  }
-
-  .not-found-panel::before {
-    content: "";
-    position: absolute;
-    inset: 18px;
-    border: 1px solid var(--line);
-    border-radius: calc(var(--radius-lg) - 4px);
-    pointer-events: none;
-  }
-
-  .not-found-copy,
-  .not-found-map {
-    position: relative;
-    z-index: 1;
-  }
-
-  .not-found-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 18px;
-    font: 500 10px/1 var(--ff-mono);
-    color: var(--accent);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
-
-  .not-found-kicker::before {
-    content: "";
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 12px var(--accent-glow);
+    width: min(960px, 100%);
+    text-align: center;
+    padding: clamp(26px, 6vw, 76px) clamp(18px, 5vw, 64px);
   }
 
   .not-found-code {
-    margin: 0 0 12px;
-    font: 600 clamp(72px, 13vw, 156px)/0.86 var(--ff-mono);
-    letter-spacing: -0.08em;
-    color: var(--text);
-  }
-
-  .not-found-copy h1 {
     margin: 0;
-    max-width: 13ch;
-    font-size: clamp(30px, 4vw, 52px);
-    line-height: 0.98;
-    letter-spacing: -0.035em;
+    font: 700 clamp(132px, 23vw, 300px)/0.78 var(--ff-mono);
+    letter-spacing: -0.1em;
+    color: var(--text);
+    text-shadow: 0 0 46px var(--accent-glow);
   }
 
-  .not-found-copy h1 span {
+  .not-found-title {
+    max-width: 9.5ch;
+    margin: 28px auto 0;
+    font-size: clamp(44px, 8vw, 104px);
+    font-weight: 700;
+    line-height: 0.94;
+    letter-spacing: -0.045em;
+    text-wrap: balance;
+  }
+
+  .not-found-title span {
     background: linear-gradient(120deg, var(--accent), var(--accent-2));
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
 
-  .not-found-copy p {
-    max-width: 58ch;
-    margin: 18px 0 0;
+  .not-found-copy {
+    max-width: 46ch;
+    margin: 24px auto 0;
     color: var(--text-2);
-    font-size: 14px;
-    line-height: 1.7;
+    font-size: clamp(15px, 1.7vw, 18px);
+    line-height: 1.65;
   }
 
   .not-found-actions {
     display: flex;
+    justify-content: center;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 28px;
+    margin-top: 34px;
   }
 
-  .not-found-diagnostics {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 28px;
-  }
-
-  .not-found-pill {
-    display: inline-flex;
-    align-items: center;
-    min-width: 0;
-    gap: 7px;
-    padding: 6px 9px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-2) 80%, transparent);
-    color: var(--text-3);
-    font: 500 10.5px/1.2 var(--ff-mono);
-  }
-
-  .not-found-pill strong {
-    color: var(--text);
-    font-weight: 500;
-  }
-
-  .not-found-path {
-    max-width: min(100%, 430px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .not-found-map {
-    align-self: stretch;
-    display: grid;
-    align-content: center;
-    gap: 12px;
-  }
-
-  .not-found-node {
-    display: grid;
-    grid-template-columns: 34px 1fr auto;
-    align-items: center;
-    gap: 12px;
-    padding: 13px 14px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: color-mix(in srgb, var(--surface) 78%, transparent);
-  }
-
-  .not-found-node.is-missing {
-    border-color: color-mix(in srgb, var(--bad) 38%, var(--line));
-    background:
-      linear-gradient(90deg, color-mix(in srgb, var(--bad) 10%, transparent), transparent),
-      color-mix(in srgb, var(--surface) 78%, transparent);
-  }
-
-  .not-found-node-icon {
-    display: grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    border: 1px solid var(--line-2);
-    border-radius: 8px;
-    color: var(--text-2);
-    background: var(--bg-2);
-  }
-
-  .not-found-node-icon svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .not-found-node strong {
-    display: block;
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
-
-  .not-found-node span {
-    display: block;
-    margin-top: 2px;
-    color: var(--text-3);
-    font-size: 11.5px;
-  }
-
-  .not-found-node-code {
-    color: var(--text-4);
-    font: 500 10px/1 var(--ff-mono);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  @media (max-width: 900px) {
+  @media (max-width: 700px) {
     .not-found-wrap {
       min-height: auto;
-      padding: 4px 0 24px;
+      padding: 10px 0 36px;
     }
 
     .not-found-panel {
-      grid-template-columns: 1fr;
-      gap: 26px;
-      padding: 22px;
-    }
-
-    .not-found-panel::before {
-      inset: 10px;
-    }
-
-    .not-found-copy h1 {
-      max-width: 100%;
-    }
-
-    .not-found-actions .btn {
-      flex: 1 1 170px;
-    }
-  }
-
-  @media (max-width: 560px) {
-    .not-found-panel {
-      border-radius: var(--radius);
-      padding: 18px;
+      padding-inline: 0;
     }
 
     .not-found-code {
-      font-size: clamp(64px, 24vw, 104px);
+      font-size: clamp(104px, 32vw, 170px);
     }
 
-    .not-found-node {
-      grid-template-columns: 30px 1fr;
+    .not-found-title {
+      max-width: 10ch;
+      margin-top: 22px;
+      font-size: clamp(42px, 13vw, 74px);
     }
 
-    .not-found-node-code {
-      grid-column: 2;
-      justify-self: start;
+    .not-found-actions .btn {
+      flex: 1 1 160px;
     }
   }
 </style>
@@ -252,75 +96,17 @@
 {% block content %}
 <div class="not-found-wrap">
     <section class="not-found-panel" aria-labelledby="not-found-title">
-        <div class="not-found-copy">
-            <div class="not-found-kicker">Route not indexed</div>
-            <p class="not-found-code">404</p>
-            <h1 id="not-found-title">This trail has gone <span>cold</span>.</h1>
-            <p>
-                The address does not match an available report, collection, workspace, or shared view.
-                Check the link, or jump back into the archive from one of the live routes below.
-            </p>
+        <p class="not-found-code">404</p>
+        <h1 class="not-found-title" id="not-found-title">This trail has gone <span>cold</span>.</h1>
+        <p class="not-found-copy">The page is missing or the link has changed.</p>
 
-            <div class="not-found-actions" aria-label="Suggested destinations">
-                <a class="btn btn-primary lg" href="{% url 'explore' %}">Browse reports</a>
-                <a class="btn btn-secondary lg" href="{% url 'collection-list' %}">Open collections</a>
-                {% if request.user.is_authenticated %}
-                    <a class="btn btn-secondary lg" href="{% url 'workspace-dashboard' %}">Your workspaces</a>
-                {% else %}
-                    <a class="btn btn-secondary lg" href="{% url 'landing' %}">Return home</a>
-                {% endif %}
-            </div>
-
-            <div class="not-found-diagnostics" aria-label="Request diagnostics">
-                <span class="not-found-pill"><strong>Status</strong> 404</span>
-                <span class="not-found-pill not-found-path"><strong>Path</strong> {{ request.path }}</span>
-            </div>
-        </div>
-
-        <div class="not-found-map" aria-label="PFD Toolkit route map">
-            <div class="not-found-node">
-                <div class="not-found-node-icon" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8l6-5 6 5v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V8z"/></svg>
-                </div>
-                <div>
-                    <strong>Overview</strong>
-                    <span>Start from the main toolkit dashboard.</span>
-                </div>
-                <div class="not-found-node-code">OK</div>
-            </div>
-
-            <div class="not-found-node">
-                <div class="not-found-node-icon" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>
-                </div>
-                <div>
-                    <strong>Explore</strong>
-                    <span>Search the Prevention of Future Death reports archive.</span>
-                </div>
-                <div class="not-found-node-code">OK</div>
-            </div>
-
-            <div class="not-found-node is-missing">
-                <div class="not-found-node-icon" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/><circle cx="8" cy="8" r="6"/></svg>
-                </div>
-                <div>
-                    <strong>Requested page</strong>
-                    <span>No matching route was found for this address.</span>
-                </div>
-                <div class="not-found-node-code">MISS</div>
-            </div>
-
-            <div class="not-found-node">
-                <div class="not-found-node-icon" aria-hidden="true">
-                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h12M3 5l1 8h8l1-8M6 5V3h4v2"/></svg>
-                </div>
-                <div>
-                    <strong>Collections</strong>
-                    <span>Use curated starting points for common research questions.</span>
-                </div>
-                <div class="not-found-node-code">OK</div>
-            </div>
+        <div class="not-found-actions" aria-label="Suggested destinations">
+            <a class="btn btn-primary lg" href="{% url 'explore' %}">Browse reports</a>
+            {% if request.user.is_authenticated %}
+                <a class="btn btn-secondary lg" href="{% url 'workspace-dashboard' %}">Your workspaces</a>
+            {% else %}
+                <a class="btn btn-secondary lg" href="{% url 'landing' %}">Return home</a>
+            {% endif %}
         </div>
     </section>
 </div>
