@@ -695,6 +695,8 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
                 "theme_summary_path": result.get("theme_summary_path"),
                 "theme_schema_path": result.get("theme_schema_path"),
                 "report_summaries_path": result.get("report_summaries_path"),
+                "output_reports": result.get("output_reports"),
+                "total_reports": result.get("total_reports"),
             },
         )
 

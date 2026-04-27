@@ -274,7 +274,7 @@ def _pipeline_status_for_run(run: InvestigationRun | None) -> str:
     return ""
 
 
-def _reports_found_from_artifact(artifact: RunArtifact | None) -> int:
+def _reports_found_from_artifact_metadata(artifact: RunArtifact | None) -> int:
     if artifact is None:
         return 0
     if isinstance(artifact.metadata_json, dict):
@@ -288,6 +288,19 @@ def _reports_found_from_artifact(artifact: RunArtifact | None) -> int:
             except (TypeError, ValueError):
                 continue
     return 0
+
+
+def _reports_found_from_artifact(artifact: RunArtifact | None) -> int:
+    if artifact is None:
+        return 0
+    # Keep workspace-card counts aligned with the actual dataset rows shown to users.
+    preview = _artifact_preview(artifact, max_rows=0)
+    if not str(preview.get("error") or "").strip():
+        try:
+            return int(preview.get("row_count") or 0)
+        except (TypeError, ValueError):
+            pass
+    return _reports_found_from_artifact_metadata(artifact)
 
 
 def _active_public_share_link_for_workspace(*, workspace: Workspace) -> WorkspaceShareLink | None:
@@ -628,16 +641,27 @@ def dashboard(request):
             if key not in latest_run_by_workspace_id:
                 latest_run_by_workspace_id[key] = run
 
-        filtered_artifacts = (
+        dataset_artifacts = (
             RunArtifact.objects.filter(
                 workspace_id__in=workspace_ids,
                 status=ArtifactStatus.READY,
-                artifact_type=ArtifactType.FILTERED_DATASET,
+                artifact_type__in=(
+                    ArtifactType.EXTRACTION_TABLE,
+                    ArtifactType.THEME_ASSIGNMENTS,
+                    ArtifactType.FILTERED_DATASET,
+                ),
             )
-            .only("workspace_id", "metadata_json")
+            .only(
+                "id",
+                "workspace_id",
+                "artifact_type",
+                "storage_backend",
+                "storage_uri",
+                "metadata_json",
+            )
             .order_by("workspace_id", "-created_at")
         )
-        for artifact in filtered_artifacts:
+        for artifact in dataset_artifacts:
             key = artifact.workspace_id
             if key not in reports_found_by_workspace_id:
                 reports_found_by_workspace_id[key] = _reports_found_from_artifact(artifact)

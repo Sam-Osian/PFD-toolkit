@@ -1,7 +1,9 @@
 from datetime import timedelta
+import os
 import re
 import io
 import json
+import tempfile
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
@@ -1122,6 +1124,46 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertContains(response, "Question prompt shown as card description")
         self.assertContains(response, "Reports found")
         self.assertContains(response, ">47<", html=False)
+
+    def test_dashboard_counts_reports_from_latest_themes_dataset_artifact_rows(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Themes Investigation",
+            question_text="Theme prompt",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.THEMES,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        run.status = RunStatus.SUCCEEDED
+        run.save(update_fields=["status"])
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as handle:
+            handle.write("id,title\n1,Report A\n2,Report B\n3,Report C\n")
+            csv_path = handle.name
+        self.addCleanup(lambda: os.path.exists(csv_path) and os.remove(csv_path))
+        RunArtifact.objects.create(
+            run=run,
+            workspace=self.workspace_a,
+            artifact_type=ArtifactType.THEME_ASSIGNMENTS,
+            status=ArtifactStatus.READY,
+            storage_backend=ArtifactStorageBackend.FILE,
+            storage_uri=csv_path,
+            metadata_json={},
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        active_rows = response.context["active_rows"]
+        row = next(item for item in active_rows if item["workspace"].id == self.workspace_a.id)
+        self.assertEqual(row["reports_found_count"], 3)
+        self.assertTrue(row["show_reports_found_count"])
 
     def test_dashboard_last_edited_prefers_newer_investigation_update_over_older_run(self):
         investigation = create_investigation(
