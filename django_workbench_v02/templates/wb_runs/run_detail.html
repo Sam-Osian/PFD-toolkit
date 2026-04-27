@@ -63,6 +63,7 @@
         {% if can_request_cancellation %}
             <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="stack-sm">
                 {% csrf_token %}
+                <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
                 {{ cancel_form.as_p }}
                 <button type="submit">Cancel run</button>
             </form>

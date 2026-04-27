@@ -125,6 +125,7 @@
                                 {% if row.running_run and row.can_cancel_running_run %}
                                     <form method="post" action="{% url 'run-cancel' workbook_id=workspace.id run_id=row.running_run.id %}" class="inline-form">
                                         {% csrf_token %}
+                                        <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
                                         <input type="hidden" name="cancel_reason" value="Cancelled from workspace dashboard card.">
                                         <button type="submit" class="btn btn-secondary sm">Cancel</button>
                                     </form>

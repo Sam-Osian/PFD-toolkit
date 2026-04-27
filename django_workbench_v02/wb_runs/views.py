@@ -6,6 +6,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_POST
 
 from wb_investigations.models import Investigation
@@ -66,6 +67,20 @@ CONFIG_SKIP_KEYS = {
     "excluded_report_identities",
     "selected_filters",
 }
+SKIP_CANCELLED_PRUNE_SESSION_KEY = "wb_skip_cancelled_prune_once"
+
+
+def _resolve_next_url(request, *, fallback: str) -> str:
+    next_url = str(request.POST.get("next_url") or "").strip()
+    if not next_url:
+        next_url = str(request.META.get("HTTP_REFERER") or "").strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+    return fallback
 
 
 def _format_size(size_bytes):
@@ -385,7 +400,9 @@ def cancel_run(request, workbook_id, run_id):
         messages.error(request, str(exc))
     else:
         messages.success(request, "Run cancellation requested.")
-    return redirect("workbook-open", workbook_id=workbook_id)
+        request.session[SKIP_CANCELLED_PRUNE_SESSION_KEY] = True
+    fallback_url = reverse("workbook-open", kwargs={"workbook_id": workbook_id})
+    return redirect(_resolve_next_url(request, fallback=fallback_url))
 
 
 @require_GET

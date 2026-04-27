@@ -130,6 +130,7 @@ RUN_STATUS_CARD_LABELS = {
     RunStatus.FAILED: "Failed",
     RunStatus.TIMED_OUT: "Timed out",
 }
+SKIP_CANCELLED_PRUNE_SESSION_KEY = "wb_skip_cancelled_prune_once"
 
 
 def _pending_status_label_for_run(run: InvestigationRun | None) -> str:
@@ -301,6 +302,22 @@ def _reports_found_from_artifact(artifact: RunArtifact | None) -> int:
         except (TypeError, ValueError):
             pass
     return _reports_found_from_artifact_metadata(artifact)
+
+
+def _consume_cancelled_prune_skip(request) -> bool:
+    return bool(request.session.pop(SKIP_CANCELLED_PRUNE_SESSION_KEY, False))
+
+
+def _prune_user_cancelled_runs(*, workspace_ids: list) -> int:
+    valid_workspace_ids = [workspace_id for workspace_id in workspace_ids if workspace_id]
+    if not valid_workspace_ids:
+        return 0
+    deleted, _ = InvestigationRun.objects.filter(
+        workspace_id__in=valid_workspace_ids,
+        status=RunStatus.CANCELLED,
+        cancel_requested_at__isnull=False,
+    ).delete()
+    return int(deleted)
 
 
 def _active_public_share_link_for_workspace(*, workspace: Workspace) -> WorkspaceShareLink | None:
@@ -618,6 +635,9 @@ def dashboard(request):
             }
         )
     workspace_ids = [row["workspace"].id for row in dashboard_rows]
+    skip_cancelled_prune = _consume_cancelled_prune_skip(request)
+    if workspace_ids and not skip_cancelled_prune:
+        _prune_user_cancelled_runs(workspace_ids=workspace_ids)
     latest_run_by_workspace_id: dict = {}
     investigations_by_workspace_id: dict = {}
     reports_found_by_workspace_id: dict = {}
@@ -1260,6 +1280,9 @@ def open_workspace(request, workbook_id):
     except WorkspaceLifecycleError as exc:
         messages.error(request, str(exc))
         return redirect("workbook-dashboard")
+    skip_cancelled_prune = _consume_cancelled_prune_skip(request)
+    if not skip_cancelled_prune:
+        _prune_user_cancelled_runs(workspace_ids=[workspace.id])
     payload = _workspace_build_explore_payload(workspace=workspace, request=request)
     explore_data = payload["explore"]
     dataset_available = bool(payload["dataset_available"])

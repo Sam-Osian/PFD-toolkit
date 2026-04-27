@@ -655,6 +655,21 @@ class RunViewTests(TestCase):
         self.run.refresh_from_db()
         self.assertEqual(self.run.status, RunStatus.CANCELLING)
 
+    def test_cancel_run_view_redirects_to_next_url_and_sets_prune_skip_flag(self):
+        self.client.force_login(self.owner)
+        next_url = reverse("workbook-dashboard")
+        response = self.client.post(
+            reverse(
+                "workbook-run-cancel",
+                kwargs={"workbook_id": self.workspace.id, "run_id": self.run.id},
+            ),
+            data={"cancel_reason": "Stop now", "next_url": next_url},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, next_url)
+        session = self.client.session
+        self.assertTrue(session.get("wb_skip_cancelled_prune_once"))
+
     def test_owner_can_download_run_artifact(self):
         output_path = Path("/tmp/test-run-detail-download.csv")
         output_path.write_text("id,value\n1,ok\n", encoding="utf-8")

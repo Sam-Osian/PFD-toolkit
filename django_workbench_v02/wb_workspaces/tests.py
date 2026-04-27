@@ -19,6 +19,7 @@ from wb_runs.models import (
     ArtifactStatus,
     ArtifactStorageBackend,
     ArtifactType,
+    InvestigationRun,
     RunStatus,
     RunArtifact,
     RunType,
@@ -1193,6 +1194,40 @@ class WorkspaceActiveStateViewTests(TestCase):
         active_rows = response.context["active_rows"]
         row = next(item for item in active_rows if item["workspace"].id == self.workspace_a.id)
         self.assertEqual(row["last_edited_at"], newer_investigation_time)
+
+    def test_cancelled_runs_are_pruned_after_refresh_with_one_request_grace(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="Cancelled Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "openai", "model_name": "gpt-4.1-mini"},
+        )
+        run.status = RunStatus.CANCELLED
+        run.cancel_requested_at = timezone.now()
+        run.finished_at = timezone.now()
+        run.save(update_fields=["status", "cancel_requested_at", "finished_at", "updated_at"])
+
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session["wb_skip_cancelled_prune_once"] = True
+        session.save()
+
+        first_response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(first_response.status_code, 200)
+        self.assertTrue(InvestigationRun.objects.filter(id=run.id).exists())
+
+        second_response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(second_response.status_code, 200)
+        self.assertFalse(InvestigationRun.objects.filter(id=run.id).exists())
 
     def test_workspace_detail_shows_switcher_with_all_user_workbooks(self):
         self.client.force_login(self.owner)
