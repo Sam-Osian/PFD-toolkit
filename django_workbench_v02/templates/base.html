@@ -427,10 +427,10 @@
                     <select id="wz-model-select" name="model_name" class="wz-review-control">
                         {% if active_llm_config and active_llm_config.provider == "openrouter" %}
                             <option value="openai/gpt-4.1-mini" {% if active_llm_config.model_name == "openai/gpt-4.1-mini" or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
-                            <option value="openai/gpt-4.1" {% if active_llm_config.model_name == "openai/gpt-4.1" or active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
+                            <option value="openai/gpt-5.4" {% if active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" or active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
                         {% else %}
                             <option value="gpt-4.1-mini" {% if not active_llm_config or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
-                            <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
+                            <option value="gpt-5.4" {% if active_llm_config and active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "gpt-4.1" or active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
                         {% endif %}
                     </select>
                     <div class="wz-review-inline">
@@ -527,7 +527,7 @@
                     <label for="llm-pop-model">Preferred model</label>
                     <select id="llm-pop-model" name="model_name">
                         <option value="gpt-4.1-mini" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
-                        <option value="gpt-4.1" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
+                        <option value="gpt-5.4" {% if active_llm_config and active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "gpt-4.1" or active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
                     </select>
                 </div>
                 <div class="field">
@@ -1131,11 +1131,14 @@ document.addEventListener("DOMContentLoaded", function() {
     const model = String(rawModel || "").trim();
     if (provider === "openrouter") {
       if (model === "gpt-4.1-mini") return "openai/gpt-4.1-mini";
-      if (model === "gpt-4.1") return "openai/gpt-4.1";
+      if (model === "gpt-4.1") return "openai/gpt-5.4";
+      if (model === "gpt-5.4") return "openai/gpt-5.4";
+      if (model === "openai/gpt-4.1") return "openai/gpt-5.4";
       return model || "openai/gpt-4.1-mini";
     }
     if (model === "openai/gpt-4.1-mini") return "gpt-4.1-mini";
-    if (model === "openai/gpt-4.1") return "gpt-4.1";
+    if (model === "openai/gpt-4.1" || model === "openai/gpt-5.4") return "gpt-5.4";
+    if (model === "gpt-4.1") return "gpt-5.4";
     return model || "gpt-4.1-mini";
   };
 
@@ -1144,9 +1147,9 @@ document.addEventListener("DOMContentLoaded", function() {
     const provider = String(providerValue || "openai").trim().toLowerCase();
     const selectedModel = normaliseModelForProvider(provider, preferredModel);
     if (provider === "openrouter") {
-      modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">Standard (faster, lower cost)</option><option value="openai/gpt-4.1">Advanced (best quality)</option>';
+      modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">Standard (faster, lower cost)</option><option value="openai/gpt-5.4">Advanced (best quality)</option>';
     } else {
-      modelSelect.innerHTML = '<option value="gpt-4.1-mini">Standard (faster, lower cost)</option><option value="gpt-4.1">Advanced (best quality)</option>';
+      modelSelect.innerHTML = '<option value="gpt-4.1-mini">Standard (faster, lower cost)</option><option value="gpt-5.4">Advanced (best quality)</option>';
     }
     modelSelect.value = selectedModel;
     if (!modelSelect.value) {

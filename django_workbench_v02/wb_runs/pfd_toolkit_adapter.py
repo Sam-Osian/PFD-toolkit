@@ -62,9 +62,36 @@ def _normalise_parallel_workers(raw_value) -> int:
     return min(32, max(1, requested))
 
 
+def _normalise_model_alias(*, provider: str, model_name: str) -> str:
+    cleaned = str(model_name or "").strip()
+    if not cleaned:
+        return "gpt-4.1-mini"
+    aliases = {
+        "gpt-4.1": "gpt-5.4",
+        "openai/gpt-4.1": "openai/gpt-5.4",
+    }
+    resolved = aliases.get(cleaned, cleaned)
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == "openai" and resolved.startswith("openai/"):
+        return resolved.split("/", 1)[1]
+    if provider_key == "openrouter" and "/" not in resolved:
+        return f"openai/{resolved}"
+    return resolved
+
+
+def _resolve_reasoning_effort(model_name: str) -> str | None:
+    model = str(model_name or "").strip().lower()
+    if model in {"gpt-5.4", "gpt-5.4-2026-03-05", "openai/gpt-5.4"}:
+        return "none"
+    return None
+
+
 def _build_llm_kwargs(*, run, config: dict) -> dict:
     provider = str(config.get("provider", "openai")).strip().lower()
-    model_name = (config.get("model_name") or "gpt-4.1-mini").strip() or "gpt-4.1-mini"
+    model_name = _normalise_model_alias(
+        provider=provider,
+        model_name=(config.get("model_name") or "gpt-4.1-mini").strip(),
+    )
     timeout = int(config.get("llm_timeout_seconds") or LLM_REQUEST_TIMEOUT_SECONDS)
     try:
         api_key, saved_base_url = resolve_workspace_credential(
@@ -97,6 +124,9 @@ def _build_llm_kwargs(*, run, config: dict) -> dict:
         "seed": 123,
         "timeout": timeout,
     }
+    reasoning_effort = _resolve_reasoning_effort(model_name)
+    if reasoning_effort:
+        kwargs["reasoning_effort"] = reasoning_effort
     if base_url:
         kwargs["base_url"] = base_url
     return kwargs

@@ -28,8 +28,12 @@ class DummyAPIConnectionError(Exception):
 class DummyAPITimeoutError(DummyAPIConnectionError):
     pass
 
+class DummyBadRequestError(Exception):
+    pass
+
 dummy_openai = types.SimpleNamespace(
     Client=DummyClient,
+    BadRequestError=DummyBadRequestError,
     RateLimitError=DummyRateLimitError,
     APIConnectionError=DummyAPIConnectionError,
     APITimeoutError=DummyAPITimeoutError,
@@ -51,7 +55,7 @@ from pfd_toolkit.llm import (
 def test_generate_sequential(monkeypatch):
     llm = LLM(api_key="test", max_workers=1, timeout=1)
 
-    def fake_create(model, messages, temperature=0.0, seed=None):
+    def fake_create(model, messages, temperature=0.0, seed=None, reasoning_effort=None):
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -70,7 +74,7 @@ def test_generate_sequential(monkeypatch):
 def test_generate_parallel(monkeypatch):
     llm = LLM(api_key="test", max_workers=4, timeout=1)
 
-    def fake_create(model, messages, temperature=0.0, seed=None):
+    def fake_create(model, messages, temperature=0.0, seed=None, reasoning_effort=None):
         return types.SimpleNamespace(
             choices=[
                 types.SimpleNamespace(
@@ -106,6 +110,67 @@ def test_generate_markdown_wrapped_json(monkeypatch):
 
     result = llm.generate(["prompt"], response_format=TopicMatch)
     assert result[0].matches_topic == "Yes"
+
+
+def test_generate_retries_without_unsupported_temperature(monkeypatch):
+    llm = LLM(api_key="test", model="gpt-5.4", max_workers=1, timeout=1, reasoning_effort="none")
+    calls = []
+
+    def fake_create(**kwargs):
+        calls.append(dict(kwargs))
+        if len(calls) == 1:
+            exc = dummy_openai.BadRequestError("unsupported temperature")
+            exc.body = {
+                "error": {
+                    "message": "Unsupported parameter: 'temperature' is not supported with this model.",
+                    "param": "temperature",
+                    "code": "unsupported_parameter",
+                }
+            }
+            raise exc
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="OK"))],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
+
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
+    result = llm.generate(["prompt"], max_workers=1)
+    assert result == ["OK"]
+    assert "temperature" in calls[0]
+    assert "temperature" not in calls[1]
+    assert calls[1].get("reasoning_effort") == "none"
+
+
+def test_generate_retries_parse_without_unsupported_reasoning_effort(monkeypatch):
+    class TopicMatch(BaseModel):
+        matches_topic: str
+
+    llm = LLM(api_key="test", model="gpt-5.4", max_workers=1, timeout=1, reasoning_effort="none")
+    calls = []
+
+    def fake_parse(**kwargs):
+        calls.append(dict(kwargs))
+        if len(calls) == 1:
+            exc = dummy_openai.BadRequestError("unsupported reasoning_effort")
+            exc.body = {
+                "error": {
+                    "message": "Unsupported parameter: 'reasoning_effort' is not supported with this model.",
+                    "param": "reasoning_effort",
+                    "code": "unsupported_parameter",
+                }
+            }
+            raise exc
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content='{"matches_topic":"Yes"}'))]
+        )
+
+    monkeypatch.setattr(llm.client.beta.chat.completions, "parse", fake_parse)
+
+    result = llm.generate(["prompt"], response_format=TopicMatch, max_workers=1)
+    assert result[0].matches_topic == "Yes"
+    assert "reasoning_effort" in calls[0]
+    assert "reasoning_effort" not in calls[1]
 
 
 @pytest.mark.parametrize(
@@ -202,7 +267,7 @@ def test_generate_can_cancel_before_submission(monkeypatch):
     llm = LLM(api_key="test", max_workers=1, timeout=1)
     call_counter = {"n": 0}
 
-    def fake_create(model, messages, temperature=0.0, seed=None):
+    def fake_create(model, messages, temperature=0.0, seed=None, reasoning_effort=None):
         call_counter["n"] += 1
         return types.SimpleNamespace(
             choices=[
@@ -229,7 +294,7 @@ def test_generate_stops_submitting_after_cancellation(monkeypatch):
     call_counter = {"n": 0}
     cancel_state = {"value": False}
 
-    def fake_create(model, messages, temperature=0.0, seed=None):
+    def fake_create(model, messages, temperature=0.0, seed=None, reasoning_effort=None):
         call_counter["n"] += 1
         return types.SimpleNamespace(
             choices=[

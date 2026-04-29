@@ -36,11 +36,11 @@ ALLOWED_REVIEW_PROVIDERS = {
 PROVIDER_MODEL_ALLOWLIST = {
     WorkspaceLLMProvider.OPENAI: {
         "gpt-4.1-mini",
-        "gpt-4.1",
+        "gpt-5.4",
     },
     WorkspaceLLMProvider.OPENROUTER: {
         "openai/gpt-4.1-mini",
-        "openai/gpt-4.1",
+        "openai/gpt-5.4",
     },
 }
 
@@ -59,6 +59,14 @@ def _normalise_review_config(review_config: dict | None) -> dict:
         model_name = "gpt-4.1-mini"
     else:
         model_name = str(raw_model_name).strip()
+    if provider == WorkspaceLLMProvider.OPENAI:
+        if model_name in {"gpt-4.1", "openai/gpt-4.1"}:
+            model_name = "gpt-5.4"
+        if model_name == "openai/gpt-5.4":
+            model_name = "gpt-5.4"
+    elif provider == WorkspaceLLMProvider.OPENROUTER:
+        if model_name in {"gpt-4.1", "openai/gpt-4.1", "gpt-5.4"}:
+            model_name = "openai/gpt-5.4"
     try:
         max_parallel_workers = int(raw.get("max_parallel_workers") or 1)
     except (TypeError, ValueError):

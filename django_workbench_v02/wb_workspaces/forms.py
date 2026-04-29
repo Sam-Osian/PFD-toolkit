@@ -50,7 +50,7 @@ class ActiveLLMConfigForm(forms.Form):
         required=False,
         choices=(
             ("gpt-4.1-mini", "gpt-4.1-mini (recommended - lower cost)"),
-            ("gpt-4.1", "gpt-4.1 (higher accuracy)"),
+            ("gpt-5.4", "gpt-5.4 (higher accuracy)"),
         ),
         initial="gpt-4.1-mini",
     )

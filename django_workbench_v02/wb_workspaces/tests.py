@@ -748,6 +748,19 @@ class WorkspaceLLMSettingTests(TestCase):
         self.assertEqual(setting.get("model_name"), "gpt-4.1-mini")
         self.assertEqual(setting.get("max_parallel_workers"), 3)
 
+    def test_upsert_llm_setting_normalises_legacy_advanced_model_alias(self):
+        upsert_workspace_llm_setting(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="openai",
+            model_name="gpt-4.1",
+            max_parallel_workers=2,
+        )
+        setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
+        self.assertEqual(setting.get("provider"), "openai")
+        self.assertEqual(setting.get("model_name"), "gpt-5.4")
+        self.assertEqual(setting.get("max_parallel_workers"), 2)
+
 
 class WorkspaceActiveStateViewTests(TestCase):
     def setUp(self):

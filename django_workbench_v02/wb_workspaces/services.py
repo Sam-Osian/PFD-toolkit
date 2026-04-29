@@ -519,7 +519,13 @@ def _validate_api_key_format(*, provider: str, api_key: str) -> None:
 
 def _normalise_model_name(model_name: str) -> str:
     cleaned = str(model_name or "").strip()
-    return cleaned or "gpt-4.1-mini"
+    if not cleaned:
+        return "gpt-4.1-mini"
+    legacy_to_current = {
+        "gpt-4.1": "gpt-5.4",
+        "openai/gpt-4.1": "openai/gpt-5.4",
+    }
+    return legacy_to_current.get(cleaned, cleaned)
 
 
 def _normalise_max_parallel_workers(value) -> int:

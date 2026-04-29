@@ -1,5 +1,5 @@
 import openai
-from openai import RateLimitError, APIConnectionError, APITimeoutError
+from openai import BadRequestError, RateLimitError, APIConnectionError, APITimeoutError
 import httpx
 import tiktoken
 import logging
@@ -65,6 +65,53 @@ def _is_insufficient_quota_error(exc: Exception) -> bool:
                     return True
 
     return False
+
+
+def _is_unsupported_parameter_error(exc: Exception, parameter_name: str) -> bool:
+    """Return True when an API error indicates the parameter is unsupported."""
+    if exc is None or not isinstance(exc, BadRequestError):
+        return False
+
+    param = str(parameter_name or "").strip()
+    if not param:
+        return False
+
+    payload = getattr(exc, "body", None)
+    if isinstance(payload, dict):
+        err = payload.get("error", payload)
+    else:
+        err = None
+
+    if err is None:
+        response = getattr(exc, "response", None)
+        if response is not None:
+            try:
+                payload = response.json()
+            except Exception:
+                payload = None
+            if isinstance(payload, dict):
+                err = payload.get("error", payload)
+
+    if isinstance(err, dict):
+        error_param = str(err.get("param") or "").strip()
+        if error_param == param:
+            return True
+        message = str(err.get("message") or "").strip().lower()
+        code = str(err.get("code") or "").strip().lower()
+        if (
+            (f"'{param}'" in message or param in message)
+            and ("unsupported" in message or "does not support" in message)
+        ):
+            return True
+        if code in {"unsupported_parameter", "unsupported_value"} and (
+            f"'{param}'" in message or param in message
+        ):
+            return True
+
+    message = str(exc).strip().lower()
+    return (f"'{param}'" in message or param in message) and (
+        "unsupported parameter" in message or "does not support" in message
+    )
 
 
 def _strip_json_markdown(text: str) -> str:
@@ -134,6 +181,10 @@ class LLM:
         Defaults to ``8``.
     temperature : float, optional
         Sampling temperature used for all requests. Defaults to ``0.0``.
+    reasoning_effort : str or None, optional
+        Optional reasoning effort hint for reasoning-capable models.
+        Common values include ``none``, ``low``, ``medium`` and ``high``.
+        Defaults to ``None``.
     seed : int or None, optional
         Deterministic seed value passed to the API. Defaults to ``None``.
     validation_attempts : int, optional
@@ -165,6 +216,7 @@ class LLM:
         base_url: Optional[str] = None,
         max_workers: int = 8,
         temperature: float = 0.0,
+        reasoning_effort: Optional[str] = None,
         seed: Optional[int] = None,
         validation_attempts: int = 2,
         timeout: float | httpx.Timeout = 120,
@@ -180,6 +232,7 @@ class LLM:
         )
 
         self.temperature = float(temperature)
+        self.reasoning_effort = str(reasoning_effort).strip() if reasoning_effort else None
         self.seed = seed
         self.validation_attempts = max(1, validation_attempts)
 
@@ -205,8 +258,7 @@ class LLM:
             with self._sem:
                 if self._cancel_requested.is_set():
                     raise GenerationCancelledError("LLM generation cancelled.")
-                # Call the client's parse method directly
-                return self.client.beta.chat.completions.parse(**kwargs)
+                return self._chat_parse_with_compat_retry(**kwargs)
 
         self._parse_with_backoff = _parse_with_backoff
 
@@ -224,6 +276,54 @@ class LLM:
     def reset_cancellation(self) -> None:
         """Clear any prior cancellation request."""
         self._cancel_requested.clear()
+
+    def _chat_create_with_compat_retry(self, **request_kwargs):
+        """Retry once without unsupported optional parameters."""
+        attempted_removals: set[str] = set()
+        while True:
+            try:
+                return self.client.chat.completions.create(**request_kwargs)
+            except Exception as exc:
+                removable = None
+                for candidate in ("reasoning_effort", "temperature", "seed"):
+                    if candidate in request_kwargs and candidate not in attempted_removals:
+                        if _is_unsupported_parameter_error(exc, candidate):
+                            removable = candidate
+                            break
+                if removable is None:
+                    raise
+                attempted_removals.add(removable)
+                request_kwargs = dict(request_kwargs)
+                request_kwargs.pop(removable, None)
+                logger.warning(
+                    "Model '%s' rejected parameter '%s'; retrying without it.",
+                    self.model,
+                    removable,
+                )
+
+    def _chat_parse_with_compat_retry(self, **request_kwargs):
+        """Retry parse requests without unsupported optional parameters."""
+        attempted_removals: set[str] = set()
+        while True:
+            try:
+                return self.client.beta.chat.completions.parse(**request_kwargs)
+            except Exception as exc:
+                removable = None
+                for candidate in ("reasoning_effort", "temperature", "seed"):
+                    if candidate in request_kwargs and candidate not in attempted_removals:
+                        if _is_unsupported_parameter_error(exc, candidate):
+                            removable = candidate
+                            break
+                if removable is None:
+                    raise
+                attempted_removals.add(removable)
+                request_kwargs = dict(request_kwargs)
+                request_kwargs.pop(removable, None)
+                logger.warning(
+                    "Model '%s' rejected parameter '%s' for parse call; retrying without it.",
+                    self.model,
+                    removable,
+                )
 
     def _pdf_bytes_to_base64_images(
         self, pdf_bytes: bytes, dpi: int = 200
@@ -385,12 +485,16 @@ class LLM:
             _raise_if_cancelled()
             with self._sem:
                 _raise_if_cancelled()
-                resp = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=self.temperature,
-                    **({"seed": self.seed} if self.seed is not None else {}),
-                )
+                request_kwargs = {
+                    "model": self.model,
+                    "messages": messages,
+                }
+                request_kwargs["temperature"] = self.temperature
+                if self.seed is not None:
+                    request_kwargs["seed"] = self.seed
+                if self.reasoning_effort:
+                    request_kwargs["reasoning_effort"] = self.reasoning_effort
+                resp = self._chat_create_with_compat_retry(**request_kwargs)
             try:
                 used = resp.usage.total_tokens
                 logger.debug(f"Actual tokens used: {used}")
@@ -411,13 +515,17 @@ class LLM:
                 for attempt in range(self.validation_attempts):
                     _raise_if_cancelled()
                     try:
-                        resp = self._parse_with_backoff(
-                            model=self.model,
-                            messages=messages,
-                            temperature=self.temperature,
-                            response_format=response_format,
-                            **({"seed": self.seed} if self.seed is not None else {}),
-                        )
+                        parse_kwargs = {
+                            "model": self.model,
+                            "messages": messages,
+                            "temperature": self.temperature,
+                            "response_format": response_format,
+                        }
+                        if self.seed is not None:
+                            parse_kwargs["seed"] = self.seed
+                        if self.reasoning_effort:
+                            parse_kwargs["reasoning_effort"] = self.reasoning_effort
+                        resp = self._parse_with_backoff(**parse_kwargs)
                         raw = resp.choices[0].message.content
                         cleaned = _strip_json_markdown(raw)
                         validated = response_format.model_validate_json(

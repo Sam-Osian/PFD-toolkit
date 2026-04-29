@@ -969,7 +969,7 @@ class InvestigationModalWizardLaunchTests(TestCase):
         )
         self.owner.refresh_from_db()
         self.assertEqual(self.owner.llm_setting.provider, "openrouter")
-        self.assertEqual(self.owner.llm_setting.model_name, "openai/gpt-4.1")
+        self.assertEqual(self.owner.llm_setting.model_name, "openai/gpt-5.4")
         self.assertEqual(self.owner.llm_setting.max_parallel_workers, 7)
 
     def test_modal_launch_saves_user_credential_for_selected_provider(self):
