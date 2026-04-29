@@ -466,10 +466,11 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!dashboardSections || refreshInFlight) return;
     if (document.querySelector(".dlg-back.on")) return;
     if (document.querySelector("details.ws-actions[open]")) return;
+    if (document.querySelector("details.ws-archive[open]")) return;
     if (document.activeElement?.closest("details.ws-archive")) return;
     refreshInFlight = true;
     try {
-      const uiState = captureDashboardUiState();
+      const uiStateAtRequestStart = captureDashboardUiState();
       const response = await fetch(window.location.href, {
         method: "GET",
         headers: {
@@ -485,8 +486,9 @@ document.addEventListener("DOMContentLoaded", function() {
       const nextSections = nextDoc.getElementById("workspace-dashboard-sections");
       if (!nextSections) return;
       closeAllActionMenus();
+      const uiStateBeforeSwap = captureDashboardUiState();
       dashboardSections.innerHTML = nextSections.innerHTML;
-      restoreDashboardUiState(uiState);
+      restoreDashboardUiState(uiStateBeforeSwap || uiStateAtRequestStart);
     } catch (error) {
       // Keep dashboard usable if refresh fails transiently.
     } finally {
