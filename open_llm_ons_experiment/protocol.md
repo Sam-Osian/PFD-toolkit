@@ -31,6 +31,14 @@ These windows are fixed a priori for reproducibility.
 - Cloud-only models (this benchmark is local-only by design)
 - Models below 5B effective parameter size
 
+### 5.1 Variant Selection Policy (Protocol-Level)
+The unit of execution is the model tag/variant.
+
+- Evaluate at tag level, not family level.
+- Include all eligible tags within the declared caps.
+- No canonical tag de-duplication is applied.
+- Record variant metadata (including quantisation and tag) for each run so analyses can be stratified if required.
+
 ## 6. Parameter Policy
 - Fixed minimum size: 5
 - Fixed dense cap: 80

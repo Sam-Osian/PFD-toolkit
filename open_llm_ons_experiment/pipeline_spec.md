@@ -50,6 +50,13 @@ Library pages expose key inclusion metadata (updated date, task tags, sizes, clo
 
 All include/exclude decisions are written to `model_manifest.csv` and `exclusions.csv` with explicit reason codes.
 
+### 4.1 Variant Handling
+After eligibility filtering, all eligible tags are evaluated.
+
+- No canonical tag de-duplication is applied.
+- Tag-level metadata (including quantisation and family) is persisted for each run.
+- Downstream analysis and visualisation may be stratified by family, parameter size, or quantisation.
+
 ## 5. Pydantic Compliance Gate (Mandatory)
 - Before full evaluation, run a short schema-validation preflight for each model.
 - Pass criterion: model returns parseable JSON that validates against required Pydantic schema within a fixed retry budget of 3 attempts.
