@@ -11,10 +11,20 @@ library(irr)
 
 
 # Read data
-# ...data is an Excel spreadsheet with multiple tabs, but 'Randomised w 
-#    Annotations' is the only tab we need.
+# ...data is an Excel spreadsheet with multiple tabs. Resolve it using
+# relative paths so this script can be run from either the repo root or
+# this scripts directory.
+candidate_paths <- c(
+  "ons_replication/PFD Toolkit--Consensus Comparison.xlsx",
+  "../PFD Toolkit--Consensus Comparison.xlsx",
+  "PFD Toolkit--Consensus Comparison.xlsx"
+)
+existing_paths <- candidate_paths[file.exists(candidate_paths)]
+if(length(existing_paths) == 0){
+  stop("Could not find replication spreadsheet. Tried:\n", paste(candidate_paths, collapse = "\n"))
+}
 
-file_path  <- "Downloads/PFD Toolkit Consensus Annotations.xlsx"
+file_path  <- existing_paths[[1]]
 sheet_name <- "Consensus annotations"
 
 raw <- read_excel(file_path, sheet = sheet_name)
@@ -169,4 +179,3 @@ if(nrow(pos_raw) == 0){
     cat(sprintf("\n*** WARNING: %d 'Date' entries not in strict YYYY-MM-DD format and were excluded from windowing.\n", invalid_n))
   }
 }
-

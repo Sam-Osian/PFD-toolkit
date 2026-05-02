@@ -1,7 +1,7 @@
 """Compare Screener performance across multiple LLM models against ONS consensus labels.
 
 This script reads report sections and ground-truth labels directly from
-``ons_replication/ONS_master_spreadsheet.xlsx`` and measures the accuracy,
+the ONS replication spreadsheet in ``ons_replication/`` and measures the accuracy,
 sensitivity, and specificity for several LLM models. Results are written to
 ``model_comparison.csv``.
 """
@@ -17,14 +17,27 @@ from dotenv import load_dotenv
 from pfd_toolkit import LLM, Screener
 from pfd_toolkit.config import GeneralConfig
 
+
+def _resolve_ons_spreadsheet() -> Path:
+    """Return the available replication spreadsheet path."""
+    base = Path(__file__).resolve().parent.parent / "ons_replication"
+    candidates = [
+        base / "ONS_master_spreadsheet.xlsx",
+        base / "PFD Toolkit--Consensus Comparison.xlsx",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    tried = "\n".join(str(p) for p in candidates)
+    raise FileNotFoundError(
+        f"Could not find replication spreadsheet. Tried:\n{tried}"
+    )
+
+
 # ---------------------------------------------------------------------
 # 1. Load ONS ground-truth data
 # ---------------------------------------------------------------------
-ons_path = (
-    Path(__file__).resolve().parent.parent
-    / "ons_replication"
-    / "ONS_master_spreadsheet.xlsx"
-)
+ons_path = _resolve_ons_spreadsheet()
 ons_df = pd.read_excel(ons_path, sheet_name=0)
 
 ons_df = ons_df.rename(
@@ -33,9 +46,24 @@ ons_df = ons_df.rename(
         "Circumstances of death section": GeneralConfig.COL_CIRCUMSTANCES,
         "Matters of concern section": GeneralConfig.COL_CONCERNS,
         "Consensus": "consensus",
+        "Post-consensus verdict: Is this a child suicide case? (Yes or No)": "consensus",
         "Ref": GeneralConfig.COL_ID,
     }
 )
+
+required_cols = [
+    GeneralConfig.COL_ID,
+    GeneralConfig.COL_INVESTIGATION,
+    GeneralConfig.COL_CIRCUMSTANCES,
+    GeneralConfig.COL_CONCERNS,
+    "consensus",
+]
+missing = [col for col in required_cols if col not in ons_df.columns]
+if missing:
+    raise ValueError(
+        "Spreadsheet is missing required columns: "
+        + ", ".join(missing)
+    )
 
 keep_cols = [
     GeneralConfig.COL_ID,
@@ -53,6 +81,7 @@ reports["consensus"] = (
     .str.lower()
     .map({"yes": True, "no": False, "1": True, "0": False})
 )
+reports = reports.dropna(subset=["consensus"]).copy()
 
 print(f"Loaded {len(reports)} reports from ONS spreadsheet.")
 
@@ -285,6 +314,57 @@ models = [
      },
 ]
 
+# Metadata used by the visualisation script.
+OPEN_MODEL_NAMES = {
+    "mistralai/devstral-small",
+    "mistralai/mistral-large-2411",
+    "google/gemma-3-4b-it",
+    "deepseek/deepseek-chat-v3-0324",
+    "moonshotai/kimi-k2",
+    "qwen/qwen3-235b-a22b-2507",
+    "meta-llama/llama-4-maverick",
+    "mistral-nemo:12b",
+    "mistral-small:22b",
+    "mistral-small:24b",
+    "gemma3:12b",
+    "gemma3:27b",
+    "gemma2:27b",
+    "qwen3:32b",
+    "qwen3:30b",
+    "qwen2.5:72b",
+    "qwen2.5:32b",
+    "llava:34b",
+    "phi4:14b",
+    "llama3:70b",
+    "cohere/command-a",
+    "mistralai/codestral-2508",
+}
+
+PARAMS_BY_MODEL = {
+    "mistralai/devstral-small": 24.0,
+    "mistralai/mistral-large-2411": 123.0,
+    "google/gemma-3-4b-it": 4.0,
+    "deepseek/deepseek-chat-v3-0324": 37.0,
+    "moonshotai/kimi-k2": 32.0,
+    "qwen/qwen3-235b-a22b-2507": 22.0,
+    "meta-llama/llama-4-maverick": 17.0,
+    "mistral-nemo:12b": 12.0,
+    "mistral-small:22b": 22.0,
+    "mistral-small:24b": 24.0,
+    "gemma3:12b": 12.0,
+    "gemma3:27b": 27.0,
+    "gemma2:27b": 27.0,
+    "qwen3:32b": 32.0,
+    "qwen3:30b": 30.0,
+    "qwen2.5:72b": 72.0,
+    "qwen2.5:32b": 32.0,
+    "llava:34b": 34.0,
+    "phi4:14b": 14.0,
+    "llama3:70b": 70.0,
+    "cohere/command-a": 111.0,
+    "mistralai/codestral-2508": 37.0,
+}
+
 user_query = """
 Where the deceased is 18 or younger *at the time of death* AND the death was due to suicide.
 Age may not be explicitly noted, but could be implied through recent use of child services (e.g. CAMHS),
@@ -300,7 +380,13 @@ out_path = Path(__file__).resolve().parent / "model_comparison.csv"
 if out_path.exists():
     results_df = pd.read_csv(out_path)
 else:
-    results_df = pd.DataFrame(columns=["model", "accuracy", "sensitivity", "specificity"])
+    results_df = pd.DataFrame(
+        columns=["model", "accuracy", "sensitivity", "specificity", "local", "params"]
+    )
+
+for col in ("local", "params"):
+    if col not in results_df.columns:
+        results_df[col] = pd.NA
 
 existing_models: set[str] = set(results_df["model"].astype(str))
 
@@ -366,6 +452,8 @@ for spec in models_to_run:
                         "accuracy": accuracy,
                         "sensitivity": sensitivity,
                         "specificity": specificity,
+                        "local": "yes" if model in OPEN_MODEL_NAMES else "no",
+                        "params": PARAMS_BY_MODEL.get(model),
                     }
                 ]
             ),
