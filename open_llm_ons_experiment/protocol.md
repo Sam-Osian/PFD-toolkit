@@ -29,6 +29,7 @@ These windows are fixed a priori for reproducibility.
 - Embedding models
 - Clearly task-specialised models (for example: code-only, medical-specialised, safety/guardrail-specialised)
 - Cloud-only models (this benchmark is local-only by design)
+- Alias tags such as `:latest` (non-pinned variants)
 - Models below 5B effective parameter size
 
 ### 5.1 Variant Selection Policy (Protocol-Level)
@@ -37,24 +38,25 @@ The unit of execution is the model tag/variant.
 - Evaluate at tag level, not family level.
 - Include all eligible tags within the declared caps.
 - No canonical tag de-duplication is applied.
+- If both instruction-tuned and text/base variants are available for the same model family/size stratum, retain the instruction-tuned variant and exclude the paired text/base variant.
 - Record variant metadata (including quantisation and tag) for each run so analyses can be stratified if required.
 
 ## 6. Parameter Policy
-- Fixed minimum size: 5
-- Fixed dense cap: 80
+- Fixed dense minimum size: 5
+- Fixed dense cap: 120
 - Fixed MoE active cap: 40
-- Fixed MoE total cap: 200 (where available)
-- Fixed model artefact size cap: 60
+- Fixed MoE total cap: 400 (where available)
+- Fixed model artefact size cap: 100
 - For MoE models, report both total and active/effective parameters when available.
 
 Models exceeding any active threshold are excluded and logged with explicit reason codes.
 
 Rationale for thresholds:
-- Minimum size of 5 excludes very small models that are unlikely to be competitive on this complex screening task.
-- Dense cap of 80 retains common high-capability dense open models (including 70B-class models) while avoiding disproportionate run-time from much larger dense models.
+- Dense minimum size of 5 excludes very small dense models that are unlikely to be competitive on this complex screening task.
+- Dense cap of 120 retains high-capability dense open models (including 120B-class models) while still constraining extreme outliers.
 - MoE active cap of 40 permits sparse MoE inclusion while constraining effective inference-time compute to a practical range.
-- MoE total cap of 200 aligns with the local hardware envelope and avoids ultra-large MoE variants with disproportionate footprint for this benchmark.
-- Model artefact size cap of 60 limits operational burden from very large downloads and loading, while still admitting widely used large quantised models.
+- MoE total cap of 400 permits larger sparse MoE families while still excluding extreme total-parameter outliers.
+- Model artefact size cap of 100 limits operational burden from very large downloads and loading, while still admitting widely used large quantised models.
 
 ## 7. Evaluation Procedure
 - Use the same task prompt template and same report fields for every model.

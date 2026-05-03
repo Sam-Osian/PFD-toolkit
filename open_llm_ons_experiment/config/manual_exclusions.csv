@@ -1,0 +1,93 @@
+family,tag,stage,reason_code,rationale
+# Set either family, tag, or both (exact match).
+# Example 1 (exclude whole family): qwen2.5-coder,,manual_exclusion,coding_specialised,Coding-specialised
+# Example 2 (exclude one tag): ,qwen2.5:72b,manual_exclusion,manual_other,Manual exclusion after review
+# Example 3 (exclude specific family+tag): qwen2.5,qwen2.5:72b,manual_exclusion,manual_other,Exclude this variant only
+medgemma,,manual_exclusion,specialised_model_excluded,Medical-specialised
+medgemma1.5,,manual_exclusion,specialised_model_excluded,Medical-specialised
+meditron,,manual_exclusion,specialised_model_excluded,Medical-specialised
+medllama2,,manual_exclusion,specialised_model_excluded,Medical-specialised
+glm-ocr,,manual_exclusion,specialised_model_excluded,OCR-specialised
+llama-guard3,,manual_exclusion,specialised_model_excluded,Safety-specialised
+granite3-guardian,,manual_exclusion,specialised_model_excluded,Safety-specialised
+gpt-oss-safeguard,,manual_exclusion,specialised_model_excluded,Safety-specialised
+functiongemma,,manual_exclusion,specialised_model_excluded,Function-calling-specialised
+nexusraven,,manual_exclusion,specialised_model_excluded,Function-calling-specialised
+duckdb-nsql,,manual_exclusion,specialised_model_excluded,SQL-specialised
+mathstral,,manual_exclusion,specialised_model_excluded,Math-specialised
+codebooga,,manual_exclusion,specialised_model_excluded,Coding-specialised
+codegeex4,,manual_exclusion,specialised_model_excluded,Coding-specialised
+codeup,,manual_exclusion,specialised_model_excluded,Coding-specialised
+deepcoder,,manual_exclusion,specialised_model_excluded,Coding-specialised
+magicoder,,manual_exclusion,specialised_model_excluded,Coding-specialised
+opencoder,,manual_exclusion,specialised_model_excluded,Coding-specialised
+starcoder2,,manual_exclusion,specialised_model_excluded,Coding-specialised
+llama3-groq-tool-use,,manual_exclusion,specialised_model_excluded,Tool-use-specialised
+firefunction-v2,,manual_exclusion,specialised_model_excluded,Function-calling-specialised
+rnj-1,,manual_exclusion,specialised_model_excluded,Coding-specialised
+open-orca-platypus2,,manual_exclusion,specialised_model_excluded,Coding-specialised
+laguna-xs.2,,manual_exclusion,specialised_model_excluded,Coding-specialised
+devstral,,manual_exclusion,specialised_model_excluded,Coding-specialised
+devstral-small-2,,manual_exclusion,specialised_model_excluded,Coding-specialised
+dolphin-mistral,,manual_exclusion,specialised_model_excluded,Coding-specialised
+dolphin-mixtral,,manual_exclusion,specialised_model_excluded,Coding-specialised
+athene-v2,,manual_exclusion,specialised_model_excluded,Coding/maths-specialised
+wizardlm,,manual_exclusion,derivative_legacy_family_excluded,Derivative of Llama 2 with no clear distinct methodological advantage for this benchmark
+wizard-vicuna-uncensored,,manual_exclusion,derivative_legacy_family_excluded,Derivative of Llama 2 with no clear distinct methodological advantage for this benchmark
+wizardlm2,,manual_exclusion,derivative_legacy_family_excluded,Derivative of Llama 2 with no clear distinct methodological advantage for this benchmark
+wizardlm-uncensored,,manual_exclusion,derivative_legacy_family_excluded,Derivative of Llama 2 with no clear distinct methodological advantage for this benchmark
+wizard-vicuna,,manual_exclusion,derivative_legacy_family_excluded,Derivative of Llama 2 with no clear distinct methodological advantage for this benchmark
+openhermes,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+mistral-openorca,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+neural-chat,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+notus,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+nous-hermes,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+nous-hermes2,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+nous-hermes2-mixtral,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+vicuna,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+xwinlm,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+llama2-uncensored,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+everythinglm,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+dolphin-llama3,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+dolphin3,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+orca2,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+llama3-chatqa,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+samantha-mistral,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+openthinker,,manual_exclusion,derivative_legacy_family_excluded,Distilled derivative with no clear distinct methodological advantage for this benchmark
+command-r7b-arabic,,manual_exclusion,specialised_model_excluded,Regional-language-specialised
+shieldgemma,,manual_exclusion,specialised_model_excluded,Safety-evaluation-specialised
+bespoke-minicheck,,manual_exclusion,specialised_model_excluded,Fact-checking-specialised
+samantha-mistral,,manual_exclusion,specialised_model_excluded,Philosophy/psychology-specialised
+llama2-chinese,,manual_exclusion,specialised_model_excluded,Regional-language-specialised
+yi,,manual_exclusion,specialised_model_excluded,Bilingual-specialised
+zephyr,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+glm4,,manual_exclusion,specialised_model_excluded,Multilingual-specialised
+aya,,manual_exclusion,specialised_model_excluded,Multilingual-specialised
+aya-expanse,,manual_exclusion,specialised_model_excluded,Multilingual-specialised
+sailor2,,manual_exclusion,specialised_model_excluded,Regional-language-specialised
+stablelm2,,manual_exclusion,specialised_model_excluded,Multilingual-specialised
+stable-beluga,,manual_exclusion,derivative_legacy_family_excluded,Derivative with no clear distinct methodological advantage for this benchmark
+bakllava,,manual_exclusion,specialised_model_excluded,Vision-language-specialised
+llama-pro,llama-pro:8b-text-fp16,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q2_K,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q3_K_L,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q3_K_M,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q3_K_S,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q4_0,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q4_1,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q4_K_M,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q4_K_S,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q5_0,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q5_1,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q5_K_M,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q5_K_S,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q6_K,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+llama-pro,llama-pro:8b-text-q8_0,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists
+qwen3.6,qwen3.6:27b-coding-bf16,manual_exclusion,specialised_model_excluded,Coding-specialised
+qwen3.6,qwen3.6:27b-coding-mxfp8,manual_exclusion,specialised_model_excluded,Coding-specialised
+qwen3.6,qwen3.6:27b-coding-nvfp4,manual_exclusion,specialised_model_excluded,Coding-specialised
+qwen3.6,qwen3.6:35b-a3b-coding-bf16,manual_exclusion,specialised_model_excluded,Coding-specialised
+qwen3.6,qwen3.6:35b-a3b-coding-mxfp8,manual_exclusion,specialised_model_excluded,Coding-specialised
+qwen3.6,qwen3.6:35b-a3b-coding-nvfp4,manual_exclusion,specialised_model_excluded,Coding-specialised
+exaone-deep,,manual_exclusion,specialised_model_excluded,Coding/maths-specialised
+exaone3.5,,manual_exclusion,specialised_model_excluded,Multilingual-specialised

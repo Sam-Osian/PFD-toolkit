@@ -40,13 +40,18 @@ Library pages expose key inclusion metadata (updated date, task tags, sizes, clo
 - Time filter: updated within selected window (24-month primary; 12-month sensitivity run).
 - Exclude labels/families indicating embeddings.
 - Exclude clearly specialised families (code-only, medical-specialised, safety-specialised, etc.).
+- Exclude alias tags such as `:latest` (non-pinned variants).
 - Include general multimodal models, exclude vision-specialised VLMs by default unless explicitly overridden.
 - Apply parameter constraints:
 - Minimum: `min_params_b = 5`
-- Dense max: `dense_max_params_b = 80`
+- Dense max: `dense_max_params_b = 120`
 - MoE active max: `moe_max_active_params_b = 40`
-- MoE total max: `moe_max_total_params_b = 200` where metadata is available
-- Model artefact size max: `max_model_size_gb = 60`
+- MoE total max: `moe_max_total_params_b = 400` where metadata is available
+- Model artefact size max: `max_model_size_gb = 100`
+
+Notes:
+- `min_params_b` applies to dense models only.
+- MoE models are constrained by `moe_max_active_params_b`, `moe_max_total_params_b`, and `max_model_size_gb`.
 
 All include/exclude decisions are written to `model_manifest.csv` and `exclusions.csv` with explicit reason codes.
 
@@ -54,6 +59,7 @@ All include/exclude decisions are written to `model_manifest.csv` and `exclusion
 After eligibility filtering, all eligible tags are evaluated.
 
 - No canonical tag de-duplication is applied.
+- If a family/size stratum has both instruction-tuned and text/base variants, retain instruction-tuned variants and exclude paired text/base variants via manual exclusions.
 - Tag-level metadata (including quantisation and family) is persisted for each run.
 - Downstream analysis and visualisation may be stratified by family, parameter size, or quantisation.
 

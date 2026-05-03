@@ -1,0 +1,13 @@
+reason_code,stage,excluded_tag_count
+below_min_params_b,eligibility,117
+specialised_model_excluded,eligibility,88
+cloud_model_excluded,eligibility,40
+embedding_model_excluded,eligibility,32
+vision_specialised_model_excluded,eligibility,29
+exceeds_dense_max_params_b,eligibility,28
+exceeds_max_model_size_gb,eligibility,21
+exceeds_moe_max_total_params_b,eligibility,1
+derivative_legacy_family_excluded,manual_exclusion,165
+specialised_model_excluded,manual_exclusion,114
+instruct_variant_preferred,manual_exclusion,15
+latest_alias_tag,preprocessing,210
