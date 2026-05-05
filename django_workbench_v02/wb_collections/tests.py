@@ -1,3 +1,4 @@
+from datetime import datetime, timezone as dt_timezone
 from unittest.mock import patch
 
 import pandas as pd
@@ -347,3 +348,67 @@ class CollectionMetricsTests(TestCase):
         self.assertEqual(long_span_metrics["temporal_mode"], "year")
         self.assertEqual(medium_span_metrics["temporal_mode"], "month")
         self.assertEqual(short_span_metrics["temporal_mode"], "week")
+
+    def test_year_temporal_axis_ticks_align_to_chart_coordinates(self):
+        reports_df = pd.DataFrame(
+            [
+                {"date": "2013-01-01", "receiver": "A", "area": "X"},
+                {"date": "2026-02-01", "receiver": "B", "area": "Y"},
+            ]
+        )
+
+        metrics = build_explore_metrics(
+            reports_df=reports_df,
+            scoped_reports_df=reports_df,
+            query="",
+        )
+
+        ticks = metrics["temporal_series"]["year"]["axis_ticks"]
+        self.assertGreaterEqual(len(ticks), 2)
+        self.assertEqual(ticks[0]["x"], 0.0)
+        self.assertEqual(ticks[-1]["x"], 900.0)
+        self.assertEqual(
+            [tick["x"] for tick in ticks],
+            sorted(float(tick["x"]) for tick in ticks),
+        )
+        self.assertEqual(
+            metrics["temporal_series"]["year"]["axis_labels"],
+            [tick["label"] for tick in ticks],
+        )
+
+    @patch("wb_collections.services.timezone.now")
+    def test_now_tick_is_shown_only_when_latest_period_is_current(self, mock_now):
+        mock_now.return_value = datetime(2026, 5, 5, tzinfo=dt_timezone.utc)
+
+        current_df = pd.DataFrame(
+            [
+                {"date": "2024-01-01", "receiver": "A", "area": "X"},
+                {"date": "2026-05-04", "receiver": "B", "area": "Y"},
+            ]
+        )
+        historical_df = pd.DataFrame(
+            [
+                {"date": "2020-01-01", "receiver": "A", "area": "X"},
+                {"date": "2024-12-31", "receiver": "B", "area": "Y"},
+            ]
+        )
+
+        current_metrics = build_explore_metrics(
+            reports_df=current_df,
+            scoped_reports_df=current_df,
+            query="",
+        )
+        historical_metrics = build_explore_metrics(
+            reports_df=historical_df,
+            scoped_reports_df=historical_df,
+            query="",
+        )
+
+        self.assertEqual(
+            current_metrics["temporal_series"]["year"]["axis_ticks"][-1]["label"],
+            "Now",
+        )
+        self.assertNotIn(
+            "Now",
+            [tick["label"] for tick in historical_metrics["temporal_series"]["year"]["axis_ticks"]],
+        )

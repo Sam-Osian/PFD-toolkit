@@ -56,13 +56,13 @@
         {% endif %}
     </div>
     <div class="home-meta">
-        <div class="hm-stat"><span>6,293</span> reports</div>
+        <div class="hm-stat"><span>{{ home_metrics.reports_count }}</span> reports</div>
         <div class="hm-div"></div>
-        <div class="hm-stat"><span>2013–26</span> date range</div>
+        <div class="hm-stat"><span>{{ home_metrics.date_range }}</span> date range</div>
         <div class="hm-div"></div>
-        <div class="hm-stat"><span>88</span> coroners</div>
+        <div class="hm-stat"><span>{{ home_metrics.coroners_count }}</span> coroners</div>
         <div class="hm-div"></div>
-        <div class="hm-stat"><span>34</span> areas</div>
+        <div class="hm-stat"><span>{{ home_metrics.areas_count }}</span> areas</div>
     </div>
 
     {% if request.user.is_authenticated %}

@@ -553,11 +553,12 @@ def build_explore_metrics(
     temporal_start_label = ""
     temporal_end_label = ""
     temporal_axis_labels: list[str] = []
+    temporal_axis_ticks: list[dict[str, Any]] = []
     temporal_mode = "month"
     temporal_series: dict[str, dict[str, Any]] = {
-        "week": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
-        "month": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
-        "year": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
+        "week": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "axis_ticks": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
+        "month": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "axis_ticks": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
+        "year": {"points": [], "line_path": "", "area_path": "", "axis_labels": [], "axis_ticks": [], "start_label": "", "end_label": "", "latest_label": "", "latest_count": 0},
     }
 
     def _complete_period_counts(*, source_dates: pd.Series, freq: str) -> pd.Series:
@@ -586,15 +587,28 @@ def build_explore_metrics(
 
     def _year_axis_labels(*, start_year: int, end_year: int, max_labels: int = 6) -> list[str]:
         if end_year <= start_year:
-            return [str(start_year), "Now"]
+            return [str(start_year)]
         span_years = max(1, end_year - start_year)
         step = max(1, int(math.ceil(span_years / max(1, max_labels - 2))))
         labels = [str(year) for year in range(start_year, end_year + 1, step)]
         if labels[-1] != str(end_year):
             labels.append(str(end_year))
-        if labels[-1] != "Now":
-            labels.append("Now")
         return labels
+
+    def _latest_period_is_current(*, latest_period, mode: str) -> bool:
+        today = timezone.now().date()
+        if mode == "year":
+            return int(latest_period.year) == int(today.year)
+        if mode == "month":
+            return (
+                int(latest_period.year) == int(today.year)
+                and int(latest_period.month) == int(today.month)
+            )
+        if mode == "week":
+            start = latest_period.start_time.date()
+            end = latest_period.end_time.date()
+            return start <= today <= end
+        return False
 
     def _build_temporal_series(
         counts_by_period: pd.Series,
@@ -607,6 +621,7 @@ def build_explore_metrics(
             "line_path": "",
             "area_path": "",
             "axis_labels": [],
+            "axis_ticks": [],
             "start_label": "",
             "end_label": "",
             "latest_label": "",
@@ -675,7 +690,45 @@ def build_explore_metrics(
 
         start_year = int(point_pairs[0][0].year)
         end_year = int(point_pairs[-1][0].year)
-        result["axis_labels"] = _year_axis_labels(start_year=start_year, end_year=end_year)
+        raw_axis_labels = _year_axis_labels(start_year=start_year, end_year=end_year)
+        year_to_x: dict[int, float] = {}
+        for (period, _, _), (x, _) in zip(point_pairs, raw_points):
+            year_to_x.setdefault(int(period.year), float(x))
+
+        ticks: list[dict[str, Any]] = []
+        for axis_label in raw_axis_labels:
+            label_text = str(axis_label)
+            try:
+                label_year = int(label_text)
+            except (TypeError, ValueError):
+                continue
+            x_value = year_to_x.get(label_year)
+            if x_value is None:
+                continue
+            ticks.append(
+                {
+                    "label": label_text,
+                    "x": round(float(x_value), 2),
+                    "x_percent": round(float(x_value) / chart_width * 100.0, 3),
+                }
+            )
+
+        # Explicit "Now" policy (consistent across week/month/year):
+        # show "Now" only when the latest period includes today's date.
+        if point_pairs and _latest_period_is_current(latest_period=point_pairs[-1][0], mode=mode):
+            now_x = float(raw_points[-1][0])
+            now_tick = {
+                "label": "Now",
+                "x": round(now_x, 2),
+                "x_percent": round(now_x / chart_width * 100.0, 3),
+            }
+            if ticks and abs(float(ticks[-1]["x"]) - now_x) < 0.01:
+                ticks[-1] = now_tick
+            else:
+                ticks.append(now_tick)
+
+        result["axis_ticks"] = ticks
+        result["axis_labels"] = [str(tick.get("label") or "") for tick in ticks]
         return result
 
     if not date_series.empty:
@@ -705,6 +758,7 @@ def build_explore_metrics(
         temporal_start_label = chosen["start_label"]
         temporal_end_label = chosen["end_label"]
         temporal_axis_labels = chosen["axis_labels"]
+        temporal_axis_ticks = chosen["axis_ticks"]
 
     area_counts = _normalise_string_series(scope_df.get("area")).value_counts()
     top_areas = _summarise_ranked_counts(
@@ -769,6 +823,7 @@ def build_explore_metrics(
         "temporal_start_label": temporal_start_label,
         "temporal_end_label": temporal_end_label,
         "temporal_axis_labels": temporal_axis_labels,
+        "temporal_axis_ticks": temporal_axis_ticks,
         "temporal_mode": temporal_mode,
         "temporal_series": temporal_series,
         "unique_coroner_count": unique_coroner_count,

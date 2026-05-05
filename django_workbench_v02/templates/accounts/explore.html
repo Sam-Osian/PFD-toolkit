@@ -340,12 +340,15 @@ Search and filter the Prevention of Future Death report archive by question, rec
                 <path class="area" id="timeline-area" d="{{ explore.temporal_area_path }}"/>
                 <path class="line" id="timeline-line" pathLength="100" d="{{ explore.temporal_line_path }}"/>
                 <line class="hover-guide" x1="0" y1="20" x2="0" y2="170" hidden></line>
-                <circle class="hover-dot" cx="0" cy="0" r="4" hidden></circle>
+                <ellipse class="hover-dot" cx="0" cy="0" rx="4" ry="4" hidden></ellipse>
             </svg>
             <div class="timeline-tip" aria-live="polite" hidden></div>
             <div class="tl-labels" id="timeline-axis-labels">
-                {% for label in explore.temporal_axis_labels %}
-                    <span>{{ label }}</span>
+                {% for tick in explore.temporal_axis_ticks %}
+                    <span
+                        class="{% if forloop.first %}is-start{% elif forloop.last %}is-end{% endif %}"
+                        style="left: {{ tick.x_percent }}%;"
+                    >{{ tick.label }}</span>
                 {% endfor %}
             </div>
         </div>
@@ -672,22 +675,52 @@ Search and filter the Prevention of Future Death report archive by question, rec
   const dot = svg.querySelector('.hover-dot');
   const tip = timeline.querySelector('.timeline-tip');
   const axisLabels = timeline.querySelector('#timeline-axis-labels');
-  const modeButtons = document.querySelectorAll('[data-temporal-mode]');
-  const titleNode = document.querySelector('.panel-head .left h3');
+  const modeButtons = timeline.closest('.panel')?.querySelectorAll('[data-temporal-mode]') || [];
+  const titleNode = timeline.closest('.panel')?.querySelector('.panel-head .left h3');
   if (!svg || !areaPath || !linePath || !guide || !dot || !tip || !axisLabels || !titleNode) return;
 
   const VIEWBOX_WIDTH = 900;
+  const VIEWBOX_HEIGHT = 200;
+  const DOT_RADIUS = 4;
   let activeMode = String(timeline.getAttribute('data-default-mode') || 'month').trim().toLowerCase();
   if (!['week', 'month', 'year'].includes(activeMode)) activeMode = 'month';
   let activePoints = [];
 
-  const renderAxisLabels = (labels) => {
+  const renderAxisLabels = (axisData) => {
     axisLabels.innerHTML = '';
-    (labels || []).forEach((label) => {
+    const ticks = Array.isArray(axisData) ? axisData : [];
+    ticks.forEach((tick, index) => {
       const span = document.createElement('span');
-      span.textContent = String(label);
+      if (tick && typeof tick === 'object') {
+        span.textContent = String(tick.label || '');
+        const left = Number(tick.x_percent);
+        if (Number.isFinite(left)) {
+          span.style.left = `${left}%`;
+        }
+      } else {
+        span.textContent = String(tick || '');
+        const fallbackLeft = ticks.length <= 1 ? 0 : (index * 100) / (ticks.length - 1);
+        span.style.left = `${fallbackLeft}%`;
+      }
+      if (index === 0) span.classList.add('is-start');
+      if (index === ticks.length - 1) span.classList.add('is-end');
       axisLabels.appendChild(span);
     });
+  };
+
+  const updateHoverDotShape = () => {
+    if (!(dot instanceof SVGEllipseElement)) return;
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width || !rect.height) {
+      dot.setAttribute('rx', String(DOT_RADIUS));
+      dot.setAttribute('ry', String(DOT_RADIUS));
+      return;
+    }
+    const sx = rect.width / VIEWBOX_WIDTH;
+    const sy = rect.height / VIEWBOX_HEIGHT;
+    const ry = sy > 0 ? (DOT_RADIUS * sx) / sy : DOT_RADIUS;
+    dot.setAttribute('rx', String(DOT_RADIUS));
+    dot.setAttribute('ry', String(Math.max(1.5, ry)));
   };
 
   const setMode = (mode) => {
@@ -702,7 +735,7 @@ Search and filter the Prevention of Future Death report archive by question, rec
     linePath.style.animation = 'none';
     linePath.getBoundingClientRect();
     linePath.style.animation = '';
-    renderAxisLabels(payload.axis_labels || []);
+    renderAxisLabels(payload.axis_ticks || payload.axis_labels || []);
     titleNode.textContent = `Reports in view · ${payload.start_label || 'N/A'} → ${payload.end_label || 'N/A'}`;
     modeButtons.forEach((button) => {
       button.classList.toggle('on', button.getAttribute('data-temporal-mode') === mode);
@@ -721,7 +754,50 @@ Search and filter the Prevention of Future Death report archive by question, rec
     dot.hidden = false;
     tip.textContent = `${point.label} · ${point.count} report(s)`;
     tip.hidden = false;
-    tip.style.left = `${pixelX}px`;
+
+    const svgRect = svg.getBoundingClientRect();
+    const timelineRect = timeline.getBoundingClientRect();
+    const anchorX = (svgRect.left - timelineRect.left) + pixelX;
+    const sidePadding = 12;
+
+    // Clamp tooltip left edge to both timeline bounds and viewport bounds.
+    const visualViewport = window.visualViewport;
+    const viewportLeft = visualViewport ? visualViewport.offsetLeft : 0;
+    const viewportWidth = visualViewport ? visualViewport.width : window.innerWidth;
+    const viewportRight = viewportLeft + viewportWidth;
+
+    const tipWidth = tip.offsetWidth || 0;
+    const desiredLeft = anchorX - (tipWidth / 2);
+
+    const minLeft = Math.max(
+      sidePadding,
+      (viewportLeft + sidePadding) - timelineRect.left,
+    );
+    const maxLeft = Math.min(
+      timelineRect.width - sidePadding - tipWidth,
+      (viewportRight - sidePadding) - timelineRect.left - tipWidth,
+    );
+    const clampedMaxLeft = Math.max(minLeft, maxLeft);
+    const clampedLeft = Math.min(Math.max(desiredLeft, minLeft), clampedMaxLeft);
+
+    const clampTipToBounds = () => {
+      tip.style.right = 'auto';
+      tip.style.left = `${clampedLeft}px`;
+      const safeLeft = Math.max(timelineRect.left + sidePadding, viewportLeft + sidePadding);
+      const safeRight = Math.min(timelineRect.right - sidePadding, viewportRight - sidePadding);
+      const rect = tip.getBoundingClientRect();
+      if (rect.right > safeRight) {
+        tip.style.left = 'auto';
+        tip.style.right = `${sidePadding}px`;
+      } else if (rect.left < safeLeft) {
+        tip.style.left = `${sidePadding}px`;
+        tip.style.right = 'auto';
+      }
+    };
+    clampTipToBounds();
+    window.requestAnimationFrame(clampTipToBounds);
+
+    updateHoverDotShape();
   };
 
   const nearestPoint = (chartX) => {
@@ -759,10 +835,13 @@ Search and filter the Prevention of Future Death report archive by question, rec
     });
   });
 
+  window.addEventListener('resize', updateHoverDotShape);
+
   if (!series[activeMode] || !Array.isArray(series[activeMode].points) || !series[activeMode].line_path) {
     activeMode = series.month?.line_path ? 'month' : (series.year?.line_path ? 'year' : 'week');
   }
   setMode(activeMode);
+  updateHoverDotShape();
 })();
 
 (() => {

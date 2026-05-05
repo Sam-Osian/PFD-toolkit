@@ -82,8 +82,11 @@
                 <path class="line" pathLength="100" d="{{ explore.temporal_line_path }}"/>
             </svg>
             <div class="tl-labels">
-                {% for label in explore.temporal_axis_labels %}
-                    <span>{{ label }}</span>
+                {% for tick in explore.temporal_axis_ticks %}
+                    <span
+                        class="{% if forloop.first %}is-start{% elif forloop.last %}is-end{% endif %}"
+                        style="left: {{ tick.x_percent }}%;"
+                    >{{ tick.label }}</span>
                 {% endfor %}
             </div>
         </div>

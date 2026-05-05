@@ -787,12 +787,34 @@ svg:not([width]):not([height]) {
   filter: none;
   pointer-events: none;
 }
-.tl-labels { display: flex; justify-content: space-between; padding: 10px 4px 0; font-family: var(--ff-mono); font-size: 10px; color: var(--text-3); }
+.tl-labels {
+  position: relative;
+  min-height: 16px;
+  padding: 10px 4px 0;
+  font-family: var(--ff-mono);
+  font-size: 10px;
+  color: var(--text-3);
+}
+.tl-labels span {
+  position: absolute;
+  top: 10px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.tl-labels span.is-start {
+  left: 0 !important;
+  transform: none;
+  text-align: left;
+}
+.tl-labels span.is-end {
+  transform: translateX(-100%);
+  text-align: right;
+}
 .timeline { position: relative; }
 .timeline-tip {
   position: absolute;
   top: 8px;
-  transform: translateX(-50%);
+  transform: none;
   font: 500 10px/1 var(--ff-mono);
   letter-spacing: 0.04em;
   color: var(--text);

@@ -48,6 +48,62 @@ EXPLORE_FILTERS_SESSION_KEY = "explore_filters_v1"
 EXPLORE_SHOW_REPORTS_SESSION_KEY = "explore_show_reports_v1"
 
 
+def _format_metric_count(value: int) -> str:
+    try:
+        numeric = max(0, int(value))
+    except (TypeError, ValueError):
+        numeric = 0
+    return f"{numeric:,}"
+
+
+def _format_home_date_range_label(*, start_year: int | None, end_year: int | None) -> str:
+    if start_year is None or end_year is None:
+        return "Date range unavailable"
+    if start_year == end_year:
+        return str(start_year)
+    if start_year // 100 == end_year // 100:
+        return f"{start_year}\u2013{end_year % 100:02d}"
+    return f"{start_year}\u2013{end_year}"
+
+
+def _unique_non_empty_count(values: pd.Series) -> int:
+    if values is None:
+        return 0
+    seen: set[str] = set()
+    for raw_value in values.tolist():
+        cleaned = _normalise_dashboard_value(raw_value)
+        if not cleaned:
+            continue
+        seen.add(cleaned.casefold())
+    return len(seen)
+
+
+def _build_home_metrics() -> dict[str, str]:
+    try:
+        reports_df = load_collections_dataset(force_refresh=False)
+    except Exception:
+        logger.warning("landing.metrics unavailable: failed to load collections dataset", exc_info=True)
+        return {
+            "reports_count": "\u2014",
+            "date_range": "Date range unavailable",
+            "coroners_count": "\u2014",
+            "areas_count": "\u2014",
+        }
+
+    date_series = _parse_report_dates(reports_df.get("date", pd.Series(dtype="object"))).dropna()
+    start_year = int(date_series.min().year) if not date_series.empty else None
+    end_year = int(date_series.max().year) if not date_series.empty else None
+    coroner_count = _unique_non_empty_count(reports_df.get("coroner", pd.Series(dtype="object")))
+    area_count = _unique_non_empty_count(reports_df.get("area", pd.Series(dtype="object")))
+
+    return {
+        "reports_count": _format_metric_count(len(reports_df)),
+        "date_range": _format_home_date_range_label(start_year=start_year, end_year=end_year),
+        "coroners_count": _format_metric_count(coroner_count),
+        "areas_count": _format_metric_count(area_count),
+    }
+
+
 def _dedupe_values(raw_values: list[str]) -> list[str]:
     values: list[str] = []
     seen: set[str] = set()
@@ -263,6 +319,7 @@ def _build_explore_payload(
         "ai_filter_options": [],
         "receiver_options": [],
         "area_options": [],
+        "temporal_axis_ticks": [],
     }
 
     scoped_reports = pd.DataFrame()
@@ -533,7 +590,7 @@ def auth_logout(request: HttpRequest) -> HttpResponse:
 
 @require_GET
 def landing(request: HttpRequest) -> HttpResponse:
-    return render(request, "accounts/landing.html")
+    return render(request, "accounts/landing.html", {"home_metrics": _build_home_metrics()})
 
 
 @require_GET

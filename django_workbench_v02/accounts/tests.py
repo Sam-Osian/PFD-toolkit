@@ -32,6 +32,32 @@ class AccountsViewTests(TestCase):
         response = self.client.get(reverse("landing"))
         self.assertEqual(response.status_code, 200)
 
+    @patch("accounts.views.load_collections_dataset")
+    def test_landing_page_renders_live_home_metrics(self, mock_load_collections):
+        mock_load_collections.return_value = pd.DataFrame(
+            [
+                {"date": "2013-07-10", "coroner": "Coroner A", "area": "North"},
+                {"date": "2026-01-04", "coroner": "Coroner B", "area": "South"},
+                {"date": "2025-02-20", "coroner": "coroner a", "area": "north"},
+            ]
+        )
+
+        response = self.client.get(reverse("landing"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<span>3</span> reports", html=False)
+        self.assertContains(response, "<span>2013–26</span> date range", html=False)
+        self.assertContains(response, "<span>2</span> coroners", html=False)
+        self.assertContains(response, "<span>2</span> areas", html=False)
+
+    @patch("accounts.views.load_collections_dataset")
+    def test_landing_page_handles_home_metrics_dataset_failure(self, mock_load_collections):
+        mock_load_collections.side_effect = RuntimeError("dataset unavailable")
+
+        response = self.client.get(reverse("landing"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Date range unavailable")
+        self.assertContains(response, "<span>—</span>", count=3, html=False)
+
     def test_services_page_loads_and_is_linked_from_navigation(self):
         response = self.client.get(reverse("services"))
         self.assertEqual(response.status_code, 200)
@@ -141,10 +167,31 @@ class AccountsViewTests(TestCase):
         self.assertNotContains(response, "Toolkit ready")
         self.assertNotContains(response, "pfd_toolkit adapters connected")
 
+    @override_settings(
+        AUTH0_DOMAIN="example.auth0.com",
+        AUTH0_CLIENT_ID="client-id",
+        AUTH0_CLIENT_SECRET="client-secret",
+        AUTH0_CALLBACK_URL="http://127.0.0.1:8000/auth/callback/",
+        AUTH0_SCOPES="openid profile email",
+    )
     def test_login_redirects_to_auth0_when_configured(self):
         response = self.client.get(reverse("accounts-login"))
         self.assertEqual(response.status_code, 302)
         self.assertIn("authorize?", response.url)
+
+    @override_settings(
+        AUTH0_DOMAIN="example.auth0.com",
+        AUTH0_CLIENT_ID="client-id",
+        AUTH0_CLIENT_SECRET="",
+    )
+    def test_login_returns_bad_request_when_auth0_not_configured(self):
+        response = self.client.get(reverse("accounts-login"))
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(
+            response,
+            "Auth0 is not configured on this environment.",
+            status_code=400,
+        )
 
     def test_admin_login_proxy_redirects_to_auth_login(self):
         response = self.client.get("/admin/login/")
