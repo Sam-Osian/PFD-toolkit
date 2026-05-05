@@ -5,6 +5,7 @@ import tiktoken
 import logging
 import base64
 import re
+import time
 from typing import Callable, List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model, ConfigDict
 import pymupdf
@@ -220,6 +221,7 @@ class LLM:
         seed: Optional[int] = None,
         validation_attempts: int = 2,
         timeout: float | httpx.Timeout = 120,
+        per_report_timeout_s: Optional[float] = None,
     ):
         self.api_key = api_key
         self.model = model
@@ -235,6 +237,11 @@ class LLM:
         self.reasoning_effort = str(reasoning_effort).strip() if reasoning_effort else None
         self.seed = seed
         self.validation_attempts = max(1, validation_attempts)
+        self.per_report_timeout_s = (
+            float(per_report_timeout_s)
+            if per_report_timeout_s is not None and float(per_report_timeout_s) > 0
+            else None
+        )
 
         # Ensure max_workers is at least 1
         self.max_workers = max(1, max_workers)
@@ -538,6 +545,9 @@ class LLM:
                     except Exception as e:
                         if _is_insufficient_quota_error(e):
                             raise
+                        if isinstance(e, APITimeoutError) or "timed out" in str(e).lower():
+                            # Fail fast on timeout so callers can abort the whole model run.
+                            raise
                         if attempt == self.validation_attempts - 1:
                             logger.error(
                                 f"Batch pydantic parse failed for item {idx}: {e}"
@@ -561,6 +571,7 @@ class LLM:
         progress_bar = tqdm(total=len(prompts), desc=current_desc, **bar_kwargs)
         executor = ThreadPoolExecutor(max_workers=effective_workers)
         futures: dict = {}
+        future_started_at: dict = {}
         next_idx = 0
         completed_count = 0
         cancelled = False
@@ -569,10 +580,24 @@ class LLM:
                 _raise_if_cancelled()
                 fut = executor.submit(_worker, next_idx, prompts[next_idx])
                 futures[fut] = next_idx
+                future_started_at[fut] = time.monotonic()
                 next_idx += 1
 
             while futures:
                 _raise_if_cancelled()
+                if self.per_report_timeout_s is not None:
+                    now = time.monotonic()
+                    for fut in list(futures.keys()):
+                        started = future_started_at.get(fut, now)
+                        if (now - started) > self.per_report_timeout_s:
+                            self.request_cancellation()
+                            raise APITimeoutError(
+                                message=(
+                                    f"Per-report wall-clock timeout exceeded "
+                                    f"({self.per_report_timeout_s:.0f}s)"
+                                ),
+                                request=None,
+                            )
                 done, _ = wait(
                     set(futures.keys()),
                     timeout=0.1,
@@ -583,6 +608,7 @@ class LLM:
 
                 for fut in done:
                     futures.pop(fut, None)
+                    future_started_at.pop(fut, None)
                     try:
                         i, out = fut.result()
                     except GenerationCancelledError:
@@ -599,12 +625,14 @@ class LLM:
                     _raise_if_cancelled()
                     fut = executor.submit(_worker, next_idx, prompts[next_idx])
                     futures[fut] = next_idx
+                    future_started_at[fut] = time.monotonic()
                     next_idx += 1
         except GenerationCancelledError:
             cancelled = True
             for fut in list(futures.keys()):
                 fut.cancel()
             futures.clear()
+            future_started_at.clear()
             raise
         finally:
             progress_bar.close()

@@ -76,6 +76,14 @@ Rationale for thresholds:
 - Reference line: GPT-4.1 benchmark agreement with clinical adjudication from the prior run.
 - Sensitivity report: repeat with 12-month cohort and compare direction/magnitude of conclusions.
 - All exclusions are logged with explicit reason codes.
+- Primary inferential analysis: non-inferiority against GPT-4.1 on agreement with clinical adjudication.
+- Primary non-inferiority margin: 5 percentage points (open model minus GPT-4.1 agreement > -0.05).
+- Sensitivity non-inferiority margin: 2.5 percentage points (open model minus GPT-4.1 agreement > -0.025).
+- Inference is based on paired report-level predictions matched by report ID (`Ref`).
+- Secondary decision-analysis endpoint: Pareto frontier on agreement-runtime trade-off.
+- Objectives: maximise agreement with clinical adjudication and minimise classification runtime.
+- Dominance definition: model A dominates model B if agreement_A >= agreement_B and runtime_A <= runtime_B, with at least one strict inequality.
+- Models on the non-dominated set are reported as operationally efficient candidates for deployment.
 
 ## 10. Reproducibility
 - Freeze model manifest at run start (with timestamp and eligibility decisions).

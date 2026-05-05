@@ -91,3 +91,31 @@ qwen3.6,qwen3.6:35b-a3b-coding-mxfp8,manual_exclusion,specialised_model_excluded
 qwen3.6,qwen3.6:35b-a3b-coding-nvfp4,manual_exclusion,specialised_model_excluded,Coding-specialised
 exaone-deep,,manual_exclusion,specialised_model_excluded,Coding/maths-specialised
 exaone3.5,,manual_exclusion,specialised_model_excluded,Multilingual-specialised
+qwen3.6,,manual_exclusion,specialised_model_excluded,Coding-specialised agentic family
+goliath,goliath:120b-q2_K,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q3_K_L,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q3_K_M,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q3_K_S,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q4_0,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q4_1,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q4_K_S,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q5_0,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q5_1,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q5_K_M,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q5_K_S,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+goliath,goliath:120b-q6_K,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-fp16,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q2_K,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q3_K_L,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q3_K_M,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q3_K_S,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q4_0,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q4_1,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q4_K_S,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q5_0,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q5_1,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q5_K_M,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q5_K_S,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q6_K,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:8b-instruct-q8_0,manual_exclusion,quantisation_variant_excluded,Retain q4_K_M as canonical quantisation variant
+llama-pro,llama-pro:text,manual_exclusion,instruct_variant_preferred,Instruct variant preferred when paired text variant exists

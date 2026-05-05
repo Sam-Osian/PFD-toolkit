@@ -18,12 +18,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import requests
+from openai import APITimeoutError
 from tqdm import tqdm
 
 from pfd_toolkit import LLM, Screener
@@ -45,6 +48,9 @@ RESULT_COLUMNS = [
     "params_total_b",
     "params_active_b",
     "agreement_with_clinical_adjudication",
+    "cohen_kappa",
+    "kappa_ci_lower",
+    "kappa_ci_upper",
     "sensitivity",
     "specificity",
     "local",
@@ -54,6 +60,18 @@ RESULT_COLUMNS = [
     "finished_at",
     "status",
     "error_reason",
+]
+
+PREDICTION_COLUMNS = [
+    "model",
+    "tag",
+    "family",
+    "report_id",
+    "consensus",
+    "model_pred",
+    "status",
+    "error_reason",
+    "recorded_at",
 ]
 
 EXCLUSION_COLUMNS = [
@@ -92,6 +110,10 @@ def parse_args() -> argparse.Namespace:
         default="open_llm_ons_experiment/artifacts/results.csv",
     )
     parser.add_argument(
+        "--predictions-path",
+        default="open_llm_ons_experiment/artifacts/report_level_predictions.csv",
+    )
+    parser.add_argument(
         "--exclusions-path",
         default="open_llm_ons_experiment/artifacts/exclusions.csv",
     )
@@ -119,8 +141,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--temperature", type=float, default=0.0)
     parser.add_argument("--timeout", type=float, default=600)
+    parser.add_argument("--per-report-timeout", type=float, default=600)
     parser.add_argument("--max-workers", type=int, default=1)
-    parser.add_argument("--validation-attempts", type=int, default=3)
+    parser.add_argument("--validation-attempts", type=int, default=1)
     parser.add_argument("--preflight-reports", type=int, default=5)
     parser.add_argument("--gpt41-benchmark", type=float, default=0.97)
     parser.add_argument("--delete-pulled", action="store_true", default=True)
@@ -302,6 +325,20 @@ def upsert_result(results: pd.DataFrame, results_path: Path, row: dict[str, Any]
     return results
 
 
+def upsert_predictions(
+    predictions: pd.DataFrame,
+    predictions_path: Path,
+    rows: pd.DataFrame,
+    *,
+    tag: str,
+) -> pd.DataFrame:
+    if "tag" in predictions.columns:
+        predictions = predictions[predictions["tag"].astype(str) != str(tag)].copy()
+    predictions = pd.concat([predictions, rows], ignore_index=True)
+    fsync_csv(predictions_path, predictions)
+    return predictions
+
+
 def generate_plots(results: pd.DataFrame, plots_dir: Path, gpt41_benchmark: float) -> None:
     completed = results[results["status"] == "completed"].copy()
     if completed.empty:
@@ -384,7 +421,9 @@ def run_preflight(
     return True, ""
 
 
-def run_full_eval(llm: LLM, reports: pd.DataFrame, query: str) -> tuple[float, float, float]:
+def run_full_eval(
+    llm: LLM, reports: pd.DataFrame, query: str
+) -> tuple[float, float, float, float, float, float, pd.DataFrame]:
     screener = Screener(
         llm=llm,
         reports=reports,
@@ -414,7 +453,68 @@ def run_full_eval(llm: LLM, reports: pd.DataFrame, query: str) -> tuple[float, f
     agreement = (tp + tn) / total if total else float("nan")
     sensitivity = tp / (tp + fn) if (tp + fn) else float("nan")
     specificity = tn / (tn + fp) if (tn + fp) else float("nan")
-    return agreement, sensitivity, specificity
+    kappa, kappa_ci_lower, kappa_ci_upper = compute_kappa_ci_with_r(pred, truth)
+
+    return agreement, sensitivity, specificity, kappa, float(kappa_ci_lower), float(kappa_ci_upper), classified
+
+
+def compute_kappa_ci_with_r(pred: pd.Series, truth: pd.Series) -> tuple[float, float, float]:
+    """Compute Cohen's kappa and 95% CI using irr::kappa2, mirroring ONS R script."""
+    work = pd.DataFrame(
+        {
+            "consensus": truth.map({True: "Yes", False: "No"}),
+            "model_pred": pred.map({True: "Yes", False: "No"}),
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        work.to_csv(tmp_path, index=False)
+        r_script = "open_llm_ons_experiment/ons_replication/scripts/kappa_single_model.R"
+        r_env = os.environ.copy()
+        user_r_lib = str(Path.home() / "R" / "library")
+        if r_env.get("R_LIBS_USER"):
+            r_env["R_LIBS_USER"] = f"{user_r_lib}:{r_env['R_LIBS_USER']}"
+        else:
+            r_env["R_LIBS_USER"] = user_r_lib
+        proc = subprocess.run(
+            ["Rscript", r_script, tmp_path],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=r_env,
+        )
+        out = proc.stdout.strip().split(",")
+        if len(out) != 3:
+            raise RuntimeError(f"Unexpected R output: {proc.stdout}")
+        return float(out[0]), float(out[1]), float(out[2])
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def build_prediction_rows(
+    *,
+    model: str,
+    tag: str,
+    family: str,
+    classified: pd.DataFrame,
+    status: str,
+    error_reason: str,
+) -> pd.DataFrame:
+    rows = classified[[GeneralConfig.COL_ID, "consensus", "model_pred"]].copy()
+    rows = rows.rename(columns={GeneralConfig.COL_ID: "report_id"})
+    rows["consensus"] = rows["consensus"].astype(bool)
+    rows["model_pred"] = rows["model_pred"].astype(bool)
+    rows["model"] = model
+    rows["tag"] = tag
+    rows["family"] = family
+    rows["status"] = status
+    rows["error_reason"] = error_reason
+    rows["recorded_at"] = utc_now_iso()
+    return rows[PREDICTION_COLUMNS]
 
 
 def main() -> None:
@@ -422,6 +522,7 @@ def main() -> None:
     eligible_path = Path(args.eligible_path)
     manifest_path = Path(args.manifest_path)
     results_path = Path(args.results_path)
+    predictions_path = Path(args.predictions_path)
     exclusions_path = Path(args.exclusions_path)
     state_path = Path(args.state_path)
     plots_dir = Path(args.plots_dir)
@@ -429,6 +530,7 @@ def main() -> None:
     reports = load_reports(Path(args.ons_spreadsheet))
     manifest = load_or_init_manifest(eligible_path, manifest_path)
     results = load_csv(results_path, RESULT_COLUMNS)
+    predictions = load_csv(predictions_path, PREDICTION_COLUMNS)
     exclusions = load_csv(exclusions_path, EXCLUSION_COLUMNS)
 
     preexisting_models = ollama_tags(args.ollama_base_url, timeout=args.timeout)
@@ -466,7 +568,7 @@ def main() -> None:
         if model_status == "failed" and not args.retry_failed:
             continue
 
-        started_at = utc_now_iso()
+        started_at = pd.NA
         state["models"][tag] = "in_progress"
         state["current_model"] = tag
         state["phase"] = "install"
@@ -496,6 +598,7 @@ def main() -> None:
                 seed=args.seed,
                 timeout=args.timeout,
                 validation_attempts=args.validation_attempts,
+                per_report_timeout_s=args.per_report_timeout,
             )
 
             state["phase"] = "preflight"
@@ -523,12 +626,27 @@ def main() -> None:
 
             state["phase"] = "evaluate"
             save_state(state_path, state)
-            agreement, sensitivity, specificity = run_full_eval(
+            started_at = utc_now_iso()
+            agreement, sensitivity, specificity, kappa, kappa_ci_lower, kappa_ci_upper, classified = run_full_eval(
                 llm=llm_client,
                 reports=reports,
                 query=args.query,
             )
             finished_at = utc_now_iso()
+            prediction_rows = build_prediction_rows(
+                model=model,
+                tag=tag,
+                family=family,
+                classified=classified,
+                status="completed",
+                error_reason="",
+            )
+            predictions = upsert_predictions(
+                predictions,
+                predictions_path,
+                prediction_rows,
+                tag=tag,
+            )
 
             results = upsert_result(
                 results,
@@ -541,6 +659,9 @@ def main() -> None:
                     "params_total_b": row.get("params_total_b"),
                     "params_active_b": row.get("params_active_b"),
                     "agreement_with_clinical_adjudication": agreement,
+                    "cohen_kappa": kappa,
+                    "kappa_ci_lower": kappa_ci_lower,
+                    "kappa_ci_upper": kappa_ci_upper,
                     "sensitivity": sensitivity,
                     "specificity": specificity,
                     "local": True,
@@ -558,6 +679,9 @@ def main() -> None:
         except Exception as exc:
             finished_at = utc_now_iso()
             error_reason = f"{type(exc).__name__}: {exc}"
+            timeout_hit = isinstance(exc, APITimeoutError) or ("timed out" in str(exc).lower())
+            if timeout_hit:
+                error_reason = "timeout"
             results = upsert_result(
                 results,
                 results_path,
@@ -569,6 +693,9 @@ def main() -> None:
                     "params_total_b": row.get("params_total_b"),
                     "params_active_b": row.get("params_active_b"),
                     "agreement_with_clinical_adjudication": pd.NA,
+                    "cohen_kappa": pd.NA,
+                    "kappa_ci_lower": pd.NA,
+                    "kappa_ci_upper": pd.NA,
                     "sensitivity": pd.NA,
                     "specificity": pd.NA,
                     "local": True,
@@ -581,6 +708,9 @@ def main() -> None:
                 },
             )
             state["models"][tag] = "failed"
+            if timeout_hit:
+                # Fail-fast for timeout-prone models: skip any further work on this tag.
+                state["phase"] = "cleanup"
         finally:
             state["phase"] = "cleanup"
             if args.delete_pulled and pulled_this_model and not installed_preexisting:
@@ -596,6 +726,7 @@ def main() -> None:
     print("Run complete.")
     print(f"Manifest:   {manifest_path}")
     print(f"Results:    {results_path}")
+    print(f"Predictions:{predictions_path}")
     print(f"Exclusions: {exclusions_path}")
     print(f"State:      {state_path}")
     print(f"Plots dir:  {plots_dir}")

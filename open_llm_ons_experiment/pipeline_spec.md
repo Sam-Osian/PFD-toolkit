@@ -100,9 +100,23 @@ After eligibility filtering, all eligible tags are evaluated.
 
 - Required per-row fields:
 - `model`, `tag`, `family`, `is_moe`, `params_total_b`, `params_active_b`
-- `agreement_with_clinical_adjudication`, `sensitivity`, `specificity`
+- `agreement_with_clinical_adjudication`, `cohen_kappa`, `kappa_ci_lower`, `kappa_ci_upper`, `sensitivity`, `specificity`
 - `local`, `installed_preexisting`, `pulled_by_run`
 - `started_at`, `finished_at`, `status`, `error_reason`
+
+- Persist report-level predictions to `report_level_predictions.csv` for paired inference against GPT-4.1 (`PFD Toolkit: child suicide?` in the replication workbook).
+
+## 8.1 Non-Inferiority Analysis (Pre-Specified)
+- Primary endpoint: agreement with clinical adjudication.
+- Comparator: GPT-4.1 report-level output from `PFD Toolkit: child suicide?`, paired by `Ref`.
+- Primary margin: 5 percentage points (non-inferiority if open model minus GPT-4.1 agreement > -0.05).
+- Sensitivity margin: 2.5 percentage points (non-inferiority if open model minus GPT-4.1 agreement > -0.025).
+
+## 8.2 Pareto Decision Analysis (Secondary)
+- Inputs: per-model agreement with clinical adjudication and classification runtime (from `started_at`/`finished_at`).
+- Objective pair: maximise agreement; minimise runtime.
+- Dominance rule: model A dominates model B if agreement_A >= agreement_B and runtime_A <= runtime_B, with at least one strict inequality.
+- Output: non-dominated model set (Pareto frontier) reported as operationally efficient candidates.
 
 ## 9. Interruption/Resume Robustness
 - `run_state.json` tracks current model and phase.
