@@ -1,7 +1,7 @@
 # Run Worker Execution (v0.2)
 
-Status: Implemented adapter-backed execution + guardrails/retries  
-Last updated: 2026-04-22
+Status: Implemented adapter-backed execution + guardrails/retries + route isolation  
+Last updated: 2026-05-06
 
 ## 1. Purpose
 
@@ -66,7 +66,7 @@ If a run sets `execution_mode=simulate`, staged simulation is used for testing r
 
 ### 5.1 Shared keys (`filter`, `themes`, `extract`, `export`)
 
-1. `provider` (`openai` or `openrouter`)
+1. `provider` (`local_ollama`, `openai`, or `openrouter`)
 2. `model_name`
 3. `max_parallel_workers`
 4. `llm_timeout_seconds`
@@ -78,8 +78,9 @@ If a run sets `execution_mode=simulate`, staged simulation is used for testing r
 
 Credential source used by real adapter:
 
-1. API keys are resolved from encrypted workspace credentials (`wb_workspaces.WorkspaceCredential`) for the run requester.
-2. Runs fail with adapter-configuration error if no matching credential exists for the selected provider.
+1. `local_ollama` route uses service-level local settings (`LOCAL_OLLAMA_*`) and does not require user API credentials.
+2. `openai` and `openrouter` keys are resolved from encrypted workspace credentials (`wb_workspaces.WorkspaceCredential`) for the run requester.
+3. API-route runs fail with adapter-configuration error if no matching credential exists for the selected provider.
 
 Artifact persistence keys:
 
@@ -169,6 +170,18 @@ Loop worker with explicit id:
 uv run python manage.py run_runs_worker --worker-id railway-worker-1 --poll-seconds 3
 ```
 
+Loop worker in API-only lane:
+
+```bash
+uv run python manage.py run_runs_worker --worker-id railway-worker-1 --route-mode api --poll-seconds 3
+```
+
+Loop worker in local-only lane:
+
+```bash
+uv run python manage.py run_runs_worker --worker-id dgx-worker-1 --route-mode local --poll-seconds 3
+```
+
 Process only cancellations reconciliation:
 
 ```bash
@@ -198,9 +211,15 @@ uv run python manage.py check_run_worker_health --worker-id railway-worker-1
 Recommended services:
 
 1. `web`: Django HTTP app
-2. `worker`: command `uv run python manage.py run_runs_worker --worker-id railway-worker-1 --poll-seconds 3`
+2. `worker`: API lane command `uv run python manage.py run_runs_worker --worker-id railway-worker-1 --route-mode api --poll-seconds 3`
 3. `scheduler` (or cron): command `uv run python manage.py run_lifecycle_maintenance`
 4. `notification-dispatcher`: command `uv run python manage.py run_notification_dispatcher --poll-seconds 5 --max-items 50`
+
+DGX service (outside Railway):
+
+1. Local lane command `uv run python manage.py run_runs_worker --worker-id dgx-worker-1 --route-mode local --poll-seconds 3`
+2. Set `RUN_WORKER_ROUTE_MODE=local` on DGX env as a safety default.
+3. Set `LOCAL_OLLAMA_BASE_URL` reachable from DGX host (default `http://127.0.0.1:11434/v1`).
 
 Optional later:
 

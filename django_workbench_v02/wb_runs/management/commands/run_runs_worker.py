@@ -15,6 +15,12 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--worker-id", default="")
+        parser.add_argument(
+            "--route-mode",
+            default="",
+            choices=["", "all", "api", "local"],
+            help="Optional worker route lane: all, api, or local.",
+        )
         parser.add_argument("--poll-seconds", type=float, default=5.0)
         parser.add_argument("--max-runs", type=int, default=None)
         parser.add_argument(
@@ -41,6 +47,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         worker_id = options["worker_id"] or f"worker-{uuid.uuid4()}"
+        route_mode = options.get("route_mode") or None
         poll_seconds = options["poll_seconds"]
         max_runs = options["max_runs"]
         once = options["once"]
@@ -49,7 +56,7 @@ class Command(BaseCommand):
         reconcile_timeouts_only = options["reconcile_timeouts_only"]
 
         if finalize_cancelling_only:
-            count = finalize_stuck_cancellations(worker_id=worker_id)
+            count = finalize_stuck_cancellations(worker_id=worker_id, route_mode=route_mode)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"[{worker_id}] Finalized {count} cancelling run(s)."
@@ -58,7 +65,7 @@ class Command(BaseCommand):
             return
 
         if reconcile_timeouts_only:
-            count = reconcile_timed_out_runs(worker_id=worker_id)
+            count = reconcile_timed_out_runs(worker_id=worker_id, route_mode=route_mode)
             self.stdout.write(
                 self.style.SUCCESS(
                     f"[{worker_id}] Reconciled {count} timed-out run(s)."
@@ -69,6 +76,7 @@ class Command(BaseCommand):
         if once:
             run = process_single_available_run(
                 worker_id=worker_id,
+                route_mode=route_mode,
                 sleep_between_stages_seconds=sleep_between_stages_seconds,
             )
             if run is None:
@@ -83,6 +91,7 @@ class Command(BaseCommand):
 
         processed = run_worker_loop(
             worker_id=worker_id,
+            route_mode=route_mode,
             poll_seconds=poll_seconds,
             max_runs=max_runs,
             sleep_between_stages_seconds=sleep_between_stages_seconds,

@@ -3,6 +3,11 @@ from django import forms
 from .models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceLLMProvider
 
 
+API_CREDENTIAL_PROVIDER_CHOICES = (
+    (WorkspaceLLMProvider.OPENAI, "OpenAI"),
+)
+
+
 class WorkspaceCreateForm(forms.ModelForm):
     class Meta:
         model = Workspace
@@ -28,7 +33,7 @@ class WorkspaceMemberUpdateForm(forms.Form):
 
 class WorkspaceCredentialUpsertForm(forms.Form):
     provider = forms.ChoiceField(
-        choices=WorkspaceLLMProvider.choices,
+        choices=API_CREDENTIAL_PROVIDER_CHOICES,
         initial=WorkspaceLLMProvider.OPENAI,
     )
     api_key = forms.CharField(
@@ -38,21 +43,20 @@ class WorkspaceCredentialUpsertForm(forms.Form):
 
 
 class WorkspaceCredentialDeleteForm(forms.Form):
-    provider = forms.ChoiceField(choices=WorkspaceLLMProvider.choices)
+    provider = forms.ChoiceField(choices=API_CREDENTIAL_PROVIDER_CHOICES)
 
 
 class ActiveLLMConfigForm(forms.Form):
     provider = forms.ChoiceField(
-        choices=WorkspaceLLMProvider.choices,
-        initial=WorkspaceLLMProvider.OPENAI,
-    )
-    model_name = forms.ChoiceField(
-        required=False,
         choices=(
-            ("gpt-4.1-mini", "gpt-4.1-mini (recommended - lower cost)"),
-            ("gpt-5.4", "gpt-5.4 (higher accuracy)"),
+            (WorkspaceLLMProvider.LOCAL_OLLAMA, "Our server"),
+            (WorkspaceLLMProvider.OPENAI, "OpenAI server"),
         ),
-        initial="gpt-4.1-mini",
+        initial=WorkspaceLLMProvider.LOCAL_OLLAMA,
+    )
+    model_name = forms.CharField(
+        required=False,
+        initial="gemma4:27b",
     )
     max_parallel_workers = forms.IntegerField(
         required=False,
@@ -70,7 +74,7 @@ class ActiveLLMConfigForm(forms.Form):
 
 class ActiveLLMCredentialDeleteForm(forms.Form):
     provider = forms.ChoiceField(
-        choices=WorkspaceLLMProvider.choices,
+        choices=API_CREDENTIAL_PROVIDER_CHOICES,
         initial=WorkspaceLLMProvider.OPENAI,
     )
     next_url = forms.CharField(required=False)

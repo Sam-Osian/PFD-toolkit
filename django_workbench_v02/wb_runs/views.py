@@ -17,6 +17,7 @@ from wb_workspaces.services import (
     has_workspace_credential,
     upsert_workspace_credential,
 )
+from wb_workspaces.models import WorkspaceLLMProvider
 
 from .artifact_storage import ArtifactStorageError, open_artifact_for_download
 from .forms import RunCancelForm, RunQueueForm
@@ -302,12 +303,18 @@ def queue_investigation_run(request, workbook_id, investigation_id):
         run_config = form.cleaned_data["input_config_json"] or {}
 
         execution_mode = str(run_config.get("execution_mode", "real")).strip().lower()
-        provider = str(form.cleaned_data.get("provider") or "openai").strip().lower()
+        provider = str(
+            form.cleaned_data.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA
+        ).strip().lower()
         api_key = str(form.cleaned_data.get("api_key") or "").strip()
         save_api_key = bool(form.cleaned_data.get("save_api_key", True))
         base_url = str(form.cleaned_data.get("base_url") or "").strip()
+        provider_requires_api_key = provider in {
+            WorkspaceLLMProvider.OPENAI,
+            WorkspaceLLMProvider.OPENROUTER,
+        }
 
-        if execution_mode != "simulate":
+        if execution_mode != "simulate" and provider_requires_api_key:
             if api_key:
                 if save_api_key:
                     upsert_workspace_credential(

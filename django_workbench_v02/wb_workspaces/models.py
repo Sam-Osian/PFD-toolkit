@@ -30,6 +30,7 @@ class RevisionChangeType(models.TextChoices):
 
 
 class WorkspaceLLMProvider(models.TextChoices):
+    LOCAL_OLLAMA = "local_ollama", "Local (Ollama)"
     OPENAI = "openai", "OpenAI"
     OPENROUTER = "openrouter", "OpenRouter"
 
@@ -278,9 +279,9 @@ class UserLLMSetting(models.Model):
     provider = models.CharField(
         max_length=16,
         choices=WorkspaceLLMProvider.choices,
-        default=WorkspaceLLMProvider.OPENAI,
+        default=WorkspaceLLMProvider.LOCAL_OLLAMA,
     )
-    model_name = models.CharField(max_length=255, default="gpt-4.1-mini")
+    model_name = models.CharField(max_length=255, default="gemma4:27b")
     max_parallel_workers = models.PositiveSmallIntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -316,9 +317,9 @@ class WorkspaceLLMSetting(models.Model):
     provider = models.CharField(
         max_length=16,
         choices=WorkspaceLLMProvider.choices,
-        default=WorkspaceLLMProvider.OPENAI,
+        default=WorkspaceLLMProvider.LOCAL_OLLAMA,
     )
-    model_name = models.CharField(max_length=255, default="gpt-4.1-mini")
+    model_name = models.CharField(max_length=255, default="gemma4:27b")
     max_parallel_workers = models.PositiveSmallIntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)

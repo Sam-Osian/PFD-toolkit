@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core import mail
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -33,16 +34,24 @@ from .models import (
     ArtifactStorageBackend,
     ArtifactType,
     RunArtifact,
+    RunApprovalStatus,
     RunStatus,
     RunType,
     RunWorkerHeartbeat,
 )
 from .pfd_toolkit_adapter import (
     AdapterCancelledError,
+    _build_llm_kwargs,
     _patch_generate_with_progress,
     _theme_summary_from_dataframe,
 )
-from .services import queue_run, request_run_cancellation, set_run_status
+from .services import (
+    approve_run_for_execution,
+    queue_run,
+    reject_run_for_execution,
+    request_run_cancellation,
+    set_run_status,
+)
 from .worker import process_single_available_run, reconcile_timed_out_runs
 
 
@@ -52,6 +61,10 @@ User = get_user_model()
 class RunServiceTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="run-owner@example.com", password="x")
+        self.admin_user = User.objects.create_superuser(
+            email="run-admin@example.com",
+            password="x",
+        )
         self.viewer = User.objects.create_user(email="run-viewer@example.com", password="x")
         self.request_factory = RequestFactory()
         self.workspace = create_workspace_for_user(
@@ -94,6 +107,134 @@ class RunServiceTests(TestCase):
             ).exists()
         )
         self.assertEqual(run.events.count(), 1)
+        self.assertFalse(run.requires_approval)
+        self.assertEqual(run.approval_status, RunApprovalStatus.NOT_REQUIRED)
+
+    def test_queue_run_marks_pending_approval_when_requested(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"requires_manual_approval": True},
+        )
+        self.assertTrue(run.requires_approval)
+        self.assertEqual(run.approval_status, RunApprovalStatus.PENDING)
+        self.assertIsNotNone(run.approval_requested_at)
+
+    @override_settings(
+        WORKBENCH_BASE_URL="https://workbench.example.com",
+        PFD_ADMIN_EMAIL="sam.osian@oreliandata.co.uk",
+        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+    )
+    def test_queue_run_auto_requires_approval_for_local_llm_runs(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "provider": "local_ollama",
+                "execution_mode": "real",
+                "model_name": "gemma4:27b",
+            },
+        )
+        self.assertTrue(run.requires_approval)
+        self.assertEqual(run.approval_status, RunApprovalStatus.PENDING)
+        self.assertIsNotNone(run.approval_requested_at)
+        self.assertEqual(len(mail.outbox), 1)
+        sent = mail.outbox[0]
+        self.assertIn("Approval required", sent.subject)
+        self.assertIn("sam.osian@oreliandata.co.uk", sent.to)
+        self.assertIn("/admin/wb_runs/investigationrun/", sent.body)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action_type="run.approval_requested",
+                target_id=str(run.id),
+            ).exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action_type="run.approval_email_sent",
+                target_id=str(run.id),
+            ).exists()
+        )
+
+    def test_queue_run_local_pipeline_continuation_does_not_require_second_approval(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.THEMES,
+            input_config_json={
+                "provider": "local_ollama",
+                "execution_mode": "real",
+                "model_name": "gemma4:27b",
+                "pipeline_plan": ["filter", "themes", "extract"],
+                "pipeline_index": 1,
+            },
+        )
+        self.assertFalse(run.requires_approval)
+        self.assertEqual(run.approval_status, RunApprovalStatus.NOT_REQUIRED)
+
+    def test_queue_run_openai_real_does_not_require_approval(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "provider": "openai",
+                "execution_mode": "real",
+                "model_name": "gpt-4.1-mini",
+            },
+        )
+        self.assertFalse(run.requires_approval)
+        self.assertEqual(run.approval_status, RunApprovalStatus.NOT_REQUIRED)
+
+    def test_superuser_can_approve_queued_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"requires_manual_approval": True},
+        )
+        scheduled_for = timezone.now() + timedelta(minutes=15)
+        approved = approve_run_for_execution(
+            actor=self.admin_user,
+            run=run,
+            note="Approved for later execution",
+            scheduled_for=scheduled_for,
+        )
+        self.assertEqual(approved.approval_status, RunApprovalStatus.APPROVED)
+        self.assertEqual(approved.approved_by_id, self.admin_user.id)
+        self.assertIsNotNone(approved.approved_at)
+        self.assertEqual(approved.queued_at, scheduled_for)
+
+    def test_superuser_can_reject_queued_run_and_mark_terminal(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"requires_manual_approval": True},
+        )
+        rejected = reject_run_for_execution(
+            actor=self.admin_user,
+            run=run,
+            reason="Capacity not available",
+        )
+        self.assertEqual(rejected.approval_status, RunApprovalStatus.REJECTED)
+        self.assertEqual(rejected.status, RunStatus.CANCELLED)
+        self.assertEqual(rejected.rejected_by_id, self.admin_user.id)
+        self.assertEqual(rejected.approval_note, "Capacity not available")
+
+    def test_non_superuser_cannot_approve_or_reject(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"requires_manual_approval": True},
+        )
+        with self.assertRaises(PermissionDenied):
+            approve_run_for_execution(actor=self.owner, run=run)
+        with self.assertRaises(PermissionDenied):
+            reject_run_for_execution(actor=self.owner, run=run)
 
     def test_viewer_cannot_queue_run(self):
         with self.assertRaises(PermissionDenied):
@@ -426,6 +567,33 @@ class RunViewTests(TestCase):
                 input_config_json__execution_mode="real",
             ).exists()
         )
+
+    def test_queue_real_local_ollama_run_does_not_require_api_key(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "workbook-run-queue",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "run_type": RunType.FILTER,
+                "provider": "local_ollama",
+                "model_name": "gemma4:27b",
+                "api_key": "",
+                "input_config_json": '{"execution_mode": "real"}',
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        run = self.investigation.runs.filter(
+            run_type=RunType.FILTER,
+            input_config_json__execution_mode="real",
+        ).latest("created_at")
+        self.assertEqual(run.input_config_json.get("provider"), "local_ollama")
+        self.assertEqual(run.input_config_json.get("model_name"), "gemma4:27b")
 
     def test_queue_real_run_saves_workspace_credential(self):
         self.client.force_login(self.owner)
@@ -819,6 +987,29 @@ class RunAdapterTests(TestCase):
         self.assertIn("cancellation_check", captured["kwargs"])
         self.assertTrue(callable(captured["kwargs"]["cancellation_check"]))
 
+    @override_settings(
+        LOCAL_OLLAMA_BASE_URL="http://127.0.0.1:11434/v1",
+        LOCAL_OLLAMA_MODEL_DEFAULT="gemma4:27b",
+        LOCAL_OLLAMA_API_KEY="ollama",
+        LOCAL_OLLAMA_MAX_PARALLEL_WORKERS=1,
+    )
+    def test_build_llm_kwargs_for_local_ollama_uses_local_defaults(self):
+        with patch("wb_runs.pfd_toolkit_adapter.resolve_workspace_credential") as mocked_resolve:
+            kwargs = _build_llm_kwargs(
+                run=object(),
+                config={
+                    "provider": "local_ollama",
+                    "model_name": "",
+                    "max_parallel_workers": 9,
+                },
+            )
+        mocked_resolve.assert_not_called()
+        self.assertEqual(kwargs.get("api_key"), "ollama")
+        self.assertEqual(kwargs.get("base_url"), "http://127.0.0.1:11434/v1")
+        self.assertEqual(kwargs.get("model"), "gemma4:27b")
+        self.assertEqual(kwargs.get("max_workers"), 1)
+        self.assertEqual(kwargs.get("reasoning_effort"), "none")
+
 
 class RunWorkerTests(TestCase):
     def setUp(self):
@@ -855,6 +1046,89 @@ class RunWorkerTests(TestCase):
         self.assertIsNotNone(run.finished_at)
         self.assertEqual(run.progress_percent, 100)
         self.assertTrue(run.artifacts.exists())
+
+    def test_api_route_worker_does_not_claim_local_route_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "provider": "local_ollama",
+                "execution_mode": "simulate",
+                "requires_manual_approval": False,
+            },
+        )
+        processed = process_single_available_run(worker_id="test-worker", route_mode="api")
+        self.assertIsNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.QUEUED)
+
+    def test_local_route_worker_does_not_claim_api_route_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "provider": "openai",
+                "execution_mode": "simulate",
+            },
+        )
+        processed = process_single_available_run(worker_id="test-worker", route_mode="local")
+        self.assertIsNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.QUEUED)
+
+    def test_local_route_worker_claims_local_route_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "provider": "local_ollama",
+                "execution_mode": "simulate",
+                "requires_manual_approval": False,
+            },
+        )
+        processed = process_single_available_run(worker_id="test-worker", route_mode="local")
+        self.assertIsNotNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+
+    def test_worker_skips_pending_approval_run(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "requires_manual_approval": True,
+            },
+        )
+        processed = process_single_available_run(worker_id="test-worker")
+        self.assertIsNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.QUEUED)
+        self.assertEqual(run.approval_status, RunApprovalStatus.PENDING)
+
+    def test_worker_processes_approved_run_that_requires_approval(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "requires_manual_approval": True,
+            },
+        )
+        run.approval_status = RunApprovalStatus.APPROVED
+        run.approved_at = timezone.now()
+        run.approved_by = self.owner
+        run.save(update_fields=["approval_status", "approved_at", "approved_by", "updated_at"])
+
+        processed = process_single_available_run(worker_id="test-worker")
+        self.assertIsNotNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
 
     def test_worker_honors_pre_requested_cancellation(self):
         run = queue_run(

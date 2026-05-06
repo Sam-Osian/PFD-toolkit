@@ -22,6 +22,7 @@ from wb_sharing.services import (
     update_share_link,
 )
 from wb_workspaces.models import Workspace
+from wb_workspaces.models import WorkspaceLLMProvider
 from wb_workspaces.permissions import (
     can_edit_workspace,
     can_run_workflows,
@@ -378,8 +379,12 @@ def _wizard_retry_prefill(*, investigation: Investigation, run: InvestigationRun
         "force_assign": bool(config.get("force_assign", False)),
         "skip_if_present": bool(config.get("skip_if_present", True)),
         "extract_include_supporting_quotes": bool(config.get("produce_spans", False)),
-        "provider": str(config.get("provider") or "openai").strip().lower(),
-        "model_name": str(config.get("model_name") or "gpt-4.1-mini").strip(),
+        "provider": (
+            WorkspaceLLMProvider.OPENAI
+            if str(config.get("provider") or "").strip().lower() == WorkspaceLLMProvider.OPENROUTER
+            else str(config.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
+        ),
+        "model_name": str(config.get("model_name") or "gemma4:27b").strip(),
         "max_parallel_workers": max_parallel_workers,
         "request_completion_email": True,
     }
@@ -476,8 +481,8 @@ def investigation_start(request):
                 if review_form.is_valid():
                     modal_review_config = {
                         "execution_mode": "real",
-                        "provider": review_form.cleaned_data.get("provider") or "openai",
-                        "model_name": review_form.cleaned_data.get("model_name") or "gpt-4.1-mini",
+                        "provider": review_form.cleaned_data.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA,
+                        "model_name": review_form.cleaned_data.get("model_name") or "gemma4:27b",
                         "max_parallel_workers": int(
                             review_form.cleaned_data.get("max_parallel_workers") or 1
                         ),

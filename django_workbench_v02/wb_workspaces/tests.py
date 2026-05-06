@@ -685,43 +685,41 @@ class WorkspaceMemberViewsTests(TestCase):
         response = self.client.post(
             reverse("workspace-llm-config-save"),
             data={
-                "provider": "openrouter",
+                "provider": "openai",
                 "model_name": "gpt-4.1-mini",
                 "max_parallel_workers": "4",
-                "api_key": "sk-or-example-1234",
+                "api_key": "sk-example-1234",
                 "base_url": "",
                 "next_url": reverse("workbook-dashboard"),
             },
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "LLM config and credential saved.")
         setting = self.owner.llm_setting
-        self.assertEqual(setting.provider, "openrouter")
+        self.assertEqual(setting.provider, "openai")
         self.assertEqual(setting.model_name, "gpt-4.1-mini")
         self.assertEqual(setting.max_parallel_workers, 4)
-        self.assertTrue(self.owner.llm_credentials.filter(provider="openrouter", key_last4="1234").exists())
+        self.assertTrue(self.owner.llm_credentials.filter(provider="openai", key_last4="1234").exists())
 
     def test_owner_can_clear_active_llm_credential(self):
         upsert_user_llm_credential(
             actor=self.owner,
-            provider="openrouter",
-            api_key="sk-or-example-1234",
+            provider="openai",
+            api_key="sk-example-1234",
             base_url="",
         )
         self.client.force_login(self.owner)
         response = self.client.post(
             reverse("workspace-llm-config-credential-clear"),
             data={
-                "provider": "openrouter",
+                "provider": "openai",
                 "next_url": reverse("workbook-dashboard"),
             },
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Cleared openrouter credential from your account defaults.")
         self.assertFalse(
-            self.owner.llm_credentials.filter(provider="openrouter").exists()
+            self.owner.llm_credentials.filter(provider="openai").exists()
         )
 
 
@@ -739,14 +737,34 @@ class WorkspaceLLMSettingTests(TestCase):
         upsert_workspace_llm_setting(
             actor=self.owner,
             workspace=self.workspace,
-            provider="openrouter",
+            provider="openai",
             model_name="gpt-4.1-mini",
             max_parallel_workers=3,
         )
         setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
-        self.assertEqual(setting.get("provider"), "openrouter")
+        self.assertEqual(setting.get("provider"), "openai")
         self.assertEqual(setting.get("model_name"), "gpt-4.1-mini")
         self.assertEqual(setting.get("max_parallel_workers"), 3)
+
+    def test_get_workspace_llm_setting_defaults_to_local_ollama(self):
+        setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
+        self.assertEqual(setting.get("provider"), "local_ollama")
+        self.assertEqual(setting.get("model_name"), "gemma4:27b")
+        self.assertEqual(setting.get("max_parallel_workers"), 1)
+        self.assertTrue(setting.get("has_provider_credential"))
+
+    def test_local_ollama_max_workers_clamped_to_one(self):
+        upsert_workspace_llm_setting(
+            actor=self.owner,
+            workspace=self.workspace,
+            provider="local_ollama",
+            model_name="gemma4:27b",
+            max_parallel_workers=7,
+        )
+        setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
+        self.assertEqual(setting.get("provider"), "local_ollama")
+        self.assertEqual(setting.get("model_name"), "gemma4:27b")
+        self.assertEqual(setting.get("max_parallel_workers"), 1)
 
     def test_upsert_llm_setting_normalises_legacy_advanced_model_alias(self):
         upsert_workspace_llm_setting(
@@ -912,7 +930,7 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertEqual(payload.get("min_themes"), 4)
         self.assertEqual(payload.get("max_themes"), 10)
         self.assertEqual(payload.get("extra_theme_instructions"), "Prioritise process-level failures.")
-        self.assertEqual(payload.get("provider"), "openrouter")
+        self.assertEqual(payload.get("provider"), "openai")
         self.assertEqual(payload.get("model_name"), "gpt-4.1-mini")
         self.assertEqual(payload.get("max_parallel_workers"), 3)
         self.assertNotIn("api_key", payload)

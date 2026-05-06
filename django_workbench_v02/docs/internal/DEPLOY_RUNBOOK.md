@@ -1,7 +1,7 @@
 # Deploy Runbook (Railway, v0.2)
 
 Status: Active  
-Last updated: 2026-04-22
+Last updated: 2026-05-06
 
 ## 1. Scope
 
@@ -10,6 +10,7 @@ This runbook covers:
 1. Safe deploy flow for `pfd-toolkit-v02` on Railway.
 2. Smoke tests after deploy.
 3. Rollback and recovery, including snapshot-failure workaround.
+4. Worker lane isolation (Railway API lane, DGX local lane).
 
 Project:
 
@@ -19,7 +20,7 @@ Project:
 Services:
 
 1. `web`
-2. `worker`
+2. `worker` (API lane)
 3. `notification-dispatcher`
 4. `Postgres`
 
@@ -30,6 +31,7 @@ Services:
 3. Confirm `CREDENTIAL_ENCRYPTION_KEY` is set on `web`, `worker`, `notification-dispatcher`.
 4. Confirm SMTP/Auth0 vars are present on required services.
 5. Confirm `RAILWAY_DOCKERFILE_PATH=Dockerfile.railway.v02` on app services.
+6. Confirm Railway `worker` has `RUN_WORKER_ROUTE_MODE=api`.
 
 ## 3. Standard Deploy
 
@@ -49,6 +51,11 @@ Expected end state:
 2. `worker`: `SUCCESS`
 3. `notification-dispatcher`: `SUCCESS`
 4. `Postgres`: `SUCCESS`
+
+Railway worker lane requirement:
+
+1. Worker command should include `--route-mode api` or env `RUN_WORKER_ROUTE_MODE=api`.
+2. This keeps API-route execution isolated from DGX local-route execution.
 
 ## 4. Snapshot Failure Recovery
 
@@ -132,6 +139,25 @@ Pending manual confirmation:
 2. Real run execution and artifact download.
 3. Completion email receipt.
 
+## 5.4 DGX Local Worker (Out of Railway)
+
+Run this on the DGX host:
+
+```bash
+uv run python manage.py run_runs_worker --worker-id dgx-worker-1 --route-mode local --poll-seconds 3
+```
+
+Required DGX env:
+
+1. `RUN_WORKER_ROUTE_MODE=local`
+2. `LOCAL_OLLAMA_BASE_URL=http://127.0.0.1:11434/v1` (or reachable Ollama URL)
+3. `LOCAL_OLLAMA_MODEL_DEFAULT=gemma4:27b`
+
+Result:
+
+1. Railway worker only processes API provider runs.
+2. DGX worker only processes local Ollama runs.
+
 ## 6. Rollback
 
 If latest deploy is unhealthy:
@@ -153,6 +179,7 @@ railway restart -s worker -y
 1. `web`: confirm migrations applied and gunicorn booted.
 2. `worker`: confirm polling loop started without DB errors.
 3. `notification-dispatcher`: confirm loop started and no SMTP config errors.
+4. Confirm Railway worker logs show API lane mode and DGX logs show local lane mode.
 
 Commands:
 

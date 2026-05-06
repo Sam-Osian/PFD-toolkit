@@ -29,18 +29,17 @@ class InvestigationServiceError(ValidationError):
 
 
 ALLOWED_REVIEW_PROVIDERS = {
+    WorkspaceLLMProvider.LOCAL_OLLAMA,
     WorkspaceLLMProvider.OPENAI,
-    WorkspaceLLMProvider.OPENROUTER,
 }
 
 PROVIDER_MODEL_ALLOWLIST = {
+    WorkspaceLLMProvider.LOCAL_OLLAMA: {
+        "gemma4:27b",
+    },
     WorkspaceLLMProvider.OPENAI: {
         "gpt-4.1-mini",
         "gpt-5.4",
-    },
-    WorkspaceLLMProvider.OPENROUTER: {
-        "openai/gpt-4.1-mini",
-        "openai/gpt-5.4",
     },
 }
 
@@ -50,28 +49,33 @@ def _normalise_review_config(review_config: dict | None) -> dict:
     execution_mode = "real"
     raw_provider = raw.get("provider")
     if raw_provider is None:
-        provider = WorkspaceLLMProvider.OPENAI
+        provider = WorkspaceLLMProvider.LOCAL_OLLAMA
     else:
         provider = str(raw_provider).strip().lower()
+    if provider not in ALLOWED_REVIEW_PROVIDERS:
+        provider = WorkspaceLLMProvider.LOCAL_OLLAMA
 
     raw_model_name = raw.get("model_name")
     if raw_model_name is None:
-        model_name = "gpt-4.1-mini"
+        model_name = "gemma4:27b"
     else:
         model_name = str(raw_model_name).strip()
-    if provider == WorkspaceLLMProvider.OPENAI:
+    if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        if not model_name:
+            model_name = "gemma4:27b"
+    elif provider == WorkspaceLLMProvider.OPENAI:
         if model_name in {"gpt-4.1", "openai/gpt-4.1"}:
             model_name = "gpt-5.4"
         if model_name == "openai/gpt-5.4":
             model_name = "gpt-5.4"
-    elif provider == WorkspaceLLMProvider.OPENROUTER:
-        if model_name in {"gpt-4.1", "openai/gpt-4.1", "gpt-5.4"}:
-            model_name = "openai/gpt-5.4"
     try:
         max_parallel_workers = int(raw.get("max_parallel_workers") or 1)
     except (TypeError, ValueError):
         max_parallel_workers = 1
-    max_parallel_workers = min(32, max(1, max_parallel_workers))
+    if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        max_parallel_workers = 1
+    else:
+        max_parallel_workers = min(32, max(1, max_parallel_workers))
     notify_on = str(raw.get("notify_on") or NotificationTrigger.ANY).strip().lower()
     if notify_on not in {
         NotificationTrigger.SUCCESS,
@@ -161,6 +165,9 @@ def evaluate_investigation_launch_readiness(
         if not provider_model_ready:
             credential_ready = False
             credential_block_reason = "Resolve provider/model readiness before checking credentials."
+        elif review["provider"] == WorkspaceLLMProvider.LOCAL_OLLAMA:
+            credential_ready = True
+            credential_block_reason = ""
         else:
             saved = has_workspace_credential(
                 user=actor,
@@ -213,7 +220,11 @@ def evaluate_investigation_launch_readiness(
             "label": "Credential",
             "ready": credential_ready,
             "message": (
-                f"{review['provider'].title()} key ready for this workspace."
+                (
+                    "Local Ollama route is configured."
+                    if review["provider"] == WorkspaceLLMProvider.LOCAL_OLLAMA
+                    else f"{review['provider'].title()} key ready for this workspace."
+                )
                 if credential_ready
                 else credential_block_reason
             ),
@@ -290,7 +301,11 @@ def launch_investigation_wizard_pipeline(
         max_parallel_workers=review["max_parallel_workers"],
         request=request,
     )
-    if review["execution_mode"] == "real" and credential.get("api_key"):
+    if (
+        review["execution_mode"] == "real"
+        and review["provider"] in {WorkspaceLLMProvider.OPENAI, WorkspaceLLMProvider.OPENROUTER}
+        and credential.get("api_key")
+    ):
         upsert_user_llm_credential(
             actor=actor,
             provider=review["provider"],

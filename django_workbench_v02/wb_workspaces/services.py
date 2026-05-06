@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -39,6 +40,38 @@ class WorkspaceReportExclusionError(ValidationError):
 
 class WorkspaceLifecycleError(ValidationError):
     pass
+
+
+def _supported_providers() -> set[str]:
+    return {
+        WorkspaceLLMProvider.LOCAL_OLLAMA,
+        WorkspaceLLMProvider.OPENAI,
+        WorkspaceLLMProvider.OPENROUTER,
+    }
+
+
+def _provider_requires_api_key(provider: str) -> bool:
+    return str(provider or "").strip().lower() in {
+        WorkspaceLLMProvider.OPENAI,
+        WorkspaceLLMProvider.OPENROUTER,
+    }
+
+
+def _default_model_name_for_provider(provider: str) -> str:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:27b") or "gemma4:27b").strip() or "gemma4:27b"
+    if provider_key == WorkspaceLLMProvider.OPENROUTER:
+        return "openai/gpt-4.1-mini"
+    return "gpt-4.1-mini"
+
+
+def _normalise_workers_for_provider(*, provider: str, value) -> int:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        max_local = max(1, int(getattr(settings, "LOCAL_OLLAMA_MAX_PARALLEL_WORKERS", 1) or 1))
+        return max_local
+    return _normalise_max_parallel_workers(value)
 
 
 def get_active_workspace_for_user(*, user) -> Workspace | None:
@@ -491,8 +524,11 @@ def remove_workspace_member(
 
 def _normalise_provider(provider: str) -> str:
     raw = (provider or "").strip().lower()
-    if raw not in {WorkspaceLLMProvider.OPENAI, WorkspaceLLMProvider.OPENROUTER}:
+    if raw not in _supported_providers():
         raise WorkspaceCredentialValidationError(f"Unsupported provider '{provider}'.")
+    # OpenRouter is retired from user-facing flows; treat legacy references as OpenAI.
+    if raw == WorkspaceLLMProvider.OPENROUTER:
+        return WorkspaceLLMProvider.OPENAI
     return raw
 
 
@@ -504,6 +540,10 @@ def _key_last4(api_key: str) -> str:
 
 
 def _validate_api_key_format(*, provider: str, api_key: str) -> None:
+    if not _provider_requires_api_key(provider):
+        raise WorkspaceCredentialValidationError(
+            f"Provider '{provider}' does not require a saved API key."
+        )
     compact = str(api_key or "").strip()
     if not compact:
         raise WorkspaceCredentialValidationError("API key is required.")
@@ -517,15 +557,21 @@ def _validate_api_key_format(*, provider: str, api_key: str) -> None:
         )
 
 
-def _normalise_model_name(model_name: str) -> str:
+def _normalise_model_name(*, provider: str, model_name: str) -> str:
+    provider_key = _normalise_provider(provider)
     cleaned = str(model_name or "").strip()
     if not cleaned:
-        return "gpt-4.1-mini"
+        return _default_model_name_for_provider(provider_key)
     legacy_to_current = {
         "gpt-4.1": "gpt-5.4",
         "openai/gpt-4.1": "openai/gpt-5.4",
     }
-    return legacy_to_current.get(cleaned, cleaned)
+    resolved = legacy_to_current.get(cleaned, cleaned)
+    if provider_key == WorkspaceLLMProvider.OPENAI and resolved.startswith("openai/"):
+        return resolved.split("/", 1)[1]
+    if provider_key == WorkspaceLLMProvider.OPENROUTER and "/" not in resolved:
+        return f"openai/{resolved}"
+    return resolved
 
 
 def _normalise_max_parallel_workers(value) -> int:
@@ -615,6 +661,8 @@ def resolve_workspace_credential(
     request=None,
 ) -> tuple[str, str]:
     resolved_provider = _normalise_provider(provider)
+    if not _provider_requires_api_key(resolved_provider):
+        return "", ""
     credential = WorkspaceCredential.objects.filter(
         workspace=workspace,
         user=user,
@@ -651,6 +699,8 @@ def resolve_workspace_credential(
 
 def has_workspace_credential(*, user, workspace: Workspace, provider: str) -> bool:
     resolved_provider = _normalise_provider(provider)
+    if not _provider_requires_api_key(resolved_provider):
+        return True
     workspace_saved = WorkspaceCredential.objects.filter(
         workspace=workspace,
         user=user,
@@ -665,11 +715,13 @@ def has_workspace_credential(*, user, workspace: Workspace, provider: str) -> bo
 
 
 def workspace_credential_status_map(*, user, workspace: Workspace) -> dict[str, bool]:
+    default_map = {
+        WorkspaceLLMProvider.LOCAL_OLLAMA: True,
+        WorkspaceLLMProvider.OPENAI: False,
+        WorkspaceLLMProvider.OPENROUTER: False,
+    }
     if not user or not getattr(user, "is_authenticated", False):
-        return {
-            WorkspaceLLMProvider.OPENAI: False,
-            WorkspaceLLMProvider.OPENROUTER: False,
-        }
+        return default_map
     providers = set(
         WorkspaceCredential.objects.filter(
             workspace=workspace,
@@ -683,24 +735,29 @@ def workspace_credential_status_map(*, user, workspace: Workspace) -> dict[str, 
     )
     merged = providers | user_providers
     return {
+        **default_map,
         WorkspaceLLMProvider.OPENAI: WorkspaceLLMProvider.OPENAI in merged,
         WorkspaceLLMProvider.OPENROUTER: WorkspaceLLMProvider.OPENROUTER in merged,
     }
 
 
 def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object]:
-    provider = WorkspaceLLMProvider.OPENAI
-    model_name = "gpt-4.1-mini"
+    provider = WorkspaceLLMProvider.LOCAL_OLLAMA
+    model_name = _default_model_name_for_provider(provider)
     max_parallel_workers = 1
 
     setting = UserLLMSetting.objects.filter(user=user).first()
     if setting is not None:
         provider = _normalise_provider(setting.provider)
-        model_name = _normalise_model_name(setting.model_name)
-        max_parallel_workers = _normalise_max_parallel_workers(setting.max_parallel_workers)
+        model_name = _normalise_model_name(provider=provider, model_name=setting.model_name)
+        max_parallel_workers = _normalise_workers_for_provider(
+            provider=provider,
+            value=setting.max_parallel_workers,
+        )
 
     cred_map = workspace_credential_status_map(user=user, workspace=workspace)
     credential_last4 = {
+        WorkspaceLLMProvider.LOCAL_OLLAMA: "",
         WorkspaceLLMProvider.OPENAI: "",
         WorkspaceLLMProvider.OPENROUTER: "",
     }
@@ -718,9 +775,17 @@ def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object
         if provider_credential is not None:
             credential_last4[provider_key] = str(provider_credential.key_last4 or "").strip()
 
-    provider_credential = WorkspaceCredential.objects.filter(workspace=workspace, user=user, provider=provider).first()
-    if provider_credential is None:
-        provider_credential = UserLLMCredential.objects.filter(user=user, provider=provider).first()
+    provider_credential = None
+    if _provider_requires_api_key(provider):
+        provider_credential = WorkspaceCredential.objects.filter(workspace=workspace, user=user, provider=provider).first()
+        if provider_credential is None:
+            provider_credential = UserLLMCredential.objects.filter(user=user, provider=provider).first()
+    base_url = ""
+    if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        base_url = str(getattr(settings, "LOCAL_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1") or "").strip()
+    elif provider_credential is not None:
+        base_url = str(provider_credential.base_url or "").strip()
+
     return {
         "provider": provider,
         "model_name": model_name,
@@ -728,7 +793,7 @@ def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object
         "has_provider_credential": bool(cred_map.get(provider)),
         "credentials": cred_map,
         "credential_last4": credential_last4,
-        "base_url": str(provider_credential.base_url or "").strip() if provider_credential else "",
+        "base_url": base_url,
     }
 
 
@@ -752,8 +817,11 @@ def upsert_workspace_llm_setting(
     )
     # Ensure an object exists for older references; not used for runtime defaults.
     resolved_provider = _normalise_provider(provider)
-    resolved_model_name = _normalise_model_name(model_name)
-    resolved_workers = _normalise_max_parallel_workers(max_parallel_workers)
+    resolved_model_name = _normalise_model_name(provider=resolved_provider, model_name=model_name)
+    resolved_workers = _normalise_workers_for_provider(
+        provider=resolved_provider,
+        value=max_parallel_workers,
+    )
 
     setting, created = WorkspaceLLMSetting.objects.get_or_create(
         workspace=workspace,
@@ -865,8 +933,11 @@ def upsert_user_llm_setting(
     request=None,
 ) -> UserLLMSetting:
     resolved_provider = _normalise_provider(provider)
-    resolved_model_name = _normalise_model_name(model_name)
-    resolved_workers = _normalise_max_parallel_workers(max_parallel_workers)
+    resolved_model_name = _normalise_model_name(provider=resolved_provider, model_name=model_name)
+    resolved_workers = _normalise_workers_for_provider(
+        provider=resolved_provider,
+        value=max_parallel_workers,
+    )
     setting, created = UserLLMSetting.objects.get_or_create(
         user=actor,
         defaults={

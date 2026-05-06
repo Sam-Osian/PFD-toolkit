@@ -64,14 +64,18 @@ def _normalise_parallel_workers(raw_value) -> int:
 
 def _normalise_model_alias(*, provider: str, model_name: str) -> str:
     cleaned = str(model_name or "").strip()
+    provider_key = str(provider or "").strip().lower()
     if not cleaned:
+        if provider_key == "local_ollama":
+            return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:27b") or "gemma4:27b").strip() or "gemma4:27b"
+        if provider_key == "openrouter":
+            return "openai/gpt-4.1-mini"
         return "gpt-4.1-mini"
     aliases = {
         "gpt-4.1": "gpt-5.4",
         "openai/gpt-4.1": "openai/gpt-5.4",
     }
     resolved = aliases.get(cleaned, cleaned)
-    provider_key = str(provider or "").strip().lower()
     if provider_key == "openai" and resolved.startswith("openai/"):
         return resolved.split("/", 1)[1]
     if provider_key == "openrouter" and "/" not in resolved:
@@ -79,7 +83,10 @@ def _normalise_model_alias(*, provider: str, model_name: str) -> str:
     return resolved
 
 
-def _resolve_reasoning_effort(model_name: str) -> str | None:
+def _resolve_reasoning_effort(*, provider: str, model_name: str) -> str | None:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == "local_ollama":
+        return "none"
     model = str(model_name or "").strip().lower()
     if model in {"gpt-5.4", "gpt-5.4-2026-03-05", "openai/gpt-5.4"}:
         return "none"
@@ -87,44 +94,56 @@ def _resolve_reasoning_effort(model_name: str) -> str | None:
 
 
 def _build_llm_kwargs(*, run, config: dict) -> dict:
-    provider = str(config.get("provider", "openai")).strip().lower()
+    provider = str(config.get("provider", "local_ollama")).strip().lower()
     model_name = _normalise_model_alias(
         provider=provider,
-        model_name=(config.get("model_name") or "gpt-4.1-mini").strip(),
+        model_name=(config.get("model_name") or "").strip(),
     )
     timeout = int(config.get("llm_timeout_seconds") or LLM_REQUEST_TIMEOUT_SECONDS)
-    try:
-        api_key, saved_base_url = resolve_workspace_credential(
-            user=run.requested_by,
-            workspace=run.workspace,
-            provider=provider,
-        )
-    except WorkspaceCredentialValidationError as exc:
-        raise AdapterConfigurationError(str(exc)) from exc
-
-    if provider == "openrouter":
+    if provider == "local_ollama":
         base_url = (
-            (config.get("openrouter_base_url") or "").strip()
-            or (saved_base_url or "").strip()
-            or OPENROUTER_API_BASE
-        )
-    else:
-        base_url = (
-            (config.get("openai_base_url") or "").strip()
-            or (saved_base_url or "").strip()
+            (config.get("local_ollama_base_url") or "").strip()
+            or str(getattr(settings, "LOCAL_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1") or "").strip()
             or None
         )
+        api_key = str(getattr(settings, "LOCAL_OLLAMA_API_KEY", "ollama") or "").strip() or "ollama"
+        max_workers = max(1, int(getattr(settings, "LOCAL_OLLAMA_MAX_PARALLEL_WORKERS", 1) or 1))
+    elif provider in {"openai", "openrouter"}:
+        try:
+            api_key, saved_base_url = resolve_workspace_credential(
+                user=run.requested_by,
+                workspace=run.workspace,
+                provider=provider,
+            )
+        except WorkspaceCredentialValidationError as exc:
+            raise AdapterConfigurationError(str(exc)) from exc
+
+        if provider == "openrouter":
+            base_url = (
+                (config.get("openrouter_base_url") or "").strip()
+                or (saved_base_url or "").strip()
+                or OPENROUTER_API_BASE
+            )
+        else:
+            base_url = (
+                (config.get("openai_base_url") or "").strip()
+                or (saved_base_url or "").strip()
+                or None
+            )
+        max_workers = _normalise_parallel_workers(config.get("max_parallel_workers"))
+    else:
+        raise AdapterConfigurationError(f"Unsupported provider '{provider}'.")
 
     kwargs = {
         "api_key": api_key,
         "model": model_name,
-        "max_workers": _normalise_parallel_workers(config.get("max_parallel_workers")),
+        "max_workers": max_workers,
         "temperature": 0.0,
         "validation_attempts": 2,
         "seed": 123,
         "timeout": timeout,
     }
-    reasoning_effort = _resolve_reasoning_effort(model_name)
+    reasoning_effort = _resolve_reasoning_effort(provider=provider, model_name=model_name)
     if reasoning_effort:
         kwargs["reasoning_effort"] = reasoning_effort
     if base_url:

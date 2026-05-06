@@ -160,8 +160,10 @@
     class="wz-back"
     id="wizard"
     aria-hidden="true"
+    data-cred-local-ollama="{% if active_llm_config and active_llm_config.credentials.local_ollama %}1{% else %}0{% endif %}"
     data-cred-openai="{% if active_llm_config and active_llm_config.credentials.openai %}1{% else %}0{% endif %}"
     data-cred-openrouter="{% if active_llm_config and active_llm_config.credentials.openrouter %}1{% else %}0{% endif %}"
+    data-cred-last4-local-ollama="{% if active_llm_config %}{{ active_llm_config.credential_last4.local_ollama|default:'' }}{% endif %}"
     data-cred-last4-openai="{% if active_llm_config %}{{ active_llm_config.credential_last4.openai|default:'' }}{% endif %}"
     data-cred-last4-openrouter="{% if active_llm_config %}{{ active_llm_config.credential_last4.openrouter|default:'' }}{% endif %}"
 >
@@ -406,64 +408,24 @@
                             </div>
                         </div>
                         <div class="wz-pv">
-                            <div class="wz-ai-row">
-                                <div class="pk">AI configuration</div>
-                                <button type="button" class="btn btn-secondary sm wz-ai-open" id="wz-ai-open">AI configuration</button>
+                            <div class="pk">AI route</div>
+                            <div class="pv">
+                                {% if active_llm_config and active_llm_config.provider == "local_ollama" %}
+                                    Our server
+                                {% else %}
+                                    OpenAI server
+                                {% endif %}
                             </div>
-                            <input type="hidden" name="provider" id="wz-provider-input" value="{{ active_llm_config.provider|default:'openai' }}">
+                            <input type="hidden" name="provider" id="wz-provider-input" value="{% if active_llm_config and active_llm_config.provider == 'local_ollama' %}local_ollama{% else %}openai{% endif %}">
+                            <input type="hidden" name="model_name" id="wz-model-select" value="{{ active_llm_config.model_name|default:'gemma4:27b' }}">
+                            <input type="hidden" name="max_parallel_workers" value="{{ active_llm_config.max_parallel_workers|default:1 }}">
+                            <input type="hidden" name="api_key" id="wz-api-key-input" value="">
+                            <input type="hidden" name="base_url" id="wz-base-url-input" value="">
                             <input type="hidden" name="save_api_key" value="on">
                             <input type="hidden" name="notify_on" value="any">
                         </div>
                     </div>
                 </section>
-            </div>
-            <div class="wz-ai-pop" id="wz-ai-pop" aria-hidden="true">
-                <div class="wz-ai-pop-k">AI configuration</div>
-                <div class="wz-review-compact">
-                    <div class="seg-pick wz-provider-pick wz-provider-pick-compact">
-                        <button type="button" class="{% if not active_llm_config or active_llm_config.provider == 'openai' %}on{% endif %}" data-provider="openai">OpenAI</button>
-                        <button type="button" class="{% if active_llm_config and active_llm_config.provider == 'openrouter' %}on{% endif %}" data-provider="openrouter">OpenRouter</button>
-                    </div>
-                    <select id="wz-model-select" name="model_name" class="wz-review-control">
-                        {% if active_llm_config and active_llm_config.provider == "openrouter" %}
-                            <option value="openai/gpt-4.1-mini" {% if active_llm_config.model_name == "openai/gpt-4.1-mini" or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
-                            <option value="openai/gpt-5.4" {% if active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" or active_llm_config.model_name == "gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
-                        {% else %}
-                            <option value="gpt-4.1-mini" {% if not active_llm_config or active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
-                            <option value="gpt-5.4" {% if active_llm_config and active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "gpt-4.1" or active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
-                        {% endif %}
-                    </select>
-                    <div class="wz-review-inline">
-                        <input
-                            type="number"
-                            name="max_parallel_workers"
-                            min="1"
-                            max="32"
-                            value="{{ active_llm_config.max_parallel_workers|default:1 }}"
-                            class="wz-review-control"
-                            aria-label="Concurrency"
-                        >
-                        <label class="wz-inline-field">
-                            <span>API key</span>
-                            <input
-                                type="password"
-                                name="api_key"
-                                autocomplete="off"
-                                placeholder="Paste provider API key"
-                                class="wz-review-control"
-                                aria-label="Provider API key"
-                            >
-                        </label>
-                    </div>
-                    <input
-                        type="url"
-                        name="base_url"
-                        value="{{ active_llm_config.base_url|default:'' }}"
-                        placeholder="https://... (optional provider base URL)"
-                        class="wz-review-control"
-                        aria-label="Provider base URL"
-                    >
-                </div>
             </div>
 
             <div class="wz-foot">
@@ -497,10 +459,10 @@
     class="llm-pop-back"
     id="llm-pop-back"
     aria-hidden="true"
+    data-cred-local-ollama="{% if active_llm_config and active_llm_config.credentials.local_ollama %}1{% else %}0{% endif %}"
     data-cred-openai="{% if active_llm_config and active_llm_config.credentials.openai %}1{% else %}0{% endif %}"
-    data-cred-openrouter="{% if active_llm_config and active_llm_config.credentials.openrouter %}1{% else %}0{% endif %}"
+    data-cred-last4-local-ollama="{% if active_llm_config %}{{ active_llm_config.credential_last4.local_ollama|default:'' }}{% endif %}"
     data-cred-last4-openai="{% if active_llm_config %}{{ active_llm_config.credential_last4.openai|default:'' }}{% endif %}"
-    data-cred-last4-openrouter="{% if active_llm_config %}{{ active_llm_config.credential_last4.openrouter|default:'' }}{% endif %}"
 >
     <div class="llm-pop" role="dialog" aria-labelledby="llm-pop-title">
         <div class="llm-pop-head">
@@ -516,39 +478,43 @@
             <div class="llm-pop-body">
                 <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
                 <div class="field">
-                    <label>Provider</label>
-                    <div class="seg-pick" id="llm-pop-provider-pick" style="grid-template-columns:1fr 1fr">
-                        <button type="button" data-provider="openai">OpenAI</button>
-                        <button type="button" data-provider="openrouter">OpenRouter</button>
+                    <label>Route</label>
+                    <div class="route-toggle" id="llm-pop-provider-pick" role="group" aria-label="LLM route">
+                        <button type="button" data-provider="local_ollama">Our server</button>
+                        <button type="button" data-provider="openai">OpenAI server</button>
                     </div>
-                    <input type="hidden" name="provider" id="llm-pop-provider" value="{{ active_llm_config.provider|default:'openai' }}">
+                    <input type="hidden" name="provider" id="llm-pop-provider" value="{% if active_llm_config and active_llm_config.provider == 'local_ollama' %}local_ollama{% else %}openai{% endif %}">
                 </div>
-                <div class="field">
-                    <label for="llm-pop-model">Preferred model</label>
-                    <select id="llm-pop-model" name="model_name">
-                        <option value="gpt-4.1-mini" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
-                        <option value="gpt-5.4" {% if active_llm_config and active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "gpt-4.1" or active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label for="llm-pop-workers">Concurrency (max workers)</label>
-                    <input id="llm-pop-workers" type="number" name="max_parallel_workers" min="1" max="32" step="1" value="{{ active_llm_config.max_parallel_workers|default:1 }}">
-                </div>
-                <div class="field">
-                    <label for="llm-pop-api-key">API key <span class="wz-optional">optional if already saved</span></label>
-                    <input id="llm-pop-api-key" type="password" name="api_key" autocomplete="off" placeholder="Paste key to update saved credential">
-                </div>
-                <div class="field">
-                    <label for="llm-pop-base-url">Base URL override <span class="wz-optional">optional</span></label>
-                    <input id="llm-pop-base-url" type="url" name="base_url" value="{{ active_llm_config.base_url|default:'' }}" placeholder="https://...">
+                <div id="llm-pop-openai-fields">
+                    <div class="field">
+                        <label for="llm-pop-model">Preferred model</label>
+                        <select id="llm-pop-model" name="model_name">
+                            <option value="gpt-4.1-mini" {% if active_llm_config and active_llm_config.model_name == "gpt-4.1-mini" %}selected{% endif %}>Standard (faster, lower cost)</option>
+                            <option value="gpt-5.4" {% if active_llm_config and active_llm_config.model_name == "gpt-5.4" or active_llm_config.model_name == "gpt-4.1" or active_llm_config.model_name == "openai/gpt-5.4" or active_llm_config.model_name == "openai/gpt-4.1" %}selected{% endif %}>Advanced (best quality)</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="llm-pop-workers">Concurrency (max workers)</label>
+                        <input id="llm-pop-workers" type="number" name="max_parallel_workers" min="1" max="32" step="1" value="{{ active_llm_config.max_parallel_workers|default:1 }}">
+                    </div>
+                    <div class="field">
+                        <label for="llm-pop-api-key">OpenAI API key <span class="wz-optional">optional if already saved</span></label>
+                        <input id="llm-pop-api-key" type="password" name="api_key" autocomplete="off" placeholder="Paste key to update saved credential">
+                    </div>
+                    <div class="field">
+                        <label for="llm-pop-base-url">Base URL override <span class="wz-optional">optional</span></label>
+                        <input id="llm-pop-base-url" type="url" name="base_url" value="{{ active_llm_config.base_url|default:'' }}" placeholder="https://...">
+                    </div>
                 </div>
             </div>
             <div class="llm-pop-foot">
                 <span class="llm-status{% if active_llm_config and active_llm_config.has_provider_credential %} ok{% endif %}" id="llm-pop-status">
-                    {% if active_llm_config and active_llm_config.has_provider_credential %}
-                        Saved credential detected for {{ active_llm_config.provider|default:"openai" }}.
+                    {% if active_llm_config and active_llm_config.provider == "local_ollama" %}
+                        Our server is selected. No API key required.
+                    {% elif active_llm_config and active_llm_config.has_provider_credential %}
+                        Saved credential detected for OpenAI.
                     {% else %}
-                        No saved credential for selected provider.
+                        No saved OpenAI credential.
                     {% endif %}
                 </span>
                 <div style="display:flex; gap:8px; align-items:center;">
@@ -801,6 +767,10 @@ document.addEventListener("DOMContentLoaded", function() {
     e: "{% url 'explore' %}",
     c: "{% url 'collection-list' %}",
   };
+  const providerNeedsCredential = function(providerValue) {
+    const key = String(providerValue || "").trim().toLowerCase();
+    return key === "openai";
+  };
 
   const isTypingTarget = function(target) {
     if (!target || !(target instanceof Element)) return false;
@@ -1015,7 +985,8 @@ document.addEventListener("DOMContentLoaded", function() {
   };
 
   const isLaunchReadyInUi = function() {
-    const provider = String(providerInput?.value || "openai").trim().toLowerCase();
+    const provider = String(providerInput?.value || "local_ollama").trim().toLowerCase();
+    if (!providerNeedsCredential(provider)) return true;
     const typedKey = String(apiKeyInput?.value || "").trim();
     const hasSaved = hasSavedCredentialForProvider(provider);
     return Boolean(hasSaved || typedKey);
@@ -1121,20 +1092,16 @@ document.addEventListener("DOMContentLoaded", function() {
       return "Add at least one complete extract row: name, description, and type.";
     }
     if (isFinalWizardStep() && !isLaunchReadyInUi()) {
-      return "Configure your AI model before launching.";
+      return "Configure OpenAI in LLM config before launching.";
     }
     return "";
   };
 
   const normaliseModelForProvider = function(providerValue, rawModel) {
-    const provider = String(providerValue || "openai").trim().toLowerCase();
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
     const model = String(rawModel || "").trim();
-    if (provider === "openrouter") {
-      if (model === "gpt-4.1-mini") return "openai/gpt-4.1-mini";
-      if (model === "gpt-4.1") return "openai/gpt-5.4";
-      if (model === "gpt-5.4") return "openai/gpt-5.4";
-      if (model === "openai/gpt-4.1") return "openai/gpt-5.4";
-      return model || "openai/gpt-4.1-mini";
+    if (provider === "local_ollama") {
+      return model || "gemma4:27b";
     }
     if (model === "openai/gpt-4.1-mini") return "gpt-4.1-mini";
     if (model === "openai/gpt-4.1" || model === "openai/gpt-5.4") return "gpt-5.4";
@@ -1144,22 +1111,39 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const setWizardModelOptions = function(providerValue, preferredModel) {
     if (!modelSelect) return;
-    const provider = String(providerValue || "openai").trim().toLowerCase();
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
     const selectedModel = normaliseModelForProvider(provider, preferredModel);
-    if (provider === "openrouter") {
-      modelSelect.innerHTML = '<option value="openai/gpt-4.1-mini">Standard (faster, lower cost)</option><option value="openai/gpt-5.4">Advanced (best quality)</option>';
+    if (modelSelect instanceof HTMLInputElement) {
+      modelSelect.value = selectedModel;
+      return;
+    }
+    if (provider === "local_ollama") {
+      modelSelect.innerHTML = '<option value="gemma4:27b">Gemma 4 27B (local)</option>';
     } else {
       modelSelect.innerHTML = '<option value="gpt-4.1-mini">Standard (faster, lower cost)</option><option value="gpt-5.4">Advanced (best quality)</option>';
     }
     modelSelect.value = selectedModel;
-    if (!modelSelect.value) {
-      modelSelect.selectedIndex = 0;
-    }
+    if (!modelSelect.value) modelSelect.selectedIndex = 0;
   };
 
   const syncWizardCredentialMaskForProvider = function(providerValue) {
     if (!apiKeyInput) return;
-    const provider = String(providerValue || "openai").trim().toLowerCase();
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
+    if (!providerNeedsCredential(provider)) {
+      apiKeyInput.value = "";
+      apiKeyInput.setAttribute("disabled", "disabled");
+      apiKeyInput.removeAttribute("data-masked");
+      apiKeyInput.placeholder = "Not required for local route";
+      if (workersInput) workersInput.value = "1";
+      if (baseUrlInput) {
+        baseUrlInput.placeholder = "http://127.0.0.1:11434/v1 (optional override)";
+      }
+      return;
+    }
+    apiKeyInput.removeAttribute("disabled");
+    if (baseUrlInput) {
+      baseUrlInput.placeholder = "https://... (optional provider base URL)";
+    }
     const hasSaved = hasSavedCredentialForProvider(provider);
     const last4 = credentialLast4ForProvider(provider);
     if (!hasSaved) {
@@ -1348,7 +1332,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (options && typeof options === "object" && options.step) {
       wizardStep = wizardStepIndexFromKey(options.step);
     }
-    const selectedProvider = String(providerInput?.value || "openai").toLowerCase();
+    const selectedProvider = String(providerInput?.value || "local_ollama").toLowerCase();
     applyProviderButtonState(wizardOverlay?.querySelector(".wz-provider-pick"), selectedProvider);
     setWizardModelOptions(selectedProvider, modelSelect?.value || "");
     if (workersInput && !String(workersInput.value || "").trim()) {
@@ -1438,8 +1422,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const llmPopProviderPick = document.getElementById("llm-pop-provider-pick");
   const llmPopProvider = document.getElementById("llm-pop-provider");
   const llmPopStatus = document.getElementById("llm-pop-status");
+  const llmPopModel = document.getElementById("llm-pop-model");
   const llmPopApiKey = document.getElementById("llm-pop-api-key");
   const llmPopClearOpen = document.getElementById("llm-pop-clear-open");
+  const llmPopOpenaiFields = document.getElementById("llm-pop-openai-fields");
   const llmClearDialog = document.getElementById("dlg-llm-clear");
   const llmClearProvider = document.getElementById("llm-clear-provider");
   const llmClearCloseButtons = llmClearDialog ? llmClearDialog.querySelectorAll("[data-llm-clear-close]") : [];
@@ -1448,17 +1434,17 @@ document.addEventListener("DOMContentLoaded", function() {
   const userNoticeVersion = String(userNoticeBack?.dataset.noticeVersion || "v1").trim() || "v1";
   const userNoticeSeenKey = `pfd_user_notice_${userNoticeVersion}_seen`;
   const credentialMap = {
+    local_ollama: String(llmPopBack?.dataset.credLocalOllama || "0") === "1",
     openai: String(llmPopBack?.dataset.credOpenai || "0") === "1",
-    openrouter: String(llmPopBack?.dataset.credOpenrouter || "0") === "1",
   };
   const credentialLast4Map = {
+    local_ollama: String(llmPopBack?.dataset.credLast4LocalOllama || "").trim(),
     openai: String(llmPopBack?.dataset.credLast4Openai || "").trim(),
-    openrouter: String(llmPopBack?.dataset.credLast4Openrouter || "").trim(),
   };
   const maskedCredentialValue = "********";
-
   const hasSavedCredentialForProvider = function(providerValue) {
     const key = String(providerValue || "").trim().toLowerCase();
+    if (!providerNeedsCredential(key)) return true;
     return Boolean(credentialMap[key]);
   };
 
@@ -1469,6 +1455,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const syncLlmCredentialMaskForProvider = function(providerValue) {
     if (!llmPopApiKey) return;
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
+    if (!providerNeedsCredential(provider)) {
+      llmPopApiKey.value = "";
+      llmPopApiKey.setAttribute("disabled", "disabled");
+      llmPopApiKey.removeAttribute("data-masked");
+      llmPopApiKey.placeholder = "Not required for local route";
+      return;
+    }
+    llmPopApiKey.removeAttribute("disabled");
     const hasSaved = hasSavedCredentialForProvider(providerValue);
     const last4 = credentialLast4ForProvider(providerValue);
     if (!hasSaved) {
@@ -1484,17 +1479,43 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const syncLlmStatusForProvider = function(providerValue) {
     if (!llmPopStatus) return;
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
+    if (!providerNeedsCredential(provider)) {
+      if (llmPopClearOpen) llmPopClearOpen.disabled = true;
+      llmPopStatus.classList.add("ok");
+      llmPopStatus.textContent = "Our server is selected. No API key required.";
+      return;
+    }
     const hasSaved = hasSavedCredentialForProvider(providerValue);
     if (llmPopClearOpen) llmPopClearOpen.disabled = !hasSaved;
     llmPopStatus.classList.toggle("ok", hasSaved);
     llmPopStatus.textContent = hasSaved
-      ? (`Saved credential detected for ${providerValue}.`)
-      : "No saved credential for selected provider.";
+      ? "Saved credential detected for OpenAI."
+      : "No saved OpenAI credential.";
+  };
+
+  const setLlmPopModelOptions = function(providerValue, preferredModel) {
+    if (!llmPopModel) return;
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
+    const selectedModel = normaliseModelForProvider(provider, preferredModel);
+    if (provider === "local_ollama") {
+      llmPopModel.innerHTML = '<option value="gemma4:27b">Gemma 4 27B (local)</option>';
+    } else {
+      llmPopModel.innerHTML = '<option value="gpt-4.1-mini">Standard (faster, lower cost)</option><option value="gpt-5.4">Advanced (best quality)</option>';
+    }
+    llmPopModel.value = selectedModel;
+    if (!llmPopModel.value) llmPopModel.selectedIndex = 0;
+  };
+
+  const syncLlmFieldVisibilityForProvider = function(providerValue) {
+    if (!llmPopOpenaiFields) return;
+    const provider = String(providerValue || "local_ollama").trim().toLowerCase();
+    llmPopOpenaiFields.style.display = provider === "openai" ? "grid" : "none";
   };
 
   const applyProviderButtonState = function(container, providerValue) {
     if (!container) return;
-    const providerKey = String(providerValue || "openai").trim().toLowerCase();
+    const providerKey = String(providerValue || "local_ollama").trim().toLowerCase();
     container.querySelectorAll("button[data-provider]").forEach(function(button) {
       button.classList.toggle("on", String(button.getAttribute("data-provider") || "").toLowerCase() === providerKey);
     });
@@ -1504,7 +1525,9 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!llmPopBack) return;
     llmPopBack.classList.add("on");
     llmPopBack.setAttribute("aria-hidden", "false");
-    const selectedProvider = String(llmPopProvider?.value || "openai").toLowerCase();
+    const selectedProvider = String(llmPopProvider?.value || "local_ollama").toLowerCase();
+    setLlmPopModelOptions(selectedProvider, llmPopModel?.value || "");
+    syncLlmFieldVisibilityForProvider(selectedProvider);
     syncLlmCredentialMaskForProvider(selectedProvider);
     syncLlmStatusForProvider(selectedProvider);
   };
@@ -1527,17 +1550,21 @@ document.addEventListener("DOMContentLoaded", function() {
   if (llmPopProviderPick) {
     llmPopProviderPick.querySelectorAll("button[data-provider]").forEach(function(button) {
       button.addEventListener("click", function() {
-        const selected = String(button.getAttribute("data-provider") || "openai").toLowerCase();
+        const selected = String(button.getAttribute("data-provider") || "local_ollama").toLowerCase();
         if (llmPopProvider) llmPopProvider.value = selected;
         applyProviderButtonState(llmPopProviderPick, selected);
+        setLlmPopModelOptions(selected, llmPopModel?.value || "");
+        syncLlmFieldVisibilityForProvider(selected);
         syncLlmCredentialMaskForProvider(selected);
         syncLlmStatusForProvider(selected);
       });
     });
   }
-  applyProviderButtonState(llmPopProviderPick, llmPopProvider?.value || "openai");
-  syncLlmCredentialMaskForProvider(llmPopProvider?.value || "openai");
-  syncLlmStatusForProvider(llmPopProvider?.value || "openai");
+  applyProviderButtonState(llmPopProviderPick, llmPopProvider?.value || "local_ollama");
+  setLlmPopModelOptions(llmPopProvider?.value || "local_ollama", llmPopModel?.value || "");
+  syncLlmFieldVisibilityForProvider(llmPopProvider?.value || "local_ollama");
+  syncLlmCredentialMaskForProvider(llmPopProvider?.value || "local_ollama");
+  syncLlmStatusForProvider(llmPopProvider?.value || "local_ollama");
 
   const openUserNotice = function() {
     if (!userNoticeBack) return;
@@ -1576,7 +1603,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const openLlmClearDialog = function() {
     if (!llmClearDialog) return;
-    const selectedProvider = String(llmPopProvider?.value || "openai").toLowerCase();
+    const selectedProvider = String(llmPopProvider?.value || "local_ollama").toLowerCase();
     if (!hasSavedCredentialForProvider(selectedProvider)) return;
     if (llmClearProvider) llmClearProvider.value = selectedProvider;
     llmClearDialog.classList.add("on");
@@ -1702,7 +1729,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
   wizardOverlay?.querySelectorAll(".wz-provider-pick button").forEach(function(button) {
     button.addEventListener("click", function() {
-      const selectedProvider = String(button.getAttribute("data-provider") || "openai").toLowerCase();
+      const selectedProvider = String(button.getAttribute("data-provider") || "local_ollama").toLowerCase();
       applyProviderButtonState(wizardOverlay?.querySelector(".wz-provider-pick"), selectedProvider);
       if (providerInput) providerInput.value = selectedProvider;
       setWizardModelOptions(selectedProvider, modelSelect?.value || "");
@@ -1769,6 +1796,11 @@ document.addEventListener("DOMContentLoaded", function() {
     });
   });
   wizardForm?.addEventListener("submit", function(event) {
+    const selectedProvider = String(providerInput?.value || "local_ollama").trim().toLowerCase();
+    if (!providerNeedsCredential(selectedProvider) && apiKeyInput) {
+      apiKeyInput.value = "";
+      apiKeyInput.removeAttribute("data-masked");
+    }
     if (apiKeyInput?.getAttribute("data-masked") === "1") {
       apiKeyInput.value = "";
       apiKeyInput.removeAttribute("data-masked");

@@ -306,11 +306,14 @@ class InvestigationWizardReviewForm(forms.Form):
         required=True,
     )
     provider = forms.ChoiceField(
-        choices=WorkspaceLLMProvider.choices,
-        initial=WorkspaceLLMProvider.OPENAI,
+        choices=(
+            (WorkspaceLLMProvider.LOCAL_OLLAMA, "Our server"),
+            (WorkspaceLLMProvider.OPENAI, "OpenAI server"),
+        ),
+        initial=WorkspaceLLMProvider.LOCAL_OLLAMA,
         required=False,
     )
-    model_name = forms.CharField(required=False, initial="gpt-4.1-mini")
+    model_name = forms.CharField(required=False, initial="gemma4:27b")
     max_parallel_workers = forms.IntegerField(
         required=False,
         min_value=1,

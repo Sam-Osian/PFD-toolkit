@@ -19,6 +19,7 @@ from .models import (
     ArtifactStorageBackend,
     ArtifactType,
     InvestigationRun,
+    RunApprovalStatus,
     RunStatus,
     RunType,
     RunArtifact,
@@ -117,6 +118,15 @@ NON_TRANSIENT_ERROR_SNIPPETS = (
     "insufficient quota",
 )
 
+WORKER_ROUTE_MODE_ALL = "all"
+WORKER_ROUTE_MODE_LOCAL = "local"
+WORKER_ROUTE_MODE_API = "api"
+WORKER_ROUTE_MODE_ALLOWED = {
+    WORKER_ROUTE_MODE_ALL,
+    WORKER_ROUTE_MODE_LOCAL,
+    WORKER_ROUTE_MODE_API,
+}
+
 
 def _reload_run(run_id):
     return InvestigationRun.objects.select_related("workspace", "investigation").get(id=run_id)
@@ -150,6 +160,21 @@ def _retry_jitter_pct() -> int:
 
 def _artifact_retention_days() -> int:
     return max(1, int(getattr(settings, "ARTIFACT_RETENTION_DAYS", 365)))
+
+
+def _normalise_worker_route_mode(route_mode: str | None) -> str:
+    configured = str(route_mode or getattr(settings, "RUN_WORKER_ROUTE_MODE", WORKER_ROUTE_MODE_ALL) or "").strip().lower()
+    if configured not in WORKER_ROUTE_MODE_ALLOWED:
+        return WORKER_ROUTE_MODE_ALL
+    return configured
+
+
+def _apply_route_mode_filter(queryset, *, route_mode: str):
+    if route_mode == WORKER_ROUTE_MODE_LOCAL:
+        return queryset.filter(input_config_json__provider="local_ollama")
+    if route_mode == WORKER_ROUTE_MODE_API:
+        return queryset.exclude(input_config_json__provider="local_ollama")
+    return queryset
 
 
 def _stage_timeout_seconds() -> int:
@@ -423,17 +448,29 @@ def _cancel_requested(run) -> bool:
 
 
 @transaction.atomic
-def claim_next_runnable_run(worker_id: str) -> InvestigationRun | None:
+def claim_next_runnable_run(worker_id: str, *, route_mode: str | None = None) -> InvestigationRun | None:
     now = timezone.now()
-    run = (
+    resolved_route_mode = _normalise_worker_route_mode(route_mode)
+    approval_gate = Q(requires_approval=False) | Q(
+        requires_approval=True,
+        approval_status=RunApprovalStatus.APPROVED,
+    )
+    candidates = (
         InvestigationRun.objects.select_for_update(skip_locked=True)
         .filter(
             Q(status=RunStatus.CANCELLING)
-            | Q(status=RunStatus.QUEUED, queued_at__lte=now)
+            | Q(
+                status=RunStatus.QUEUED,
+                queued_at__lte=now,
+            )
         )
-        .order_by("queued_at", "created_at")
-        .first()
+        .filter(Q(status=RunStatus.CANCELLING) | approval_gate)
     )
+    candidates = _apply_route_mode_filter(
+        candidates,
+        route_mode=resolved_route_mode,
+    )
+    run = candidates.order_by("queued_at", "created_at").first()
     if run is None:
         return None
 
@@ -817,12 +854,17 @@ def _execute_run(run: InvestigationRun, sleep_between_stages_seconds: float = 0.
     )
 
 
-def reconcile_timed_out_runs(*, worker_id: str | None = None) -> int:
+def reconcile_timed_out_runs(*, worker_id: str | None = None, route_mode: str | None = None) -> int:
     effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    resolved_route_mode = _normalise_worker_route_mode(route_mode)
     count = 0
     runs = InvestigationRun.objects.filter(
         status__in=[RunStatus.STARTING, RunStatus.RUNNING],
         finished_at__isnull=True,
+    )
+    runs = _apply_route_mode_filter(
+        runs,
+        route_mode=resolved_route_mode,
     ).order_by("queued_at")
     for run in runs:
         run.worker_id = run.worker_id or effective_worker_id
@@ -846,12 +888,14 @@ def reconcile_timed_out_runs(*, worker_id: str | None = None) -> int:
 def process_single_available_run(
     *,
     worker_id: str | None = None,
+    route_mode: str | None = None,
     sleep_between_stages_seconds: float = 0.0,
 ) -> InvestigationRun | None:
     effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    resolved_route_mode = _normalise_worker_route_mode(route_mode)
     _record_worker_heartbeat(worker_id=effective_worker_id, state="polling")
-    reconcile_timed_out_runs(worker_id=effective_worker_id)
-    run = claim_next_runnable_run(effective_worker_id)
+    reconcile_timed_out_runs(worker_id=effective_worker_id, route_mode=resolved_route_mode)
+    run = claim_next_runnable_run(effective_worker_id, route_mode=resolved_route_mode)
     if run is None:
         _record_worker_heartbeat(worker_id=effective_worker_id, state="idle")
         return None
@@ -887,15 +931,18 @@ def process_single_available_run(
 def run_worker_loop(
     *,
     worker_id: str | None = None,
+    route_mode: str | None = None,
     poll_seconds: float = 5.0,
     max_runs: int | None = None,
     sleep_between_stages_seconds: float = 0.0,
 ) -> int:
     effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    resolved_route_mode = _normalise_worker_route_mode(route_mode)
     processed = 0
     while True:
         run = process_single_available_run(
             worker_id=effective_worker_id,
+            route_mode=resolved_route_mode,
             sleep_between_stages_seconds=sleep_between_stages_seconds,
         )
         if run is None:
@@ -909,12 +956,17 @@ def run_worker_loop(
             return processed
 
 
-def finalize_stuck_cancellations(*, worker_id: str | None = None) -> int:
+def finalize_stuck_cancellations(*, worker_id: str | None = None, route_mode: str | None = None) -> int:
     effective_worker_id = worker_id or f"worker-{uuid.uuid4()}"
+    resolved_route_mode = _normalise_worker_route_mode(route_mode)
     count = 0
     cancelling_runs = InvestigationRun.objects.filter(
         status=RunStatus.CANCELLING,
         finished_at__isnull=True,
+    )
+    cancelling_runs = _apply_route_mode_filter(
+        cancelling_runs,
+        route_mode=resolved_route_mode,
     ).order_by("queued_at")
     for run in cancelling_runs:
         run.worker_id = run.worker_id or effective_worker_id

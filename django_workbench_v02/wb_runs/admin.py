@@ -1,6 +1,9 @@
 from django.contrib import admin
+from django.contrib import messages
+from django.utils import timezone
 
 from .models import InvestigationRun, RunArtifact, RunEvent
+from .services import approve_run_for_execution, reject_run_for_execution
 
 
 class RunEventInline(admin.TabularInline):
@@ -26,12 +29,16 @@ class InvestigationRunAdmin(admin.ModelAdmin):
         "workspace",
         "run_type",
         "status",
+        "requires_approval",
+        "approval_status",
+        "approved_by",
+        "approved_at",
         "progress_percent",
         "requested_by",
         "queued_at",
         "updated_at",
     ]
-    list_filter = ["run_type", "status", "queued_at", "updated_at"]
+    list_filter = ["run_type", "status", "requires_approval", "approval_status", "queued_at", "updated_at"]
     search_fields = [
         "id",
         "investigation__title",
@@ -45,9 +52,85 @@ class InvestigationRunAdmin(admin.ModelAdmin):
         "workspace",
         "requested_by",
         "cancel_requested_by",
+        "approved_by",
+        "rejected_by",
     ]
-    readonly_fields = ["created_at", "updated_at", "queued_at", "started_at", "finished_at"]
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "started_at",
+        "finished_at",
+        "approval_requested_at",
+        "approved_at",
+        "rejected_at",
+    ]
+    actions = ["approve_selected_runs_now", "reject_selected_runs"]
     inlines = [RunEventInline, RunArtifactInline]
+
+    @admin.action(description="Approve selected runs now (superuser only)")
+    def approve_selected_runs_now(self, request, queryset):
+        if not request.user.is_superuser:
+            self.message_user(
+                request,
+                "Only superusers can approve runs.",
+                level=messages.ERROR,
+            )
+            return
+        approved = 0
+        skipped = 0
+        for run in queryset.select_related("workspace", "investigation"):
+            try:
+                approve_run_for_execution(
+                    actor=request.user,
+                    run=run,
+                    scheduled_for=run.queued_at or timezone.now(),
+                    request=request,
+                )
+            except Exception:
+                skipped += 1
+            else:
+                approved += 1
+        self.message_user(
+            request,
+            f"Approved {approved} run(s). Skipped {skipped}.",
+            level=messages.SUCCESS if approved else messages.WARNING,
+        )
+
+    @admin.action(description="Reject selected runs (superuser only)")
+    def reject_selected_runs(self, request, queryset):
+        if not request.user.is_superuser:
+            self.message_user(
+                request,
+                "Only superusers can reject runs.",
+                level=messages.ERROR,
+            )
+            return
+        rejected = 0
+        skipped = 0
+        for run in queryset.select_related("workspace", "investigation"):
+            try:
+                reject_run_for_execution(
+                    actor=request.user,
+                    run=run,
+                    reason="Rejected in admin.",
+                    request=request,
+                )
+            except Exception:
+                skipped += 1
+            else:
+                rejected += 1
+        self.message_user(
+            request,
+            f"Rejected {rejected} run(s). Skipped {skipped}.",
+            level=messages.SUCCESS if rejected else messages.WARNING,
+        )
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not request.user.is_superuser:
+            actions.pop("approve_selected_runs_now", None)
+            actions.pop("reject_selected_runs", None)
+        return actions
 
 
 @admin.register(RunEvent)

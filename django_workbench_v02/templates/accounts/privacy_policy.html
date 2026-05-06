@@ -92,7 +92,7 @@
     <section class="legal-section">
         <h2>Who We Share Data With</h2>
         <p>We use service providers for authentication, hosting, database/storage infrastructure, email delivery, and operational support. Authentication is handled through Auth0. Email notifications may be sent through the configured SMTP provider. Run artifacts may be stored in S3-compatible object storage in production.</p>
-        <p>When you run an LLM workflow, relevant prompt text, selected PFD report content, and workflow instructions are sent to the LLM provider you select, currently OpenAI or OpenRouter. Your API key is used to authenticate to that provider and is not intentionally displayed after saving.</p>
+        <p>When you run an LLM workflow, relevant prompt text, selected PFD report content, and workflow instructions are sent through either our server route or OpenAI, depending on your selected configuration. If you select OpenAI, your API key is used to authenticate to OpenAI and is not intentionally displayed after saving.</p>
     </section>
 
     <section class="legal-section">

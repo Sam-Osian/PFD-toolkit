@@ -11,12 +11,12 @@ class RunQueueForm(forms.Form):
     provider = forms.ChoiceField(
         required=False,
         choices=WorkspaceLLMProvider.choices,
-        initial=WorkspaceLLMProvider.OPENAI,
+        initial=WorkspaceLLMProvider.LOCAL_OLLAMA,
         help_text="Provider used for real workflow runs.",
     )
     model_name = forms.CharField(
         required=False,
-        initial="gpt-4.1-mini",
+        initial="gemma4:27b",
         help_text="LLM model name used for this run.",
     )
     api_key = forms.CharField(
@@ -53,16 +53,32 @@ class RunQueueForm(forms.Form):
         config = cleaned.get("input_config_json")
         if not isinstance(config, dict):
             config = {}
-        provider = (cleaned.get("provider") or WorkspaceLLMProvider.OPENAI).strip().lower()
-        if provider not in {WorkspaceLLMProvider.OPENAI, WorkspaceLLMProvider.OPENROUTER}:
-            provider = WorkspaceLLMProvider.OPENAI
+        provider = (cleaned.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
+        if provider not in {
+            WorkspaceLLMProvider.LOCAL_OLLAMA,
+            WorkspaceLLMProvider.OPENAI,
+            WorkspaceLLMProvider.OPENROUTER,
+        }:
+            provider = WorkspaceLLMProvider.LOCAL_OLLAMA
 
-        model_name = (cleaned.get("model_name") or "gpt-4.1-mini").strip() or "gpt-4.1-mini"
+        model_name = (cleaned.get("model_name") or "").strip()
+        if not model_name:
+            if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
+                model_name = "gemma4:27b"
+            elif provider == WorkspaceLLMProvider.OPENROUTER:
+                model_name = "openai/gpt-4.1-mini"
+            else:
+                model_name = "gpt-4.1-mini"
         base_url = (cleaned.get("base_url") or "").strip()
         config["provider"] = provider
         config["model_name"] = model_name
         if base_url:
-            config_key = "openrouter_base_url" if provider == WorkspaceLLMProvider.OPENROUTER else "openai_base_url"
+            if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
+                config_key = "local_ollama_base_url"
+            elif provider == WorkspaceLLMProvider.OPENROUTER:
+                config_key = "openrouter_base_url"
+            else:
+                config_key = "openai_base_url"
             config[config_key] = base_url
 
         cleaned["input_config_json"] = config

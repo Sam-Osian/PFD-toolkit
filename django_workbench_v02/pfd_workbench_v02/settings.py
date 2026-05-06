@@ -350,6 +350,13 @@ RUN_STAGE_TIMEOUT_SECONDS = _env_int("RUN_STAGE_TIMEOUT_SECONDS", 1800)
 RUN_TOTAL_TIMEOUT_SECONDS = _env_int("RUN_TOTAL_TIMEOUT_SECONDS", 28800)
 RUN_STUCK_THRESHOLD_SECONDS = _env_int("RUN_STUCK_THRESHOLD_SECONDS", 1800)
 WORKER_HEARTBEAT_STALE_SECONDS = _env_int("WORKER_HEARTBEAT_STALE_SECONDS", 120)
+RUN_WORKER_ROUTE_MODE = str(os.getenv("RUN_WORKER_ROUTE_MODE", "all") or "all").strip().lower()
+
+# Local Ollama defaults (DGX/local-host execution route).
+LOCAL_OLLAMA_BASE_URL = str(os.getenv("LOCAL_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1") or "").strip()
+LOCAL_OLLAMA_MODEL_DEFAULT = str(os.getenv("LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:27b") or "").strip() or "gemma4:27b"
+LOCAL_OLLAMA_API_KEY = str(os.getenv("LOCAL_OLLAMA_API_KEY", "ollama") or "").strip() or "ollama"
+LOCAL_OLLAMA_MAX_PARALLEL_WORKERS = _env_int("LOCAL_OLLAMA_MAX_PARALLEL_WORKERS", 1)
 
 # Performance instrumentation (MVP baseline)
 # Logs warnings for slow requests/queries via standard Django logging handlers.

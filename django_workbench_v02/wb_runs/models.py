@@ -24,6 +24,13 @@ class RunStatus(models.TextChoices):
     TIMED_OUT = "timed_out", "Timed out"
 
 
+class RunApprovalStatus(models.TextChoices):
+    NOT_REQUIRED = "not_required", "Not required"
+    PENDING = "pending", "Pending approval"
+    APPROVED = "approved", "Approved"
+    REJECTED = "rejected", "Rejected"
+
+
 class RunEventType(models.TextChoices):
     STAGE = "stage", "Stage"
     PROGRESS = "progress", "Progress"
@@ -96,6 +103,30 @@ class InvestigationRun(models.Model):
     error_code = models.CharField(max_length=64, blank=True)
     error_message = models.TextField(blank=True)
     input_config_json = models.JSONField(default=dict)
+    requires_approval = models.BooleanField(default=False)
+    approval_status = models.CharField(
+        max_length=16,
+        choices=RunApprovalStatus.choices,
+        default=RunApprovalStatus.NOT_REQUIRED,
+    )
+    approval_requested_at = models.DateTimeField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_investigation_runs",
+    )
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rejected_investigation_runs",
+    )
+    approval_note = models.TextField(blank=True)
     query_start_date = models.DateField(null=True, blank=True)
     query_end_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
@@ -123,6 +154,10 @@ class InvestigationRun(models.Model):
             models.Index(
                 fields=["status", "queued_at", "created_at"],
                 name="idx_run_stat_queue_cr",
+            ),
+            models.Index(
+                fields=["status", "requires_approval", "approval_status", "queued_at"],
+                name="idx_run_stat_appr_qd",
             ),
             models.Index(
                 fields=["investigation", "-created_at"],

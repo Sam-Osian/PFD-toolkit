@@ -241,6 +241,40 @@ class InvestigationServiceTests(TestCase):
         self.assertFalse(provider_model_check["ready"])
         self.assertIn("Choose one of", provider_model_check["message"])
 
+    def test_launch_readiness_allows_local_ollama_without_saved_credentials(self):
+        inv = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace,
+            title="Local Route",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.DRAFT,
+        )
+        state = InvestigationWizardState(
+            stage="review",
+            title=inv.title,
+            question_text=inv.question_text,
+            run_filter=True,
+            review_config={
+                "provider": "local_ollama",
+                "model_name": "gemma4:27b",
+                "max_parallel_workers": 8,
+            },
+        )
+        readiness = evaluate_investigation_launch_readiness(
+            actor=self.owner,
+            investigation=inv,
+            wizard_state=state,
+        )
+        self.assertTrue(readiness["can_launch"])
+        self.assertEqual(readiness["review"]["provider"], "local_ollama")
+        self.assertEqual(readiness["review"]["model_name"], "gemma4:27b")
+        self.assertEqual(readiness["review"]["max_parallel_workers"], 1)
+        credential_check = next(check for check in readiness["checks"] if check["key"] == "credential")
+        self.assertTrue(credential_check["ready"])
+        self.assertIn("Local Ollama route", credential_check["message"])
+
     def test_launch_readiness_blocks_when_worker_heartbeat_missing(self):
         RunWorkerHeartbeat.objects.all().delete()
         inv = create_investigation(
@@ -962,26 +996,26 @@ class InvestigationModalWizardLaunchTests(TestCase):
 
     def test_modal_launch_updates_user_llm_setting_defaults(self):
         self._launch_modal(
-            provider="openrouter",
-            model_name="openai/gpt-4.1",
+            provider="openai",
+            model_name="gpt-4.1",
             max_parallel_workers="7",
-            api_key="sk-or-test-secret-1234",
+            api_key="sk-test-secret-1234",
         )
         self.owner.refresh_from_db()
-        self.assertEqual(self.owner.llm_setting.provider, "openrouter")
-        self.assertEqual(self.owner.llm_setting.model_name, "openai/gpt-5.4")
+        self.assertEqual(self.owner.llm_setting.provider, "openai")
+        self.assertEqual(self.owner.llm_setting.model_name, "gpt-5.4")
         self.assertEqual(self.owner.llm_setting.max_parallel_workers, 7)
 
     def test_modal_launch_saves_user_credential_for_selected_provider(self):
         self._launch_modal(
-            provider="openrouter",
-            model_name="openai/gpt-4.1-mini",
-            api_key="sk-or-test-secret-5678",
-            base_url="https://openrouter.ai/api/v1",
+            provider="openai",
+            model_name="gpt-4.1-mini",
+            api_key="sk-test-secret-5678",
+            base_url="https://api.openai.com/v1",
         )
-        credential = UserLLMCredential.objects.get(user=self.owner, provider="openrouter")
+        credential = UserLLMCredential.objects.get(user=self.owner, provider="openai")
         self.assertEqual(credential.key_last4, "5678")
-        self.assertEqual(credential.base_url, "https://openrouter.ai/api/v1")
+        self.assertEqual(credential.base_url, "https://api.openai.com/v1")
 
     def test_modal_launch_uses_description_for_workspace_and_investigation(self):
         _, run = self._launch_modal(
@@ -1029,5 +1063,5 @@ class InvestigationModalWizardLaunchTests(TestCase):
             )
         )
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/investigations/", response.url)
+        self.assertIn(f"/workbooks/{workspace.id}/open/", response.url)
         self.assertIn("open_wizard=1", response.url)
