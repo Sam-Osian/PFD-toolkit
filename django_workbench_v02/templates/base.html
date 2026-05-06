@@ -409,14 +409,8 @@
                         </div>
                         <div class="wz-pv">
                             <div class="pk">AI route</div>
-                            <div class="pv">
-                                {% if active_llm_config and active_llm_config.provider == "local_ollama" %}
-                                    Our server
-                                {% else %}
-                                    OpenAI server
-                                {% endif %}
-                            </div>
-                            <input type="hidden" name="provider" id="wz-provider-input" value="{% if active_llm_config and active_llm_config.provider == 'local_ollama' %}local_ollama{% else %}openai{% endif %}">
+                            <div class="pv" id="wz-preview-route">Our server</div>
+                            <input type="hidden" name="provider" id="wz-provider-input" value="local_ollama">
                             <input type="hidden" name="model_name" id="wz-model-select" value="{{ active_llm_config.model_name|default:'gemma4:27b' }}">
                             <input type="hidden" name="max_parallel_workers" value="{{ active_llm_config.max_parallel_workers|default:1 }}">
                             <input type="hidden" name="api_key" id="wz-api-key-input" value="">
@@ -483,7 +477,7 @@
                         <button type="button" data-provider="local_ollama">Our server</button>
                         <button type="button" data-provider="openai">OpenAI server</button>
                     </div>
-                    <input type="hidden" name="provider" id="llm-pop-provider" value="{% if active_llm_config and active_llm_config.provider == 'local_ollama' %}local_ollama{% else %}openai{% endif %}">
+                    <input type="hidden" name="provider" id="llm-pop-provider" value="local_ollama">
                 </div>
                 <div id="llm-pop-openai-fields">
                     <div class="field">
@@ -733,6 +727,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const reviewTitle = document.getElementById("wz-preview-title");
   const reviewQuestion = document.getElementById("wz-preview-q");
   const reviewScope = document.getElementById("wz-preview-scope");
+  const reviewRoute = document.getElementById("wz-preview-route");
   const reviewPipeline = document.getElementById("wz-preview-pipeline");
   const reviewFilterCard = document.getElementById("wz-preview-filter-card");
   const reviewFilterQuery = document.getElementById("wz-preview-filter-query");
@@ -770,6 +765,12 @@ document.addEventListener("DOMContentLoaded", function() {
   const providerNeedsCredential = function(providerValue) {
     const key = String(providerValue || "").trim().toLowerCase();
     return key === "openai";
+  };
+
+  const providerLabelForDisplay = function(providerValue) {
+    const key = String(providerValue || "").trim().toLowerCase();
+    if (key === "openai") return "OpenAI server";
+    return "Our server";
   };
 
   const isTypingTarget = function(target) {
@@ -924,56 +925,8 @@ document.addEventListener("DOMContentLoaded", function() {
     return Boolean(runFilterInput?.checked || runThemesInput?.checked || runExtractInput?.checked);
   };
 
-  const saveWizardDraft = function() {
-    if (!wizardOverlay || !wizardForm) return;
-    const data = new FormData(wizardForm);
-    const payload = {};
-    const skippedDraftFields = new Set(["api_key", "csrfmiddlewaretoken"]);
-    data.forEach(function(value, key) {
-      if (skippedDraftFields.has(String(key))) return;
-      if (payload[key] !== undefined) {
-        if (Array.isArray(payload[key])) payload[key].push(value);
-        else payload[key] = [payload[key], value];
-      } else {
-        payload[key] = value;
-      }
-    });
-    payload.__wizard_step = wizardStep;
-    try {
-      localStorage.setItem(wizardDraftKey, JSON.stringify(payload));
-    } catch (error) {}
-  };
-
-  const restoreWizardDraft = function() {
-    if (!wizardForm) return;
-    let payload = null;
-    try {
-      payload = JSON.parse(localStorage.getItem(wizardDraftKey) || "null");
-    } catch (error) {
-      payload = null;
-    }
-    if (!payload || typeof payload !== "object") return;
-    Object.entries(payload).forEach(function(entry) {
-      const key = entry[0];
-      const value = entry[1];
-      if (key === "__wizard_step") return;
-      const fields = wizardForm.querySelectorAll(`[name="${CSS.escape(key)}"]`);
-      if (!fields.length) return;
-      fields.forEach(function(field) {
-        if (!(field instanceof HTMLElement)) return;
-        if (field instanceof HTMLInputElement && (field.type === "checkbox" || field.type === "radio")) {
-          if (Array.isArray(value)) field.checked = value.includes(field.value);
-          else field.checked = String(value) === String(field.value) || (field.type === "checkbox" && String(value).toLowerCase() === "on");
-          return;
-        }
-        if ("value" in field && typeof value !== "object") {
-          field.value = String(value);
-        }
-      });
-    });
-    const restoredStep = Number(payload.__wizard_step);
-    if (Number.isFinite(restoredStep)) wizardStep = Math.max(0, Math.min(wizardSteps.length - 1, restoredStep));
-  };
+  const saveWizardDraft = function() {};
+  const restoreWizardDraft = function() {};
 
   const clearWizardDraft = function() {
     try { localStorage.removeItem(wizardDraftKey); } catch (error) {}
@@ -995,6 +948,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const refreshReviewDetails = function() {
     if (reviewTitle) reviewTitle.textContent = String(titleInput?.value || "").trim() || "—";
     if (reviewQuestion) reviewQuestion.textContent = String(questionInput?.value || "").trim() || "—";
+    if (reviewRoute) reviewRoute.textContent = providerLabelForDisplay(providerInput?.value || "local_ollama");
     const filterText = String(filterQueryInput?.value || "").trim();
     if (reviewFilterCard && reviewFilterQuery) {
       const showFilter = Boolean(runFilterInput?.checked && filterText);
@@ -1322,9 +1276,47 @@ document.addEventListener("DOMContentLoaded", function() {
     return 0;
   };
 
+  const resetWizardFormState = function() {
+    if (!wizardForm) return;
+    wizardStep = 0;
+    wizardForm.reset();
+    if (providerInput) providerInput.value = "local_ollama";
+    if (workersInput) workersInput.value = "1";
+    if (apiKeyInput) {
+      apiKeyInput.value = "";
+      apiKeyInput.removeAttribute("data-masked");
+    }
+    if (baseUrlInput) baseUrlInput.value = "";
+    if (extractTable) {
+      const rows = Array.from(extractTable.querySelectorAll(".wet-row"));
+      rows.forEach(function(row, index) {
+        if (!(row instanceof HTMLElement)) return;
+        if (index > 0) {
+          row.remove();
+          return;
+        }
+        const nameInput = row.querySelector(".wet-name");
+        const descriptionInput = row.querySelector(".wet-description");
+        const typeInput = row.querySelector(".wet-type");
+        if (nameInput instanceof HTMLInputElement) nameInput.value = "";
+        if (descriptionInput instanceof HTMLInputElement) descriptionInput.value = "";
+        if (typeInput instanceof HTMLSelectElement) typeInput.value = "text";
+      });
+      if (!extractTable.querySelector(".wet-row")) {
+        addExtractRow({ name: "", description: "", type: "text" });
+      }
+    }
+    setWizardModelOptions("local_ollama", "gemma4:27b");
+    syncExtractFeatureRows();
+    updateCustomScopeVisibility();
+    updatePipelinePreview();
+    refreshReviewDetails();
+  };
+
   const openWizard = function(options) {
     if (!wizardOverlay) return;
-    wizardStep = 0;
+    clearWizardDraft();
+    resetWizardFormState();
     restoreWizardDraft();
     if (options && typeof options === "object" && options.prefill) {
       applyWizardPrefill(options.prefill);
@@ -1354,6 +1346,8 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const closeWizard = function() {
     if (!wizardOverlay) return;
+    clearWizardDraft();
+    resetWizardFormState();
     wizardOverlay.classList.remove("on");
     wizardOverlay.setAttribute("aria-hidden", "true");
     aiPopover?.classList.remove("on");
