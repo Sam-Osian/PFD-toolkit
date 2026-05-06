@@ -1347,7 +1347,6 @@ document.addEventListener("DOMContentLoaded", function() {
   const closeWizard = function() {
     if (!wizardOverlay) return;
     clearWizardDraft();
-    resetWizardFormState();
     wizardOverlay.classList.remove("on");
     wizardOverlay.setAttribute("aria-hidden", "true");
     aiPopover?.classList.remove("on");
