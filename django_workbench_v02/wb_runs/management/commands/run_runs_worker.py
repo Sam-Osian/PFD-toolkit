@@ -1,5 +1,6 @@
 import uuid
 
+from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from wb_runs.worker import (
@@ -48,12 +49,19 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         worker_id = options["worker_id"] or f"worker-{uuid.uuid4()}"
         route_mode = options.get("route_mode") or None
+        configured_route_mode = str(
+            route_mode or getattr(settings, "RUN_WORKER_ROUTE_MODE", "all") or "all"
+        ).strip().lower() or "all"
         poll_seconds = options["poll_seconds"]
         max_runs = options["max_runs"]
         once = options["once"]
         sleep_between_stages_seconds = options["sleep_between_stages_seconds"]
         finalize_cancelling_only = options["finalize_cancelling_only"]
         reconcile_timeouts_only = options["reconcile_timeouts_only"]
+
+        self.stdout.write(
+            f"[{worker_id}] Starting worker with route_mode={configured_route_mode} poll_seconds={poll_seconds}."
+        )
 
         if finalize_cancelling_only:
             count = finalize_stuck_cancellations(worker_id=worker_id, route_mode=route_mode)

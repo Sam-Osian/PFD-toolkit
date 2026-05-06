@@ -1094,6 +1094,23 @@ class RunWorkerTests(TestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, RunStatus.SUCCEEDED)
 
+    def test_api_route_worker_does_not_claim_local_route_with_whitespace_provider(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "provider": " local_ollama ",
+                "execution_mode": "simulate",
+                "requires_manual_approval": False,
+            },
+        )
+        processed = process_single_available_run(worker_id="test-worker", route_mode="api")
+        self.assertIsNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.QUEUED)
+        self.assertEqual(run.worker_id, "")
+
     def test_worker_skips_pending_approval_run(self):
         run = queue_run(
             actor=self.owner,

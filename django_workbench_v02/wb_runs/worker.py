@@ -177,6 +177,25 @@ def _apply_route_mode_filter(queryset, *, route_mode: str):
     return queryset
 
 
+def _execution_route_for_config(config: dict | None) -> str:
+    source = config if isinstance(config, dict) else {}
+    explicit = str(source.get("execution_route") or "").strip().lower()
+    if explicit in {WORKER_ROUTE_MODE_LOCAL, WORKER_ROUTE_MODE_API}:
+        return explicit
+    provider = str(source.get("provider") or "").strip().lower()
+    if provider == "local_ollama":
+        return WORKER_ROUTE_MODE_LOCAL
+    return WORKER_ROUTE_MODE_API
+
+
+def _run_is_eligible_for_route_mode(run: InvestigationRun, *, route_mode: str) -> bool:
+    if route_mode == WORKER_ROUTE_MODE_ALL:
+        return True
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    execution_route = _execution_route_for_config(config)
+    return execution_route == route_mode
+
+
 def _stage_timeout_seconds() -> int:
     return max(0, int(getattr(settings, "RUN_STAGE_TIMEOUT_SECONDS", 1800)))
 
@@ -470,13 +489,27 @@ def claim_next_runnable_run(worker_id: str, *, route_mode: str | None = None) ->
         candidates,
         route_mode=resolved_route_mode,
     )
-    run = candidates.order_by("queued_at", "created_at").first()
-    if run is None:
-        return None
+    blocked_ids: set[str] = set()
+    while True:
+        run = candidates.exclude(id__in=blocked_ids).order_by("queued_at", "created_at").first()
+        if run is None:
+            return None
+        if not _run_is_eligible_for_route_mode(run, route_mode=resolved_route_mode):
+            blocked_ids.add(str(run.id))
+            run_config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+            logger.warning(
+                "Worker %s skipped run %s due to route mismatch (mode=%s, resolved_route=%s, provider=%s).",
+                worker_id,
+                run.id,
+                resolved_route_mode,
+                _execution_route_for_config(run_config),
+                str(run_config.get("provider") or ""),
+            )
+            continue
 
-    run.worker_id = worker_id
-    run.save(update_fields=["worker_id", "updated_at"])
-    return run
+        run.worker_id = worker_id
+        run.save(update_fields=["worker_id", "updated_at"])
+        return run
 
 
 def _create_success_artifact(
