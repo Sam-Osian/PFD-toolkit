@@ -1147,6 +1147,24 @@ class RunWorkerTests(TestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, RunStatus.SUCCEEDED)
 
+    def test_worker_refuses_execution_when_claimed_run_is_pending_approval(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "requires_manual_approval": True,
+            },
+        )
+        with patch("wb_runs.worker.claim_next_runnable_run", return_value=run):
+            processed = process_single_available_run(worker_id="test-worker", route_mode="api")
+        self.assertIsNone(processed)
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.QUEUED)
+        self.assertEqual(run.approval_status, RunApprovalStatus.PENDING)
+        self.assertEqual(run.worker_id, "")
+
     def test_worker_honors_pre_requested_cancellation(self):
         run = queue_run(
             actor=self.owner,

@@ -196,6 +196,12 @@ def _run_is_eligible_for_route_mode(run: InvestigationRun, *, route_mode: str) -
     return execution_route == route_mode
 
 
+def _run_is_eligible_for_approval_state(run: InvestigationRun) -> bool:
+    if not bool(run.requires_approval):
+        return True
+    return str(run.approval_status or "").strip().lower() == RunApprovalStatus.APPROVED
+
+
 def _stage_timeout_seconds() -> int:
     return max(0, int(getattr(settings, "RUN_STAGE_TIMEOUT_SECONDS", 1800)))
 
@@ -930,6 +936,18 @@ def process_single_available_run(
     reconcile_timed_out_runs(worker_id=effective_worker_id, route_mode=resolved_route_mode)
     run = claim_next_runnable_run(effective_worker_id, route_mode=resolved_route_mode)
     if run is None:
+        _record_worker_heartbeat(worker_id=effective_worker_id, state="idle")
+        return None
+
+    if not _run_is_eligible_for_approval_state(run):
+        logger.warning(
+            "Worker %s skipped run %s due to pending approval (status=%s).",
+            effective_worker_id,
+            run.id,
+            run.approval_status,
+        )
+        run.worker_id = ""
+        run.save(update_fields=["worker_id", "updated_at"])
         _record_worker_heartbeat(worker_id=effective_worker_id, state="idle")
         return None
 
