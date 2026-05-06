@@ -5,6 +5,7 @@ import backoff
 import time
 import threading
 from pydantic import BaseModel
+from typing import Literal
 
 # Provide a minimal openai stub before importing LLM
 class DummyClient:
@@ -171,6 +172,50 @@ def test_generate_retries_parse_without_unsupported_reasoning_effort(monkeypatch
     assert result[0].matches_topic == "Yes"
     assert "reasoning_effort" in calls[0]
     assert "reasoning_effort" not in calls[1]
+
+
+def test_generate_structured_falls_back_to_create_when_parse_fails(monkeypatch):
+    class TopicMatch(BaseModel):
+        matches_topic: str
+
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+
+    def fake_parse(**kwargs):
+        raise RuntimeError("parse endpoint unsupported")
+
+    def fake_create(**kwargs):
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content='{"matches_topic":"Yes"}'))],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
+
+    monkeypatch.setattr(llm, "_parse_with_backoff", fake_parse)
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
+    result = llm.generate(["prompt"], response_format=TopicMatch, max_workers=1)
+    assert result[0].matches_topic == "Yes"
+
+
+def test_generate_structured_infers_yes_no_from_plain_text(monkeypatch):
+    class TopicMatch(BaseModel):
+        matches_topic: Literal["Yes", "No"]
+
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+
+    def fake_parse(**kwargs):
+        raise RuntimeError("parse endpoint unsupported")
+
+    def fake_create(**kwargs):
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="Yes"))],
+            usage=types.SimpleNamespace(total_tokens=0),
+        )
+
+    monkeypatch.setattr(llm, "_parse_with_backoff", fake_parse)
+    monkeypatch.setattr(llm.client.chat.completions, "create", fake_create)
+
+    result = llm.generate(["prompt"], response_format=TopicMatch, max_workers=1)
+    assert result[0].matches_topic == "Yes"
 
 
 @pytest.mark.parametrize(

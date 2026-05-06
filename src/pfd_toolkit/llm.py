@@ -5,6 +5,7 @@ import tiktoken
 import logging
 import base64
 import re
+import json
 import time
 from typing import Callable, List, Optional, Dict, Type, Any
 from pydantic import BaseModel, create_model, ConfigDict
@@ -151,6 +152,56 @@ def _strip_json_markdown(text: str) -> str:
 
     # Fallback: remove all fences globally
     return text.replace("```", "").strip()
+
+
+def _coerce_structured_response_from_text(
+    *,
+    response_format: Type[BaseModel],
+    raw_text: str,
+) -> BaseModel:
+    """Best-effort parsing for non-OpenAI-compatible structured responses."""
+    cleaned = _strip_json_markdown(raw_text or "")
+    if not cleaned:
+        raise ValueError("Empty structured response.")
+
+    # First try strict JSON validation as originally intended.
+    try:
+        return response_format.model_validate_json(cleaned, strict=True)
+    except Exception:
+        pass
+
+    # Some providers emit valid JSON that fails strict mode due type coercion.
+    try:
+        payload = json.loads(cleaned)
+    except Exception:
+        payload = None
+    if isinstance(payload, dict):
+        try:
+            return response_format.model_validate(payload)
+        except Exception:
+            pass
+
+    # Final heuristic for topic classification models that sometimes emit plain
+    # "Yes"/"No" text instead of JSON.
+    lowered = cleaned.lower()
+    inferred_answer = None
+    if re.search(r"\byes\b", lowered):
+        inferred_answer = "Yes"
+    elif re.search(r"\bno\b", lowered):
+        inferred_answer = "No"
+    if inferred_answer is None:
+        raise ValueError(f"Unable to parse structured response: {cleaned[:200]}")
+
+    fields = getattr(response_format, "model_fields", {})
+    heuristic_payload: dict[str, str] = {}
+    if "matches_topic" in fields:
+        heuristic_payload["matches_topic"] = inferred_answer
+    if "spans_matches_topic" in fields:
+        heuristic_payload["spans_matches_topic"] = GeneralConfig.NOT_FOUND_TEXT
+    if not heuristic_payload:
+        raise ValueError(f"Unable to map heuristic answer into model: {response_format}")
+
+    return response_format.model_validate(heuristic_payload)
 
 
 class GenerationCancelledError(RuntimeError):
@@ -533,11 +584,18 @@ class LLM:
                         if self.reasoning_effort:
                             parse_kwargs["reasoning_effort"] = self.reasoning_effort
                         resp = self._parse_with_backoff(**parse_kwargs)
-                        raw = resp.choices[0].message.content
-                        cleaned = _strip_json_markdown(raw)
-                        validated = response_format.model_validate_json(
-                            cleaned,
-                            strict=True,
+                        message = resp.choices[0].message
+                        parsed = getattr(message, "parsed", None)
+                        if parsed is not None:
+                            if isinstance(parsed, response_format):
+                                return idx, parsed
+                            validated = response_format.model_validate(parsed, strict=True)
+                            return idx, validated
+
+                        raw = message.content
+                        validated = _coerce_structured_response_from_text(
+                            response_format=response_format,
+                            raw_text=raw,
                         )
                         return idx, validated
                     except GenerationCancelledError:
@@ -548,16 +606,39 @@ class LLM:
                         if isinstance(e, APITimeoutError) or "timed out" in str(e).lower():
                             # Fail fast on timeout so callers can abort the whole model run.
                             raise
+                        # Fallback for providers that do not fully support parse-mode.
+                        try:
+                            fallback_text = _call_llm(messages)
+                            validated = _coerce_structured_response_from_text(
+                                response_format=response_format,
+                                raw_text=fallback_text,
+                            )
+                            logger.debug(
+                                "Structured parse fallback succeeded for item %s after parse failure: %s",
+                                idx,
+                                e,
+                            )
+                            return idx, validated
+                        except GenerationCancelledError:
+                            raise
+                        except Exception as fallback_exc:
+                            if _is_insufficient_quota_error(fallback_exc):
+                                raise
+                            if isinstance(fallback_exc, APITimeoutError) or "timed out" in str(fallback_exc).lower():
+                                raise
                         if attempt == self.validation_attempts - 1:
                             logger.error(
-                                f"Batch pydantic parse failed for item {idx}: {e}"
+                                "Batch pydantic parse failed for item %s: parse error=%s, fallback error=%s",
+                                idx,
+                                e,
+                                fallback_exc,
                             )
-                            return idx, f"Error: {e}"
+                            return idx, f"Error: {fallback_exc}"
                         logger.debug(
                             "Validation attempt %s failed for item %s: %s",
                             attempt + 1,
                             idx,
-                            e,
+                            fallback_exc,
                         )
             else:
                 txt = _call_llm(messages)
