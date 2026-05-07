@@ -263,10 +263,10 @@
                             <div><strong>Screen &amp; filter</strong><span>Read every report and keep only those relevant to your query.</span></div>
                             <span class="wm-est">Stage 1</span>
                         </label>
-                        <label id="wz-themes-label">
-                            <input id="wz-themes" type="checkbox" name="run_themes" value="on">
+                        <label id="wz-themes-label" class="is-disabled" aria-disabled="true" data-disabled-note="Theme discovery is temporarily unavailable while we improve quality and reliability.">
+                            <input id="wz-themes" type="checkbox" name="run_themes" value="on" disabled>
                             <span class="wcb"></span>
-                            <div><strong>Discover themes</strong><span>Cluster the selected set into recurring topics. Configure optional hints on the next step.</span></div>
+                            <div><strong>Discover themes</strong><span>Temporarily unavailable.</span></div>
                             <span class="wm-est">Stage 2</span>
                         </label>
                         <label id="wz-extract-label">
@@ -715,6 +715,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const wizardCloseButtons = wizardOverlay ? wizardOverlay.querySelectorAll("[data-wiz-close]") : [];
   const wizardOpenButtons = document.querySelectorAll("[data-open-wizard]");
   const runThemesInput = document.getElementById("wz-themes");
+  const runThemesLabel = document.getElementById("wz-themes-label");
   const runExtractInput = document.getElementById("wz-extract");
   const runFilterInput = document.getElementById("wz-filter");
   const featureFieldsInput = document.getElementById("wz-feature-fields");
@@ -856,6 +857,15 @@ document.addEventListener("DOMContentLoaded", function() {
     if (Boolean(runExtractInput?.checked)) active.push(5);
     active.push(wizardSteps.length - 1);
     return active;
+  };
+
+  const enforceThemesOptionDisabled = function() {
+    if (!runThemesInput) return;
+    runThemesInput.checked = false;
+    runThemesInput.disabled = true;
+    runThemesInput.setAttribute("aria-disabled", "true");
+    runThemesLabel?.classList.add("is-disabled");
+    runThemesLabel?.classList.remove("on");
   };
 
   const getWizardDotIndex = function(stepDomIndex) {
@@ -1168,6 +1178,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
   const renderWizard = function() {
     if (!wizardOverlay) return;
+    enforceThemesOptionDisabled();
     const activeSteps = getActiveWizardSteps();
     const currentIndex = activeSteps.indexOf(wizardStep);
     if (currentIndex === -1) wizardStep = activeSteps[0];
@@ -1262,6 +1273,7 @@ document.addEventListener("DOMContentLoaded", function() {
       }
     }
     syncExtractFeatureRows();
+    enforceThemesOptionDisabled();
   };
 
   const wizardStepIndexFromKey = function(stepKey) {
@@ -1615,6 +1627,7 @@ document.addEventListener("DOMContentLoaded", function() {
     btn.addEventListener("click", closeLlmClearDialog);
   });
   maybeOpenWizardFromQuery();
+  enforceThemesOptionDisabled();
   window.addEventListener("resize", function() {
     if (llmPopBack?.classList.contains("on")) openLlmConfig();
     if (window.innerWidth > 960 && document.body.classList.contains("mobile-nav-open")) {
@@ -1670,6 +1683,7 @@ document.addEventListener("DOMContentLoaded", function() {
   });
   wizardOverlay?.querySelectorAll(".wz-method label").forEach(function(label) {
     label.addEventListener("click", function() {
+      if (label.classList.contains("is-disabled")) return;
       setTimeout(function() {
         const checked = Boolean(label.querySelector("input")?.checked);
         label.classList.toggle("on", checked);

@@ -1799,7 +1799,7 @@ svg:not([width]):not([height]) {
   display: grid; grid-template-columns: 18px 1fr auto; gap: 12px; align-items: start;
   padding: 14px 18px;
   background: var(--bg-2); border: 1px solid var(--line-2); border-radius: 12px;
-  cursor: pointer; transition: all var(--dur-base);
+  cursor: pointer; transition: all var(--dur-base); position: relative;
 }
 .wz-method label:hover { border-color: var(--line-3); }
 .wz-method label.on { border-color: var(--accent); background: var(--accent-soft); }
@@ -1813,6 +1813,45 @@ svg:not([width]):not([height]) {
 .wz-method strong { display: block; font-size: 13.5px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 3px; }
 .wz-method span { font-size: 12px; color: var(--text-3); line-height: 1.45; display: block; }
 .wz-method .wm-est { font-family: var(--ff-mono); font-size: 10px; color: var(--text-3); padding-top: 3px; white-space: nowrap; }
+.wz-method label.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--bg-2) 90%, transparent);
+}
+.wz-method label.is-disabled:hover { border-color: var(--line-2); }
+.wz-method label.is-disabled.on {
+  border-color: var(--line-2);
+  background: color-mix(in srgb, var(--bg-2) 90%, transparent);
+}
+.wz-method label.is-disabled .wcb {
+  border-color: var(--line-2);
+  background: transparent;
+}
+.wz-method label.is-disabled::after {
+  content: attr(data-disabled-note);
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: calc(100% + 8px);
+  z-index: 12;
+  padding: 8px 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 95%, black 5%);
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity var(--dur-fast), transform var(--dur-fast);
+}
+.wz-method label.is-disabled:hover::after,
+.wz-method label.is-disabled:focus-within::after {
+  opacity: 1;
+  transform: translateY(0);
+}
 
 .wz-ai-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .wz-ai-open.warn {
