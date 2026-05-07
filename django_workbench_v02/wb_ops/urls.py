@@ -4,9 +4,14 @@ from . import views
 
 
 urlpatterns = [
-    path("ops/", views.dashboard, name="ops-dashboard"),
+    path("ops/", views.approvals, name="ops-dashboard"),
+    path("ops/approvals/", views.approvals, name="ops-approvals"),
+    path("ops/approvals/<uuid:run_id>/action/", views.approval_action, name="ops-approval-action"),
+    path("ops/failures/", views.failures, name="ops-failures"),
+    path("ops/workers/", views.workers, name="ops-workers"),
     path("ops/users/", views.user_list, name="ops-users"),
     path("ops/users/<int:user_id>/", views.user_detail, name="ops-user-detail"),
+    path("ops/workspaces/", views.workspace_list, name="ops-workspaces"),
     path("ops/workspaces/<uuid:workspace_id>/", views.workspace_detail, name="ops-workspace-detail"),
     path(
         "ops/workspaces/<uuid:workspace_id>/exclude-row/",

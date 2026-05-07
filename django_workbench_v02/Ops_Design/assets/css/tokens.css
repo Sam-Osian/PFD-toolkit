@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════════════════════════
+   PFD Toolkit · Ops Console — Design tokens
+   Aligned with the public app (Manrope + JetBrains Mono, dark base)
+   but with a distinct cyan-leaning accent so this surface reads as
+   internal control, not public product.
+   ═══════════════════════════════════════════════════════════════ */
+
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+:root {
+  /* ── geometry ── */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── type ── */
+  --ff-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --ff-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* ── motion ── */
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 140ms;
+  --dur-base: 220ms;
+  --dur-slow: 380ms;
+
+  /* ── surface — dark indigo, public-app aligned ── */
+  --bg:        #07050f;
+  --bg-2:      #0b0918;
+  --surface:   #110f22;
+  --surface-2: #181530;
+  --surface-3: #221d44;
+  --line:      rgba(255,255,255,0.06);
+  --line-2:    rgba(255,255,255,0.10);
+  --line-3:    rgba(255,255,255,0.18);
+
+  --text:      #ecebf7;
+  --text-2:    #a4a0c8;
+  --text-3:    #6b6792;
+  --text-4:    #45415f;
+
+  /* ── ops accent — cyan/teal, distinct from public violet ── */
+  --accent:       oklch(0.78 0.13 195);
+  --accent-2:     oklch(0.72 0.15 200);
+  --accent-soft:  oklch(0.78 0.13 195 / 0.14);
+  --accent-glow:  oklch(0.78 0.13 195 / 0.40);
+  --accent-fg:    #04141a;
+
+  /* secondary signals */
+  --good: oklch(0.78 0.15 160);
+  --warn: oklch(0.82 0.15 75);
+  --bad:  oklch(0.70 0.20 22);
+  --info: oklch(0.74 0.13 240);
+
+  --good-soft: oklch(0.78 0.15 160 / 0.16);
+  --warn-soft: oklch(0.82 0.15 75 / 0.16);
+  --bad-soft:  oklch(0.70 0.20 22 / 0.18);
+  --info-soft: oklch(0.74 0.13 240 / 0.16);
+
+  --grid-color: rgba(255,255,255,0.030);
+  --shadow-1:   0 1px 0 rgba(255,255,255,0.03), 0 6px 18px rgba(0,0,0,0.45);
+  --shadow-2:   0 14px 40px rgba(0,0,0,0.55);
+  --shadow-3:   0 30px 80px rgba(0,0,0,0.65);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--ff-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "ss01", "cv11";
+}
+
+button, input, select, textarea { font: inherit; color: inherit; }
+button { background: none; border: 0; cursor: pointer; color: inherit; }
+a { color: inherit; text-decoration: none; }
+
+.mono { font-family: var(--ff-mono); font-feature-settings: "zero"; }

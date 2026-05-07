@@ -155,6 +155,32 @@ class NotificationDispatchTests(TestCase):
         self.assertIn("Run failed", mail.outbox[0].subject)
         self.assertIn("Run failed", mail.outbox[0].body)
 
+    def test_dispatch_uses_no_relevant_reports_copy_for_specific_failure(self):
+        self.run.status = RunStatus.FAILED
+        self.run.error_code = "NO_RELEVANT_REPORTS"
+        self.run.finished_at = timezone.now()
+        self.run.error_message = (
+            "PFD Toolkit did not find any reports that matched your search query. "
+            "Try again with a different search."
+        )
+        self.run.save(
+            update_fields=["status", "error_code", "finished_at", "error_message", "updated_at"]
+        )
+        create_notification_request(
+            run=self.run,
+            user=self.owner,
+            notify_on=NotificationTrigger.ANY,
+        )
+
+        result = dispatch_pending_notifications(max_items=10)
+        self.assertEqual(result.sent, 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("No relevant reports found", mail.outbox[0].subject)
+        self.assertIn(
+            "did not find any reports that matched your search query",
+            mail.outbox[0].body,
+        )
+
     def test_dispatch_command_once(self):
         self.run.status = RunStatus.SUCCEEDED
         self.run.finished_at = timezone.now()

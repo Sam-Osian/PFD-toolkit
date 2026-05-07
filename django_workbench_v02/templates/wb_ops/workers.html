@@ -1,0 +1,71 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops · Workers{% endblock %}
+{% block crumbs %}Workers{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1><span class="label">SYSTEM HEALTH</span>Workers &amp; queue</h1>
+    <p>Live worker heartbeat and queue state.</p>
+  </div>
+</div>
+
+<div class="cols-3">
+  <div class="tile"><div class="k">Workers · online</div><div class="v">{{ worker_snapshot.online_count }}<small>/ {{ worker_snapshot.worker_count }}</small></div></div>
+  <div class="tile"><div class="k">Runs · in flight</div><div class="v">{{ worker_snapshot.active_runs }}<small>now</small></div></div>
+  <div class="tile"><div class="k">Queue depth</div><div class="v">{{ worker_snapshot.queued_runs }}<small>queued</small></div></div>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><span class="kicker">FLEET</span><h2>Workers</h2></div>
+  <table class="tbl">
+    <thead><tr><th>Worker</th><th>Heartbeat</th><th>State</th><th>Now running</th><th>Last run</th></tr></thead>
+    <tbody>
+      {% for row in worker_rows %}
+      <tr>
+        <td><b>{{ row.heartbeat.worker_id }}</b></td>
+        <td><span class="b {% if row.is_online %}ok{% else %}warn{% endif %}"><span class="dot"></span>{{ row.seconds_since_seen }}s ago</span></td>
+        <td>{{ row.heartbeat.state|default:'unknown' }}</td>
+        <td>
+          {% if row.active_run %}
+            <b>{{ row.active_run.investigation.title }}</b>
+            <div class="mono-small">{{ row.active_run.run_type }} · {{ row.active_run.status }}</div>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.heartbeat.last_run_id %}
+            <span class="mono-small">{{ row.heartbeat.last_run_id }} · {{ row.heartbeat.last_run_status|default:'-' }}</span>
+          {% else %}
+            <span class="muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No worker heartbeat records yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="panel">
+  <div class="panel-head"><span class="kicker">QUEUE</span><h2>Active &amp; queued runs</h2></div>
+  <table class="tbl">
+    <thead><tr><th>Run</th><th>User</th><th>Type</th><th>Worker</th><th>State</th><th>Elapsed</th></tr></thead>
+    <tbody>
+      {% for run in queue_rows %}
+      <tr>
+        <td><b>{{ run.investigation.title }}</b><div class="mono-small">{{ run.id }}</div></td>
+        <td>{{ run.requested_by.email }}</td>
+        <td><span class="b accent">{{ run.run_type }}</span></td>
+        <td><span class="mono-small">{{ run.worker_id|default:'—' }}</span></td>
+        <td><span class="b {% if run.status == 'queued' %}warn{% else %}ok{% endif %}"><span class="dot"></span>{{ run.status }}</span></td>
+        <td><span class="mono-small">{{ run.started_at|timesince|default:'-' }}</span></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No active or queued runs.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

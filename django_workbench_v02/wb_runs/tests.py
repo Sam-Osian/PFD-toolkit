@@ -144,7 +144,7 @@ class RunServiceTests(TestCase):
         sent = mail.outbox[0]
         self.assertIn("Approval required", sent.subject)
         self.assertIn("sam.osian@oreliandata.co.uk", sent.to)
-        self.assertIn("/admin/wb_runs/investigationrun/", sent.body)
+        self.assertIn("/ops/approvals/?run=", sent.body)
         self.assertTrue(
             AuditEvent.objects.filter(
                 action_type="run.approval_requested",
@@ -1606,6 +1606,46 @@ class RunWorkerTests(TestCase):
         self.assertEqual(artifact.storage_uri, "s3://fake-bucket/path/filter.csv")
         self.assertEqual(artifact.size_bytes, 123)
         mocked_store.assert_called_once()
+
+    def test_filter_run_with_zero_matches_fails_with_no_relevant_reports_error(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "real",
+                "search_query": "query with no matches",
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+
+        with patch(
+            "wb_runs.worker.execute_filter_workflow",
+            return_value={
+                "output_path": "",
+                "total_reports": 10,
+                "matched_reports": 0,
+                "output_reports": 0,
+                "search_query": "query with no matches",
+                "filter_df": True,
+                "produce_spans": False,
+                "drop_spans": False,
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "report_limit": None,
+            },
+        ):
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.FAILED)
+        self.assertEqual(run.error_code, "NO_RELEVANT_REPORTS")
+        self.assertIn("did not find any reports", (run.error_message or "").lower())
+        self.assertFalse(
+            self.investigation.runs.filter(run_type=RunType.THEMES).exclude(id=run.id).exists()
+        )
 
     @override_settings(
         RUN_RETRY_ENABLED=True,

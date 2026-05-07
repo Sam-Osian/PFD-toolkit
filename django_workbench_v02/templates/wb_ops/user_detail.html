@@ -1,100 +1,78 @@
 {% extends "wb_ops/base.html" %}
-{% block page_title %}Ops User · PFD Toolkit{% endblock %}
+{% block page_title %}Ops · User{% endblock %}
+{% block crumbs %}Users{% endblock %}
 {% block content %}
-<section class="ops-panel">
-    <div class="ops-panel-head">
-        <h1>{{ target_user.email }}</h1>
-        <p>User job history and workspace access.</p>
+<div class="page-head">
+  <div>
+    <h1><span class="label">PROFILE</span>{{ target_user.get_full_name|default:target_user.email }}</h1>
+    <p>{{ target_user.email }}</p>
+  </div>
+</div>
+
+<div class="cols-2">
+  <section class="panel">
+    <div class="panel-head"><span class="kicker">ACCOUNT</span><h2>Summary</h2></div>
+    <ul class="kv">
+      <li><span>User ID</span><b class="mono-small">{{ target_user.id }}</b></li>
+      <li><span>Active</span><b>{{ target_user.is_active|yesno:'yes,no' }}</b></li>
+      <li><span>Staff</span><b>{{ target_user.is_staff|yesno:'yes,no' }}</b></li>
+      <li><span>Superuser</span><b>{{ target_user.is_superuser|yesno:'yes,no' }}</b></li>
+      <li><span>Runs</span><b>{{ run_total }}</b></li>
+    </ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head"><span class="kicker">ACTIVITY</span><h2>Recent audit events</h2></div>
+    <div class="timeline tight">
+      {% for event in recent_activity %}
+      <div class="ev info">
+        <div class="h"><b>{{ event.action_type }}</b><span class="t">{{ event.created_at|date:"H:i" }}</span></div>
+        <div class="body">{{ event.target_type }} · {{ event.target_id }}</div>
+      </div>
+      {% empty %}
+      <div class="ev info"><div class="h"><b>No activity</b></div></div>
+      {% endfor %}
     </div>
-    <div class="ops-stats-grid">
-        <article class="stat-card"><h3>Name</h3><p>{{ target_user.get_full_name|default:"-" }}</p><small>auth0: {{ target_user.auth0_sub|default:"-" }}</small></article>
-        <article class="stat-card"><h3>Permissions</h3><p>{% if target_user.is_superuser %}superuser{% elif target_user.is_staff %}staff{% else %}standard{% endif %}</p><small>active: {{ target_user.is_active|yesno:"yes,no" }}</small></article>
-        <article class="stat-card"><h3>Runs</h3><p>{{ run_total }}</p><small>showing latest {{ run_rows|length }}</small></article>
-    </div>
+  </section>
+</div>
+
+<section class="panel">
+  <div class="panel-head"><span class="kicker">WORKSPACES</span><h2>Memberships</h2></div>
+  <table class="tbl">
+    <thead><tr><th>Workspace</th><th>Role</th><th>Access</th><th>Can run</th><th>Updated</th></tr></thead>
+    <tbody>
+      {% for membership in memberships %}
+      <tr>
+        <td><a href="{% url 'ops-workspace-detail' workspace_id=membership.workspace_id %}">{{ membership.workspace.title }}</a></td>
+        <td>{{ membership.role }}</td>
+        <td>{{ membership.access_mode }}</td>
+        <td>{{ membership.can_run_workflows|yesno:'yes,no' }}</td>
+        <td>{{ membership.updated_at|date:"Y-m-d H:i" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No workspace memberships.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 
-<section class="ops-panel">
-    <h2>Workspace memberships</h2>
-    <table class="ops-table">
-        <thead>
-            <tr>
-                <th>Workspace</th>
-                <th>Role</th>
-                <th>Access mode</th>
-                <th>Run workflows</th>
-                <th>Updated</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for membership in memberships %}
-                <tr>
-                    <td><a href="{% url 'ops-workspace-detail' workspace_id=membership.workspace_id %}">{{ membership.workspace.title }}</a></td>
-                    <td>{{ membership.role }}</td>
-                    <td>{{ membership.access_mode }}</td>
-                    <td>{{ membership.can_run_workflows|yesno:"yes,no" }}</td>
-                    <td>{{ membership.updated_at|date:"Y-m-d H:i" }}</td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="5">No workspace memberships.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</section>
-
-<section class="ops-panel">
-    <h2>Run status totals</h2>
-    <table class="ops-table compact">
-        <thead>
-            <tr>
-                <th>Status</th>
-                <th>Count</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in run_status_counts %}
-                <tr>
-                    <td>{{ row.status }}</td>
-                    <td>{{ row.total }}</td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="2">No runs found.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</section>
-
-<section class="ops-panel">
-    <h2>Recent jobs for this user</h2>
-    <table class="ops-table">
-        <thead>
-            <tr>
-                <th>Created</th>
-                <th>Run</th>
-                <th>Workspace</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Pipeline JSON</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in run_rows %}
-                <tr>
-                    <td>{{ row.run.created_at|date:"Y-m-d H:i" }}</td>
-                    <td><code>{{ row.run.id }}</code></td>
-                    <td><a href="{% url 'ops-workspace-detail' workspace_id=row.run.workspace_id %}">{{ row.run.workspace.title }}</a></td>
-                    <td>{{ row.run.run_type }}</td>
-                    <td>{{ row.run.status }}</td>
-                    <td>
-                        <details>
-                            <summary>View JSON</summary>
-                            <pre class="json-block">{{ row.input_config_json }}</pre>
-                        </details>
-                    </td>
-                </tr>
-            {% empty %}
-                <tr><td colspan="6">No runs found for this user.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<section class="panel">
+  <div class="panel-head"><span class="kicker">RUNS</span><h2>Recent jobs</h2></div>
+  <table class="tbl">
+    <thead><tr><th>Created</th><th>Run</th><th>Workspace</th><th>Type</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for row in run_rows %}
+      <tr>
+        <td>{{ row.run.created_at|date:"Y-m-d H:i" }}</td>
+        <td><code>{{ row.run.id }}</code></td>
+        <td><a href="{% url 'ops-workspace-detail' workspace_id=row.run.workspace_id %}">{{ row.run.workspace.title }}</a></td>
+        <td>{{ row.run.run_type }}</td>
+        <td>{{ row.run.status }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5">No runs found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 {% endblock %}

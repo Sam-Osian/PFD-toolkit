@@ -436,17 +436,25 @@ main hr {
   font-size: 12px;
   padding: 7px 10px;
 }
-.ws-status-help {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  min-height: 22px;
-  padding: 0;
-}
 .ws-status-glossary-wrap {
   max-height: min(58vh, 460px);
   overflow: auto;
   margin-top: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+.ws-status-glossary-wrap::-webkit-scrollbar {
+  width: 8px;
+}
+.ws-status-glossary-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ws-status-glossary-wrap::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--line-2) 88%, transparent);
+  border-radius: 999px;
+}
+.ws-status-glossary-wrap::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--line-3) 90%, transparent);
 }
 .ws-status-glossary {
   width: 100%;
@@ -468,6 +476,19 @@ main hr {
   color: var(--text-3);
 }
 .ws-status-glossary tbody tr:last-child td { border-bottom: 0; }
+.ws-run-json {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-2) 75%, transparent);
+  color: var(--text-1);
+  font-family: var(--ff-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .ws-body {
   flex: 1;

@@ -1133,6 +1133,31 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertContains(response, "Finding reports that match your search query.")
         self.assertContains(response, "Extracting structured fields according to your specification.")
 
+    def test_dashboard_uses_special_failure_label_when_no_reports_match(self):
+        investigation = create_investigation(
+            actor=self.owner,
+            workspace=self.workspace_a,
+            title="No Match Investigation",
+            question_text="Q",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = queue_run(
+            actor=self.owner,
+            investigation=investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"provider": "local_ollama", "model_name": "gemma4:26b"},
+        )
+        run.status = RunStatus.FAILED
+        run.error_code = "NO_RELEVANT_REPORTS"
+        run.save(update_fields=["status", "error_code", "updated_at"])
+
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Failure - no relevant reports found")
+
     def test_dashboard_shows_complete_reports_found_metric(self):
         investigation = create_investigation(
             actor=self.owner,

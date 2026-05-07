@@ -87,8 +87,8 @@ class OpsInterfaceTests(TestCase):
         self.client.force_login(self.staff)
         response = self.client.get(reverse("ops-dashboard"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Operations dashboard")
-        self.assertContains(response, "Recent jobs")
+        self.assertContains(response, "Run review")
+        self.assertContains(response, "queued investigations")
 
     def test_non_staff_redirected_to_admin_login(self):
         self.client.force_login(self.owner)
@@ -136,4 +136,3 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dataset moderation")
         self.assertContains(response, "Sample report")
-        self.assertContains(response, "find delayed escalation")

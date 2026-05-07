@@ -131,6 +131,7 @@ RUN_STATUS_CARD_LABELS = {
     RunStatus.FAILED: "Failed",
     RunStatus.TIMED_OUT: "Timed out",
 }
+NO_RELEVANT_REPORTS_ERROR_CODE = "NO_RELEVANT_REPORTS"
 SKIP_CANCELLED_PRUNE_SESSION_KEY = "wb_skip_cancelled_prune_once"
 
 
@@ -151,6 +152,15 @@ def _pending_status_label_for_run(run: InvestigationRun | None) -> str:
         if run.run_type == RunType.EXTRACT:
             return "Extracting"
         return RUN_TYPE_LABELS.get(str(run.run_type), "Running")
+    return RUN_STATUS_CARD_LABELS.get(run.status, str(run.status).replace("_", " ").title())
+
+
+def _status_label_for_dashboard_run(run: InvestigationRun) -> str:
+    if (
+        run.status == RunStatus.FAILED
+        and str(getattr(run, "error_code", "") or "").strip().upper() == NO_RELEVANT_REPORTS_ERROR_CODE
+    ):
+        return "Failure - no relevant reports found"
     return RUN_STATUS_CARD_LABELS.get(run.status, str(run.status).replace("_", " ").title())
 
 
@@ -708,7 +718,7 @@ def dashboard(request):
             row["pipeline_state"] = _pipeline_status_for_run(run)
             row["pipeline_stage_label"] = stage_label
             row["pipeline_run_status"] = str(run.status)
-            row["pipeline_status_label"] = RUN_STATUS_CARD_LABELS.get(run.status, str(run.status).replace("_", " ").title())
+            row["pipeline_status_label"] = _status_label_for_dashboard_run(run)
             row["pending_status_label"] = _pending_status_label_for_run(run)
             row["pipeline_updated_at"] = run.updated_at
             if run.updated_at and run.updated_at > row["last_edited_at"]:

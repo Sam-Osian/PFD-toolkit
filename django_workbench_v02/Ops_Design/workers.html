@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ops · Workers · PFD Toolkit</title>
+<link rel="stylesheet" href="assets/css/tokens.css" />
+<link rel="stylesheet" href="assets/css/app.css" />
+</head>
+<body>
+<div class="scrim"></div>
+<div class="app">
+
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <div class="brand-text"><b>PFD Toolkit</b><small>Ops Console</small></div>
+    </div>
+    <nav class="nav">
+      <div class="nav-section">Operate</div>
+      <a href="approvals.html"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5L20 7"/></svg></span>Run review<span class="nav-count">7</span></a>
+      <a href="failures.html"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 2 22h20L12 2z"/></svg></span>Failures<span class="nav-count">3</span></a>
+      <a href="workers.html" class="is-active"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="6" rx="1.4"/><rect x="3" y="14" width="18" height="6" rx="1.4"/></svg></span>Workers</a>
+      <div class="nav-section">Manage</div>
+      <a href="users.html"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 5-6 8-6s7 2 8 6"/></svg></span>Users</a>
+      <a href="workspaces.html"><span class="nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4z"/></svg></span>Workspaces</a>
+    </nav>
+    <div class="sidebar-foot"><div class="who"><div class="avatar">SO</div><div><b>Sam Osian</b><small>superuser</small></div></div></div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="mobile-bar"><button class="menu-btn" data-menu-toggle aria-label="Open navigation"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button></div>
+      <div class="crumbs"><span class="mono-small">ops</span><span class="sep">/</span><span class="here">Workers</span></div>
+      <div class="grow"></div>
+    </header>
+
+    <div class="main">
+      <div class="page-head">
+        <div>
+          <h1><span class="label">SYSTEM HEALTH</span>Workers &amp; queue</h1>
+          <p>Live state of the PFD Toolkit worker fleet. Read straight from <code class="mono-small">Worker</code>, <code class="mono-small">RunQueueState</code> and <code class="mono-small">InvestigationRun</code>.</p>
+        </div>
+      </div>
+
+      <div class="cols-3">
+        <div class="tile">
+          <div class="k">Workers · online</div>
+          <div class="v">3<small>/ 3 registered</small></div>
+          <div class="delta up">▲ all heartbeats &lt; 30s</div>
+        </div>
+        <div class="tile">
+          <div class="k">Runs · in flight</div>
+          <div class="v">2<small>now</small></div>
+          <div class="delta flat">capacity 4 · 50% used</div>
+        </div>
+        <div class="tile">
+          <div class="k">Queue depth</div>
+          <div class="v">7<small>pending approval</small></div>
+          <div class="delta flat">0 awaiting capacity</div>
+        </div>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <span class="kicker">FLEET</span>
+          <h2>Workers</h2>
+          <div class="grow"></div>
+          <button class="btn btn-ghost btn-sm">Refresh</button>
+        </div>
+        <table class="tbl">
+          <thead>
+            <tr><th>Worker</th><th>Heartbeat</th><th>State</th><th>Now running</th><th>Capacity</th><th>Last error</th><th class="right"></th></tr>
+          </thead>
+          <tbody>
+
+            <tr>
+              <td data-label="Worker">
+                <b>worker-01 <span class="b accent" style="margin-left:6px">primary</span></b>
+                <div class="mono-small">celery · default queue</div>
+              </td>
+              <td data-label="Heartbeat"><span class="b ok"><span class="dot"></span>4s ago</span></td>
+              <td data-label="State"><span class="b ok">running</span></td>
+              <td data-label="Now"><b>brett-mh-2026 · filter</b><div class="mono-small">batch 6 / 14 · 2m elapsed</div></td>
+              <td data-label="Capacity"><b>1 / 2</b><div class="bar"><span style="width:50%"></span></div></td>
+              <td data-label="Err"><span class="muted">—</span></td>
+              <td class="right"><button class="btn btn-ghost btn-sm">Logs</button></td>
+            </tr>
+
+            <tr>
+              <td data-label="Worker">
+                <b>worker-02</b>
+                <div class="mono-small">celery · default queue</div>
+              </td>
+              <td data-label="Heartbeat"><span class="b ok"><span class="dot"></span>2s ago</span></td>
+              <td data-label="State"><span class="b ok">running</span></td>
+              <td data-label="Now"><b>maternal-safety · themes</b><div class="mono-small">batch 3 / 8 · 1m elapsed</div></td>
+              <td data-label="Capacity"><b>1 / 1</b><div class="bar"><span style="width:100%"></span></div></td>
+              <td data-label="Err"><span class="muted">—</span></td>
+              <td class="right"><button class="btn btn-ghost btn-sm">Logs</button></td>
+            </tr>
+
+            <tr>
+              <td data-label="Worker">
+                <b>worker-cloud-1</b>
+                <div class="mono-small">aws · eu-west-2 · 1× a10g</div>
+              </td>
+              <td data-label="Heartbeat"><span class="b ok"><span class="dot"></span>11s ago</span></td>
+              <td data-label="State"><span class="b muted">idle</span></td>
+              <td data-label="Now"><span class="muted">—</span></td>
+              <td data-label="Capacity"><b>0 / 1</b><div class="bar"><span style="width:0%"></span></div></td>
+              <td data-label="Err"><span class="muted">—</span></td>
+              <td class="right"><button class="btn btn-ghost btn-sm">Logs</button></td>
+            </tr>
+
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <span class="kicker">QUEUE</span>
+          <h2>Active &amp; pending capacity</h2>
+        </div>
+        <table class="tbl">
+          <thead><tr><th>Run</th><th>User</th><th>Type</th><th>Worker</th><th>State</th><th>Elapsed</th><th class="right"></th></tr></thead>
+          <tbody>
+            <tr>
+              <td data-label="Run"><b>brett-mh-2026 · filter</b><div class="mono-small">run 91ee·c012</div></td>
+              <td data-label="User">Jane Carter</td>
+              <td data-label="Type"><span class="b accent">filter</span></td>
+              <td data-label="Worker"><span class="mono-small">worker-01</span></td>
+              <td data-label="State"><span class="b ok"><span class="dot"></span>running</span></td>
+              <td data-label="Elapsed"><span class="mono-small">2m 04s</span></td>
+              <td class="right"><button class="btn btn-ghost btn-sm">Open</button></td>
+            </tr>
+            <tr>
+              <td data-label="Run"><b>maternal-safety · themes</b><div class="mono-small">run 70f1·aa12</div></td>
+              <td data-label="User">Emma Hughes</td>
+              <td data-label="Type"><span class="b accent">themes</span></td>
+              <td data-label="Worker"><span class="mono-small">worker-02</span></td>
+              <td data-label="State"><span class="b ok"><span class="dot"></span>running</span></td>
+              <td data-label="Elapsed"><span class="mono-small">1m 18s</span></td>
+              <td class="right"><button class="btn btn-ghost btn-sm">Open</button></td>
+            </tr>
+            <tr>
+              <td data-label="Run"><b>opioid-trends · themes</b><div class="mono-small">run 1d22·ee08</div></td>
+              <td data-label="User">Daniel Reeve</td>
+              <td data-label="Type"><span class="b accent">themes</span></td>
+              <td data-label="Worker"><span class="muted">—</span></td>
+              <td data-label="State"><span class="b" data-status="pending"><span class="dot"></span>pending approval</span></td>
+              <td data-label="Elapsed"><span class="mono-small">38m</span></td>
+              <td class="right"><a class="btn btn-ghost btn-sm" href="approvals.html">Review</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+
+<nav class="mobile-tabbar" aria-label="Primary">
+  <a href="approvals.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12l5 5L20 7"/></svg>Review<span class="pip"></span></a>
+  <a href="failures.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2 2 22h20L12 2z"/><path d="M12 9v6"/></svg>Failures</a>
+  <a href="workers.html" class="is-active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="6" rx="1.4"/><rect x="3" y="14" width="18" height="6" rx="1.4"/></svg>Workers</a>
+  <a href="users.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 5-6 8-6s7 2 8 6"/></svg>Users</a>
+  <a href="workspaces.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7l9-4 9 4-9 4-9-4z"/></svg>Spaces</a>
+</nav>
+
+<script src="assets/js/app.js"></script>
+</body>
+</html>

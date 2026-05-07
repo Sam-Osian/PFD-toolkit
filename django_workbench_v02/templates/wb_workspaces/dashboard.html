@@ -52,19 +52,6 @@
                                 {% else %}
                                     <span class="ws-tag">{{ row.pipeline_status_label }}</span>
                                 {% endif %}
-                                <button
-                                    type="button"
-                                    class="icon-btn ws-status-help"
-                                    data-open-status-glossary
-                                    aria-label="Open status glossary"
-                                    title="Status glossary"
-                                >
-                                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                                        <circle cx="8" cy="8" r="6"></circle>
-                                        <path d="M6 6.2a2 2 0 1 1 3 1.7c-.7.4-1 .7-1 1.4"></path>
-                                        <path d="M8 11.5v.1"></path>
-                                    </svg>
-                                </button>
                                 <span class="ws-owner">You</span>
                             </div>
                             <details class="ws-actions">
@@ -72,6 +59,26 @@
                                     <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
                                 </summary>
                                 <div class="ws-actions-menu">
+                                    {% if row.latest_run %}
+                                        <button
+                                            class="ws-actions-item"
+                                            type="button"
+                                            data-open-run-details
+                                            data-run-id="{{ row.latest_run.id }}"
+                                            data-run-config-script-id="workspace-run-config-{{ workspace.id }}"
+                                        >
+                                            Run details
+                                        </button>
+                                    {% else %}
+                                        <span class="ws-actions-empty">Run details unavailable</span>
+                                    {% endif %}
+                                    <button
+                                        class="ws-actions-item"
+                                        type="button"
+                                        data-open-status-glossary
+                                    >
+                                        Status glossary
+                                    </button>
                                     <button
                                         class="ws-actions-item"
                                         type="button"
@@ -109,6 +116,13 @@
                             </details>
                         </header>
                         {{ row.copy_prefill|json_script:row.copy_prefill_id }}
+                        {% if row.latest_run %}
+                            {% with workspace_id=workspace.id|stringformat:"s" %}
+                                {% with run_config_id="workspace-run-config-"|add:workspace_id %}
+                                    {{ row.latest_run.input_config_json|json_script:run_config_id }}
+                                {% endwith %}
+                            {% endwith %}
+                        {% endif %}
 
                         <div class="ws-body">
                             <h3>
@@ -184,6 +198,26 @@
                                     <svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="13" cy="8" r="1.2"/></svg>
                                 </summary>
                                 <div class="ws-actions-menu">
+                                    {% if row.latest_run %}
+                                        <button
+                                            class="ws-actions-item"
+                                            type="button"
+                                            data-open-run-details
+                                            data-run-id="{{ row.latest_run.id }}"
+                                            data-run-config-script-id="workspace-run-config-{{ workspace.id }}"
+                                        >
+                                            Run details
+                                        </button>
+                                    {% else %}
+                                        <span class="ws-actions-empty">Run details unavailable</span>
+                                    {% endif %}
+                                    <button
+                                        class="ws-actions-item"
+                                        type="button"
+                                        data-open-status-glossary
+                                    >
+                                        Status glossary
+                                    </button>
                                     <button
                                         class="ws-actions-item"
                                         type="button"
@@ -220,6 +254,13 @@
                                 </div>
                             </details>
                             {{ row.copy_prefill|json_script:row.copy_prefill_id }}
+                            {% if row.latest_run %}
+                                {% with workspace_id=workspace.id|stringformat:"s" %}
+                                    {% with run_config_id="workspace-run-config-"|add:workspace_id %}
+                                        {{ row.latest_run.input_config_json|json_script:run_config_id }}
+                                    {% endwith %}
+                                {% endwith %}
+                            {% endif %}
                         </li>
                         {% endwith %}
                     {% endfor %}
@@ -328,6 +369,25 @@
     </div>
 </div>
 
+<div class="dlg-back" id="workspace-run-details-dialog" aria-hidden="true">
+    <div class="dlg confirm" role="dialog" aria-labelledby="workspace-run-details-title">
+        <div class="dlg-head">
+            <div class="k">Reference</div>
+            <h3 id="workspace-run-details-title">Run details</h3>
+            <p><strong>Run ID:</strong> <span id="workspace-run-details-id">—</span></p>
+        </div>
+        <div class="ws-status-glossary-wrap">
+            <pre class="ws-run-json" id="workspace-run-details-json">{}</pre>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to close</span>
+            <div class="acts">
+                <button class="btn btn-primary" type="button" data-run-details-close>Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   const dashboardSections = document.getElementById("workspace-dashboard-sections");
@@ -341,6 +401,9 @@ document.addEventListener("DOMContentLoaded", function() {
   const restoreForm = document.getElementById("workspace-restore-form");
   const restoreCopy = document.getElementById("workspace-restore-copy");
   const statusGlossaryDialog = document.getElementById("workspace-status-glossary-dialog");
+  const runDetailsDialog = document.getElementById("workspace-run-details-dialog");
+  const runDetailsId = document.getElementById("workspace-run-details-id");
+  const runDetailsJson = document.getElementById("workspace-run-details-json");
   let refreshInFlight = false;
 
   const closeActionMenu = function(menu) {
@@ -459,6 +522,28 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
 
+    const runDetailsButton = event.target.closest("[data-open-run-details]");
+    if (runDetailsButton) {
+      closeAllActionMenus();
+      const runId = String(runDetailsButton.getAttribute("data-run-id") || "").trim();
+      const configScriptId = String(runDetailsButton.getAttribute("data-run-config-script-id") || "").trim();
+      let runConfig = {};
+      if (configScriptId) {
+        const script = document.getElementById(configScriptId);
+        if (script) {
+          try {
+            runConfig = JSON.parse(script.textContent || "{}");
+          } catch (error) {
+            runConfig = { error: "Unable to parse run configuration JSON." };
+          }
+        }
+      }
+      if (runDetailsId) runDetailsId.textContent = runId || "—";
+      if (runDetailsJson) runDetailsJson.textContent = JSON.stringify(runConfig || {}, null, 2);
+      openDialog(runDetailsDialog);
+      return;
+    }
+
     if (event.target.closest("[data-archive-close]")) {
       closeDialog(archiveDialog);
       return;
@@ -473,6 +558,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     if (event.target.closest("[data-status-help-close]")) {
       closeDialog(statusGlossaryDialog);
+      return;
+    }
+    if (event.target.closest("[data-run-details-close]")) {
+      closeDialog(runDetailsDialog);
       return;
     }
 
@@ -490,6 +579,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     if (event.target === statusGlossaryDialog) {
       closeDialog(statusGlossaryDialog);
+      return;
+    }
+    if (event.target === runDetailsDialog) {
+      closeDialog(runDetailsDialog);
       return;
     }
 
@@ -524,6 +617,7 @@ document.addEventListener("DOMContentLoaded", function() {
       closeDialog(deleteDialog);
       closeDialog(restoreDialog);
       closeDialog(statusGlossaryDialog);
+      closeDialog(runDetailsDialog);
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;

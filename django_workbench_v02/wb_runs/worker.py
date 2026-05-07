@@ -127,6 +127,8 @@ WORKER_ROUTE_MODE_ALLOWED = {
     WORKER_ROUTE_MODE_API,
 }
 
+NO_RELEVANT_REPORTS_ERROR_CODE = "NO_RELEVANT_REPORTS"
+
 
 def _reload_run(run_id):
     return InvestigationRun.objects.select_related("workspace", "investigation").get(id=run_id)
@@ -408,6 +410,8 @@ def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun 
     if current_run.status == RunStatus.CANCELLED:
         return None
     if current_run.status not in PIPELINE_TERMINAL_CONTINUE_STATUSES:
+        return None
+    if current_run.status == RunStatus.FAILED and str(current_run.error_code or "") == NO_RELEVANT_REPORTS_ERROR_CODE:
         return None
     if not continue_on_fail and current_run.status != RunStatus.SUCCEEDED:
         return None
@@ -725,6 +729,19 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
 
     metadata = {"adapter_workflow": run_label}
     metadata.update({key: value for key, value in result.items() if key != "output_path"})
+
+    if run.run_type == RunType.FILTER and int(result.get("matched_reports") or 0) == 0:
+        return set_run_status(
+            run=current,
+            status=RunStatus.FAILED,
+            message="Run failed because no relevant reports were found.",
+            progress_percent=current.progress_percent or 95,
+            error_code=NO_RELEVANT_REPORTS_ERROR_CODE,
+            error_message=(
+                "PFD Toolkit did not find any reports that matched your search query. "
+                "Try again with a different search."
+            ),
+        )
 
     _create_success_artifact(
         current,

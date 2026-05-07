@@ -1,0 +1,119 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops · Run review{% endblock %}
+{% block crumbs %}Run review{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1><span class="label">PRIMARY · APPROVALS</span>Run review</h1>
+    <p>Review and approve queued investigations. Edits are applied through a typed mapping layer before approval.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <div class="filters">
+    <form method="get" class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
+      <select class="select" name="type" style="width:auto;min-width:150px">
+        <option value="" {% if not filter_type %}selected{% endif %}>Type · Any</option>
+        <option value="filter" {% if filter_type == 'filter' %}selected{% endif %}>filter</option>
+        <option value="themes" {% if filter_type == 'themes' %}selected{% endif %}>themes</option>
+        <option value="extract" {% if filter_type == 'extract' %}selected{% endif %}>extract</option>
+      </select>
+      <select class="select" name="provider" style="width:auto;min-width:170px">
+        <option value="" {% if not filter_provider %}selected{% endif %}>Provider · Any</option>
+        <option value="local_ollama" {% if filter_provider == 'local_ollama' %}selected{% endif %}>Our server</option>
+        <option value="openai" {% if filter_provider == 'openai' %}selected{% endif %}>OpenAI</option>
+      </select>
+      <button class="btn btn-sm" type="submit">Apply</button>
+    </form>
+  </div>
+
+  <table class="tbl">
+    <thead><tr><th>Investigation</th><th>User</th><th>Type</th><th>Provider</th><th>Queued</th><th>Status</th><th class="right">Action</th></tr></thead>
+    <tbody>
+      {% for row in pending_rows %}
+      <tr>
+        <td><b>{{ row.run.investigation.title }}</b><div class="mono-small">{{ row.run.id }}</div></td>
+        <td>{{ row.run.requested_by.email }}</td>
+        <td><span class="b accent">{{ row.run.run_type }}</span></td>
+        <td><span class="mono-small">{{ row.provider }}{% if row.model_name %} · {{ row.model_name }}{% endif %}</span></td>
+        <td><span class="mono-small">{{ row.queued_ago }}</span></td>
+        <td><span class="b" data-status="pending"><span class="dot"></span>{{ row.run.approval_status }}</span></td>
+        <td class="right"><a class="btn btn-sm {% if row.is_selected %}btn-primary{% else %}btn-ghost{% endif %}" href="{% url 'ops-approvals' %}?run={{ row.run.id }}{% if filter_type %}&type={{ filter_type }}{% endif %}{% if filter_provider %}&provider={{ filter_provider }}{% endif %}">Review</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7">No pending approvals.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if selected_run and selected_payload %}
+<section class="panel">
+  <div class="panel-head"><span class="kicker">EDITOR</span><h2>{{ selected_run.investigation.title }}</h2></div>
+  <form method="post" action="{% url 'ops-approval-action' run_id=selected_run.id %}" class="stack-md" style="padding:18px;">
+    {% csrf_token %}
+    <div class="cols-2">
+      <div class="field"><label>Title</label><input class="input" name="title" value="{{ selected_payload.title }}"></div>
+      <div class="field"><label>Research question</label><input class="input" name="question_text" value="{{ selected_payload.question_text }}"></div>
+    </div>
+
+    <div class="cols-3">
+      <div class="field"><label>Scope</label>
+        <select class="select" name="scope_option">
+          <option value="all_reports" {% if selected_payload.scope_option == 'all_reports' %}selected{% endif %}>All reports</option>
+          <option value="last_3_years" {% if selected_payload.scope_option == 'last_3_years' %}selected{% endif %}>Last 3 years</option>
+          <option value="last_year" {% if selected_payload.scope_option == 'last_year' %}selected{% endif %}>Last year</option>
+          <option value="last_6_months" {% if selected_payload.scope_option == 'last_6_months' %}selected{% endif %}>Last 6 months</option>
+          <option value="most_recent_100" {% if selected_payload.scope_option == 'most_recent_100' %}selected{% endif %}>Most recent 100</option>
+          <option value="custom_range" {% if selected_payload.scope_option == 'custom_range' %}selected{% endif %}>Custom range</option>
+        </select>
+      </div>
+      <div class="field"><label>Custom start</label><input class="input" type="date" name="custom_start_date" value="{{ selected_payload.custom_start_date }}"></div>
+      <div class="field"><label>Custom end</label><input class="input" type="date" name="custom_end_date" value="{{ selected_payload.custom_end_date }}"></div>
+    </div>
+
+    <div class="check-row">
+      <label class="check"><input type="checkbox" name="run_filter" value="1" {% if selected_payload.run_filter %}checked{% endif %}> <span>Filter</span></label>
+      <label class="check"><input type="checkbox" name="run_themes" value="1" {% if selected_payload.run_themes %}checked{% endif %}> <span>Themes</span></label>
+      <label class="check"><input type="checkbox" name="run_extract" value="1" {% if selected_payload.run_extract %}checked{% endif %}> <span>Extract</span></label>
+    </div>
+
+    <div class="field"><label>Search query</label><textarea class="textarea" name="search_query">{{ selected_payload.search_query }}</textarea></div>
+    <div class="check-row">
+      <label class="check"><input type="checkbox" name="filter_df" value="1" {% if selected_payload.filter_df %}checked{% endif %}> <span>Drop non-matches</span></label>
+      <label class="check"><input type="checkbox" name="include_supporting_quotes" value="1" {% if selected_payload.include_supporting_quotes %}checked{% endif %}> <span>Include supporting quotes</span></label>
+      <label class="check"><input type="checkbox" name="request_completion_email" value="1" {% if selected_payload.request_completion_email %}checked{% endif %}> <span>Email user on completion</span></label>
+    </div>
+
+    <div class="cols-3">
+      <div class="field"><label>Provider</label>
+        <select class="select" name="provider">
+          <option value="local_ollama" {% if selected_payload.provider == 'local_ollama' %}selected{% endif %}>Our server</option>
+          <option value="openai" {% if selected_payload.provider == 'openai' %}selected{% endif %}>OpenAI server</option>
+        </select>
+      </div>
+      <div class="field"><label>Model</label><input class="input" name="model_name" value="{{ selected_payload.model_name }}"></div>
+      <div class="field"><label>Max workers</label><input class="input" type="number" min="1" max="32" name="max_parallel_workers" value="{{ selected_payload.max_parallel_workers }}"></div>
+    </div>
+
+    <div class="cols-3">
+      <div class="field"><label>Seed topics</label><textarea class="textarea" name="seed_topics">{{ selected_payload.seed_topics }}</textarea></div>
+      <div class="field"><label>Min themes</label><input class="input" type="number" min="1" max="100" name="min_themes" value="{{ selected_payload.min_themes|default:'' }}"></div>
+      <div class="field"><label>Max themes</label><input class="input" type="number" min="1" max="100" name="max_themes" value="{{ selected_payload.max_themes|default:'' }}"></div>
+    </div>
+
+    <div class="field"><label>Extra theme instructions</label><textarea class="textarea" name="extra_theme_instructions">{{ selected_payload.extra_theme_instructions }}</textarea></div>
+    <div class="cols-2">
+      <div class="field"><label>Approval note</label><textarea class="textarea" name="approval_note" placeholder="Optional note shown in run record."></textarea></div>
+      <div class="field"><label>Schedule (optional)</label><input class="input" type="datetime-local" name="scheduled_for"></div>
+    </div>
+
+    <div class="review-actions">
+      <div class="grow"></div>
+      <button class="btn btn-danger" type="submit" name="action" value="reject">Reject</button>
+      <button class="btn btn-primary" type="submit" name="action" value="approve">Approve &amp; queue</button>
+    </div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

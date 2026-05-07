@@ -7,7 +7,6 @@ from django.core.cache import cache
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import transaction
-from django.urls import reverse
 from django.utils import timezone
 
 from wb_auditlog.services import log_action_cache_event, log_audit_event
@@ -121,9 +120,9 @@ def _workspace_run_logs_url(*, run: InvestigationRun) -> str:
     )
 
 
-def _run_admin_change_url(*, run: InvestigationRun) -> str:
+def _run_ops_approval_url(*, run: InvestigationRun) -> str:
     base = str(getattr(settings, "WORKBENCH_BASE_URL", "") or "").rstrip("/")
-    return f"{base}{reverse('admin:wb_runs_investigationrun_change', args=[str(run.id)])}"
+    return f"{base}/ops/approvals/?run={run.id}"
 
 
 def _send_approval_request_email(*, run: InvestigationRun, request=None) -> bool:
@@ -140,8 +139,8 @@ def _send_approval_request_email(*, run: InvestigationRun, request=None) -> bool
         f"Run type: {run.run_type}\n"
         f"Requested by: {getattr(run.requested_by, 'email', '')}\n"
         f"Queued at: {run.queued_at.isoformat()}\n\n"
-        "Approve/schedule in admin:\n"
-        f"{_run_admin_change_url(run=run)}\n\n"
+        "Review and approve in Ops:\n"
+        f"{_run_ops_approval_url(run=run)}\n\n"
         "Workspace run logs:\n"
         f"{_workspace_run_logs_url(run=run)}\n"
     )

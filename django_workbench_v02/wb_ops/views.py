@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from collections import defaultdict
 from datetime import timedelta
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 from django.conf import settings
@@ -10,13 +12,15 @@ from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Count, Q
+from django.db import transaction
+from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from wb_auditlog.models import AuditEvent
+from wb_auditlog.services import log_audit_event
 from wb_investigations.models import Investigation
 from wb_runs.artifact_storage import ArtifactStorageError, open_artifact_for_download
 from wb_runs.models import (
@@ -25,7 +29,12 @@ from wb_runs.models import (
     InvestigationRun,
     RunArtifact,
     RunStatus,
+    RunType,
     RunWorkerHeartbeat,
+)
+from wb_runs.services import (
+    approve_run_for_execution,
+    reject_run_for_execution,
 )
 from wb_sharing.models import WorkspaceShareLink
 from wb_workspaces.models import Workspace, WorkspaceMembership, WorkspaceReportExclusion
@@ -59,6 +68,47 @@ WORKSPACE_RUN_LIMIT = 30
 USER_RUN_LIMIT = 60
 DATASET_PREVIEW_LIMIT = 120
 BUSY_WORKER_TARGET = 3
+PENDING_APPROVAL_LIMIT = 120
+FAILED_RUN_LIMIT = 180
+ALLOWED_MODELS = {
+    "gemma4:26b",
+    "gpt-5",
+    "gpt-5-mini",
+    "gpt-4.1-mini",
+    "gpt-4o",
+}
+SCOPE_CHOICES = {
+    "all_reports",
+    "last_3_years",
+    "last_year",
+    "last_6_months",
+    "most_recent_100",
+    "custom_range",
+}
+RUN_TYPE_ORDER = [RunType.FILTER, RunType.THEMES, RunType.EXTRACT]
+
+
+@dataclass
+class TypedRunReviewPayload:
+    title: str
+    question_text: str
+    scope_option: str
+    custom_start_date: str
+    custom_end_date: str
+    run_filter: bool
+    run_themes: bool
+    run_extract: bool
+    search_query: str
+    filter_df: bool
+    include_supporting_quotes: bool
+    seed_topics: str
+    min_themes: int | None
+    max_themes: int | None
+    extra_theme_instructions: str
+    provider: str
+    model_name: str
+    max_parallel_workers: int
+    request_completion_email: bool
 
 
 def _coerce_lookback_days(raw_value) -> int:
@@ -76,6 +126,211 @@ def _safe_text(value) -> str:
     if text.casefold() in {"nan", "nat", "none", "null"}:
         return ""
     return text
+
+
+def _to_bool(value) -> bool:
+    raw = str(value or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _parse_int(value, *, default: int | None = None, minimum: int | None = None, maximum: int | None = None):
+    try:
+        parsed = int(str(value).strip())
+    except (TypeError, ValueError):
+        return default
+    if minimum is not None and parsed < minimum:
+        parsed = minimum
+    if maximum is not None and parsed > maximum:
+        parsed = maximum
+    return parsed
+
+
+def _parse_decimal(value) -> Decimal | None:
+    compact = str(value or "").strip()
+    if not compact:
+        return None
+    try:
+        return Decimal(compact)
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _format_relative_delta(ts, *, now):
+    if not ts:
+        return "-"
+    delta = max(0, int((now - ts).total_seconds()))
+    if delta < 60:
+        return f"{delta}s"
+    minutes, seconds = divmod(delta, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes:02d}m"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours:02d}h"
+
+
+def _duration_between(started_at, finished_at, *, now):
+    if not started_at:
+        return "-"
+    effective_end = finished_at or now
+    return _format_relative_delta(started_at, now=effective_end)
+
+
+def _derive_scope_option(*, query_start_date, query_end_date, report_limit):
+    if report_limit == 100:
+        return "most_recent_100"
+    if query_start_date and query_end_date:
+        return "custom_range"
+    return "all_reports"
+
+
+def _typed_payload_from_run(run: InvestigationRun) -> TypedRunReviewPayload:
+    investigation = run.investigation
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    scope = investigation.scope_json if isinstance(investigation.scope_json, dict) else {}
+    plan = config.get("pipeline_plan") if isinstance(config.get("pipeline_plan"), list) else [run.run_type]
+    plan = [str(item).strip().lower() for item in plan if str(item).strip().lower() in RUN_TYPE_ORDER]
+    if not plan:
+        plan = [RunType.FILTER]
+
+    query_start_date = run.query_start_date or scope.get("query_start_date") or ""
+    query_end_date = run.query_end_date or scope.get("query_end_date") or ""
+    report_limit = config.get("report_limit", scope.get("report_limit"))
+    scope_option = str(scope.get("temporal_scope_option") or "").strip().lower() or _derive_scope_option(
+        query_start_date=query_start_date,
+        query_end_date=query_end_date,
+        report_limit=report_limit,
+    )
+    if scope_option not in SCOPE_CHOICES:
+        scope_option = "all_reports"
+
+    provider = str(config.get("provider") or "local_ollama").strip().lower()
+    if provider not in {"local_ollama", "openai"}:
+        provider = "openai"
+
+    model_name = str(config.get("model_name") or "gemma4:26b").strip()
+    if not model_name:
+        model_name = "gemma4:26b"
+
+    return TypedRunReviewPayload(
+        title=str(investigation.title or "").strip(),
+        question_text=str(investigation.question_text or "").strip(),
+        scope_option=scope_option,
+        custom_start_date=str(query_start_date or ""),
+        custom_end_date=str(query_end_date or ""),
+        run_filter=RunType.FILTER in plan,
+        run_themes=RunType.THEMES in plan,
+        run_extract=RunType.EXTRACT in plan,
+        search_query=str(config.get("search_query") or investigation.question_text or "").strip(),
+        filter_df=bool(config.get("filter_df", True)),
+        include_supporting_quotes=bool(config.get("produce_spans", False)),
+        seed_topics=str(config.get("seed_topics") or "").strip(),
+        min_themes=_parse_int(config.get("min_themes"), default=None, minimum=1, maximum=100),
+        max_themes=_parse_int(config.get("max_themes"), default=None, minimum=1, maximum=100),
+        extra_theme_instructions=str(config.get("extra_theme_instructions") or "").strip(),
+        provider=provider,
+        model_name=model_name,
+        max_parallel_workers=_parse_int(config.get("max_parallel_workers"), default=1, minimum=1, maximum=32) or 1,
+        request_completion_email=True,
+    )
+
+
+def _typed_payload_from_post(request) -> TypedRunReviewPayload:
+    scope_option = str(request.POST.get("scope_option") or "all_reports").strip().lower()
+    if scope_option not in SCOPE_CHOICES:
+        scope_option = "all_reports"
+
+    provider = str(request.POST.get("provider") or "local_ollama").strip().lower()
+    if provider not in {"local_ollama", "openai"}:
+        provider = "local_ollama"
+    model_name = str(request.POST.get("model_name") or "gemma4:26b").strip()
+    if model_name not in ALLOWED_MODELS:
+        model_name = "gemma4:26b" if provider == "local_ollama" else "gpt-5-mini"
+
+    min_themes = _parse_int(request.POST.get("min_themes"), default=None, minimum=1, maximum=100)
+    max_themes = _parse_int(request.POST.get("max_themes"), default=None, minimum=1, maximum=100)
+    if min_themes and max_themes and min_themes > max_themes:
+        min_themes, max_themes = max_themes, min_themes
+
+    return TypedRunReviewPayload(
+        title=str(request.POST.get("title") or "").strip(),
+        question_text=str(request.POST.get("question_text") or "").strip(),
+        scope_option=scope_option,
+        custom_start_date=str(request.POST.get("custom_start_date") or "").strip(),
+        custom_end_date=str(request.POST.get("custom_end_date") or "").strip(),
+        run_filter=_to_bool(request.POST.get("run_filter")),
+        run_themes=_to_bool(request.POST.get("run_themes")),
+        run_extract=_to_bool(request.POST.get("run_extract")),
+        search_query=str(request.POST.get("search_query") or "").strip(),
+        filter_df=_to_bool(request.POST.get("filter_df")),
+        include_supporting_quotes=_to_bool(request.POST.get("include_supporting_quotes")),
+        seed_topics=str(request.POST.get("seed_topics") or "").strip(),
+        min_themes=min_themes,
+        max_themes=max_themes,
+        extra_theme_instructions=str(request.POST.get("extra_theme_instructions") or "").strip(),
+        provider=provider,
+        model_name=model_name,
+        max_parallel_workers=_parse_int(request.POST.get("max_parallel_workers"), default=1, minimum=1, maximum=32) or 1,
+        request_completion_email=_to_bool(request.POST.get("request_completion_email")),
+    )
+
+
+def _build_pipeline_plan(payload: TypedRunReviewPayload, *, fallback_run_type: str) -> list[str]:
+    plan = []
+    if payload.run_filter:
+        plan.append(RunType.FILTER)
+    if payload.run_themes:
+        plan.append(RunType.THEMES)
+    if payload.run_extract:
+        plan.append(RunType.EXTRACT)
+    if not plan:
+        plan = [str(fallback_run_type or RunType.FILTER).strip().lower()]
+    return plan
+
+
+def _resolve_scope_dates(payload: TypedRunReviewPayload):
+    now = timezone.localdate()
+    if payload.scope_option == "custom_range":
+        return payload.custom_start_date or "", payload.custom_end_date or "", None
+    if payload.scope_option == "most_recent_100":
+        return "", "", 100
+    if payload.scope_option == "last_6_months":
+        return (now - timedelta(days=183)).isoformat(), now.isoformat(), None
+    if payload.scope_option == "last_year":
+        return (now - timedelta(days=365)).isoformat(), now.isoformat(), None
+    if payload.scope_option == "last_3_years":
+        return (now - timedelta(days=365 * 3)).isoformat(), now.isoformat(), None
+    return "", "", None
+
+
+def _parse_iso_date(value: str):
+    compact = str(value or "").strip()
+    if not compact:
+        return None
+    try:
+        return timezone.datetime.fromisoformat(compact).date()
+    except ValueError:
+        return None
+
+
+def _scheduled_for_from_post(request):
+    raw = str(request.POST.get("scheduled_for") or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = timezone.datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _sanitize_error_code(value) -> str:
+    code = str(value or "").strip()
+    return code if code else "UNKNOWN"
 
 
 def _worker_snapshot(*, now):
@@ -351,6 +606,289 @@ def _require_workspace_moderation_permission(*, user, workspace) -> None:
         )
 
 
+@transaction.atomic
+def _apply_typed_review_edits(*, actor, run: InvestigationRun, payload: TypedRunReviewPayload):
+    investigation = run.investigation
+    config = dict(run.input_config_json or {})
+    scope_json = dict(investigation.scope_json or {})
+
+    plan = _build_pipeline_plan(payload, fallback_run_type=run.run_type)
+    start_date, end_date, report_limit = _resolve_scope_dates(payload)
+
+    config["pipeline_plan"] = plan
+    config["pipeline_index"] = 0
+    config["search_query"] = payload.search_query
+    config["filter_df"] = bool(payload.filter_df)
+    config["produce_spans"] = bool(payload.include_supporting_quotes)
+    config["seed_topics"] = payload.seed_topics
+    config["min_themes"] = payload.min_themes
+    config["max_themes"] = payload.max_themes
+    config["extra_theme_instructions"] = payload.extra_theme_instructions
+    config["provider"] = payload.provider
+    config["model_name"] = payload.model_name
+    config["max_parallel_workers"] = payload.max_parallel_workers
+    if report_limit is None:
+        config.pop("report_limit", None)
+    else:
+        config["report_limit"] = report_limit
+
+    scope_json["temporal_scope_option"] = payload.scope_option
+    scope_json["query_start_date"] = start_date
+    scope_json["query_end_date"] = end_date
+    scope_json["report_limit"] = report_limit
+
+    run.query_start_date = _parse_iso_date(start_date)
+    run.query_end_date = _parse_iso_date(end_date)
+    run.input_config_json = config
+    run.save(update_fields=["query_start_date", "query_end_date", "input_config_json", "updated_at"])
+
+    investigation.title = payload.title or investigation.title
+    investigation.question_text = payload.question_text
+    investigation.scope_json = scope_json
+    investigation.method_json = {
+        **(investigation.method_json if isinstance(investigation.method_json, dict) else {}),
+        "run_filter": RunType.FILTER in plan,
+        "run_themes": RunType.THEMES in plan,
+        "run_extract": RunType.EXTRACT in plan,
+        "pipeline_plan": plan,
+    }
+    investigation.save(update_fields=["title", "question_text", "scope_json", "method_json", "updated_at"])
+
+    log_audit_event(
+        action_type="ops.run_review.edited",
+        target_type="investigation_run",
+        target_id=str(run.id),
+        workspace=run.workspace,
+        user=actor,
+        payload={
+            "investigation_id": str(investigation.id),
+            "pipeline_plan": plan,
+            "provider": payload.provider,
+            "model_name": payload.model_name,
+            "scope_option": payload.scope_option,
+        },
+    )
+
+
+def _approval_queryset(*, request):
+    queryset = (
+        InvestigationRun.objects.select_related("workspace", "requested_by", "investigation")
+        .filter(approval_status="pending")
+        .order_by("-queued_at")
+    )
+    run_type = str(request.GET.get("type") or "").strip().lower()
+    if run_type in {RunType.FILTER, RunType.THEMES, RunType.EXTRACT}:
+        queryset = queryset.filter(run_type=run_type)
+    provider = str(request.GET.get("provider") or "").strip().lower()
+    if provider in {"local_ollama", "openai"}:
+        queryset = queryset.filter(input_config_json__provider=provider)
+    return queryset
+
+
+@staff_member_required(login_url="admin:login")
+@require_GET
+def approvals(request):
+    now = timezone.now()
+    pending_runs = list(_approval_queryset(request=request)[:PENDING_APPROVAL_LIMIT])
+    selected_run_id = str(request.GET.get("run") or "").strip()
+    selected_run = None
+    if selected_run_id:
+        for candidate in pending_runs:
+            if str(candidate.id) == selected_run_id:
+                selected_run = candidate
+                break
+    if selected_run is None and pending_runs:
+        selected_run = pending_runs[0]
+
+    selected_payload = _typed_payload_from_run(selected_run) if selected_run else None
+    rows = []
+    for run in pending_runs:
+        config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+        rows.append(
+            {
+                "run": run,
+                "provider": str(config.get("provider") or "local_ollama"),
+                "model_name": str(config.get("model_name") or ""),
+                "queued_ago": _format_relative_delta(run.queued_at, now=now),
+                "is_selected": selected_run is not None and run.id == selected_run.id,
+            }
+        )
+    context = {
+        "ops_section": "approvals",
+        "pending_rows": rows,
+        "selected_run": selected_run,
+        "selected_payload": selected_payload,
+        "filter_type": str(request.GET.get("type") or "").strip().lower(),
+        "filter_provider": str(request.GET.get("provider") or "").strip().lower(),
+    }
+    return render(request, "wb_ops/approvals.html", context)
+
+
+@staff_member_required(login_url="admin:login")
+@require_POST
+def approval_action(request, run_id):
+    run = get_object_or_404(
+        InvestigationRun.objects.select_related("workspace", "investigation"),
+        id=run_id,
+    )
+    action = str(request.POST.get("action") or "").strip().lower()
+    redirect_url = reverse("ops-approvals") + f"?run={run.id}"
+
+    if action not in {"approve", "reject"}:
+        messages.error(request, "Invalid run review action.")
+        return redirect(redirect_url)
+
+    if run.approval_status != "pending":
+        messages.error(request, "This run is no longer pending approval.")
+        return redirect(reverse("ops-approvals"))
+
+    if action == "reject":
+        reason = str(request.POST.get("approval_note") or "").strip()
+        try:
+            reject_run_for_execution(
+                actor=request.user,
+                run=run,
+                reason=reason,
+                request=request,
+            )
+            messages.success(request, "Run rejected.")
+        except (PermissionDenied, ValidationError) as exc:
+            messages.error(request, str(exc))
+        return redirect(reverse("ops-approvals"))
+
+    payload = _typed_payload_from_post(request)
+    scheduled_for = _scheduled_for_from_post(request)
+    note = str(request.POST.get("approval_note") or "").strip()
+    try:
+        _apply_typed_review_edits(actor=request.user, run=run, payload=payload)
+        approve_run_for_execution(
+            actor=request.user,
+            run=run,
+            note=note,
+            scheduled_for=scheduled_for,
+            request=request,
+        )
+        messages.success(request, "Run approved and queued.")
+    except (PermissionDenied, ValidationError) as exc:
+        messages.error(request, str(exc))
+        return redirect(redirect_url)
+    return redirect(reverse("ops-approvals"))
+
+
+@staff_member_required(login_url="admin:login")
+@require_GET
+def failures(request):
+    now = timezone.now()
+    days = _coerce_lookback_days(request.GET.get("days"))
+    start = now - timedelta(days=days)
+    failed_runs = list(
+        InvestigationRun.objects.select_related("workspace", "requested_by", "investigation")
+        .filter(status=RunStatus.FAILED, created_at__gte=start)
+        .order_by("-created_at")[:FAILED_RUN_LIMIT]
+    )
+    error_groups = (
+        InvestigationRun.objects.filter(status=RunStatus.FAILED, created_at__gte=start)
+        .values("error_code")
+        .annotate(total=Count("id"))
+        .order_by("-total")
+    )
+    selected_run_id = str(request.GET.get("run") or "").strip()
+    selected_run = None
+    for run in failed_runs:
+        if str(run.id) == selected_run_id:
+            selected_run = run
+            break
+    if selected_run is None and failed_runs:
+        selected_run = failed_runs[0]
+
+    timeline = []
+    if selected_run is not None:
+        for event in selected_run.events.order_by("created_at"):
+            timeline.append(
+                {
+                    "event": event,
+                    "payload_pretty": json.dumps(event.payload_json or {}, indent=2, sort_keys=True),
+                }
+            )
+
+    context = {
+        "ops_section": "failures",
+        "lookback_days": days,
+        "failed_runs": failed_runs,
+        "error_groups": error_groups,
+        "selected_run": selected_run,
+        "timeline": timeline,
+    }
+    return render(request, "wb_ops/failures.html", context)
+
+
+@staff_member_required(login_url="admin:login")
+@require_GET
+def workers(request):
+    now = timezone.now()
+    worker_snapshot = _worker_snapshot(now=now)
+    worker_rows = []
+    active_runs = list(
+        InvestigationRun.objects.select_related("workspace", "requested_by", "investigation")
+        .filter(status__in=ACTIVE_RUN_STATUSES)
+        .order_by("-started_at")
+    )
+    run_by_worker = {}
+    for run in active_runs:
+        worker_id = str(run.worker_id or "").strip()
+        if worker_id and worker_id not in run_by_worker:
+            run_by_worker[worker_id] = run
+
+    for row in worker_snapshot["rows"]:
+        heartbeat = row["heartbeat"]
+        assigned_run = run_by_worker.get(str(heartbeat.worker_id))
+        worker_rows.append(
+            {
+                "heartbeat": heartbeat,
+                "is_online": row["is_online"],
+                "seconds_since_seen": row["seconds_since_seen"],
+                "active_run": assigned_run,
+            }
+        )
+
+    queue_rows = list(
+        InvestigationRun.objects.select_related("workspace", "requested_by", "investigation")
+        .filter(status__in={RunStatus.RUNNING, RunStatus.STARTING, RunStatus.CANCELLING, RunStatus.QUEUED})
+        .order_by("-created_at")[:80]
+    )
+    context = {
+        "ops_section": "workers",
+        "worker_snapshot": worker_snapshot,
+        "worker_rows": worker_rows,
+        "queue_rows": queue_rows,
+        "now": now,
+    }
+    return render(request, "wb_ops/workers.html", context)
+
+
+@staff_member_required(login_url="admin:login")
+@require_GET
+def workspace_list(request):
+    query = str(request.GET.get("q") or "").strip()
+    workspaces = Workspace.objects.select_related("created_by").annotate(
+        member_count=Count("memberships", distinct=True),
+        run_count=Count("runs", distinct=True),
+    )
+    if query:
+        workspaces = workspaces.filter(
+            Q(title__icontains=query)
+            | Q(slug__icontains=query)
+            | Q(created_by__email__icontains=query)
+        )
+    workspaces = workspaces.order_by("-updated_at")[:200]
+    context = {
+        "ops_section": "workspaces",
+        "workspace_rows": workspaces,
+        "query": query,
+    }
+    return render(request, "wb_ops/workspaces.html", context)
+
+
 @staff_member_required(login_url="admin:login")
 @require_GET
 def dashboard(request):
@@ -447,10 +985,18 @@ def user_list(request):
                 filter=Q(requested_runs__status__in=ACTIVE_RUN_STATUSES),
                 distinct=True,
             ),
+            last_activity=Max("audit_events__created_at"),
         )
-        .order_by("-is_superuser", "-is_staff", "email")
+        .order_by("-last_activity", "email")
     )
-    return render(request, "wb_ops/users.html", {"users": users})
+    return render(
+        request,
+        "wb_ops/users.html",
+        {
+            "ops_section": "users",
+            "users": users,
+        },
+    )
 
 
 @staff_member_required(login_url="admin:login")
@@ -480,16 +1026,22 @@ def user_detail(request, user_id):
         .annotate(total=Count("id"))
         .order_by("status")
     )
+    recent_activity = list(
+        AuditEvent.objects.filter(user=target_user)
+        .order_by("-created_at")[:20]
+    )
 
     return render(
         request,
         "wb_ops/user_detail.html",
         {
+            "ops_section": "users",
             "target_user": target_user,
             "memberships": memberships,
             "run_rows": run_rows,
             "run_total": InvestigationRun.objects.filter(requested_by=target_user).count(),
             "run_status_counts": run_status_counts,
+            "recent_activity": recent_activity,
         },
     )
 
@@ -539,10 +1091,15 @@ def workspace_detail(request, workspace_id):
         "scope_json": investigation.scope_json if investigation else {},
         "method_json": investigation.method_json if investigation else {},
     }
+    recent_edits = list(
+        AuditEvent.objects.filter(workspace=workspace)
+        .order_by("-created_at")[:20]
+    )
     return render(
         request,
         "wb_ops/workspace_detail.html",
         {
+            "ops_section": "workspaces",
             "workspace": workspace,
             "investigation": investigation,
             "investigation_payload_json": json.dumps(
@@ -556,6 +1113,7 @@ def workspace_detail(request, workspace_id):
             "public_share_rows": public_share_rows,
             "user_can_moderate": _can_moderate_workspace_rows(user=request.user, workspace=workspace),
             "workspace_dashboard_url": reverse("workbook-open", kwargs={"workbook_id": workspace.id}),
+            "recent_edits": recent_edits,
         },
     )
 

@@ -26,6 +26,7 @@ FAILURE_STATUSES = {
     RunStatus.FAILED,
     RunStatus.TIMED_OUT,
 }
+NO_RELEVANT_REPORTS_ERROR_CODE = "NO_RELEVANT_REPORTS"
 
 
 class NotificationRequestError(ValidationError):
@@ -58,7 +59,7 @@ def _workspace_detail_url(run) -> str:
     return f"{settings.WORKBENCH_BASE_URL}/workbooks/{run.workspace_id}/"
 
 
-def _status_presentation(run_status: str) -> dict[str, str]:
+def _status_presentation(run_status: str, *, run_error_code: str = "") -> dict[str, str]:
     if run_status == RunStatus.SUCCEEDED:
         return {
             "subject_label": "Run complete",
@@ -70,6 +71,19 @@ def _status_presentation(run_status: str) -> dict[str, str]:
             "variant": "success",
         }
     if run_status == RunStatus.FAILED:
+        if str(run_error_code or "").strip().upper() == NO_RELEVANT_REPORTS_ERROR_CODE:
+            return {
+                "subject_label": "No relevant reports found",
+                "headline": "No relevant reports found",
+                "status_label": "RUN FAILED",
+                "status_color": "#FF7A7A",
+                "summary": (
+                    "PFD Toolkit did not find any reports that matched your search query. "
+                    "Try again with a different search."
+                ),
+                "button_label": "Review run",
+                "variant": "failure",
+            }
         return {
             "subject_label": "Run failed",
             "headline": "Run failed",
@@ -112,7 +126,7 @@ def _status_presentation(run_status: str) -> dict[str, str]:
 
 def _email_context(notification: NotificationRequest) -> dict[str, str]:
     run = notification.run
-    status_ui = _status_presentation(run.status)
+    status_ui = _status_presentation(run.status, run_error_code=str(getattr(run, "error_code", "") or ""))
     return {
         "subject": _build_subject(notification),
         "investigation_title": run.investigation.title,
@@ -131,7 +145,7 @@ def _email_context(notification: NotificationRequest) -> dict[str, str]:
 
 def _build_subject(notification: NotificationRequest) -> str:
     run = notification.run
-    status_ui = _status_presentation(run.status)
+    status_ui = _status_presentation(run.status, run_error_code=str(getattr(run, "error_code", "") or ""))
     return f"[PFD Toolkit] {status_ui['subject_label']}: {run.investigation.title}"
 
 

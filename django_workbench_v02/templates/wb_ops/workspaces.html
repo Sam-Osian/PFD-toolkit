@@ -1,0 +1,36 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops · Workspaces{% endblock %}
+{% block crumbs %}Workspaces{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1><span class="label">DIRECTORY</span>Workspaces</h1>
+    <p>Open a workspace to moderate dataset exclusions/restores and inspect run history.</p>
+  </div>
+</div>
+
+<section class="panel">
+  <form method="get" class="filters">
+    <input class="input" name="q" value="{{ query }}" placeholder="Search by title, slug, owner email">
+    <button class="btn btn-sm" type="submit">Search</button>
+  </form>
+  <table class="tbl">
+    <thead><tr><th>Workspace</th><th>Owner</th><th>Visibility</th><th>Members</th><th>Runs</th><th>Updated</th><th class="right"></th></tr></thead>
+    <tbody>
+      {% for workspace in workspace_rows %}
+      <tr>
+        <td><b>{{ workspace.title }}</b><div class="mono-small">{{ workspace.slug }}</div></td>
+        <td>{{ workspace.created_by.email }}</td>
+        <td>{{ workspace.visibility }}{% if workspace.is_listed %} · listed{% endif %}</td>
+        <td>{{ workspace.member_count }}</td>
+        <td>{{ workspace.run_count }}</td>
+        <td><span class="mono-small">{{ workspace.updated_at|date:"Y-m-d H:i" }}</span></td>
+        <td class="right"><a class="btn btn-ghost btn-sm" href="{% url 'ops-workspace-detail' workspace_id=workspace.id %}">Open</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7">No workspaces found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

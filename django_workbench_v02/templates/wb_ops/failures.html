@@ -1,0 +1,88 @@
+{% extends "wb_ops/base.html" %}
+{% block page_title %}Ops · Failures{% endblock %}
+{% block crumbs %}Failures{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1><span class="label">TRIAGE</span>Failure inspection</h1>
+    <p>Failed runs grouped by error code with timeline inspection.</p>
+  </div>
+  <div class="actions">
+    <form method="get" class="row" style="gap:8px;align-items:center;">
+      <select class="select" name="days" style="width:auto;min-width:130px">
+        <option value="1" {% if lookback_days == 1 %}selected{% endif %}>Last 24h</option>
+        <option value="7" {% if lookback_days == 7 %}selected{% endif %}>Last 7d</option>
+        <option value="30" {% if lookback_days == 30 %}selected{% endif %}>Last 30d</option>
+      </select>
+      <button class="btn btn-sm" type="submit">Apply</button>
+    </form>
+  </div>
+</div>
+
+<div class="cols-3">
+  {% for group in error_groups|slice:":3" %}
+  <div class="tile {% if forloop.first %}alert{% endif %}">
+    <div class="k">{{ group.error_code|default:'UNKNOWN' }}</div>
+    <div class="v">{{ group.total }} <small>in window</small></div>
+  </div>
+  {% empty %}
+  <div class="tile"><div class="k">No failures</div><div class="v">0</div></div>
+  {% endfor %}
+</div>
+
+<section class="panel">
+  <table class="tbl">
+    <thead><tr><th>Run</th><th>Error</th><th>User</th><th>Workspace</th><th>When</th><th class="right"></th></tr></thead>
+    <tbody>
+      {% for run in failed_runs %}
+      <tr>
+        <td><b>{{ run.investigation.title }}</b><div class="mono-small">{{ run.id }} · {{ run.run_type }}</div></td>
+        <td><span class="b bad"><span class="dot"></span>{{ run.error_code|default:'UNKNOWN' }}</span><div class="mono-small">{{ run.error_message|default:'-'|truncatechars:120 }}</div></td>
+        <td>{{ run.requested_by.email }}</td>
+        <td>{{ run.workspace.title }}</td>
+        <td><span class="mono-small">{{ run.finished_at|date:"Y-m-d H:i"|default:run.updated_at|date:"Y-m-d H:i" }}</span></td>
+        <td class="right"><a class="btn btn-ghost btn-sm" href="{% url 'ops-failures' %}?days={{ lookback_days }}&run={{ run.id }}">Inspect</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6">No failed runs in this window.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if selected_run %}
+<section class="panel">
+  <div class="panel-head"><span class="kicker">TIMELINE</span><h2>{{ selected_run.investigation.title }}</h2></div>
+  <div class="expand-inner single" style="padding:18px;">
+    <div>
+      <h3>RunEvent timeline</h3>
+      <div class="timeline">
+        {% for row in timeline %}
+          <div class="ev {% if row.event.event_type == 'error' %}bad{% elif row.event.event_type == 'warning' %}warn{% else %}info{% endif %}">
+            <div class="h"><b>{{ row.event.event_type }}</b><span class="t">{{ row.event.created_at|date:"H:i:s" }}</span></div>
+            <div class="body">{{ row.event.message }}</div>
+            {% if row.event.payload_json %}<pre class="json-block">{{ row.payload_pretty }}</pre>{% endif %}
+          </div>
+        {% empty %}
+          <div class="ev info"><div class="h"><b>No events</b></div></div>
+        {% endfor %}
+      </div>
+    </div>
+    <div>
+      <h3>Run summary</h3>
+      <ul class="kv">
+        <li><span>Run ID</span><b class="mono-small">{{ selected_run.id }}</b></li>
+        <li><span>Type</span><b>{{ selected_run.run_type }}</b></li>
+        <li><span>Status</span><b>{{ selected_run.status }}</b></li>
+        <li><span>Provider</span><b class="mono-small">{{ selected_run.input_config_json.provider|default:'-' }}</b></li>
+        <li><span>Model</span><b class="mono-small">{{ selected_run.input_config_json.model_name|default:'-' }}</b></li>
+      </ul>
+      <div class="review-actions" style="margin-top:14px;">
+        <div class="grow"></div>
+        <a class="btn btn-ghost" href="{% url 'ops-approvals' %}?run={{ selected_run.id }}">Open in Run review</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
