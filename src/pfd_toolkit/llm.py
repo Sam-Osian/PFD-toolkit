@@ -649,7 +649,7 @@ class LLM:
                         if isinstance(e, APITimeoutError) or "timed out" in str(e).lower():
                             # Fail fast on timeout so callers can abort the whole model run.
                             raise
-                        fallback_exc: Exception | None = None
+                        fallback_error: Exception = e
                         # Fallback for providers that do not fully support parse-mode.
                         try:
                             fallback_text = _call_llm(messages)
@@ -665,12 +665,12 @@ class LLM:
                             return idx, validated
                         except GenerationCancelledError:
                             raise
-                        except Exception as fallback_exc:
-                            if _is_insufficient_quota_error(fallback_exc):
+                        except Exception as fallback_parse_exc:
+                            if _is_insufficient_quota_error(fallback_parse_exc):
                                 raise
-                            if isinstance(fallback_exc, APITimeoutError) or "timed out" in str(fallback_exc).lower():
+                            if isinstance(fallback_parse_exc, APITimeoutError) or "timed out" in str(fallback_parse_exc).lower():
                                 raise
-                        fallback_error = fallback_exc or e
+                            fallback_error = fallback_parse_exc
                         if attempt == self.validation_attempts - 1:
                             logger.error(
                                 "Batch pydantic parse failed for item %s: parse error=%s, fallback error=%s",
