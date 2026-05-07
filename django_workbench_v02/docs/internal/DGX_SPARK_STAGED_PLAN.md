@@ -12,7 +12,7 @@
    - Option A selected: approval/scheduling applies to local DGX runs only.
    - API runs continue to launch immediately through existing behavior.
 4. Model and inference defaults for local route:
-   - Model tag: `gemma4:27b`.
+   - Model tag: `gemma4:26b`.
    - Reasoning off (`reasoning_effort=none`).
    - `temperature=0`.
 5. Approval UX direction:
@@ -77,7 +77,7 @@
    - New provider enum value: `local_ollama`.
    - Default user/workspace provider switched to local route.
 2. Local defaults wired:
-   - Model default: `gemma4:27b`.
+   - Model default: `gemma4:26b`.
    - Base URL default: `LOCAL_OLLAMA_BASE_URL` (default `http://127.0.0.1:11434/v1`).
    - Reasoning set to `none` for local route.
 3. Credential behavior split:

@@ -35,7 +35,7 @@ ALLOWED_REVIEW_PROVIDERS = {
 
 PROVIDER_MODEL_ALLOWLIST = {
     WorkspaceLLMProvider.LOCAL_OLLAMA: {
-        "gemma4:27b",
+        "gemma4:26b",
     },
     WorkspaceLLMProvider.OPENAI: {
         "gpt-4.1-mini",
@@ -57,12 +57,12 @@ def _normalise_review_config(review_config: dict | None) -> dict:
 
     raw_model_name = raw.get("model_name")
     if raw_model_name is None:
-        model_name = "gemma4:27b"
+        model_name = "gemma4:26b"
     else:
         model_name = str(raw_model_name).strip()
     if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
         if not model_name:
-            model_name = "gemma4:27b"
+            model_name = "gemma4:26b"
     elif provider == WorkspaceLLMProvider.OPENAI:
         if model_name in {"gpt-4.1", "openai/gpt-4.1"}:
             model_name = "gpt-5.4"

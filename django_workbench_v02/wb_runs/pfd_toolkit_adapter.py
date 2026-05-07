@@ -67,7 +67,7 @@ def _normalise_model_alias(*, provider: str, model_name: str) -> str:
     provider_key = str(provider or "").strip().lower()
     if not cleaned:
         if provider_key == "local_ollama":
-            return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:27b") or "gemma4:27b").strip() or "gemma4:27b"
+            return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:26b") or "gemma4:26b").strip() or "gemma4:26b"
         if provider_key == "openrouter":
             return "openai/gpt-4.1-mini"
         return "gpt-4.1-mini"

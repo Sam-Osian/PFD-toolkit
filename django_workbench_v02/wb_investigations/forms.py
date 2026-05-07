@@ -313,7 +313,7 @@ class InvestigationWizardReviewForm(forms.Form):
         initial=WorkspaceLLMProvider.LOCAL_OLLAMA,
         required=False,
     )
-    model_name = forms.CharField(required=False, initial="gemma4:27b")
+    model_name = forms.CharField(required=False, initial="gemma4:26b")
     max_parallel_workers = forms.IntegerField(
         required=False,
         min_value=1,

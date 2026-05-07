@@ -749,7 +749,7 @@ class WorkspaceLLMSettingTests(TestCase):
     def test_get_workspace_llm_setting_defaults_to_local_ollama(self):
         setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
         self.assertEqual(setting.get("provider"), "local_ollama")
-        self.assertEqual(setting.get("model_name"), "gemma4:27b")
+        self.assertEqual(setting.get("model_name"), "gemma4:26b")
         self.assertEqual(setting.get("max_parallel_workers"), 1)
         self.assertTrue(setting.get("has_provider_credential"))
 
@@ -758,12 +758,12 @@ class WorkspaceLLMSettingTests(TestCase):
             actor=self.owner,
             workspace=self.workspace,
             provider="local_ollama",
-            model_name="gemma4:27b",
+            model_name="gemma4:26b",
             max_parallel_workers=7,
         )
         setting = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
         self.assertEqual(setting.get("provider"), "local_ollama")
-        self.assertEqual(setting.get("model_name"), "gemma4:27b")
+        self.assertEqual(setting.get("model_name"), "gemma4:26b")
         self.assertEqual(setting.get("max_parallel_workers"), 1)
 
     def test_upsert_llm_setting_normalises_legacy_advanced_model_alias(self):

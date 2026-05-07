@@ -354,7 +354,7 @@ RUN_WORKER_ROUTE_MODE = str(os.getenv("RUN_WORKER_ROUTE_MODE", "all") or "all").
 
 # Local Ollama defaults (DGX/local-host execution route).
 LOCAL_OLLAMA_BASE_URL = str(os.getenv("LOCAL_OLLAMA_BASE_URL", "http://127.0.0.1:11434/v1") or "").strip()
-LOCAL_OLLAMA_MODEL_DEFAULT = str(os.getenv("LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:27b") or "").strip() or "gemma4:27b"
+LOCAL_OLLAMA_MODEL_DEFAULT = str(os.getenv("LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:26b") or "").strip() or "gemma4:26b"
 LOCAL_OLLAMA_API_KEY = str(os.getenv("LOCAL_OLLAMA_API_KEY", "ollama") or "").strip() or "ollama"
 LOCAL_OLLAMA_MAX_PARALLEL_WORKERS = _env_int("LOCAL_OLLAMA_MAX_PARALLEL_WORKERS", 1)
 

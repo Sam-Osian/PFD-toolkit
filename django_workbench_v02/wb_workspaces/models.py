@@ -281,7 +281,7 @@ class UserLLMSetting(models.Model):
         choices=WorkspaceLLMProvider.choices,
         default=WorkspaceLLMProvider.LOCAL_OLLAMA,
     )
-    model_name = models.CharField(max_length=255, default="gemma4:27b")
+    model_name = models.CharField(max_length=255, default="gemma4:26b")
     max_parallel_workers = models.PositiveSmallIntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)
@@ -319,7 +319,7 @@ class WorkspaceLLMSetting(models.Model):
         choices=WorkspaceLLMProvider.choices,
         default=WorkspaceLLMProvider.LOCAL_OLLAMA,
     )
-    model_name = models.CharField(max_length=255, default="gemma4:27b")
+    model_name = models.CharField(max_length=255, default="gemma4:26b")
     max_parallel_workers = models.PositiveSmallIntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
     updated_at = models.DateTimeField(auto_now=True)

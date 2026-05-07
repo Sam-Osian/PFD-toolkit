@@ -16,7 +16,7 @@ class RunQueueForm(forms.Form):
     )
     model_name = forms.CharField(
         required=False,
-        initial="gemma4:27b",
+        initial="gemma4:26b",
         help_text="LLM model name used for this run.",
     )
     api_key = forms.CharField(
@@ -64,7 +64,7 @@ class RunQueueForm(forms.Form):
         model_name = (cleaned.get("model_name") or "").strip()
         if not model_name:
             if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
-                model_name = "gemma4:27b"
+                model_name = "gemma4:26b"
             elif provider == WorkspaceLLMProvider.OPENROUTER:
                 model_name = "openai/gpt-4.1-mini"
             else:

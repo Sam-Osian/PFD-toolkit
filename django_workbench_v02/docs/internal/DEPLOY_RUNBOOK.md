@@ -151,7 +151,7 @@ Required DGX env:
 
 1. `RUN_WORKER_ROUTE_MODE=local`
 2. `LOCAL_OLLAMA_BASE_URL=http://127.0.0.1:11434/v1` (or reachable Ollama URL)
-3. `LOCAL_OLLAMA_MODEL_DEFAULT=gemma4:27b`
+3. `LOCAL_OLLAMA_MODEL_DEFAULT=gemma4:26b`
 
 Result:
 

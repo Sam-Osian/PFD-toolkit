@@ -262,7 +262,7 @@ def _wizard_copy_prefill(
             if str(config.get("provider") or "").strip().lower() == WorkspaceLLMProvider.OPENROUTER
             else str(config.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
         ),
-        "model_name": str(config.get("model_name") or "gemma4:27b").strip(),
+        "model_name": str(config.get("model_name") or "gemma4:26b").strip(),
         "max_parallel_workers": max_parallel_workers,
         "request_completion_email": True,
     }
@@ -1719,7 +1719,7 @@ def save_active_llm_config(request):
         return redirect("llm-config")
 
     provider = str(form.cleaned_data.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
-    model_name = str(form.cleaned_data.get("model_name") or "gemma4:27b").strip()
+    model_name = str(form.cleaned_data.get("model_name") or "gemma4:26b").strip()
     max_parallel_workers = int(form.cleaned_data.get("max_parallel_workers") or 1)
     api_key = str(form.cleaned_data.get("api_key") or "").strip()
     base_url = str(form.cleaned_data.get("base_url") or "").strip()

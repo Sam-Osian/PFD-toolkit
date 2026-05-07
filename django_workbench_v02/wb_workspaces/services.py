@@ -60,7 +60,7 @@ def _provider_requires_api_key(provider: str) -> bool:
 def _default_model_name_for_provider(provider: str) -> str:
     provider_key = str(provider or "").strip().lower()
     if provider_key == WorkspaceLLMProvider.LOCAL_OLLAMA:
-        return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:27b") or "gemma4:27b").strip() or "gemma4:27b"
+        return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:26b") or "gemma4:26b").strip() or "gemma4:26b"
     if provider_key == WorkspaceLLMProvider.OPENROUTER:
         return "openai/gpt-4.1-mini"
     return "gpt-4.1-mini"

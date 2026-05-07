@@ -384,7 +384,7 @@ def _wizard_retry_prefill(*, investigation: Investigation, run: InvestigationRun
             if str(config.get("provider") or "").strip().lower() == WorkspaceLLMProvider.OPENROUTER
             else str(config.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
         ),
-        "model_name": str(config.get("model_name") or "gemma4:27b").strip(),
+        "model_name": str(config.get("model_name") or "gemma4:26b").strip(),
         "max_parallel_workers": max_parallel_workers,
         "request_completion_email": True,
     }
@@ -482,7 +482,7 @@ def investigation_start(request):
                     modal_review_config = {
                         "execution_mode": "real",
                         "provider": review_form.cleaned_data.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA,
-                        "model_name": review_form.cleaned_data.get("model_name") or "gemma4:27b",
+                        "model_name": review_form.cleaned_data.get("model_name") or "gemma4:26b",
                         "max_parallel_workers": int(
                             review_form.cleaned_data.get("max_parallel_workers") or 1
                         ),

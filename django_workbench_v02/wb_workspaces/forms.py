@@ -56,7 +56,7 @@ class ActiveLLMConfigForm(forms.Form):
     )
     model_name = forms.CharField(
         required=False,
-        initial="gemma4:27b",
+        initial="gemma4:26b",
     )
     max_parallel_workers = forms.IntegerField(
         required=False,

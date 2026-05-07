@@ -134,7 +134,7 @@ class RunServiceTests(TestCase):
             input_config_json={
                 "provider": "local_ollama",
                 "execution_mode": "real",
-                "model_name": "gemma4:27b",
+                "model_name": "gemma4:26b",
             },
         )
         self.assertTrue(run.requires_approval)
@@ -166,7 +166,7 @@ class RunServiceTests(TestCase):
             input_config_json={
                 "provider": "local_ollama",
                 "execution_mode": "real",
-                "model_name": "gemma4:27b",
+                "model_name": "gemma4:26b",
                 "pipeline_plan": ["filter", "themes", "extract"],
                 "pipeline_index": 1,
             },
@@ -581,7 +581,7 @@ class RunViewTests(TestCase):
             data={
                 "run_type": RunType.FILTER,
                 "provider": "local_ollama",
-                "model_name": "gemma4:27b",
+                "model_name": "gemma4:26b",
                 "api_key": "",
                 "input_config_json": '{"execution_mode": "real"}',
             },
@@ -593,7 +593,7 @@ class RunViewTests(TestCase):
             input_config_json__execution_mode="real",
         ).latest("created_at")
         self.assertEqual(run.input_config_json.get("provider"), "local_ollama")
-        self.assertEqual(run.input_config_json.get("model_name"), "gemma4:27b")
+        self.assertEqual(run.input_config_json.get("model_name"), "gemma4:26b")
 
     def test_queue_real_run_saves_workspace_credential(self):
         self.client.force_login(self.owner)
@@ -989,7 +989,7 @@ class RunAdapterTests(TestCase):
 
     @override_settings(
         LOCAL_OLLAMA_BASE_URL="http://127.0.0.1:11434/v1",
-        LOCAL_OLLAMA_MODEL_DEFAULT="gemma4:27b",
+        LOCAL_OLLAMA_MODEL_DEFAULT="gemma4:26b",
         LOCAL_OLLAMA_API_KEY="ollama",
         LOCAL_OLLAMA_MAX_PARALLEL_WORKERS=1,
     )
@@ -1006,7 +1006,7 @@ class RunAdapterTests(TestCase):
         mocked_resolve.assert_not_called()
         self.assertEqual(kwargs.get("api_key"), "ollama")
         self.assertEqual(kwargs.get("base_url"), "http://127.0.0.1:11434/v1")
-        self.assertEqual(kwargs.get("model"), "gemma4:27b")
+        self.assertEqual(kwargs.get("model"), "gemma4:26b")
         self.assertEqual(kwargs.get("max_workers"), 1)
         self.assertEqual(kwargs.get("reasoning_effort"), "none")
 

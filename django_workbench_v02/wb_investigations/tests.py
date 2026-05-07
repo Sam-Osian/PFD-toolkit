@@ -258,7 +258,7 @@ class InvestigationServiceTests(TestCase):
             run_filter=True,
             review_config={
                 "provider": "local_ollama",
-                "model_name": "gemma4:27b",
+                "model_name": "gemma4:26b",
                 "max_parallel_workers": 8,
             },
         )
@@ -269,7 +269,7 @@ class InvestigationServiceTests(TestCase):
         )
         self.assertTrue(readiness["can_launch"])
         self.assertEqual(readiness["review"]["provider"], "local_ollama")
-        self.assertEqual(readiness["review"]["model_name"], "gemma4:27b")
+        self.assertEqual(readiness["review"]["model_name"], "gemma4:26b")
         self.assertEqual(readiness["review"]["max_parallel_workers"], 1)
         credential_check = next(check for check in readiness["checks"] if check["key"] == "credential")
         self.assertTrue(credential_check["ready"])
