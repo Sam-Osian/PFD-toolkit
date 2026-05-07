@@ -1,0 +1,20 @@
+{
+  "properties": {
+    "age": {
+      "description": "Age at death in years",
+      "title": "Age",
+      "type": "number"
+    },
+    "gender": {
+      "description": "Gender/Sex of the deceased (Male, Female, Other) - you may infer from pronouns/name of the deceased",
+      "title": "Gender",
+      "type": "string"
+    }
+  },
+  "required": [
+    "age",
+    "gender"
+  ],
+  "title": "RunExtractFeatures",
+  "type": "object"
+}

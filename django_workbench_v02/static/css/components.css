@@ -436,6 +436,38 @@ main hr {
   font-size: 12px;
   padding: 7px 10px;
 }
+.ws-status-help {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+}
+.ws-status-glossary-wrap {
+  max-height: min(58vh, 460px);
+  overflow: auto;
+  margin-top: 4px;
+}
+.ws-status-glossary {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.ws-status-glossary th,
+.ws-status-glossary td {
+  text-align: left;
+  vertical-align: top;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-2);
+}
+.ws-status-glossary th {
+  font-family: var(--ff-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-3);
+}
+.ws-status-glossary tbody tr:last-child td { border-bottom: 0; }
 
 .ws-body {
   flex: 1;
@@ -455,6 +487,10 @@ main hr {
 
 .ws-open-title:hover {
   color: #e7e3ff;
+}
+.ws-open-title-disabled {
+  cursor: default;
+  color: var(--text-2);
 }
 
 .ws-body p {

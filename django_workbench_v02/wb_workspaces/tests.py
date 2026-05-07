@@ -1121,6 +1121,17 @@ class WorkspaceActiveStateViewTests(TestCase):
         self.assertContains(response, "Queued")
         self.assertContains(response, "Finding themes")
         self.assertNotContains(response, ">Loading<")
+        self.assertNotContains(
+            response,
+            reverse("workbook-open", kwargs={"workbook_id": self.workspace_a.id}),
+        )
+        self.assertNotContains(
+            response,
+            reverse("workbook-open", kwargs={"workbook_id": self.workspace_b.id}),
+        )
+        self.assertContains(response, "Investigation status glossary")
+        self.assertContains(response, "Finding reports that match your search query.")
+        self.assertContains(response, "Extracting structured fields according to your specification.")
 
     def test_dashboard_shows_complete_reports_found_metric(self):
         investigation = create_investigation(

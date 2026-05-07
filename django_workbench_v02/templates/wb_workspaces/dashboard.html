@@ -52,6 +52,19 @@
                                 {% else %}
                                     <span class="ws-tag">{{ row.pipeline_status_label }}</span>
                                 {% endif %}
+                                <button
+                                    type="button"
+                                    class="icon-btn ws-status-help"
+                                    data-open-status-glossary
+                                    aria-label="Open status glossary"
+                                    title="Status glossary"
+                                >
+                                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                                        <circle cx="8" cy="8" r="6"></circle>
+                                        <path d="M6 6.2a2 2 0 1 1 3 1.7c-.7.4-1 .7-1 1.4"></path>
+                                        <path d="M8 11.5v.1"></path>
+                                    </svg>
+                                </button>
                                 <span class="ws-owner">You</span>
                             </div>
                             <details class="ws-actions">
@@ -98,7 +111,13 @@
                         {{ row.copy_prefill|json_script:row.copy_prefill_id }}
 
                         <div class="ws-body">
-                            <h3><a class="ws-open-title" href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a></h3>
+                            <h3>
+                                {% if row.pipeline_state == 'pending' %}
+                                    <span class="ws-open-title ws-open-title-disabled" aria-disabled="true">{{ row.investigation_title|default:workspace.title }}</span>
+                                {% else %}
+                                    <a class="ws-open-title" href="{% url 'workbook-open' workbook_id=workspace.id %}">{{ row.investigation_title|default:workspace.title }}</a>
+                                {% endif %}
+                            </h3>
                             {% if row.investigation_description %}
                                 <p>{{ row.investigation_description }}</p>
                             {% endif %}
@@ -272,6 +291,43 @@
     </div>
 </div>
 
+<div class="dlg-back" id="workspace-status-glossary-dialog" aria-hidden="true">
+    <div class="dlg confirm" role="dialog" aria-labelledby="workspace-status-glossary-title">
+        <div class="dlg-head">
+            <div class="k">Reference</div>
+            <h3 id="workspace-status-glossary-title">Investigation status glossary</h3>
+            <p>Use this quick guide to understand what each status means while runs are processing.</p>
+        </div>
+        <div class="ws-status-glossary-wrap">
+            <table class="ws-status-glossary">
+                <thead>
+                    <tr>
+                        <th scope="col">Status</th>
+                        <th scope="col">Meaning</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td>Queued</td><td>Your run is in line and will start when the worker picks it up.</td></tr>
+                    <tr><td>Filtering</td><td>Finding reports that match your search query.</td></tr>
+                    <tr><td>Finding themes</td><td>Discovering recurring themes for your reports.</td></tr>
+                    <tr><td>Extracting</td><td>Extracting structured fields according to your specification.</td></tr>
+                    <tr><td>Cancelling</td><td>Cancellation has been requested and is being processed.</td></tr>
+                    <tr><td>Complete</td><td>The latest run finished successfully and outputs are available.</td></tr>
+                    <tr><td>Failed</td><td>The latest run ended with an error and did not complete fully.</td></tr>
+                    <tr><td>Timed out</td><td>The run exceeded time limits and was stopped.</td></tr>
+                    <tr><td>Cancelled</td><td>The run was cancelled before completion.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="dlg-foot">
+            <span class="meta"><span class="k">Esc</span> to close</span>
+            <div class="acts">
+                <button class="btn btn-primary" type="button" data-status-help-close>Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 document.addEventListener("DOMContentLoaded", function() {
   const dashboardSections = document.getElementById("workspace-dashboard-sections");
@@ -284,6 +340,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const restoreDialog = document.getElementById("workspace-restore-dialog");
   const restoreForm = document.getElementById("workspace-restore-form");
   const restoreCopy = document.getElementById("workspace-restore-copy");
+  const statusGlossaryDialog = document.getElementById("workspace-status-glossary-dialog");
   let refreshInFlight = false;
 
   const closeActionMenu = function(menu) {
@@ -395,6 +452,13 @@ document.addEventListener("DOMContentLoaded", function() {
       return;
     }
 
+    const statusGlossaryButton = event.target.closest("[data-open-status-glossary]");
+    if (statusGlossaryButton) {
+      closeAllActionMenus();
+      openDialog(statusGlossaryDialog);
+      return;
+    }
+
     if (event.target.closest("[data-archive-close]")) {
       closeDialog(archiveDialog);
       return;
@@ -405,6 +469,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     if (event.target.closest("[data-restore-close]")) {
       closeDialog(restoreDialog);
+      return;
+    }
+    if (event.target.closest("[data-status-help-close]")) {
+      closeDialog(statusGlossaryDialog);
       return;
     }
 
@@ -418,6 +486,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }
     if (event.target === restoreDialog) {
       closeDialog(restoreDialog);
+      return;
+    }
+    if (event.target === statusGlossaryDialog) {
+      closeDialog(statusGlossaryDialog);
       return;
     }
 
@@ -451,6 +523,7 @@ document.addEventListener("DOMContentLoaded", function() {
       closeDialog(archiveDialog);
       closeDialog(deleteDialog);
       closeDialog(restoreDialog);
+      closeDialog(statusGlossaryDialog);
       return;
     }
     if (event.key !== "Enter" && event.key !== " ") return;
