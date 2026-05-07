@@ -18,6 +18,7 @@ from wb_runs.models import (
     RunStatus,
     RunType,
     RunWorkerHeartbeat,
+    RunApprovalStatus,
 )
 from wb_workspaces.models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceReportExclusion
 
@@ -88,7 +89,7 @@ class OpsInterfaceTests(TestCase):
         response = self.client.get(reverse("ops-dashboard"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Run review")
-        self.assertContains(response, "queued investigations")
+        self.assertContains(response, "queued runs before approval")
 
     def test_non_staff_redirected_to_admin_login(self):
         self.client.force_login(self.owner)
@@ -136,3 +137,52 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dataset moderation")
         self.assertContains(response, "Sample report")
+
+    def test_ops_review_approve_persists_extract_feature_fields(self):
+        pending = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.EXTRACT,
+            status=RunStatus.QUEUED,
+            approval_status=RunApprovalStatus.PENDING,
+            requires_approval=True,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER, RunType.EXTRACT],
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "search_query": "example",
+                "feature_fields": [{"name": "setting", "description": "Care setting", "type": "text"}],
+            },
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("ops-approval-action", kwargs={"run_id": pending.id}),
+            data={
+                "action": "approve",
+                "title": self.investigation.title,
+                "question_text": self.investigation.question_text,
+                "scope_option": "all_reports",
+                "run_filter": "1",
+                "run_extract": "1",
+                "search_query": "example",
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "max_parallel_workers": "1",
+                "feature_field_name": ["setting", "age_at_death"],
+                "feature_field_description": ["Care setting", "Age in years"],
+                "feature_field_type": ["text", "decimal"],
+                "allow_multiple": "1",
+                "skip_if_present": "1",
+                "approval_note": "looks good",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        pending.refresh_from_db()
+        self.assertEqual(pending.approval_status, RunApprovalStatus.APPROVED)
+        features = pending.input_config_json.get("feature_fields") or []
+        self.assertEqual(len(features), 2)
+        self.assertEqual(features[0]["name"], "setting")
+        self.assertEqual(features[1]["name"], "age_at_death")

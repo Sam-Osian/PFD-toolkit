@@ -45,12 +45,24 @@
                             <div class="ws-meta">
                                 <span class="ws-dot {% if row.pipeline_state == 'pending' %}live{% elif row.pipeline_state == 'complete' %}dim{% elif row.pipeline_state == 'failed-warning' %}pause{% else %}dim{% endif %}"></span>
                                 {% if row.pipeline_state == 'pending' %}
-                                    <span class="ws-tag ws-tag-loading">
+                                    <span
+                                        class="ws-tag ws-tag-loading"
+                                        data-open-status-glossary
+                                        role="button"
+                                        tabindex="0"
+                                        aria-label="Open status glossary"
+                                    >
                                         <span class="ws-spinner" aria-hidden="true"></span>
                                         <span>{{ row.pending_status_label|default:row.pipeline_status_label }}</span>
                                     </span>
                                 {% else %}
-                                    <span class="ws-tag">{{ row.pipeline_status_label }}</span>
+                                    <span
+                                        class="ws-tag"
+                                        data-open-status-glossary
+                                        role="button"
+                                        tabindex="0"
+                                        aria-label="Open status glossary"
+                                    >{{ row.pipeline_status_label }}</span>
                                 {% endif %}
                                 <span class="ws-owner">You</span>
                             </div>
@@ -352,7 +364,6 @@
                     <tr><td>Filtering</td><td>Finding reports that match your search query.</td></tr>
                     <tr><td>Finding themes</td><td>Discovering recurring themes for your reports.</td></tr>
                     <tr><td>Extracting</td><td>Extracting structured fields according to your specification.</td></tr>
-                    <tr><td>Cancelling</td><td>Cancellation has been requested and is being processed.</td></tr>
                     <tr><td>Complete</td><td>The latest run finished successfully and outputs are available.</td></tr>
                     <tr><td>Failed</td><td>The latest run ended with an error and did not complete fully.</td></tr>
                     <tr><td>Timed out</td><td>The run exceeded time limits and was stopped.</td></tr>
@@ -588,6 +599,15 @@ document.addEventListener("DOMContentLoaded", function() {
 
     if (event.target.closest("details.ws-actions")) return;
     closeAllActionMenus();
+  });
+
+  document.addEventListener("keydown", function(event) {
+    const statusGlossaryTrigger = event.target.closest("[data-open-status-glossary]");
+    if (!statusGlossaryTrigger) return;
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    closeAllActionMenus();
+    openDialog(statusGlossaryDialog);
   });
 
   document.addEventListener("mousemove", function(event) {

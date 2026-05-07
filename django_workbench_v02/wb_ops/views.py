@@ -5,6 +5,7 @@ from collections import defaultdict
 from datetime import timedelta
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from itertools import zip_longest
 
 import pandas as pd
 from django.conf import settings
@@ -109,6 +110,11 @@ class TypedRunReviewPayload:
     model_name: str
     max_parallel_workers: int
     request_completion_email: bool
+    feature_fields: list[dict]
+    allow_multiple: bool
+    force_assign: bool
+    skip_if_present: bool
+    extract_include_supporting_quotes: bool
 
 
 def _coerce_lookback_days(raw_value) -> int:
@@ -213,6 +219,29 @@ def _typed_payload_from_run(run: InvestigationRun) -> TypedRunReviewPayload:
     model_name = str(config.get("model_name") or "gemma4:26b").strip()
     if not model_name:
         model_name = "gemma4:26b"
+    feature_rows = config.get("feature_fields") if isinstance(config.get("feature_fields"), list) else []
+    feature_fields: list[dict] = []
+    for row in feature_rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or row.get("field_name") or "").strip()
+        description = str(row.get("description") or "").strip()
+        field_type = str(row.get("type") or "text").strip().lower() or "text"
+        if field_type == "number":
+            field_type = "decimal"
+        if field_type not in {"text", "decimal", "boolean"}:
+            field_type = "text"
+        if not name:
+            continue
+        feature_fields.append(
+            {
+                "name": name,
+                "description": description,
+                "type": field_type,
+            }
+        )
+    if not feature_fields:
+        feature_fields = [{"name": "", "description": "", "type": "text"}]
 
     return TypedRunReviewPayload(
         title=str(investigation.title or "").strip(),
@@ -234,7 +263,39 @@ def _typed_payload_from_run(run: InvestigationRun) -> TypedRunReviewPayload:
         model_name=model_name,
         max_parallel_workers=_parse_int(config.get("max_parallel_workers"), default=1, minimum=1, maximum=32) or 1,
         request_completion_email=True,
+        feature_fields=feature_fields,
+        allow_multiple=bool(config.get("allow_multiple", False)),
+        force_assign=bool(config.get("force_assign", False)),
+        skip_if_present=bool(config.get("skip_if_present", True)),
+        extract_include_supporting_quotes=bool(config.get("produce_spans", False)),
     )
+
+
+def _feature_fields_from_post(request) -> list[dict]:
+    names = request.POST.getlist("feature_field_name")
+    descriptions = request.POST.getlist("feature_field_description")
+    types = request.POST.getlist("feature_field_type")
+    rows: list[dict] = []
+    for raw_name, raw_description, raw_type in zip_longest(names, descriptions, types, fillvalue=""):
+        name = str(raw_name or "").strip()
+        description = str(raw_description or "").strip()
+        field_type = str(raw_type or "text").strip().lower() or "text"
+        if field_type == "number":
+            field_type = "decimal"
+        if field_type not in {"text", "decimal", "boolean"}:
+            field_type = "text"
+        if not name and not description:
+            continue
+        if not name:
+            continue
+        rows.append(
+            {
+                "name": name,
+                "description": description,
+                "type": field_type,
+            }
+        )
+    return rows
 
 
 def _typed_payload_from_post(request) -> TypedRunReviewPayload:
@@ -253,6 +314,8 @@ def _typed_payload_from_post(request) -> TypedRunReviewPayload:
     max_themes = _parse_int(request.POST.get("max_themes"), default=None, minimum=1, maximum=100)
     if min_themes and max_themes and min_themes > max_themes:
         min_themes, max_themes = max_themes, min_themes
+    include_supporting_quotes = _to_bool(request.POST.get("include_supporting_quotes"))
+    extract_include_supporting_quotes = _to_bool(request.POST.get("extract_include_supporting_quotes"))
 
     return TypedRunReviewPayload(
         title=str(request.POST.get("title") or "").strip(),
@@ -265,7 +328,7 @@ def _typed_payload_from_post(request) -> TypedRunReviewPayload:
         run_extract=_to_bool(request.POST.get("run_extract")),
         search_query=str(request.POST.get("search_query") or "").strip(),
         filter_df=_to_bool(request.POST.get("filter_df")),
-        include_supporting_quotes=_to_bool(request.POST.get("include_supporting_quotes")),
+        include_supporting_quotes=include_supporting_quotes,
         seed_topics=str(request.POST.get("seed_topics") or "").strip(),
         min_themes=min_themes,
         max_themes=max_themes,
@@ -274,6 +337,11 @@ def _typed_payload_from_post(request) -> TypedRunReviewPayload:
         model_name=model_name,
         max_parallel_workers=_parse_int(request.POST.get("max_parallel_workers"), default=1, minimum=1, maximum=32) or 1,
         request_completion_email=_to_bool(request.POST.get("request_completion_email")),
+        feature_fields=_feature_fields_from_post(request),
+        allow_multiple=_to_bool(request.POST.get("allow_multiple")),
+        force_assign=_to_bool(request.POST.get("force_assign")),
+        skip_if_present=_to_bool(request.POST.get("skip_if_present")),
+        extract_include_supporting_quotes=extract_include_supporting_quotes,
     )
 
 
@@ -619,7 +687,7 @@ def _apply_typed_review_edits(*, actor, run: InvestigationRun, payload: TypedRun
     config["pipeline_index"] = 0
     config["search_query"] = payload.search_query
     config["filter_df"] = bool(payload.filter_df)
-    config["produce_spans"] = bool(payload.include_supporting_quotes)
+    config["produce_spans"] = bool(payload.include_supporting_quotes or payload.extract_include_supporting_quotes)
     config["seed_topics"] = payload.seed_topics
     config["min_themes"] = payload.min_themes
     config["max_themes"] = payload.max_themes
@@ -627,6 +695,16 @@ def _apply_typed_review_edits(*, actor, run: InvestigationRun, payload: TypedRun
     config["provider"] = payload.provider
     config["model_name"] = payload.model_name
     config["max_parallel_workers"] = payload.max_parallel_workers
+    if RunType.EXTRACT in plan:
+        config["feature_fields"] = payload.feature_fields
+        config["allow_multiple"] = bool(payload.allow_multiple)
+        config["force_assign"] = bool(payload.force_assign)
+        config["skip_if_present"] = bool(payload.skip_if_present)
+    else:
+        config.pop("feature_fields", None)
+        config.pop("allow_multiple", None)
+        config.pop("force_assign", None)
+        config.pop("skip_if_present", None)
     if report_limit is None:
         config.pop("report_limit", None)
     else:
@@ -700,10 +778,10 @@ def approvals(request):
     if selected_run is None and pending_runs:
         selected_run = pending_runs[0]
 
-    selected_payload = _typed_payload_from_run(selected_run) if selected_run else None
     rows = []
     for run in pending_runs:
         config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+        payload = _typed_payload_from_run(run)
         rows.append(
             {
                 "run": run,
@@ -711,13 +789,13 @@ def approvals(request):
                 "model_name": str(config.get("model_name") or ""),
                 "queued_ago": _format_relative_delta(run.queued_at, now=now),
                 "is_selected": selected_run is not None and run.id == selected_run.id,
+                "payload": payload,
             }
         )
     context = {
         "ops_section": "approvals",
         "pending_rows": rows,
         "selected_run": selected_run,
-        "selected_payload": selected_payload,
         "filter_type": str(request.GET.get("type") or "").strip().lower(),
         "filter_provider": str(request.GET.get("provider") or "").strip().lower(),
     }

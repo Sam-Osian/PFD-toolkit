@@ -14,6 +14,16 @@
       target.style.display = open ? "table-row" : "none";
     });
   });
+  document.querySelectorAll("[data-row-open]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest("[data-row-toggle]");
+      if (!row) return;
+      const target = document.querySelector(btn.dataset.rowOpen || row.dataset.rowToggle || "");
+      if (!target) return;
+      const open = row.classList.toggle("expanded");
+      target.style.display = open ? "table-row" : "none";
+    });
+  });
 
   // ── chip add/remove ──
   document.querySelectorAll("[data-chips]").forEach((root) => {
@@ -71,9 +81,9 @@
       row.className = "schema-row";
       row.setAttribute("role", "row");
       row.innerHTML = `
-        <span role="cell" data-l="Field name"><input class="input mono" placeholder="field_name" /></span>
-        <span role="cell" data-l="Description"><input class="input" placeholder="What this field captures" /></span>
-        <span role="cell" data-l="Type"><select class="select"><option>integer</option><option>number</option><option>string</option><option>boolean</option><option>enum</option><option>date</option></select></span>
+        <span role="cell" data-l="Field name"><input class="input mono" name="feature_field_name" placeholder="field_name" /></span>
+        <span role="cell" data-l="Description"><input class="input" name="feature_field_description" placeholder="What this field captures" /></span>
+        <span role="cell" data-l="Type"><select class="select" name="feature_field_type"><option value="decimal">number</option><option value="text">text</option><option value="boolean">True/False</option></select></span>
         <span role="cell" data-l="Required" class="schema-c-req"><label class="check tight"><input type="checkbox" /></label></span>
         <span role="cell" class="schema-c-x"><button class="iconbtn" type="button" aria-label="Remove">×</button></span>`;
       tbl.insertBefore(row, addBtn);

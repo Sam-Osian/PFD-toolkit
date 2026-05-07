@@ -5,12 +5,16 @@
 <div class="page-head">
   <div>
     <h1><span class="label">PRIMARY · APPROVALS</span>Run review</h1>
-    <p>Review and approve queued investigations. Edits are applied through a typed mapping layer before approval.</p>
+    <p>Inspect and edit queued runs before approval. Fields map to typed backend config; no raw JSON editing required.</p>
   </div>
 </div>
 
 <section class="panel">
   <div class="filters">
+    <div class="seg">
+      <button class="is-active" type="button">Pending <span class="mono-small" style="margin-left:4px;color:var(--warn)">{{ pending_rows|length }}</span></button>
+    </div>
+    <div class="grow"></div>
     <form method="get" class="row" style="gap:8px;flex-wrap:wrap;align-items:center;">
       <select class="select" name="type" style="width:auto;min-width:150px">
         <option value="" {% if not filter_type %}selected{% endif %}>Type · Any</option>
@@ -28,92 +32,255 @@
   </div>
 
   <table class="tbl">
-    <thead><tr><th>Investigation</th><th>User</th><th>Type</th><th>Provider</th><th>Queued</th><th>Status</th><th class="right">Action</th></tr></thead>
+    <thead>
+      <tr>
+        <th style="width:34px"></th>
+        <th>Investigation</th>
+        <th>User</th>
+        <th>Type</th>
+        <th>Provider</th>
+        <th>Queued</th>
+        <th>Status</th>
+        <th class="right"></th>
+      </tr>
+    </thead>
     <tbody>
       {% for row in pending_rows %}
-      <tr>
-        <td><b>{{ row.run.investigation.title }}</b><div class="mono-small">{{ row.run.id }}</div></td>
-        <td>{{ row.run.requested_by.email }}</td>
-        <td><span class="b accent">{{ row.run.run_type }}</span></td>
-        <td><span class="mono-small">{{ row.provider }}{% if row.model_name %} · {{ row.model_name }}{% endif %}</span></td>
-        <td><span class="mono-small">{{ row.queued_ago }}</span></td>
-        <td><span class="b" data-status="pending"><span class="dot"></span>{{ row.run.approval_status }}</span></td>
-        <td class="right"><a class="btn btn-sm {% if row.is_selected %}btn-primary{% else %}btn-ghost{% endif %}" href="{% url 'ops-approvals' %}?run={{ row.run.id }}{% if filter_type %}&type={{ filter_type }}{% endif %}{% if filter_provider %}&provider={{ filter_provider }}{% endif %}">Review</a></td>
+      <tr class="row-toggle{% if row.is_selected %} expanded{% endif %}" data-row-toggle="#row-{{ row.run.id }}">
+        <td><span class="caret"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span></td>
+        <td data-label="Inv">
+          <b>{{ row.run.investigation.title }}</b>
+          <div class="mono-small">{{ row.run.workspace.slug }} · run {{ row.run.id }}</div>
+        </td>
+        <td data-label="User">
+          <div class="av-row">
+            <span class="av">{{ row.run.requested_by.email|slice:":2"|upper }}</span>
+            <div class="who"><b>{{ row.run.requested_by.get_full_name|default:row.run.requested_by.email }}</b><small>{{ row.run.requested_by.email }}</small></div>
+          </div>
+        </td>
+        <td data-label="Type"><span class="b accent">{{ row.run.run_type }}</span></td>
+        <td data-label="Provider"><span class="mono-small">{% if row.provider == "local_ollama" %}our server{% else %}openai{% endif %}{% if row.model_name %} · {{ row.model_name }}{% endif %}</span></td>
+        <td data-label="Queued"><span class="mono-small">{{ row.queued_ago }}</span></td>
+        <td data-label="Status"><span class="b" data-status="pending"><span class="dot"></span>{{ row.run.approval_status }}</span></td>
+        <td class="right"><button class="btn btn-sm {% if row.is_selected %}btn-primary{% else %}btn-ghost{% endif %}" type="button" data-row-open="#row-{{ row.run.id }}">Review</button></td>
+      </tr>
+      <tr id="row-{{ row.run.id }}" class="expand-panel"{% if not row.is_selected %} style="display:none"{% endif %}>
+        <td colspan="8">
+          <form id="review-form-{{ row.run.id }}" method="post" action="{% url 'ops-approval-action' run_id=row.run.id %}" class="expand-inner flow">
+            {% csrf_token %}
+            <section class="block">
+              <header class="block-h">
+                <span class="block-num">01</span>
+                <h3>Investigation</h3>
+                <span class="block-sub">title and research question</span>
+              </header>
+              <div class="block-body stack">
+                <div class="field">
+                  <label>Title</label>
+                  <input class="input" name="title" value="{{ row.payload.title }}">
+                </div>
+                <div class="field">
+                  <label>Research question <span class="muted">· optional</span></label>
+                  <textarea class="textarea" name="question_text">{{ row.payload.question_text }}</textarea>
+                </div>
+              </div>
+            </section>
+
+            <section class="block">
+              <header class="block-h">
+                <span class="block-num">02</span>
+                <h3>Scope</h3>
+                <span class="block-sub">temporal range of reports</span>
+              </header>
+              <div class="block-body">
+                <div class="opt-stack">
+                  <label class="opt{% if row.payload.scope_option == 'all_reports' %} is-active{% endif %}"><input type="radio" name="scope_option" value="all_reports" {% if row.payload.scope_option == 'all_reports' %}checked{% endif %}><div class="opt-body"><b>All reports</b></div></label>
+                  <label class="opt{% if row.payload.scope_option == 'last_3_years' %} is-active{% endif %}"><input type="radio" name="scope_option" value="last_3_years" {% if row.payload.scope_option == 'last_3_years' %}checked{% endif %}><div class="opt-body"><b>Last 3 years</b></div></label>
+                  <label class="opt{% if row.payload.scope_option == 'last_year' %} is-active{% endif %}"><input type="radio" name="scope_option" value="last_year" {% if row.payload.scope_option == 'last_year' %}checked{% endif %}><div class="opt-body"><b>Last year</b></div></label>
+                  <label class="opt{% if row.payload.scope_option == 'last_6_months' %} is-active{% endif %}"><input type="radio" name="scope_option" value="last_6_months" {% if row.payload.scope_option == 'last_6_months' %}checked{% endif %}><div class="opt-body"><b>Last 6 months</b></div></label>
+                  <label class="opt{% if row.payload.scope_option == 'most_recent_100' %} is-active{% endif %}"><input type="radio" name="scope_option" value="most_recent_100" {% if row.payload.scope_option == 'most_recent_100' %}checked{% endif %}><div class="opt-body"><b>100 most recent reports</b></div></label>
+                  <label class="opt{% if row.payload.scope_option == 'custom_range' %} is-active{% endif %}"><input type="radio" name="scope_option" value="custom_range" {% if row.payload.scope_option == 'custom_range' %}checked{% endif %}>
+                    <div class="opt-body">
+                      <b>Custom date range</b>
+                      <div class="row" style="gap:10px;margin-top:8px;flex-wrap:wrap">
+                        <div class="field" style="min-width:160px"><label>Start</label><input class="input" type="date" name="custom_start_date" value="{{ row.payload.custom_start_date }}"></div>
+                        <div class="field" style="min-width:160px"><label>End</label><input class="input" type="date" name="custom_end_date" value="{{ row.payload.custom_end_date }}"></div>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="block">
+              <header class="block-h">
+                <span class="block-num">03</span>
+                <h3>Method</h3>
+                <span class="block-sub">stages to run</span>
+              </header>
+              <div class="block-body">
+                <div class="method-grid">
+                  <label class="method-card{% if row.payload.run_filter %} is-active{% endif %}">
+                    <input type="checkbox" name="run_filter" value="1" data-method="filter" {% if row.payload.run_filter %}checked{% endif %}>
+                    <div class="method-card-body">
+                      <span class="method-num">1</span>
+                      <b>Filter</b>
+                      <small>Narrow the dataset to relevant reports using an LLM-evaluated search query.</small>
+                    </div>
+                  </label>
+                  <label class="method-card{% if row.payload.run_themes %} is-active{% endif %}">
+                    <input type="checkbox" name="run_themes" value="1" data-method="themes" {% if row.payload.run_themes %}checked{% endif %}>
+                    <div class="method-card-body">
+                      <span class="method-num">2</span>
+                      <b>Themes</b>
+                      <small>Inductively cluster the filtered set into themes with an LLM.</small>
+                    </div>
+                  </label>
+                  <label class="method-card{% if row.payload.run_extract %} is-active{% endif %}">
+                    <input type="checkbox" name="run_extract" value="1" data-method="extract" {% if row.payload.run_extract %}checked{% endif %}>
+                    <div class="method-card-body">
+                      <span class="method-num">3</span>
+                      <b>Extract</b>
+                      <small>Extract user-defined feature fields per report into a structured table.</small>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="block method-block" data-method-block="filter"{% if not row.payload.run_filter %} hidden{% endif %}>
+              <header class="block-h">
+                <span class="block-num">04</span>
+                <h3>Filter config</h3>
+                <span class="block-sub">how the filter stage runs</span>
+              </header>
+              <div class="block-body stack">
+                <div class="field">
+                  <label>Search query <span class="muted">· required</span></label>
+                  <textarea class="textarea" name="search_query">{{ row.payload.search_query }}</textarea>
+                </div>
+                <div class="check-row">
+                  <label class="check"><input type="checkbox" name="filter_df" value="1" {% if row.payload.filter_df %}checked{% endif %}> <span>Drop non-matches from the dataframe</span></label>
+                  <label class="check"><input type="checkbox" name="include_supporting_quotes" value="1" {% if row.payload.include_supporting_quotes %}checked{% endif %}> <span>Include supporting quotes</span></label>
+                </div>
+              </div>
+            </section>
+
+            <section class="block method-block" data-method-block="themes"{% if not row.payload.run_themes %} hidden{% endif %}>
+              <header class="block-h">
+                <span class="block-num">05</span>
+                <h3>Themes config</h3>
+                <span class="block-sub">how themes are derived</span>
+              </header>
+              <div class="block-body stack">
+                <div class="field">
+                  <label>Seed topics <span class="muted">· optional · one per line</span></label>
+                  <textarea class="textarea" name="seed_topics">{{ row.payload.seed_topics }}</textarea>
+                </div>
+                <div class="row" style="gap:12px;flex-wrap:wrap">
+                  <div class="field" style="min-width:140px"><label>Min themes</label><input class="input" type="number" min="1" max="100" name="min_themes" value="{{ row.payload.min_themes|default:'' }}"></div>
+                  <div class="field" style="min-width:140px"><label>Max themes</label><input class="input" type="number" min="1" max="100" name="max_themes" value="{{ row.payload.max_themes|default:'' }}"></div>
+                </div>
+                <div class="field">
+                  <label>Extra theme instructions <span class="muted">· optional</span></label>
+                  <textarea class="textarea" name="extra_theme_instructions">{{ row.payload.extra_theme_instructions }}</textarea>
+                </div>
+              </div>
+            </section>
+
+            <section class="block method-block" data-method-block="extract"{% if not row.payload.run_extract %} hidden{% endif %}>
+              <header class="block-h">
+                <span class="block-num">06</span>
+                <h3>Extract config</h3>
+                <span class="block-sub">feature fields to extract per report</span>
+              </header>
+              <div class="block-body stack">
+                <div class="schema-table" role="table" aria-label="Feature fields">
+                  <div class="schema-thead" role="row">
+                    <span role="columnheader">Field name</span>
+                    <span role="columnheader">Description</span>
+                    <span role="columnheader">Type</span>
+                    <span role="columnheader" class="schema-c-req">Required</span>
+                    <span role="columnheader" class="schema-c-x"></span>
+                  </div>
+                  {% for field in row.payload.feature_fields %}
+                  <div class="schema-row" role="row">
+                    <span role="cell"><input class="input mono" name="feature_field_name" value="{{ field.name }}"></span>
+                    <span role="cell"><input class="input" name="feature_field_description" value="{{ field.description }}"></span>
+                    <span role="cell">
+                      <select class="select" name="feature_field_type">
+                        <option value="decimal" {% if field.type == 'decimal' %}selected{% endif %}>number</option>
+                        <option value="text" {% if field.type == 'text' %}selected{% endif %}>text</option>
+                        <option value="boolean" {% if field.type == 'boolean' %}selected{% endif %}>True/False</option>
+                      </select>
+                    </span>
+                    <span role="cell" class="schema-c-req"><label class="check tight"><input type="checkbox" checked></label></span>
+                    <span role="cell" class="schema-c-x"><button class="iconbtn" type="button" aria-label="Remove">×</button></span>
+                  </div>
+                  {% endfor %}
+                  <button type="button" class="schema-add">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    Add field
+                  </button>
+                </div>
+                <div class="check-row">
+                  <label class="check"><input type="checkbox" name="force_assign" value="1" {% if row.payload.force_assign %}checked{% endif %}> <span>Force assign</span></label>
+                  <label class="check"><input type="checkbox" name="allow_multiple" value="1" {% if row.payload.allow_multiple %}checked{% endif %}> <span>Allow multiple values</span></label>
+                  <label class="check"><input type="checkbox" name="skip_if_present" value="1" {% if row.payload.skip_if_present %}checked{% endif %}> <span>Skip if already present</span></label>
+                  <label class="check"><input type="checkbox" name="extract_include_supporting_quotes" value="1" {% if row.payload.extract_include_supporting_quotes %}checked{% endif %}> <span>Include supporting quotes</span></label>
+                </div>
+              </div>
+            </section>
+
+            <section class="block">
+              <header class="block-h">
+                <span class="block-num">07</span>
+                <h3>Execution</h3>
+                <span class="block-sub">how the run is dispatched</span>
+              </header>
+              <div class="block-body stack">
+                <div class="row" style="gap:12px;flex-wrap:wrap">
+                  <div class="field" style="flex:1;min-width:200px">
+                    <label>Provider</label>
+                    <select class="select" name="provider">
+                      <option value="local_ollama" {% if row.payload.provider == 'local_ollama' %}selected{% endif %}>Our server</option>
+                      <option value="openai" {% if row.payload.provider == 'openai' %}selected{% endif %}>OpenAI</option>
+                    </select>
+                  </div>
+                  <div class="field" style="flex:1;min-width:200px">
+                    <label>Model</label>
+                    <input class="input" name="model_name" value="{{ row.payload.model_name }}">
+                  </div>
+                  <div class="field" style="width:140px">
+                    <label>Max workers</label>
+                    <input class="input" type="number" min="1" max="32" name="max_parallel_workers" value="{{ row.payload.max_parallel_workers }}">
+                  </div>
+                </div>
+                <div class="check-row">
+                  <label class="check"><input type="checkbox" name="request_completion_email" value="1" {% if row.payload.request_completion_email %}checked{% endif %}> <span>Email user on completion</span></label>
+                </div>
+                <div class="cols-2">
+                  <div class="field"><label>Approval note</label><textarea class="textarea" name="approval_note" placeholder="Optional note shown in run record."></textarea></div>
+                  <div class="field"><label>Schedule (optional)</label><input class="input" type="datetime-local" name="scheduled_for"></div>
+                </div>
+              </div>
+            </section>
+          </form>
+
+          <div class="review-actions">
+            <div class="req-by">
+              Requested by <b>{{ row.run.requested_by.get_full_name|default:row.run.requested_by.email }}</b> · <span class="mono">{{ row.queued_ago }} ago</span>
+            </div>
+            <div class="grow"></div>
+            <button class="btn btn-danger" type="submit" form="review-form-{{ row.run.id }}" name="action" value="reject">Reject</button>
+            <button class="btn btn-primary" type="submit" form="review-form-{{ row.run.id }}" name="action" value="approve">Approve &amp; queue</button>
+          </div>
+        </td>
       </tr>
       {% empty %}
-      <tr><td colspan="7">No pending approvals.</td></tr>
+      <tr><td colspan="8">No pending approvals.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
-
-{% if selected_run and selected_payload %}
-<section class="panel">
-  <div class="panel-head"><span class="kicker">EDITOR</span><h2>{{ selected_run.investigation.title }}</h2></div>
-  <form method="post" action="{% url 'ops-approval-action' run_id=selected_run.id %}" class="stack-md" style="padding:18px;">
-    {% csrf_token %}
-    <div class="cols-2">
-      <div class="field"><label>Title</label><input class="input" name="title" value="{{ selected_payload.title }}"></div>
-      <div class="field"><label>Research question</label><input class="input" name="question_text" value="{{ selected_payload.question_text }}"></div>
-    </div>
-
-    <div class="cols-3">
-      <div class="field"><label>Scope</label>
-        <select class="select" name="scope_option">
-          <option value="all_reports" {% if selected_payload.scope_option == 'all_reports' %}selected{% endif %}>All reports</option>
-          <option value="last_3_years" {% if selected_payload.scope_option == 'last_3_years' %}selected{% endif %}>Last 3 years</option>
-          <option value="last_year" {% if selected_payload.scope_option == 'last_year' %}selected{% endif %}>Last year</option>
-          <option value="last_6_months" {% if selected_payload.scope_option == 'last_6_months' %}selected{% endif %}>Last 6 months</option>
-          <option value="most_recent_100" {% if selected_payload.scope_option == 'most_recent_100' %}selected{% endif %}>Most recent 100</option>
-          <option value="custom_range" {% if selected_payload.scope_option == 'custom_range' %}selected{% endif %}>Custom range</option>
-        </select>
-      </div>
-      <div class="field"><label>Custom start</label><input class="input" type="date" name="custom_start_date" value="{{ selected_payload.custom_start_date }}"></div>
-      <div class="field"><label>Custom end</label><input class="input" type="date" name="custom_end_date" value="{{ selected_payload.custom_end_date }}"></div>
-    </div>
-
-    <div class="check-row">
-      <label class="check"><input type="checkbox" name="run_filter" value="1" {% if selected_payload.run_filter %}checked{% endif %}> <span>Filter</span></label>
-      <label class="check"><input type="checkbox" name="run_themes" value="1" {% if selected_payload.run_themes %}checked{% endif %}> <span>Themes</span></label>
-      <label class="check"><input type="checkbox" name="run_extract" value="1" {% if selected_payload.run_extract %}checked{% endif %}> <span>Extract</span></label>
-    </div>
-
-    <div class="field"><label>Search query</label><textarea class="textarea" name="search_query">{{ selected_payload.search_query }}</textarea></div>
-    <div class="check-row">
-      <label class="check"><input type="checkbox" name="filter_df" value="1" {% if selected_payload.filter_df %}checked{% endif %}> <span>Drop non-matches</span></label>
-      <label class="check"><input type="checkbox" name="include_supporting_quotes" value="1" {% if selected_payload.include_supporting_quotes %}checked{% endif %}> <span>Include supporting quotes</span></label>
-      <label class="check"><input type="checkbox" name="request_completion_email" value="1" {% if selected_payload.request_completion_email %}checked{% endif %}> <span>Email user on completion</span></label>
-    </div>
-
-    <div class="cols-3">
-      <div class="field"><label>Provider</label>
-        <select class="select" name="provider">
-          <option value="local_ollama" {% if selected_payload.provider == 'local_ollama' %}selected{% endif %}>Our server</option>
-          <option value="openai" {% if selected_payload.provider == 'openai' %}selected{% endif %}>OpenAI server</option>
-        </select>
-      </div>
-      <div class="field"><label>Model</label><input class="input" name="model_name" value="{{ selected_payload.model_name }}"></div>
-      <div class="field"><label>Max workers</label><input class="input" type="number" min="1" max="32" name="max_parallel_workers" value="{{ selected_payload.max_parallel_workers }}"></div>
-    </div>
-
-    <div class="cols-3">
-      <div class="field"><label>Seed topics</label><textarea class="textarea" name="seed_topics">{{ selected_payload.seed_topics }}</textarea></div>
-      <div class="field"><label>Min themes</label><input class="input" type="number" min="1" max="100" name="min_themes" value="{{ selected_payload.min_themes|default:'' }}"></div>
-      <div class="field"><label>Max themes</label><input class="input" type="number" min="1" max="100" name="max_themes" value="{{ selected_payload.max_themes|default:'' }}"></div>
-    </div>
-
-    <div class="field"><label>Extra theme instructions</label><textarea class="textarea" name="extra_theme_instructions">{{ selected_payload.extra_theme_instructions }}</textarea></div>
-    <div class="cols-2">
-      <div class="field"><label>Approval note</label><textarea class="textarea" name="approval_note" placeholder="Optional note shown in run record."></textarea></div>
-      <div class="field"><label>Schedule (optional)</label><input class="input" type="datetime-local" name="scheduled_for"></div>
-    </div>
-
-    <div class="review-actions">
-      <div class="grow"></div>
-      <button class="btn btn-danger" type="submit" name="action" value="reject">Reject</button>
-      <button class="btn btn-primary" type="submit" name="action" value="approve">Approve &amp; queue</button>
-    </div>
-  </form>
-</section>
-{% endif %}
 {% endblock %}
