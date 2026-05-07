@@ -1828,30 +1828,6 @@ svg:not([width]):not([height]) {
   border-color: var(--line-2);
   background: transparent;
 }
-.wz-method label.is-disabled::after {
-  content: attr(data-disabled-note);
-  position: absolute;
-  left: 16px;
-  right: 16px;
-  bottom: calc(100% + 8px);
-  z-index: 12;
-  padding: 8px 10px;
-  border: 1px solid var(--line-2);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg) 95%, black 5%);
-  color: var(--text-2);
-  font-size: 11px;
-  line-height: 1.4;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  transition: opacity var(--dur-fast), transform var(--dur-fast);
-}
-.wz-method label.is-disabled:hover::after,
-.wz-method label.is-disabled:focus-within::after {
-  opacity: 1;
-  transform: translateY(0);
-}
 
 .wz-ai-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .wz-ai-open.warn {
