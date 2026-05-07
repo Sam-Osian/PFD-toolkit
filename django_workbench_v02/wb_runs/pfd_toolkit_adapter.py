@@ -591,8 +591,16 @@ def execute_filter_workflow(
     successful_classifications = int(bool_series.notna().sum())
     failed_classifications = max(0, len(scored_df) - successful_classifications)
     if len(scored_df) > 0 and successful_classifications == 0:
+        samples: list[str] = []
+        for value in raw_series.head(3).tolist():
+            text = str(value)
+            if len(text) > 180:
+                text = text[:177] + "..."
+            samples.append(text)
+        sample_blob = " | ".join(samples) if samples else "no outputs captured"
         raise AdapterConfigurationError(
-            "Filter classification failed for all reports. Check provider selection and API credential."
+            "Filter classification failed for all reports. "
+            f"Sample model outputs: {sample_blob}"
         )
 
     scored_df[classification_col] = bool_series

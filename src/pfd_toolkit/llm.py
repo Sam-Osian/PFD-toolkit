@@ -154,6 +154,43 @@ def _strip_json_markdown(text: str) -> str:
     return text.replace("```", "").strip()
 
 
+def _normalise_yes_no(value: Any) -> str | None:
+    """Map common provider outputs to canonical 'Yes'/'No'."""
+    if isinstance(value, bool):
+        return "Yes" if value else "No"
+    if isinstance(value, (int, float)):
+        if value == 1:
+            return "Yes"
+        if value == 0:
+            return "No"
+    text = str(value or "").strip().lower()
+    if text in {"yes", "y", "true", "1"}:
+        return "Yes"
+    if text in {"no", "n", "false", "0"}:
+        return "No"
+    return None
+
+
+def _extract_text_from_message_content(content: Any) -> str:
+    """Handle SDK variants where message.content may be str or content parts."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict):
+                txt = part.get("text")
+                if txt is not None:
+                    text_parts.append(str(txt))
+                continue
+            txt = getattr(part, "text", None)
+            if txt is not None:
+                text_parts.append(str(txt))
+        if text_parts:
+            return "\n".join(text_parts)
+    return str(content or "")
+
+
 def _coerce_structured_response_from_text(
     *,
     response_format: Type[BaseModel],
@@ -176,6 +213,11 @@ def _coerce_structured_response_from_text(
     except Exception:
         payload = None
     if isinstance(payload, dict):
+        if "matches_topic" in payload:
+            normalized = _normalise_yes_no(payload.get("matches_topic"))
+            if normalized is not None:
+                payload = dict(payload)
+                payload["matches_topic"] = normalized
         try:
             return response_format.model_validate(payload)
         except Exception:
@@ -558,7 +600,8 @@ class LLM:
                 logger.debug(f"Actual tokens used: {used}")
             except Exception:
                 pass
-            return resp.choices[0].message.content.strip()
+            content = _extract_text_from_message_content(resp.choices[0].message.content)
+            return content.strip()
 
         results: List[BaseModel | str] = [None] * len(prompts)
 
@@ -592,7 +635,7 @@ class LLM:
                             validated = response_format.model_validate(parsed, strict=True)
                             return idx, validated
 
-                        raw = message.content
+                        raw = _extract_text_from_message_content(message.content)
                         validated = _coerce_structured_response_from_text(
                             response_format=response_format,
                             raw_text=raw,

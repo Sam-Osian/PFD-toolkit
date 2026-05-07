@@ -218,6 +218,39 @@ def test_generate_structured_infers_yes_no_from_plain_text(monkeypatch):
     assert result[0].matches_topic == "Yes"
 
 
+def test_generate_structured_accepts_boolean_matches_topic(monkeypatch):
+    class TopicMatch(BaseModel):
+        matches_topic: Literal["Yes", "No"]
+
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+
+    def fake_parse(**kwargs):
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content='{"matches_topic": true}'))]
+        )
+
+    monkeypatch.setattr(llm, "_parse_with_backoff", fake_parse)
+    result = llm.generate(["prompt"], response_format=TopicMatch, max_workers=1)
+    assert result[0].matches_topic == "Yes"
+
+
+def test_generate_structured_reads_content_parts(monkeypatch):
+    class TopicMatch(BaseModel):
+        matches_topic: Literal["Yes", "No"]
+
+    llm = LLM(api_key="test", max_workers=1, timeout=1)
+
+    def fake_parse(**kwargs):
+        content_parts = [types.SimpleNamespace(text='{"matches_topic":"No"}')]
+        return types.SimpleNamespace(
+            choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=content_parts))]
+        )
+
+    monkeypatch.setattr(llm, "_parse_with_backoff", fake_parse)
+    result = llm.generate(["prompt"], response_format=TopicMatch, max_workers=1)
+    assert result[0].matches_topic == "No"
+
+
 @pytest.mark.parametrize(
     "wrapped",
     [
