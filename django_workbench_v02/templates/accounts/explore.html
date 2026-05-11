@@ -15,7 +15,7 @@ Shared PFD Toolkit report view for {{ collection_title }}.
 {% elif is_collection_view %}
 Browse the {{ collection_title }} Prevention of Future Death report collection in PFD Toolkit.
 {% else %}
-Search and filter the Prevention of Future Death report archive by question, receiver, coroner area, and date.
+Filter the Prevention of Future Death report archive by AI filter, receiver, coroner area, and date range, then inspect trends and report-level results.
 {% endif %}
 {% endblock %}
 {% block meta_robots %}{% if is_workspace_view or is_shared_read_only %}noindex, nofollow{% else %}index, follow{% endif %}{% endblock %}
@@ -23,10 +23,10 @@ Search and filter the Prevention of Future Death report archive by question, rec
 {% if is_workspace_view %}{{ collection_title }} · Shared Report View{% elif is_collection_view %}{{ collection_title }} · PFD Report Collection{% else %}Explore Prevention of Future Death Reports{% endif %}
 {% endblock %}
 {% block og_description %}
-{% if is_collection_view and collection_description %}{{ collection_description }}{% else %}Search and filter the Prevention of Future Death report archive with PFD Toolkit.{% endif %}
+{% if is_collection_view and collection_description %}{{ collection_description }}{% else %}Filter and inspect the Prevention of Future Death report archive with live metrics, trend views, and report-level results.{% endif %}
 {% endblock %}
 {% block twitter_title %}{% if is_collection_view %}{{ collection_title }} · PFD Toolkit{% else %}Explore PFD Reports{% endif %}{% endblock %}
-{% block twitter_description %}{% if is_collection_view and collection_description %}{{ collection_description }}{% else %}Search and filter the Prevention of Future Death report archive with PFD Toolkit.{% endif %}{% endblock %}
+{% block twitter_description %}{% if is_collection_view and collection_description %}{{ collection_description }}{% else %}Filter and inspect the Prevention of Future Death report archive with live metrics, trend views, and report-level results.{% endif %}{% endblock %}
 {% block structured_data %}
 {% if not is_workspace_view and not is_shared_read_only %}
 <script type="application/ld+json">
@@ -35,7 +35,7 @@ Search and filter the Prevention of Future Death report archive by question, rec
   "@type": "{% if is_collection_view %}CollectionPage{% else %}SearchResultsPage{% endif %}",
   "name": "{% if is_collection_view %}{{ collection_title|escapejs }}{% else %}Explore Prevention of Future Death Reports{% endif %}",
   "url": "{{ seo_canonical_url }}",
-  "description": "{% if is_collection_view and collection_description %}{{ collection_description|escapejs }}{% else %}Search and filter the Prevention of Future Death report archive with PFD Toolkit.{% endif %}"
+  "description": "{% if is_collection_view and collection_description %}{{ collection_description|escapejs }}{% else %}Filter and inspect the Prevention of Future Death report archive with live metrics, trend views, and report-level results.{% endif %}"
 }
 </script>
 {% endif %}
@@ -75,7 +75,7 @@ Search and filter the Prevention of Future Death report archive by question, rec
                 </p>
             {% else %}
                 <h1 class="page-title xl">Explore PFD reports</h1>
-                <p class="page-lede big">A live HUD over the archive. Ask a question, narrow by receiver or area, and the whole surface updates.</p>
+                <p class="page-lede big">Explore the full Prevention of Future Death (PFD) report archive using live filters for AI filter, date range, receiver, and coroner area.</p>
             {% endif %}
         </div>
         <div class="explore-hero-actions">
@@ -494,7 +494,7 @@ Search and filter the Prevention of Future Death report archive by question, rec
                         <path d="M2 8l3.2 3.2L14 2.4" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                 </div>
-                <div><strong>AI screening</strong><span>Ask a question. The toolkit reads every report and keeps only relevant matches.</span></div>
+                <div><strong>AI screening</strong><span>Run an AI filter workflow in Workbooks to screen reports and keep likely matches for your investigation.</span></div>
             </div>
             <div class="eu-item">
                 <div class="eu-icon" aria-hidden="true">
