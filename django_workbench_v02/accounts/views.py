@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login, logout
 from django.core.mail import EmailMessage
-from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, QueryDict
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest, JsonResponse, QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -20,7 +20,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET
 from django.views.decorators.http import require_http_methods
 
-from .forms import ServicesEnquiryForm
+from .forms import ContactEnquiryForm, ServicesEnquiryForm
 from .services import normalize_auth0_profile, sync_user_from_auth0
 from wb_collections.services import (
     collection_cards,
@@ -844,6 +844,82 @@ def services(request: HttpRequest) -> HttpResponse:
             "services_enquiry_submitted": submitted,
         },
     )
+
+
+@require_http_methods(["POST"])
+def submit_contact_enquiry(request: HttpRequest) -> HttpResponse:
+    wants_json = (
+        request.headers.get("x-requested-with") == "XMLHttpRequest"
+        or "application/json" in str(request.headers.get("accept") or "").lower()
+    )
+
+    return_to = str(request.POST.get("return_to") or "").strip()
+    fallback_url = reverse("landing")
+    if return_to and not return_to.startswith("/"):
+        return_to = fallback_url
+    if return_to and not url_has_allowed_host_and_scheme(
+        url=return_to,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return_to = fallback_url
+    target = return_to or fallback_url
+
+    form = ContactEnquiryForm(request.POST)
+    if not form.is_valid():
+        if wants_json:
+            errors: dict[str, str] = {}
+            for field, messages_list in form.errors.items():
+                first = messages_list[0] if messages_list else "Invalid value."
+                errors[str(field)] = str(first)
+            return JsonResponse(
+                {"ok": False, "message": "Please review the highlighted fields.", "errors": errors},
+                status=400,
+            )
+        messages.error(request, "Please complete all contact fields and try again.")
+        return redirect(target)
+
+    if form.is_spam:
+        if wants_json:
+            return JsonResponse({"ok": True, "message": "Thanks. Your message has been received."})
+        messages.success(request, "Thanks. Your message has been received.")
+        return redirect(target)
+
+    recipient = getattr(settings, "PFD_ADMIN_EMAIL", "sam.osian@oreliandata.co.uk")
+    try:
+        reply_to_email = str(form.cleaned_data.get("email") or "").strip()
+        reply_to = [reply_to_email] if reply_to_email else None
+        message = EmailMessage(
+            subject=form.email_subject(),
+            body=form.email_body(),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[recipient],
+            reply_to=reply_to,
+        )
+        message.send(fail_silently=False)
+    except Exception:
+        logger.exception("contact enquiry email failed")
+        if wants_json:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "message": (
+                        "The message could not be sent right now. "
+                        "Please email sam.osian@oreliandata.co.uk directly."
+                    ),
+                },
+                status=500,
+            )
+        messages.error(
+            request,
+            "The message could not be sent right now. Please email sam.osian@oreliandata.co.uk directly.",
+        )
+    else:
+        if wants_json:
+            return JsonResponse({"ok": True, "message": "Thanks. Your message has been sent."})
+        messages.success(request, "Thanks. Your message has been sent.")
+
+    return redirect(target)
 
 
 @require_GET

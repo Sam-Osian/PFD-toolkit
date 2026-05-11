@@ -3,9 +3,131 @@
 {% block page_title %}About PFD Toolkit · Prevention of Future Death Report Research{% endblock %}
 {% block meta_description %}Learn how PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable for research, policy, and service improvement.{% endblock %}
 {% block og_title %}About PFD Toolkit{% endblock %}
-{% block og_description %}PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable at scale.{% endblock %}
+{% block og_description %}PFD Toolkit makes Prevention of Future Death reports searchable, filterable, and analysable with AI workflows.{% endblock %}
 {% block twitter_title %}About PFD Toolkit{% endblock %}
-{% block twitter_description %}PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable at scale.{% endblock %}
+{% block twitter_description %}PFD Toolkit makes Prevention of Future Death reports searchable, filterable, and analysable with AI workflows.{% endblock %}
+{% block body_class %}about-page{% endblock %}
+
+{% block extra_head %}
+<style>
+  .about-static {
+    max-width: 920px;
+    margin: 0 auto;
+    padding-bottom: 24px;
+  }
+
+  .about-static .about-hero {
+    border-bottom: 1px solid var(--line);
+    padding: 22px 0 28px;
+  }
+
+  .about-static .about-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font: 500 11px/1 var(--ff-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+
+  .about-static .about-kicker::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: var(--accent);
+  }
+
+  .about-static .about-title {
+    margin: 10px 0 12px;
+    font-size: clamp(34px, 5.8vw, 60px);
+    line-height: 1.06;
+    letter-spacing: -0.025em;
+  }
+
+  .about-static .about-lede {
+    margin: 0;
+    color: var(--text-2);
+    font-size: clamp(17px, 2.1vw, 22px);
+    line-height: 1.55;
+    max-width: 76ch;
+  }
+
+  .about-static .about-section {
+    border-bottom: 1px solid var(--line);
+    padding: 34px 0;
+  }
+
+  .about-static .about-section:last-of-type {
+    border-bottom: 0;
+    padding-bottom: 12px;
+  }
+
+  .about-static h2 {
+    margin: 10px 0 12px;
+    font-size: clamp(26px, 3.3vw, 38px);
+    line-height: 1.14;
+    letter-spacing: -0.02em;
+  }
+
+  .about-static h3 {
+    margin: 18px 0 8px;
+    font-size: 18px;
+    letter-spacing: -0.01em;
+  }
+
+  .about-static p {
+    margin: 0 0 12px;
+    color: var(--text-2);
+    line-height: 1.72;
+    font-size: 15px;
+    max-width: 78ch;
+  }
+
+  .about-static ul,
+  .about-static ol {
+    margin: 8px 0 14px;
+    padding-left: 20px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .about-static li {
+    color: var(--text-2);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  .about-static li strong {
+    color: var(--text);
+  }
+
+  .about-static .about-note {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-3);
+  }
+
+  .about-static .about-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 18px;
+  }
+
+  @media (max-width: 900px) {
+    .about-static .about-title {
+      font-size: clamp(30px, 11vw, 48px);
+    }
+
+    .about-static .about-lede {
+      font-size: 17px;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block structured_data %}
 <script type="application/ld+json">
 {
@@ -13,68 +135,93 @@
   "@type": "AboutPage",
   "name": "About PFD Toolkit",
   "url": "{{ seo_canonical_url }}",
-  "description": "PFD Toolkit makes Prevention of Future Death reports searchable, analysable, and usable at scale."
+  "description": "PFD Toolkit makes Prevention of Future Death reports searchable, filterable, and analysable with AI workflows."
 }
 </script>
 {% endblock %}
 
 {% block page_header %}
-<div class="eyebrow"><span class="d"></span>About · The story</div>
+<div class="eyebrow"><span class="d"></span>About</div>
 {% endblock %}
 
 {% block content %}
-<div class="stack-md">
-    <section class="about-hero">
-        <h1 class="page-title xl">Why coroners’ reports deserve more than a filing cabinet.</h1>
-        <p class="page-lede big">
-            Every Prevention of Future Death report is a coroner saying, on the record, that someone did not have to die.
-            PFD Toolkit exists to make this archive searchable, analysable, and usable at scale.
-        </p>
-    </section>
+<div class="about-static stack-md">
+  <section class="about-hero">
+    <div class="about-kicker">About PFD Toolkit</div>
+    <h1 class="about-title">Turning Prevention of Future Death reports into usable evidence.</h1>
+    <p class="about-lede">PFD Toolkit makes Prevention of Future Death reports searchable, filterable, and analysable with AI workflows. It is designed for policy, safety, and research teams that need transparent, repeatable analysis at national scale.</p>
+  </section>
 
-    <section class="about-grid">
-        <article class="ab-card">
-            <div class="ab-k">The reports</div>
-            <h3>What a PFD is</h3>
-            <p>When a coroner concludes an inquest, they can issue a Regulation 28 report to any organisation they believe could prevent similar deaths.</p>
-        </article>
-        <article class="ab-card">
-            <div class="ab-k">The problem</div>
-            <h3>Why they go unread</h3>
-            <p>Reports are published as PDFs with minimal metadata. Serious thematic work is otherwise manual and slow.</p>
-        </article>
-        <article class="ab-card accent">
-            <div class="ab-k">The approach</div>
-            <h3>AI as an instrument, not an oracle</h3>
-            <p>You ask a plain-English question; the toolkit screens reports, returns matches with supporting quotes, and preserves traceability.</p>
-        </article>
-        <article class="ab-card">
-            <div class="ab-k">The cost</div>
-            <h3>Run routes and model access</h3>
-            <p>PFD Toolkit defaults to Our server for AI runs. Advanced users can choose OpenAI server and supply their own API key when needed.</p>
-        </article>
-    </section>
+  <section class="about-section">
+    <div class="about-kicker">Purpose</div>
+    <h2>What problem this solves</h2>
+    <p>Prevention of Future Death (PFD) reports are among the most important public safety signals in the UK, but they are difficult to analyse consistently at scale. Reports are typically published as individual documents, metadata quality can vary, and manual review across many years is resource-intensive.</p>
+    <p>PFD Toolkit reduces this friction by combining archive-wide search and filtering with structured AI workflows. The aim is to help teams identify relevant reports faster, compare patterns more consistently, and produce outputs that can be reviewed and shared.</p>
+  </section>
 
-    <section class="about-values">
-        <div class="av-head">
-            <div class="eyebrow"><span class="d"></span>How we work</div>
-            <h2>Principles we won’t compromise on.</h2>
-        </div>
-        <div class="av-grid">
-            <div class="av"><i>01</i><h4>Evidence first</h4><p>Claims map back to source text.</p></div>
-            <div class="av"><i>02</i><h4>Open by default</h4><p>Methods are documented and reproducible.</p></div>
-            <div class="av"><i>03</i><h4>Research-grade</h4><p>Validated against expert review.</p></div>
-            <div class="av"><i>04</i><h4>Anonymity preserved</h4><p>No re-identification of the deceased.</p></div>
-        </div>
-    </section>
+  <section class="about-section">
+    <div class="about-kicker">Coverage</div>
+    <h2>What the platform contains</h2>
+    <ul>
+      <li><strong>Report archive:</strong> Prevention of Future Death reports from the published source archive.</li>
+      <li><strong>Search and filters:</strong> query by text plus metadata dimensions such as date range, coroner area, and receiver.</li>
+      <li><strong>Investigation workflows:</strong> stage-based runs for screening/filtering and structured extraction.</li>
+      <li><strong>Exportable outputs:</strong> tabular results that can be reviewed, validated, and used downstream.</li>
+    </ul>
+    <p class="about-note">Feature availability may change as workflows are improved and validated over time.</p>
+  </section>
 
-    <section class="about-cta-row">
-        <div>
-            <div class="eyebrow"><span class="d"></span>Custom work</div>
-            <h3>Need bespoke analysis?</h3>
-            <p>Structured policy outputs, custom extraction schemas, and defensible methodology are available on request.</p>
-        </div>
-        <a class="btn btn-secondary lg" href="mailto:sam.osian@oreliandata.co.uk">Commission custom analysis →</a>
-    </section>
+  <section class="about-section">
+    <div class="about-kicker">Workflow</div>
+    <h2>How investigations work</h2>
+    <ol>
+      <li><strong>Define the question:</strong> provide a clear investigation title and query description.</li>
+      <li><strong>Set scope:</strong> run across the full archive or a constrained date window.</li>
+      <li><strong>Choose methods:</strong> run screening/filtering and, where needed, structured extraction.</li>
+      <li><strong>Review outputs:</strong> inspect run status, metadata, and resulting files in workspace views.</li>
+    </ol>
+    <p>Runs can be executed via the default managed route or via user-provided OpenAI configuration for advanced workflows.</p>
+  </section>
+
+  <section class="about-section">
+    <div class="about-kicker">AI methods</div>
+    <h2>How AI is used in practice</h2>
+    <p>PFD Toolkit uses a type of AI model called a Large Language Model (LLM). An LLM is a model trained on large amounts of text so it can recognise patterns in language and produce structured outputs from written material.</p>
+    <p>In practical terms, the model reads report text and helps with tasks such as deciding whether a report matches your investigation criteria and extracting requested fields into table form. It is useful for speed and consistency, but it is not a source of truth.</p>
+    <p>All outputs should be reviewed by users and interpreted in context. The system is designed to support expert judgement, not replace it.</p>
+  </section>
+
+  <section class="about-section">
+    <div class="about-kicker">Evidence</div>
+    <h2>Validation and quality</h2>
+    <p>PFD Toolkit has been benchmarked in research settings against expert review. Current published evaluation reports strong agreement and faster end-to-end processing compared with manual-only approaches.</p>
+    <ul>
+      <li><strong>Agreement benchmark:</strong> 97% agreement with expert clinician judgements.</li>
+      <li><strong>Comparative yield:</strong> 73 identified cases using PFD Toolkit versus 37 identified manually by a research team in the benchmark comparison.</li>
+      <li><strong>Runtime:</strong> 5:29 end-to-end in the published validation example.</li>
+    </ul>
+    <p class="about-note">Reference: BMJ Mental Health, doi: <a href="https://mentalhealth.bmj.com/content/29/1/e302212" target="_blank" rel="noopener">10.1136/bmjment-2025-302212</a>.</p>
+  </section>
+
+  <section class="about-section">
+    <div class="about-kicker">Responsible use</div>
+    <h2>Limits and interpretation</h2>
+    <ul>
+      <li>AI outputs can contain errors and should be reviewed before policy or operational decisions.</li>
+      <li>Results are sensitive to query wording, selected scope, and extraction specification.</li>
+      <li>Absence of a match does not imply absence of risk.</li>
+      <li>The platform is designed to support analysis and review, not provide legal or clinical advice.</li>
+    </ul>
+  </section>
+
+  <section class="about-section">
+    <div class="about-kicker">Contact</div>
+    <h2>Questions or custom analysis</h2>
+    <p>If you need a bespoke workflow, extraction schema, or policy-focused analysis pack, get in touch.</p>
+    <div class="about-actions">
+      <a class="btn btn-primary lg" href="{% url 'explore' %}">Explore reports</a>
+      <a class="btn btn-secondary lg" href="mailto:sam.osian@oreliandata.co.uk">Contact the team</a>
+    </div>
+  </section>
 </div>
 {% endblock %}

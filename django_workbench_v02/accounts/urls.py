@@ -11,6 +11,7 @@ urlpatterns = [
     path("about/", views.about, name="about"),
     path("research/", views.research, name="research"),
     path("services/", views.services, name="services"),
+    path("contact/submit/", views.submit_contact_enquiry, name="contact-submit"),
     path("privacy/", views.privacy_policy, name="privacy-policy"),
     path("cookies/", views.cookie_policy, name="cookie-policy"),
     path("settings/llm/", views.llm_config, name="llm-config"),

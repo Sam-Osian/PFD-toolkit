@@ -111,8 +111,14 @@
             </div>
 
             <div class="topbar-actions">
-                <button class="icon-btn tut-reopen" id="tut-reopen" title="Take the tour">
+                <button class="icon-btn tut-reopen" id="tut-reopen" title="Tutorial temporarily unavailable" disabled aria-disabled="true">
                     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M6 6.2a2 2 0 1 1 3 1.7c-.7.4-1 .7-1 1.4M8 11.5v.1"/></svg>
+                </button>
+                <button class="icon-btn" id="contact-open" type="button" title="Contact">
+                    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="3.2" width="12" height="9.6" rx="1.8"></rect>
+                        <path d="M3.5 4.8L8 8.1l4.5-3.3"></path>
+                    </svg>
                 </button>
                 {% if request.user.is_authenticated %}
                     <button class="btn btn-secondary sm" type="button" id="llm-config-open">LLM config</button>
@@ -544,6 +550,90 @@
     </div>
 </div>
 {% endif %}
+
+<div class="dlg-back" id="contact-dialog" aria-hidden="true">
+    <div class="dlg contact-dlg" role="dialog" aria-labelledby="contact-title">
+        <form method="post" action="{% url 'contact-submit' %}" id="contact-form">
+            {% csrf_token %}
+            <input type="hidden" name="return_to" id="contact-return-to" value="{{ request.get_full_path }}">
+            <input type="hidden" name="wants_reply" id="contact-wants-reply-hidden" value="">
+            <div class="dlg-head">
+                <div class="k"><span class="d"></span>Contact</div>
+                <h3 id="contact-title">Send us a message</h3>
+            </div>
+            <div class="dlg-body">
+                <section class="contact-step on" data-contact-step="0">
+                    <label>What would you like to get in touch about?</label>
+                    <div class="contact-reason-group" id="contact-reason-group" role="radiogroup" aria-label="Contact reason">
+                        <label class="contact-reason on">
+                            <input type="radio" name="reason" value="question" checked>
+                            <span>Question / suggestion</span>
+                        </label>
+                        <label class="contact-reason">
+                            <input type="radio" name="reason" value="bug">
+                            <span>Bug report</span>
+                        </label>
+                        <label class="contact-reason">
+                            <input type="radio" name="reason" value="collaborate">
+                            <span>Collaborate</span>
+                        </label>
+                        <label class="contact-reason">
+                            <input type="radio" name="reason" value="commission">
+                            <span>Commission a project</span>
+                        </label>
+                        <label class="contact-reason">
+                            <input type="radio" name="reason" value="other">
+                            <span>Something else</span>
+                        </label>
+                    </div>
+                </section>
+
+                <section class="contact-step" data-contact-step="1">
+                    <div class="contact-inline-alert" id="contact-inline-alert" role="alert" hidden></div>
+                    <label class="contact-message-title" id="contact-message-label" for="contact-message">Your message</label>
+                    <p class="contact-message-hint" id="contact-message-hint"></p>
+                    <textarea id="contact-message" name="message" required minlength="20" maxlength="4000" rows="7" placeholder=""></textarea>
+                    <div class="contact-message-meta">
+                        <p class="contact-field-error" id="contact-message-error" hidden></p>
+                        <span id="contact-message-count">0 / 4000</span>
+                    </div>
+
+                    <label class="wz-toggle contact-reply-toggle" id="contact-reply-toggle" for="contact-wants-reply-toggle">
+                        <input id="contact-wants-reply-toggle" type="checkbox" value="on">
+                        <span id="contact-reply-label">Would you like us to reply to your message?</span>
+                    </label>
+
+                    <div class="contact-field-row">
+                        <div class="contact-field">
+                            <label id="contact-name-label" for="contact-name">Name <span class="wz-optional">(optional)</span></label>
+                            <input id="contact-name" name="name" type="text" maxlength="120" style="min-height:44px;" value="{% if request.user.is_authenticated %}{{ request.user.get_full_name|default:'' }}{% endif %}" data-default-value="{% if request.user.is_authenticated %}{{ request.user.get_full_name|default:'' }}{% endif %}">
+                            <p class="contact-field-error" id="contact-name-error" hidden></p>
+                        </div>
+                        <div class="contact-field">
+                            <label id="contact-email-label" for="contact-email">Email <span class="wz-optional">(optional)</span></label>
+                            <input id="contact-email" name="email" type="email" maxlength="254" style="min-height:44px;" value="{% if request.user.is_authenticated %}{{ request.user.email }}{% endif %}" data-default-value="{% if request.user.is_authenticated %}{{ request.user.email }}{% endif %}">
+                            <p class="contact-field-error" id="contact-email-error" hidden></p>
+                        </div>
+                    </div>
+                </section>
+
+                <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true">
+                    <label for="contact-website">Website</label>
+                    <input id="contact-website" type="text" name="website" tabindex="-1" autocomplete="off">
+                </div>
+            </div>
+            <div class="dlg-foot">
+                <span class="meta"><span class="k">Esc</span> to close</span>
+                <div class="acts">
+                    <button class="btn btn-ghost" type="button" data-contact-close>Cancel</button>
+                    <button class="btn btn-ghost" type="button" id="contact-back">Back</button>
+                    <button class="btn btn-primary" type="button" id="contact-next">Next</button>
+                    <button class="btn btn-primary" type="submit" id="contact-submit">Send message</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
 
 {# User notice modal removed. #}
 
@@ -1419,6 +1509,35 @@ document.addEventListener("DOMContentLoaded", function() {
   const userNoticeAck = document.getElementById("user-notice-ack");
   const userNoticeVersion = String(userNoticeBack?.dataset.noticeVersion || "v1").trim() || "v1";
   const userNoticeSeenKey = `pfd_user_notice_${userNoticeVersion}_seen`;
+  const contactOpen = document.getElementById("contact-open");
+  const contactDialog = document.getElementById("contact-dialog");
+  const contactCloseButtons = contactDialog ? contactDialog.querySelectorAll("[data-contact-close]") : [];
+  const contactReturnTo = document.getElementById("contact-return-to");
+  const contactForm = document.getElementById("contact-form");
+  const contactSteps = contactDialog ? Array.from(contactDialog.querySelectorAll(".contact-step")) : [];
+  const contactBack = document.getElementById("contact-back");
+  const contactNext = document.getElementById("contact-next");
+  const contactSubmit = document.getElementById("contact-submit");
+  const contactReasonGroup = document.getElementById("contact-reason-group");
+  const contactReasonInputs = contactReasonGroup ? Array.from(contactReasonGroup.querySelectorAll('input[name="reason"]')) : [];
+  const contactMessageLabel = document.getElementById("contact-message-label");
+  const contactMessageHint = document.getElementById("contact-message-hint");
+  const contactMessage = document.getElementById("contact-message");
+  const contactReplyToggleWrap = document.getElementById("contact-reply-toggle");
+  const contactReplyToggle = document.getElementById("contact-wants-reply-toggle");
+  const contactReplyLabel = document.getElementById("contact-reply-label");
+  const contactWantsReplyHidden = document.getElementById("contact-wants-reply-hidden");
+  const contactNameInput = document.getElementById("contact-name");
+  const contactEmailInput = document.getElementById("contact-email");
+  const contactNameLabel = document.getElementById("contact-name-label");
+  const contactEmailLabel = document.getElementById("contact-email-label");
+  const contactInlineAlert = document.getElementById("contact-inline-alert");
+  const contactMessageError = document.getElementById("contact-message-error");
+  const contactNameError = document.getElementById("contact-name-error");
+  const contactEmailError = document.getElementById("contact-email-error");
+  const contactMessageCount = document.getElementById("contact-message-count");
+  const contactDefaultName = String(contactNameInput?.dataset.defaultValue || "");
+  const contactDefaultEmail = String(contactEmailInput?.dataset.defaultValue || "");
   const credentialMap = {
     local_ollama: String(llmPopBack?.dataset.credLocalOllama || "0") === "1",
     openai: String(llmPopBack?.dataset.credOpenai || "0") === "1",
@@ -1571,6 +1690,356 @@ document.addEventListener("DOMContentLoaded", function() {
   } catch (error) {
     openUserNotice();
   }
+
+  let contactStep = 0;
+  const contactReasonConfig = {
+    question: {
+      messageLabel: "Your message",
+      messageHint: "Share your question or suggestion. Include enough context so we can understand what you were trying to do.",
+      messagePlaceholder: "Describe your question or suggestion...",
+      replyLabel: "Would you like us to reply to your message?",
+      forceReply: false,
+    },
+    bug: {
+      messageLabel: "Bug details",
+      messageHint: "Describe what happened, what you expected to happen, and any steps we can follow to reproduce the issue.",
+      messagePlaceholder: "Describe the bug in as much detail as possible...",
+      replyLabel: "Would you like us to follow up with you by email?",
+      forceReply: false,
+    },
+    collaborate: {
+      messageLabel: "Collaboration details",
+      messageHint: "Tell us what collaboration you have in mind, the context, and what a useful next step would be.",
+      messagePlaceholder: "Describe the collaboration opportunity...",
+      replyLabel: "We need your contact details to respond.",
+      forceReply: true,
+    },
+    commission: {
+      messageLabel: "What do you need?",
+      messageHint: "Please include: your objective, the type of deliverable you need, relevant timescales, who the audience is, and any constraints or context we should know.",
+      messagePlaceholder: "Describe your idea...",
+      replyLabel: "Would you like us to follow up with you by email?",
+      forceReply: true,
+    },
+    other: {
+      messageLabel: "Your message",
+      messageHint: "Share what you need help with and include any context that will help us respond clearly.",
+      messagePlaceholder: "Describe your message...",
+      replyLabel: "Would you like us to reply to your message?",
+      forceReply: false,
+    },
+  };
+
+  const selectedContactReason = function() {
+    const checked = contactReasonInputs.find(function(input) { return input.checked; });
+    return String(checked?.value || "question").toLowerCase();
+  };
+
+  const setContactReasonButtonState = function() {
+    if (!contactReasonGroup) return;
+    contactReasonGroup.querySelectorAll(".contact-reason").forEach(function(label) {
+      label.classList.toggle("on", Boolean(label.querySelector("input")?.checked));
+    });
+  };
+
+  const setContactMessageCount = function() {
+    if (!contactMessageCount) return;
+    const length = String(contactMessage?.value || "").length;
+    contactMessageCount.textContent = `${length} / 4000`;
+  };
+
+  const setContactInlineAlert = function(message, level) {
+    if (!contactInlineAlert) return;
+    const text = String(message || "").trim();
+    if (!text) {
+      contactInlineAlert.hidden = true;
+      contactInlineAlert.textContent = "";
+      contactInlineAlert.classList.remove("error", "success");
+      return;
+    }
+    contactInlineAlert.hidden = false;
+    contactInlineAlert.textContent = text;
+    contactInlineAlert.classList.toggle("error", String(level || "error") === "error");
+    contactInlineAlert.classList.toggle("success", String(level || "") === "success");
+  };
+
+  const setContactFieldError = function(node, message) {
+    if (!node) return;
+    const text = String(message || "").trim();
+    node.hidden = !text;
+    node.textContent = text;
+  };
+
+  const clearContactErrors = function() {
+    setContactInlineAlert("", "");
+    setContactFieldError(contactMessageError, "");
+    setContactFieldError(contactNameError, "");
+    setContactFieldError(contactEmailError, "");
+    [contactMessage, contactNameInput, contactEmailInput].forEach(function(input) {
+      if (!input) return;
+      input.classList.remove("field-invalid");
+      input.removeAttribute("aria-invalid");
+    });
+  };
+
+  const markContactInputInvalid = function(input) {
+    if (!input) return;
+    input.classList.add("field-invalid");
+    input.setAttribute("aria-invalid", "true");
+  };
+
+  const updateContactRequiredState = function() {
+    const reason = selectedContactReason();
+    const config = contactReasonConfig[reason] || contactReasonConfig.question;
+    const wantsReply = config.forceReply || Boolean(contactReplyToggle?.checked);
+    if (contactWantsReplyHidden) contactWantsReplyHidden.value = wantsReply ? "on" : "";
+
+    if (contactNameInput) contactNameInput.required = wantsReply;
+    if (contactEmailInput) contactEmailInput.required = wantsReply;
+
+    if (contactNameLabel) {
+      contactNameLabel.innerHTML = wantsReply
+        ? 'Name <span class="wz-required">*</span>'
+        : 'Name <span class="wz-optional">(optional)</span>';
+    }
+    if (contactEmailLabel) {
+      contactEmailLabel.innerHTML = wantsReply
+        ? 'Email <span class="wz-required">*</span>'
+        : 'Email <span class="wz-optional">(optional)</span>';
+    }
+  };
+
+  const syncContactStepTwoCopy = function() {
+    const reason = selectedContactReason();
+    const config = contactReasonConfig[reason] || contactReasonConfig.question;
+    if (contactMessageLabel) contactMessageLabel.textContent = config.messageLabel;
+    if (contactMessageHint) contactMessageHint.textContent = config.messageHint;
+    if (contactMessage) contactMessage.placeholder = config.messagePlaceholder;
+    if (contactReplyLabel) contactReplyLabel.textContent = config.replyLabel;
+
+    if (config.forceReply) {
+      if (contactReplyToggle) {
+        contactReplyToggle.checked = true;
+        contactReplyToggle.disabled = true;
+      }
+      if (contactReplyToggleWrap) contactReplyToggleWrap.style.display = "none";
+    } else {
+      if (contactReplyToggleWrap) contactReplyToggleWrap.style.display = "flex";
+      if (contactReplyToggle) contactReplyToggle.disabled = false;
+    }
+
+    updateContactRequiredState();
+    setContactMessageCount();
+  };
+
+  const validateContactForm = function() {
+    const errors = {};
+    const reason = selectedContactReason();
+    const config = contactReasonConfig[reason] || contactReasonConfig.question;
+    const message = String(contactMessage?.value || "").trim();
+    const name = String(contactNameInput?.value || "").trim();
+    const email = String(contactEmailInput?.value || "").trim();
+    const wantsReply = config.forceReply || Boolean(contactReplyToggle?.checked);
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (message.length < 20) {
+      errors.message = "Please enter at least 20 characters.";
+    } else if (message.length > 4000) {
+      errors.message = "Please keep the message under 4000 characters.";
+    }
+
+    if (wantsReply && !name) {
+      errors.name = "Name is required when requesting a reply.";
+    }
+    if (wantsReply && !email) {
+      errors.email = "Email is required when requesting a reply.";
+    } else if (email && !emailPattern.test(email)) {
+      errors.email = "Please enter a valid email address.";
+    }
+
+    return errors;
+  };
+
+  const showContactErrors = function(errors) {
+    const safeErrors = errors && typeof errors === "object" ? errors : {};
+    clearContactErrors();
+    const messageError = String(safeErrors.message || "").trim();
+    const nameError = String(safeErrors.name || "").trim();
+    const emailError = String(safeErrors.email || "").trim();
+    if (messageError) {
+      setContactFieldError(contactMessageError, messageError);
+      markContactInputInvalid(contactMessage);
+    }
+    if (nameError) {
+      setContactFieldError(contactNameError, nameError);
+      markContactInputInvalid(contactNameInput);
+    }
+    if (emailError) {
+      setContactFieldError(contactEmailError, emailError);
+      markContactInputInvalid(contactEmailInput);
+    }
+    if (messageError || nameError || emailError) {
+      setContactInlineAlert("Please review the highlighted fields.", "error");
+    }
+  };
+
+  const resetContactFormState = function() {
+    if (!contactForm) return;
+    contactForm.reset();
+    if (contactNameInput) contactNameInput.value = contactDefaultName;
+    if (contactEmailInput) contactEmailInput.value = contactDefaultEmail;
+    if (contactReasonInputs.length) {
+      contactReasonInputs.forEach(function(input, index) {
+        input.checked = index === 0;
+      });
+    }
+    if (contactReplyToggle) {
+      contactReplyToggle.checked = false;
+      contactReplyToggle.disabled = false;
+    }
+    if (contactWantsReplyHidden) contactWantsReplyHidden.value = "";
+    clearContactErrors();
+    contactStep = 0;
+    setContactReasonButtonState();
+    renderContactStep();
+  };
+
+  const renderContactStep = function() {
+    contactSteps.forEach(function(stepNode, idx) {
+      stepNode.classList.toggle("on", idx === contactStep);
+    });
+    if (contactBack) contactBack.style.display = contactStep === 0 ? "none" : "inline-flex";
+    if (contactNext) contactNext.style.display = contactStep === 0 ? "inline-flex" : "none";
+    if (contactSubmit) contactSubmit.style.display = contactStep === 1 ? "inline-flex" : "none";
+    if (contactStep === 1) syncContactStepTwoCopy();
+  };
+
+  const openContactDialog = function() {
+    if (!contactDialog) return;
+    if (contactReturnTo) {
+      contactReturnTo.value = `${window.location.pathname || "/"}${window.location.search || ""}${window.location.hash || ""}`;
+    }
+    contactDialog.classList.add("on");
+    contactDialog.setAttribute("aria-hidden", "false");
+  };
+  const closeContactDialog = function() {
+    if (!contactDialog) return;
+    contactDialog.classList.remove("on");
+    contactDialog.setAttribute("aria-hidden", "true");
+  };
+  contactOpen?.addEventListener("click", openContactDialog);
+  contactCloseButtons.forEach(function(button) {
+    button.addEventListener("click", closeContactDialog);
+  });
+  contactDialog?.addEventListener("click", function(event) {
+    if (event.target === contactDialog) closeContactDialog();
+  });
+  contactReasonInputs.forEach(function(input) {
+    input.addEventListener("change", function() {
+      setContactReasonButtonState();
+      clearContactErrors();
+      syncContactStepTwoCopy();
+    });
+  });
+  contactReplyToggle?.addEventListener("change", updateContactRequiredState);
+  contactMessage?.addEventListener("input", function() {
+    setContactMessageCount();
+    if (!contactMessageError?.hidden) {
+      const errors = validateContactForm();
+      showContactErrors(errors);
+    }
+  });
+  contactNameInput?.addEventListener("input", function() {
+    if (!contactNameError?.hidden) {
+      const errors = validateContactForm();
+      showContactErrors(errors);
+    }
+  });
+  contactEmailInput?.addEventListener("input", function() {
+    if (!contactEmailError?.hidden) {
+      const errors = validateContactForm();
+      showContactErrors(errors);
+    }
+  });
+  contactNext?.addEventListener("click", function() {
+    contactStep = 1;
+    renderContactStep();
+  });
+  contactBack?.addEventListener("click", function() {
+    contactStep = 0;
+    renderContactStep();
+  });
+  contactForm?.addEventListener("submit", function(event) {
+    if (contactStep === 0 || !contactForm) {
+      event.preventDefault();
+      contactStep = 1;
+      renderContactStep();
+      return;
+    }
+    event.preventDefault();
+    syncContactStepTwoCopy();
+    const errors = validateContactForm();
+    if (Object.keys(errors).length > 0) {
+      showContactErrors(errors);
+      return;
+    }
+    clearContactErrors();
+
+    const formData = new FormData(contactForm);
+    if (contactSubmit) contactSubmit.disabled = true;
+    if (contactNext) contactNext.disabled = true;
+    if (contactBack) contactBack.disabled = true;
+
+    fetch(contactForm.action, {
+      method: "POST",
+      body: formData,
+      headers: {
+        "X-Requested-With": "XMLHttpRequest",
+        Accept: "application/json",
+      },
+      credentials: "same-origin",
+    })
+      .then(function(response) {
+        return response
+          .json()
+          .catch(function() {
+            return { ok: false, message: "Unexpected response from server." };
+          })
+          .then(function(payload) {
+            return { response: response, payload: payload };
+          });
+      })
+      .then(function(result) {
+        const payload = result.payload || {};
+        if (result.response.ok && payload.ok) {
+          resetContactFormState();
+          closeContactDialog();
+          return;
+        }
+
+        const fieldErrors = payload.errors && typeof payload.errors === "object" ? payload.errors : {};
+        const primaryMessageError = fieldErrors.message || fieldErrors.__all__ || "";
+        showContactErrors({
+          message: primaryMessageError,
+          name: fieldErrors.name,
+          email: fieldErrors.email,
+        });
+        setContactInlineAlert(
+          String(payload.message || "We could not send your message right now. Please try again."),
+          "error",
+        );
+      })
+      .catch(function() {
+        setContactInlineAlert("We could not send your message right now. Please try again.", "error");
+      })
+      .finally(function() {
+        if (contactSubmit) contactSubmit.disabled = false;
+        if (contactNext) contactNext.disabled = false;
+        if (contactBack) contactBack.disabled = false;
+      });
+  });
+  setContactReasonButtonState();
+  renderContactStep();
 
   llmPopApiKey?.addEventListener("focus", function() {
     if (llmPopApiKey.getAttribute("data-masked") === "1") {
@@ -1889,6 +2358,9 @@ document.addEventListener("DOMContentLoaded", function() {
       if (tutorialOverlay?.classList.contains("on")) {
         event.preventDefault();
         closeTutorial();
+      } else if (contactDialog?.classList.contains("on")) {
+        event.preventDefault();
+        closeContactDialog();
       } else if (llmClearDialog?.classList.contains("on")) {
         event.preventDefault();
         llmClearDialog.classList.remove("on");

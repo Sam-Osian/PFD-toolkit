@@ -57,6 +57,82 @@ class ServicesEnquiryForm(forms.Form):
         )
 
 
+class ContactEnquiryForm(forms.Form):
+    REASON_CHOICES = (
+        ("question", "Question / suggestion"),
+        ("bug", "Bug report"),
+        ("collaborate", "Collaborate"),
+        ("commission", "Commission a project"),
+        ("other", "Something else"),
+    )
+
+    reason = forms.ChoiceField(choices=REASON_CHOICES)
+    wants_reply = forms.BooleanField(required=False)
+    name = forms.CharField(max_length=120, required=False)
+    email = forms.EmailField(max_length=254, required=False)
+    message = forms.CharField(min_length=20, max_length=4000, widget=forms.Textarea)
+    website = forms.CharField(required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.is_spam = False
+
+    def clean_website(self):
+        value = str(self.cleaned_data.get("website") or "").strip()
+        if value:
+            self.is_spam = True
+        return value
+
+    def clean_email(self):
+        value = str(self.cleaned_data.get("email") or "").strip()
+        if not value:
+            return ""
+        validate_email(value)
+        return value.lower()
+
+    def clean(self):
+        cleaned = super().clean()
+        reason = str(cleaned.get("reason") or "").strip()
+        wants_reply = bool(cleaned.get("wants_reply"))
+        name = str(cleaned.get("name") or "").strip()
+        email = str(cleaned.get("email") or "").strip()
+
+        if reason in {"collaborate", "commission"}:
+            wants_reply = True
+            cleaned["wants_reply"] = True
+
+        if wants_reply and not name:
+            self.add_error("name", "Name is required when requesting a reply.")
+        if wants_reply and not email:
+            self.add_error("email", "Email is required when requesting a reply.")
+
+        return cleaned
+
+    def email_subject(self) -> str:
+        reason = str(self.cleaned_data.get("reason") or "").strip().lower()
+        reason_label = dict(self.REASON_CHOICES).get(reason, "General")
+        return f"PFD Toolkit contact enquiry: {reason_label}"
+
+    def email_body(self) -> str:
+        cleaned = self.cleaned_data
+        reason = str(cleaned.get("reason") or "").strip().lower()
+        reason_label = dict(self.REASON_CHOICES).get(reason, "General")
+        wants_reply = "Yes" if cleaned.get("wants_reply") else "No"
+        return "\n".join(
+            [
+                "New PFD Toolkit contact enquiry",
+                "",
+                f"Reason: {reason_label}",
+                f"Reply requested: {wants_reply}",
+                f"Name: {cleaned.get('name') or '-'}",
+                f"Email: {cleaned.get('email') or '-'}",
+                "",
+                "Message:",
+                str(cleaned.get("message") or "").strip(),
+            ]
+        )
+
+
 class UserCreationForm(forms.ModelForm):
     password1 = forms.CharField(label="Password", strip=False, widget=forms.PasswordInput)
     password2 = forms.CharField(
