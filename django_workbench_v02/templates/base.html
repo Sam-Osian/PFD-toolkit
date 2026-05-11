@@ -617,6 +617,14 @@
                     </div>
                 </section>
 
+                <section class="contact-step" data-contact-step="2">
+                    <div class="contact-success">
+                        <h4>Message sent</h4>
+                        <p>Thanks for getting in touch. Your message has been delivered successfully.</p>
+                        <p>We will review it and respond if you requested a reply.</p>
+                    </div>
+                </section>
+
                 <div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true">
                     <label for="contact-website">Website</label>
                     <input id="contact-website" type="text" name="website" tabindex="-1" autocomplete="off">
@@ -629,6 +637,7 @@
                     <button class="btn btn-ghost" type="button" id="contact-back">Back</button>
                     <button class="btn btn-primary" type="button" id="contact-next">Next</button>
                     <button class="btn btn-primary" type="submit" id="contact-submit">Send message</button>
+                    <button class="btn btn-primary" type="button" id="contact-done">Close</button>
                 </div>
             </div>
         </form>
@@ -1518,6 +1527,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const contactBack = document.getElementById("contact-back");
   const contactNext = document.getElementById("contact-next");
   const contactSubmit = document.getElementById("contact-submit");
+  const contactDone = document.getElementById("contact-done");
   const contactReasonGroup = document.getElementById("contact-reason-group");
   const contactReasonInputs = contactReasonGroup ? Array.from(contactReasonGroup.querySelectorAll('input[name="reason"]')) : [];
   const contactMessageLabel = document.getElementById("contact-message-label");
@@ -1692,6 +1702,8 @@ document.addEventListener("DOMContentLoaded", function() {
   }
 
   let contactStep = 0;
+  let contactSubmitting = false;
+  let contactSentSuccess = false;
   const contactReasonConfig = {
     question: {
       messageLabel: "Your message",
@@ -1786,6 +1798,31 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!input) return;
     input.classList.add("field-invalid");
     input.setAttribute("aria-invalid", "true");
+  };
+
+  const setContactSubmittingState = function(isSubmitting) {
+    contactSubmitting = Boolean(isSubmitting);
+    const disabled = Boolean(isSubmitting);
+    if (contactSubmit) contactSubmit.disabled = disabled;
+    if (contactNext) contactNext.disabled = disabled;
+    if (contactBack) contactBack.disabled = disabled;
+    if (contactDone) contactDone.disabled = disabled;
+    contactReasonInputs.forEach(function(input) {
+      input.disabled = disabled;
+    });
+    if (contactMessage) contactMessage.disabled = disabled;
+    if (contactNameInput) contactNameInput.disabled = disabled;
+    if (contactEmailInput) contactEmailInput.disabled = disabled;
+    if (contactReplyToggle) contactReplyToggle.disabled = disabled || Boolean(contactReasonConfig[selectedContactReason()]?.forceReply);
+    contactCloseButtons.forEach(function(button) {
+      if (!(button instanceof HTMLButtonElement)) return;
+      button.disabled = disabled;
+    });
+    if (disabled) {
+      setContactInlineAlert("Sending message...", "success");
+    } else if (!contactSentSuccess) {
+      setContactInlineAlert("", "");
+    }
   };
 
   const updateContactRequiredState = function() {
@@ -1898,6 +1935,8 @@ document.addEventListener("DOMContentLoaded", function() {
       contactReplyToggle.disabled = false;
     }
     if (contactWantsReplyHidden) contactWantsReplyHidden.value = "";
+    contactSentSuccess = false;
+    setContactSubmittingState(false);
     clearContactErrors();
     contactStep = 0;
     setContactReasonButtonState();
@@ -1908,9 +1947,10 @@ document.addEventListener("DOMContentLoaded", function() {
     contactSteps.forEach(function(stepNode, idx) {
       stepNode.classList.toggle("on", idx === contactStep);
     });
-    if (contactBack) contactBack.style.display = contactStep === 0 ? "none" : "inline-flex";
+    if (contactBack) contactBack.style.display = contactStep === 1 ? "inline-flex" : "none";
     if (contactNext) contactNext.style.display = contactStep === 0 ? "inline-flex" : "none";
     if (contactSubmit) contactSubmit.style.display = contactStep === 1 ? "inline-flex" : "none";
+    if (contactDone) contactDone.style.display = contactStep === 2 ? "inline-flex" : "none";
     if (contactStep === 1) syncContactStepTwoCopy();
   };
 
@@ -1924,8 +1964,10 @@ document.addEventListener("DOMContentLoaded", function() {
   };
   const closeContactDialog = function() {
     if (!contactDialog) return;
+    if (contactSubmitting) return;
     contactDialog.classList.remove("on");
     contactDialog.setAttribute("aria-hidden", "true");
+    if (contactSentSuccess) resetContactFormState();
   };
   contactOpen?.addEventListener("click", openContactDialog);
   contactCloseButtons.forEach(function(button) {
@@ -1969,6 +2011,9 @@ document.addEventListener("DOMContentLoaded", function() {
     contactStep = 0;
     renderContactStep();
   });
+  contactDone?.addEventListener("click", function() {
+    closeContactDialog();
+  });
   contactForm?.addEventListener("submit", function(event) {
     if (contactStep === 0 || !contactForm) {
       event.preventDefault();
@@ -1986,9 +2031,7 @@ document.addEventListener("DOMContentLoaded", function() {
     clearContactErrors();
 
     const formData = new FormData(contactForm);
-    if (contactSubmit) contactSubmit.disabled = true;
-    if (contactNext) contactNext.disabled = true;
-    if (contactBack) contactBack.disabled = true;
+    setContactSubmittingState(true);
 
     fetch(contactForm.action, {
       method: "POST",
@@ -2012,8 +2055,12 @@ document.addEventListener("DOMContentLoaded", function() {
       .then(function(result) {
         const payload = result.payload || {};
         if (result.response.ok && payload.ok) {
-          resetContactFormState();
-          closeContactDialog();
+          contactSentSuccess = true;
+          setContactSubmittingState(false);
+          clearContactErrors();
+          setContactInlineAlert("", "");
+          contactStep = 2;
+          renderContactStep();
           return;
         }
 
@@ -2033,9 +2080,7 @@ document.addEventListener("DOMContentLoaded", function() {
         setContactInlineAlert("We could not send your message right now. Please try again.", "error");
       })
       .finally(function() {
-        if (contactSubmit) contactSubmit.disabled = false;
-        if (contactNext) contactNext.disabled = false;
-        if (contactBack) contactBack.disabled = false;
+        if (!contactSentSuccess) setContactSubmittingState(false);
       });
   });
   setContactReasonButtonState();

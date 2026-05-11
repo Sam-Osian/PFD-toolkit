@@ -1685,6 +1685,25 @@ svg:not([width]):not([height]) {
 .contact-step { display: none; }
 .contact-step.on { display: block; }
 
+.contact-dlg .dlg-body .contact-success {
+  border: 1px solid color-mix(in srgb, var(--ok) 34%, var(--line-2));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ok) 10%, var(--bg-2));
+  padding: 16px 16px;
+}
+.contact-dlg .dlg-body .contact-success h4 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--text);
+}
+.contact-dlg .dlg-body .contact-success p {
+  margin: 0 0 6px;
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.contact-dlg .dlg-body .contact-success p:last-child { margin-bottom: 0; }
+
 .contact-dlg .dlg-body .contact-inline-alert {
   margin: 0 0 12px;
   border: 1px solid var(--line-2);
