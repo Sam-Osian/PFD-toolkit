@@ -16,7 +16,21 @@
 </div>
 
 <section class="panel">
-  <div class="panel-head"><span class="kicker">FLEET</span><h2>Workers</h2></div>
+  <div class="panel-head">
+    <span class="kicker">FLEET</span>
+    <h2>Workers</h2>
+    <div class="grow"></div>
+    <form method="get" class="seg" aria-label="Worker visibility">
+      <button type="submit" name="show_stale" value="0" {% if not show_stale %}class="is-active"{% endif %}>Hide stale</button>
+      <button type="submit" name="show_stale" value="1" {% if show_stale %}class="is-active"{% endif %}>Show stale</button>
+    </form>
+  </div>
+  {% if not show_stale and workers_hidden_stale_count > 0 %}
+    <div class="filters" style="justify-content:space-between;">
+      <span class="mono-small">{{ workers_hidden_stale_count }} stale worker row{{ workers_hidden_stale_count|pluralize }} hidden.</span>
+      <span class="muted">Use “Show stale” to inspect retired IDs.</span>
+    </div>
+  {% endif %}
   <table class="tbl">
     <thead><tr><th>Worker</th><th>Heartbeat</th><th>State</th><th>Now running</th><th>Last run</th></tr></thead>
     <tbody>

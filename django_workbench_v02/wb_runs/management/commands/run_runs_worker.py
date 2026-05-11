@@ -1,3 +1,5 @@
+import os
+import re
 import uuid
 
 from django.conf import settings
@@ -13,6 +15,23 @@ from wb_runs.worker import (
 
 class Command(BaseCommand):
     help = "Run the investigation-run worker loop."
+
+    @staticmethod
+    def _default_worker_id() -> str:
+        configured = str(os.getenv("RUN_WORKER_ID", "") or "").strip()
+        if configured:
+            return configured
+
+        replica_hint = (
+            str(os.getenv("RAILWAY_REPLICA_ID", "") or "").strip()
+            or str(os.getenv("HOSTNAME", "") or "").strip()
+        )
+        if replica_hint:
+            normalized = re.sub(r"[^a-zA-Z0-9._-]", "-", replica_hint).strip("-")
+            if normalized:
+                return f"worker-{normalized}"
+
+        return f"worker-{uuid.uuid4()}"
 
     def add_arguments(self, parser):
         parser.add_argument("--worker-id", default="")
@@ -47,7 +66,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        worker_id = options["worker_id"] or f"worker-{uuid.uuid4()}"
+        worker_id = options["worker_id"] or self._default_worker_id()
         route_mode = options.get("route_mode") or None
         configured_route_mode = str(
             route_mode or getattr(settings, "RUN_WORKER_ROUTE_MODE", "all") or "all"

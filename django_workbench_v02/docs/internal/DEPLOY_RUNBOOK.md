@@ -201,3 +201,13 @@ uv run python manage.py refresh_collection_cards_snapshot
 ```bash
 uv run python manage.py run_lifecycle_maintenance
 ```
+3. Worker heartbeat prune (daily):
+```bash
+uv run python manage.py prune_stale_worker_heartbeats
+```
+
+Recommended cadence:
+
+1. Run once per day (off-peak, for example `03:17 UTC`).
+2. Keep DGX protected via `WORKER_HEARTBEAT_PROTECTED_IDS=dgx-worker-1` (or comma-separated list).
+3. Default stale threshold is `WORKER_HEARTBEAT_PRUNE_STALE_SECONDS=172800` (48h). Adjust if needed.

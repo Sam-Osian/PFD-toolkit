@@ -905,6 +905,7 @@ def failures(request):
 @require_GET
 def workers(request):
     now = timezone.now()
+    show_stale = str(request.GET.get("show_stale") or "").strip().lower() in {"1", "true", "yes", "on"}
     worker_snapshot = _worker_snapshot(now=now)
     worker_rows = []
     active_runs = list(
@@ -921,6 +922,8 @@ def workers(request):
     for row in worker_snapshot["rows"]:
         heartbeat = row["heartbeat"]
         assigned_run = run_by_worker.get(str(heartbeat.worker_id))
+        if not show_stale and not row["is_online"] and assigned_run is None:
+            continue
         worker_rows.append(
             {
                 "heartbeat": heartbeat,
@@ -939,6 +942,8 @@ def workers(request):
         "ops_section": "workers",
         "worker_snapshot": worker_snapshot,
         "worker_rows": worker_rows,
+        "workers_hidden_stale_count": max(0, int(worker_snapshot["worker_count"]) - len(worker_rows)),
+        "show_stale": show_stale,
         "queue_rows": queue_rows,
         "now": now,
     }

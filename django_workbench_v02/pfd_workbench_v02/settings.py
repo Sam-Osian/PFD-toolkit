@@ -350,6 +350,12 @@ RUN_STAGE_TIMEOUT_SECONDS = _env_int("RUN_STAGE_TIMEOUT_SECONDS", 1800)
 RUN_TOTAL_TIMEOUT_SECONDS = _env_int("RUN_TOTAL_TIMEOUT_SECONDS", 28800)
 RUN_STUCK_THRESHOLD_SECONDS = _env_int("RUN_STUCK_THRESHOLD_SECONDS", 1800)
 WORKER_HEARTBEAT_STALE_SECONDS = _env_int("WORKER_HEARTBEAT_STALE_SECONDS", 120)
+WORKER_HEARTBEAT_PRUNE_STALE_SECONDS = _env_int("WORKER_HEARTBEAT_PRUNE_STALE_SECONDS", 172800)
+WORKER_HEARTBEAT_PROTECTED_IDS = tuple(
+    worker_id.strip()
+    for worker_id in str(os.getenv("WORKER_HEARTBEAT_PROTECTED_IDS", "dgx-worker-1") or "").split(",")
+    if worker_id.strip()
+)
 RUN_WORKER_ROUTE_MODE = str(os.getenv("RUN_WORKER_ROUTE_MODE", "all") or "all").strip().lower()
 
 # Local Ollama defaults (DGX/local-host execution route).
