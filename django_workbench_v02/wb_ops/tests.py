@@ -186,3 +186,31 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(len(features), 2)
         self.assertEqual(features[0]["name"], "setting")
         self.assertEqual(features[1]["name"], "age_at_death")
+
+    def test_ops_approvals_excludes_terminal_runs_with_stale_pending_approval_status(self):
+        failed = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.FAILED,
+            approval_status=RunApprovalStatus.PENDING,
+            requires_approval=True,
+            input_config_json={"provider": "local_ollama", "model_name": "gemma4:26b"},
+        )
+        queued = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.QUEUED,
+            approval_status=RunApprovalStatus.PENDING,
+            requires_approval=True,
+            input_config_json={"provider": "local_ollama", "model_name": "gemma4:26b"},
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("ops-approvals"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(queued.id))
+        self.assertNotContains(response, str(failed.id))

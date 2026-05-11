@@ -751,7 +751,10 @@ def _apply_typed_review_edits(*, actor, run: InvestigationRun, payload: TypedRun
 def _approval_queryset(*, request):
     queryset = (
         InvestigationRun.objects.select_related("workspace", "requested_by", "investigation")
-        .filter(approval_status="pending")
+        .filter(
+            approval_status="pending",
+            status=RunStatus.QUEUED,
+        )
         .order_by("-queued_at")
     )
     run_type = str(request.GET.get("type") or "").strip().lower()
@@ -775,8 +778,6 @@ def approvals(request):
             if str(candidate.id) == selected_run_id:
                 selected_run = candidate
                 break
-    if selected_run is None and pending_runs:
-        selected_run = pending_runs[0]
 
     rows = []
     for run in pending_runs:

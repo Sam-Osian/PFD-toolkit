@@ -7,6 +7,7 @@ import uuid
 from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
+from typing import Callable
 
 from django.conf import settings
 from django.db import transaction
@@ -134,6 +135,10 @@ def _reload_run(run_id):
     return InvestigationRun.objects.select_related("workspace", "investigation").get(id=run_id)
 
 
+def _active_heartbeat_interval_seconds() -> int:
+    return max(1, int(getattr(settings, "WORKER_ACTIVE_HEARTBEAT_SECONDS", 20)))
+
+
 def _retry_enabled() -> bool:
     return bool(getattr(settings, "RUN_RETRY_ENABLED", True))
 
@@ -257,6 +262,30 @@ def _record_worker_heartbeat(
             "last_seen_at": timezone.now(),
         },
     )
+
+
+def _record_worker_heartbeat_safe(
+    *,
+    worker_id: str,
+    state: str,
+    run: InvestigationRun | None = None,
+    error: str = "",
+) -> None:
+    try:
+        _record_worker_heartbeat(
+            worker_id=worker_id,
+            state=state,
+            run=run,
+            error=error,
+        )
+    except Exception:  # pragma: no cover - defensive heartbeat reliability guard
+        logger.warning(
+            "Worker heartbeat update failed (worker_id=%s state=%s run_id=%s).",
+            worker_id,
+            state,
+            getattr(run, "id", None),
+            exc_info=True,
+        )
 
 
 def _apply_timeout_if_needed(run: InvestigationRun) -> InvestigationRun:
@@ -606,7 +635,11 @@ def _build_success_message(run: InvestigationRun, result: dict) -> str:
     return "Run completed successfully."
 
 
-def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
+def _execute_real_adapter_run(
+    run: InvestigationRun,
+    *,
+    active_heartbeat_callback: Callable[[InvestigationRun], None] | None = None,
+) -> InvestigationRun:
     run = _reload_run(run.id)
     run_label = RUN_LABEL_BY_TYPE.get(run.run_type, run.run_type)
     adapter = _resolve_real_adapter(run.run_type)
@@ -622,6 +655,8 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
 
     def _cancellation_check() -> bool:
         current = _reload_run(run.id)
+        if active_heartbeat_callback:
+            active_heartbeat_callback(current)
         current = _apply_timeout_if_needed(current)
         if current.status == RunStatus.TIMED_OUT:
             raise AdapterCancelledError("Run timed out during cancellation checks.")
@@ -629,6 +664,8 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
 
     def _progress_update(progress_percent: int, message: str) -> None:
         current = _reload_run(run.id)
+        if active_heartbeat_callback:
+            active_heartbeat_callback(current)
         current = _apply_timeout_if_needed(current)
         if current.status == RunStatus.TIMED_OUT:
             raise AdapterCancelledError("Run timed out during progress updates.")
@@ -801,7 +838,12 @@ def _execute_real_adapter_run(run: InvestigationRun) -> InvestigationRun:
     )
 
 
-def _execute_run_simulated(run: InvestigationRun, sleep_between_stages_seconds: float = 0.0) -> InvestigationRun:
+def _execute_run_simulated(
+    run: InvestigationRun,
+    sleep_between_stages_seconds: float = 0.0,
+    *,
+    active_heartbeat_callback: Callable[[InvestigationRun], None] | None = None,
+) -> InvestigationRun:
     run = _reload_run(run.id)
     run = _apply_timeout_if_needed(run)
     if run.status == RunStatus.TIMED_OUT:
@@ -833,6 +875,8 @@ def _execute_run_simulated(run: InvestigationRun, sleep_between_stages_seconds: 
 
     for index, (message, progress) in enumerate(stages, start=1):
         run = _reload_run(run.id)
+        if active_heartbeat_callback:
+            active_heartbeat_callback(run)
         run = _apply_timeout_if_needed(run)
         if run.status == RunStatus.TIMED_OUT:
             return run
@@ -883,7 +927,12 @@ def _execute_run_simulated(run: InvestigationRun, sleep_between_stages_seconds: 
     )
 
 
-def _execute_run(run: InvestigationRun, sleep_between_stages_seconds: float = 0.0) -> InvestigationRun:
+def _execute_run(
+    run: InvestigationRun,
+    sleep_between_stages_seconds: float = 0.0,
+    *,
+    active_heartbeat_callback: Callable[[InvestigationRun], None] | None = None,
+) -> InvestigationRun:
     run = _reload_run(run.id)
     run = _apply_timeout_if_needed(run)
     if run.status == RunStatus.TIMED_OUT:
@@ -900,13 +949,19 @@ def _execute_run(run: InvestigationRun, sleep_between_stages_seconds: float = 0.
         status=RunStatus.STARTING,
         message=f"Worker {run.worker_id or 'unknown'} claimed run.",
     )
+    if active_heartbeat_callback:
+        active_heartbeat_callback(run)
 
     if _is_real_adapter_mode(run):
-        return _execute_real_adapter_run(run)
+        return _execute_real_adapter_run(
+            run,
+            active_heartbeat_callback=active_heartbeat_callback,
+        )
 
     return _execute_run_simulated(
         run=run,
         sleep_between_stages_seconds=sleep_between_stages_seconds,
+        active_heartbeat_callback=active_heartbeat_callback,
     )
 
 
@@ -969,9 +1024,28 @@ def process_single_available_run(
         return None
 
     _record_worker_heartbeat(worker_id=effective_worker_id, state="claimed", run=run)
+    heartbeat_interval = _active_heartbeat_interval_seconds()
+    last_active_heartbeat = time.monotonic()
+
+    def _maybe_record_active_heartbeat(current_run: InvestigationRun) -> None:
+        nonlocal last_active_heartbeat
+        now_monotonic = time.monotonic()
+        if now_monotonic - last_active_heartbeat < heartbeat_interval:
+            return
+        _record_worker_heartbeat_safe(
+            worker_id=effective_worker_id,
+            state="claimed",
+            run=current_run,
+        )
+        last_active_heartbeat = now_monotonic
+
     logger.info("Worker %s processing run %s", effective_worker_id, run.id)
     try:
-        final_run = _execute_run(run, sleep_between_stages_seconds=sleep_between_stages_seconds)
+        final_run = _execute_run(
+            run,
+            sleep_between_stages_seconds=sleep_between_stages_seconds,
+            active_heartbeat_callback=_maybe_record_active_heartbeat,
+        )
     except Exception as exc:  # pragma: no cover - defensive heartbeat for crash diagnostics
         _record_worker_heartbeat(
             worker_id=effective_worker_id,

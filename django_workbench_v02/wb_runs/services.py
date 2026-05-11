@@ -553,6 +553,11 @@ def set_run_status(
         run.started_at = run.started_at or timezone.now()
     if status in TERMINAL_STATUSES:
         run.finished_at = timezone.now()
+        if run.approval_status == RunApprovalStatus.PENDING:
+            # Defensive cleanup for legacy rows that reached terminal states without
+            # the approval status being normalised.
+            run.approval_status = RunApprovalStatus.NOT_REQUIRED
+            run.requires_approval = False
     if error_code:
         run.error_code = error_code
     if error_message:

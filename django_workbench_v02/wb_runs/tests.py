@@ -288,6 +288,26 @@ class RunServiceTests(TestCase):
                 message="Invalid direct success from queued",
             )
 
+    def test_terminal_status_normalises_stale_pending_approval_state(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"requires_manual_approval": True},
+        )
+        run.status = RunStatus.STARTING
+        run.save(update_fields=["status", "updated_at"])
+
+        set_run_status(
+            run=run,
+            status=RunStatus.FAILED,
+            message="Failed after being picked up",
+        )
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.FAILED)
+        self.assertEqual(run.approval_status, RunApprovalStatus.NOT_REQUIRED)
+        self.assertFalse(run.requires_approval)
+
     def test_queue_run_backfills_scope_from_investigation_and_enforces_exclusions(self):
         self.investigation.scope_json = {
             "collection_slug": "local-gov",
@@ -1723,6 +1743,44 @@ class RunWorkerTests(TestCase):
         heartbeat = RunWorkerHeartbeat.objects.get(worker_id="heartbeat-worker")
         self.assertEqual(heartbeat.state, "idle")
         self.assertIsNone(heartbeat.last_run)
+
+    @override_settings(WORKER_ACTIVE_HEARTBEAT_SECONDS=1)
+    def test_worker_refreshes_claimed_heartbeat_during_real_run_execution(self):
+        output_path = Path("/tmp/test-run-heartbeat-output.csv")
+        output_path.write_text("id,matches_query\n1,True\n", encoding="utf-8")
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={"execution_mode": "real", "search_query": "medication safety"},
+        )
+
+        def _adapter_side_effect(*, run, progress_callback, cancellation_check):
+            progress_callback(30, "Sending requests to the LLM")
+            progress_callback(45, "Sending requests to the LLM")
+            return {
+                "output_path": str(output_path),
+                "total_reports": 10,
+                "matched_reports": 3,
+                "output_reports": 3,
+                "search_query": "medication safety",
+                "filter_df": True,
+                "produce_spans": False,
+                "drop_spans": False,
+                "start_date": "2024-01-01",
+                "end_date": "2024-12-31",
+                "report_limit": None,
+            }
+
+        with patch("wb_runs.worker.execute_filter_workflow", side_effect=_adapter_side_effect), patch(
+            "wb_runs.worker.time.monotonic",
+            side_effect=[0.0, 2.0, 3.0, 4.0, 5.0],
+        ), patch("wb_runs.worker._record_worker_heartbeat_safe") as mocked_safe:
+            process_single_available_run(worker_id="test-worker")
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, RunStatus.SUCCEEDED)
+        self.assertGreaterEqual(mocked_safe.call_count, 1)
 
     @override_settings(WORKER_HEARTBEAT_STALE_SECONDS=120)
     def test_worker_healthcheck_passes_when_recent_heartbeat_exists(self):
