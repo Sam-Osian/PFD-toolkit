@@ -157,6 +157,10 @@ class GenerationCancelledError(RuntimeError):
     """Raised when an LLM batch is cancelled before completion."""
 
 
+class ReasoningControlUnsupportedError(RuntimeError):
+    """Raised when model/provider does not support requested reasoning control."""
+
+
 class LLM:
     """Wrapper around the OpenAI Python SDK for batch prompting.
 
@@ -222,6 +226,7 @@ class LLM:
         validation_attempts: int = 2,
         timeout: float | httpx.Timeout = 120,
         per_report_timeout_s: Optional[float] = None,
+        strict_reasoning_effort: bool = False,
     ):
         self.api_key = api_key
         self.model = model
@@ -237,6 +242,7 @@ class LLM:
         self.reasoning_effort = str(reasoning_effort).strip() if reasoning_effort else None
         self.seed = seed
         self.validation_attempts = max(1, validation_attempts)
+        self.strict_reasoning_effort = bool(strict_reasoning_effort)
         self.per_report_timeout_s = (
             float(per_report_timeout_s)
             if per_report_timeout_s is not None and float(per_report_timeout_s) > 0
@@ -295,6 +301,10 @@ class LLM:
                 for candidate in ("reasoning_effort", "temperature", "seed"):
                     if candidate in request_kwargs and candidate not in attempted_removals:
                         if _is_unsupported_parameter_error(exc, candidate):
+                            if candidate == "reasoning_effort" and self.strict_reasoning_effort:
+                                raise ReasoningControlUnsupportedError(
+                                    "Model does not support enforced reasoning_effort control."
+                                ) from exc
                             removable = candidate
                             break
                 if removable is None:
@@ -319,6 +329,10 @@ class LLM:
                 for candidate in ("reasoning_effort", "temperature", "seed"):
                     if candidate in request_kwargs and candidate not in attempted_removals:
                         if _is_unsupported_parameter_error(exc, candidate):
+                            if candidate == "reasoning_effort" and self.strict_reasoning_effort:
+                                raise ReasoningControlUnsupportedError(
+                                    "Model does not support enforced reasoning_effort control."
+                                ) from exc
                             removable = candidate
                             break
                 if removable is None:
@@ -591,12 +605,9 @@ class LLM:
                         started = future_started_at.get(fut, now)
                         if (now - started) > self.per_report_timeout_s:
                             self.request_cancellation()
-                            raise APITimeoutError(
-                                message=(
-                                    f"Per-report wall-clock timeout exceeded "
-                                    f"({self.per_report_timeout_s:.0f}s)"
-                                ),
-                                request=None,
+                            raise TimeoutError(
+                                f"Per-report wall-clock timeout exceeded "
+                                f"({self.per_report_timeout_s:.0f}s)"
                             )
                 done, _ = wait(
                     set(futures.keys()),

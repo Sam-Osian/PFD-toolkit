@@ -1,0 +1,5 @@
+model,tag,family,reason_code,reason_detail,occurred_at
+glm-4.7-flash:bf16,glm-4.7-flash:bf16,glm-4.7-flash,pydantic_gate_failed,preflight_pred_contains_na,2026-05-15T17:17:26.813709+00:00
+glm-4.7-flash:q4_K_M,glm-4.7-flash:q4_K_M,glm-4.7-flash,pydantic_gate_failed,preflight_pred_contains_na,2026-05-15T17:18:54.431486+00:00
+glm-4.7-flash:q8_0,glm-4.7-flash:q8_0,glm-4.7-flash,pydantic_gate_failed,preflight_pred_contains_na,2026-05-15T17:22:00.387862+00:00
+notux:8x7b,notux:8x7b,notux,pydantic_gate_failed,preflight_pred_contains_na,2026-05-15T21:05:26.288662+00:00
