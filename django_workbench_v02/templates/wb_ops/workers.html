@@ -42,7 +42,15 @@
         <td>
           {% if row.active_run %}
             <b>{{ row.active_run.investigation.title }}</b>
-            <div class="mono-small">{{ row.active_run.run_type }} · {{ row.active_run.status }}</div>
+            <div class="run-inline-meta">
+              <span class="mono-small">{{ row.active_run.run_type }} · {{ row.active_run.status }}</span>
+              <span class="b accent">{{ row.active_progress_label }}</span>
+            </div>
+            {% if row.active_progress_percent is not None %}
+              <div class="run-inline-progress" aria-label="{{ row.active_progress_label }}">
+                <i style="--progress: {{ row.active_progress_percent }}%;"></i>
+              </div>
+            {% endif %}
           {% else %}
             <span class="muted">—</span>
           {% endif %}

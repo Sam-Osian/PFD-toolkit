@@ -922,6 +922,9 @@ def workers(request):
     for row in worker_snapshot["rows"]:
         heartbeat = row["heartbeat"]
         assigned_run = run_by_worker.get(str(heartbeat.worker_id))
+        progress_percent = None
+        if assigned_run is not None:
+            progress_percent = assigned_run.progress_percent
         if not show_stale and not row["is_online"] and assigned_run is None:
             continue
         worker_rows.append(
@@ -930,6 +933,12 @@ def workers(request):
                 "is_online": row["is_online"],
                 "seconds_since_seen": row["seconds_since_seen"],
                 "active_run": assigned_run,
+                "active_progress_percent": progress_percent,
+                "active_progress_label": (
+                    f"{progress_percent}% complete"
+                    if progress_percent is not None
+                    else "progress pending"
+                ),
             }
         )
 
