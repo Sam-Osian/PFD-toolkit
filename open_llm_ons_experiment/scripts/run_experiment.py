@@ -31,6 +31,7 @@ from tqdm import tqdm
 
 from pfd_toolkit import LLM, Screener
 from pfd_toolkit.config import GeneralConfig
+from pfd_toolkit.llm import ReasoningControlUnsupportedError
 
 
 DEFAULT_QUERY = """
@@ -88,6 +89,14 @@ def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def format_seconds(seconds: float) -> str:
+    if pd.isna(seconds) or seconds < 0:
+        return "not recorded"
+    total_seconds = int(round(seconds))
+    minutes, remaining_seconds = divmod(total_seconds, 60)
+    return f"{minutes} min {remaining_seconds:02d} sec"
+
+
 def fsync_csv(path: Path, df: pd.DataFrame) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(path, index=False)
@@ -140,6 +149,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--query", default=DEFAULT_QUERY)
     parser.add_argument("--seed", type=int, default=12345)
     parser.add_argument("--temperature", type=float, default=0.0)
+    parser.add_argument("--reasoning-effort", default="none")
     parser.add_argument("--timeout", type=float, default=600)
     parser.add_argument("--per-report-timeout", type=float, default=600)
     parser.add_argument("--max-workers", type=int, default=1)
@@ -346,7 +356,6 @@ def generate_plots(results: pd.DataFrame, plots_dir: Path, gpt41_benchmark: floa
 
     try:
         import plotly.express as px
-        import plotly.graph_objects as go
     except Exception:
         return
 
@@ -355,44 +364,60 @@ def generate_plots(results: pd.DataFrame, plots_dir: Path, gpt41_benchmark: floa
     completed["agreement_with_clinical_adjudication"] = pd.to_numeric(
         completed["agreement_with_clinical_adjudication"], errors="coerce"
     )
+    started = pd.to_datetime(completed["started_at"], errors="coerce", utc=True)
+    finished = pd.to_datetime(completed["finished_at"], errors="coerce", utc=True)
+    elapsed_seconds = (finished - started).dt.total_seconds()
+    completed["elapsed_time"] = elapsed_seconds.apply(format_seconds)
     completed = completed.dropna(
         subset=["params_total_b", "agreement_with_clinical_adjudication"]
     ).copy()
     if completed.empty:
         return
+    top_models = completed.nlargest(5, "agreement_with_clinical_adjudication").copy()
 
     fig = px.scatter(
         completed,
         x="params_total_b",
         y="agreement_with_clinical_adjudication",
-        hover_data=[
-            "model",
-            "tag",
-            "family",
-            "sensitivity",
-            "specificity",
-            "is_moe",
-            "installed_preexisting",
-            "pulled_by_run",
-        ],
+        custom_data=["model", "family", "elapsed_time"],
         title="Open LLM ONS Agreement Benchmark",
+    )
+    fig.update_traces(
+        marker={"size": 10},
+        hovertemplate=(
+            "<b>%{customdata[0]}</b><br>"
+            "Family: %{customdata[1]}<br>"
+            "Agreement: %{y:.1%}<br>"
+            "Elapsed time: %{customdata[2]}<extra></extra>"
+        )
     )
     fig.add_hline(
         y=gpt41_benchmark,
         line_dash="dot",
         annotation_text=f"GPT-4.1 benchmark ({gpt41_benchmark:.2%})",
     )
+    label_offsets = [(-45, -35), (45, 35), (55, -35), (-50, 35), (0, 50)]
+    for (_, row), (ax, ay) in zip(top_models.iterrows(), label_offsets, strict=False):
+        fig.add_annotation(
+            x=row["params_total_b"],
+            y=row["agreement_with_clinical_adjudication"],
+            text=row["model"],
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowwidth=1,
+            ax=ax,
+            ay=ay,
+            bgcolor="black",
+            bordercolor="black",
+            borderpad=4,
+            font={"color": "white", "size": 11},
+        )
     fig.update_layout(
         xaxis_title="Parameters (billions)",
         yaxis_title="Agreement with clinical adjudication",
     )
     fig.write_html(str(plots_dir / "results_interactive.html"), include_plotlyjs="cdn")
-
-    try:
-        fig.write_image(str(plots_dir / "results_static.png"))
-    except Exception:
-        # Static image export requires optional Kaleido; HTML is still generated.
-        pass
 
 
 def run_preflight(
@@ -595,10 +620,12 @@ def main() -> None:
                 base_url=args.llm_base_url,
                 max_workers=args.max_workers,
                 temperature=args.temperature,
+                reasoning_effort=args.reasoning_effort,
                 seed=args.seed,
                 timeout=args.timeout,
                 validation_attempts=args.validation_attempts,
                 per_report_timeout_s=args.per_report_timeout,
+                strict_reasoning_effort=True,
             )
 
             state["phase"] = "preflight"
@@ -676,6 +703,43 @@ def main() -> None:
             state["models"][tag] = "completed"
             generate_plots(results, plots_dir, args.gpt41_benchmark)
 
+        except ReasoningControlUnsupportedError as exc:
+            exclusions = append_exclusion(
+                exclusions,
+                exclusions_path,
+                model=model,
+                tag=tag,
+                family=family,
+                reason_code="reasoning_control_unsupported",
+                reason_detail=str(exc),
+            )
+            finished_at = utc_now_iso()
+            results = upsert_result(
+                results,
+                results_path,
+                {
+                    "model": model,
+                    "tag": tag,
+                    "family": family,
+                    "is_moe": row.get("is_moe"),
+                    "params_total_b": row.get("params_total_b"),
+                    "params_active_b": row.get("params_active_b"),
+                    "agreement_with_clinical_adjudication": pd.NA,
+                    "cohen_kappa": pd.NA,
+                    "kappa_ci_lower": pd.NA,
+                    "kappa_ci_upper": pd.NA,
+                    "sensitivity": pd.NA,
+                    "specificity": pd.NA,
+                    "local": True,
+                    "installed_preexisting": installed_preexisting,
+                    "pulled_by_run": pulled_this_model,
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "status": "excluded",
+                    "error_reason": "reasoning_control_unsupported",
+                },
+            )
+            state["models"][tag] = "excluded"
         except Exception as exc:
             finished_at = utc_now_iso()
             error_reason = f"{type(exc).__name__}: {exc}"

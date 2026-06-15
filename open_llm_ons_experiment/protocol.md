@@ -68,8 +68,9 @@ Rationale for thresholds:
 
 ## 8. Structured Output and Reasoning Handling
 - Output must validate against the required schema (Pydantic gate).
-- If a model is a reasoning/thinking model, only the final answer payload is evaluated.
-- No constraints or scoring are applied to intermediate reasoning traces/tokens.
+- Reasoning is requested as disabled for all models (`reasoning_effort = none`) to minimise hidden thinking-token variability.
+- If a model/API does not support that parameter, the model is excluded (`reasoning_control_unsupported`) and is not evaluated further.
+- No constraints or scoring are applied to any intermediate reasoning traces/tokens.
 
 ## 9. Statistical/Reporting Plan
 - Primary report: model-wise performance table and scatterplot (x: parameters in billions, y: agreement with clinical adjudication).

@@ -1,0 +1,4 @@
+Quick similarity recommendation
+- Very strict grouping (<20% grouped): reduce similarity threshold or min group size.
+- Very many groups: increase threshold or min group size to reduce fragmentation.
+- For issue tracking, prefer higher precision and accept many ungrouped sentences.

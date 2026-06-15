@@ -88,6 +88,8 @@ After eligibility filtering, all eligible tags are evaluated.
 ## 7. Evaluation Execution
 - Reuse the replication screening task and fixed input columns.
 - Use deterministic settings where supported (temperature/seed).
+- Request `reasoning_effort = none` for all models.
+- If the provider/model rejects `reasoning_effort`, exclude model with reason `reasoning_control_unsupported`.
 - For reasoning models, parse and validate only final output payload.
 - Ignore intermediate reasoning tokens/content.
 
