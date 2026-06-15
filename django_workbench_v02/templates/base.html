@@ -415,8 +415,8 @@
                         </div>
                         <div class="wz-pv">
                             <div class="pk">AI route</div>
-                            <div class="pv" id="wz-preview-route">Our server</div>
-                            <input type="hidden" name="provider" id="wz-provider-input" value="local_ollama">
+                            <div class="pv" id="wz-preview-route">{% if active_llm_config and active_llm_config.provider == "openai" %}OpenAI server{% else %}Our server{% endif %}</div>
+                            <input type="hidden" name="provider" id="wz-provider-input" value="{{ active_llm_config.provider|default:'local_ollama' }}">
                             <input type="hidden" name="model_name" id="wz-model-select" value="{{ active_llm_config.model_name|default:'gemma4:26b' }}">
                             <input type="hidden" name="max_parallel_workers" value="{{ active_llm_config.max_parallel_workers|default:1 }}">
                             <input type="hidden" name="api_key" id="wz-api-key-input" value="">
@@ -824,6 +824,10 @@ document.addEventListener("DOMContentLoaded", function() {
   const workersInput = wizardOverlay ? wizardOverlay.querySelector('input[name="max_parallel_workers"]') : null;
   const apiKeyInput = wizardOverlay ? wizardOverlay.querySelector('input[name="api_key"]') : null;
   const baseUrlInput = wizardOverlay ? wizardOverlay.querySelector('input[name="base_url"]') : null;
+  const wizardDefaultProvider = String(providerInput?.value || providerInput?.defaultValue || "local_ollama").trim().toLowerCase();
+  const wizardDefaultModel = String(modelSelect?.value || modelSelect?.defaultValue || "").trim();
+  const wizardDefaultWorkers = String(workersInput?.value || workersInput?.defaultValue || "1").trim() || "1";
+  const wizardDefaultBaseUrl = String(baseUrlInput?.value || baseUrlInput?.defaultValue || "").trim();
   const aiOpenButton = document.getElementById("wz-ai-open");
   const aiPopover = document.getElementById("wz-ai-pop");
   const completionToggle = document.getElementById("wz-completion-toggle");
@@ -1374,13 +1378,13 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!wizardForm) return;
     wizardStep = 0;
     wizardForm.reset();
-    if (providerInput) providerInput.value = "local_ollama";
-    if (workersInput) workersInput.value = "1";
+    if (providerInput) providerInput.value = wizardDefaultProvider;
+    if (workersInput) workersInput.value = wizardDefaultWorkers;
     if (apiKeyInput) {
       apiKeyInput.value = "";
       apiKeyInput.removeAttribute("data-masked");
     }
-    if (baseUrlInput) baseUrlInput.value = "";
+    if (baseUrlInput) baseUrlInput.value = wizardDefaultBaseUrl;
     if (extractTable) {
       const rows = Array.from(extractTable.querySelectorAll(".wet-row"));
       rows.forEach(function(row, index) {
@@ -1400,7 +1404,7 @@ document.addEventListener("DOMContentLoaded", function() {
         addExtractRow({ name: "", description: "", type: "text" });
       }
     }
-    setWizardModelOptions("local_ollama", "gemma4:26b");
+    setWizardModelOptions(wizardDefaultProvider, wizardDefaultModel);
     syncExtractFeatureRows();
     updateCustomScopeVisibility();
     updatePipelinePreview();

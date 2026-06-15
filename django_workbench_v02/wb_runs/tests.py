@@ -23,10 +23,15 @@ from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
     WorkspaceCredential,
+    WorkspaceLLMProvider,
     WorkspaceMembership,
     WorkspaceReportExclusion,
 )
-from wb_workspaces.services import create_workspace_for_user
+from wb_workspaces.services import (
+    create_workspace_for_user,
+    upsert_user_llm_credential,
+    upsert_user_llm_setting,
+)
 
 from .artifact_storage import StoredArtifactFile
 from .models import (
@@ -614,6 +619,44 @@ class RunViewTests(TestCase):
         ).latest("created_at")
         self.assertEqual(run.input_config_json.get("provider"), "local_ollama")
         self.assertEqual(run.input_config_json.get("model_name"), "gemma4:26b")
+
+    def test_queue_real_run_defaults_to_saved_llm_config_when_route_omitted(self):
+        upsert_user_llm_setting(
+            actor=self.owner,
+            provider=WorkspaceLLMProvider.OPENAI,
+            model_name="gpt-5.4",
+            max_parallel_workers=7,
+        )
+        upsert_user_llm_credential(
+            actor=self.owner,
+            provider=WorkspaceLLMProvider.OPENAI,
+            api_key="sk-test-secret-5678",
+        )
+
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse(
+                "workbook-run-queue",
+                kwargs={
+                    "workbook_id": self.workspace.id,
+                    "investigation_id": self.investigation.id,
+                },
+            ),
+            data={
+                "run_type": RunType.FILTER,
+                "api_key": "",
+                "input_config_json": '{"execution_mode": "real"}',
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        run = self.investigation.runs.filter(
+            run_type=RunType.FILTER,
+            input_config_json__execution_mode="real",
+        ).latest("created_at")
+        self.assertEqual(run.input_config_json.get("provider"), "openai")
+        self.assertEqual(run.input_config_json.get("model_name"), "gpt-5.4")
+        self.assertEqual(run.input_config_json.get("max_parallel_workers"), 7)
 
     def test_queue_real_run_saves_workspace_credential(self):
         self.client.force_login(self.owner)

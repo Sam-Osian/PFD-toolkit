@@ -800,7 +800,7 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(credential.key_last4, "5678")
         self.assertEqual(credential.base_url, "https://api.example.test/v1")
 
-    def test_llm_config_popup_renders_saved_provider(self):
+    def test_llm_config_and_investigation_wizard_render_saved_provider(self):
         upsert_user_llm_setting(
             actor=self.owner,
             provider="openai",
@@ -813,6 +813,21 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertContains(
             response,
             'name="provider" id="llm-pop-provider" value="openai"',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'name="provider" id="wz-provider-input" value="openai"',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'name="model_name" id="wz-model-select" value="gpt-5.4"',
+            html=False,
+        )
+        self.assertContains(
+            response,
+            'name="max_parallel_workers" value="6"',
             html=False,
         )
 

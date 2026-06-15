@@ -19,6 +19,13 @@ class RunQueueForm(forms.Form):
         initial="gemma4:26b",
         help_text="LLM model name used for this run.",
     )
+    max_parallel_workers = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=32,
+        initial=1,
+        help_text="Maximum concurrent LLM workers for this run.",
+    )
     api_key = forms.CharField(
         required=False,
         widget=forms.PasswordInput(render_value=False),
@@ -70,8 +77,10 @@ class RunQueueForm(forms.Form):
             else:
                 model_name = "gpt-4.1-mini"
         base_url = (cleaned.get("base_url") or "").strip()
+        max_parallel_workers = cleaned.get("max_parallel_workers") or 1
         config["provider"] = provider
         config["model_name"] = model_name
+        config["max_parallel_workers"] = max_parallel_workers
         if base_url:
             if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
                 config_key = "local_ollama_base_url"
@@ -84,6 +93,7 @@ class RunQueueForm(forms.Form):
         cleaned["input_config_json"] = config
         cleaned["provider"] = provider
         cleaned["model_name"] = model_name
+        cleaned["max_parallel_workers"] = max_parallel_workers
         cleaned["base_url"] = base_url
         return cleaned
 

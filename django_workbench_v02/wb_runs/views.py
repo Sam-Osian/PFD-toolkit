@@ -14,6 +14,7 @@ from wb_notifications.services import NotificationRequestError, create_notificat
 from wb_workspaces.permissions import can_view_workspace
 from wb_workspaces.services import (
     WorkspaceCredentialValidationError,
+    get_workspace_llm_setting,
     has_workspace_credential,
     upsert_workspace_credential,
 )
@@ -301,11 +302,30 @@ def queue_investigation_run(request, workbook_id, investigation_id):
 
     try:
         run_config = form.cleaned_data["input_config_json"] or {}
+        active_llm_config = get_workspace_llm_setting(
+            user=request.user,
+            workspace=investigation.workspace,
+        )
 
         execution_mode = str(run_config.get("execution_mode", "real")).strip().lower()
+        posted_provider = str(request.POST.get("provider") or "").strip()
+        posted_model_name = str(request.POST.get("model_name") or "").strip()
+        posted_workers = str(request.POST.get("max_parallel_workers") or "").strip()
         provider = str(
             form.cleaned_data.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA
         ).strip().lower()
+        if not posted_provider:
+            provider = str(active_llm_config.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
+            run_config["provider"] = provider
+        if not posted_model_name:
+            model_name = str(active_llm_config.get("model_name") or form.cleaned_data.get("model_name") or "").strip()
+            if model_name:
+                form.cleaned_data["model_name"] = model_name
+                run_config["model_name"] = model_name
+        if not posted_workers:
+            max_parallel_workers = active_llm_config.get("max_parallel_workers") or form.cleaned_data.get("max_parallel_workers") or 1
+            form.cleaned_data["max_parallel_workers"] = max_parallel_workers
+            run_config["max_parallel_workers"] = max_parallel_workers
         api_key = str(form.cleaned_data.get("api_key") or "").strip()
         save_api_key = bool(form.cleaned_data.get("save_api_key", True))
         base_url = str(form.cleaned_data.get("base_url") or "").strip()
