@@ -463,6 +463,8 @@
     data-cred-openai="{% if active_llm_config and active_llm_config.credentials.openai %}1{% else %}0{% endif %}"
     data-cred-last4-local-ollama="{% if active_llm_config %}{{ active_llm_config.credential_last4.local_ollama|default:'' }}{% endif %}"
     data-cred-last4-openai="{% if active_llm_config %}{{ active_llm_config.credential_last4.openai|default:'' }}{% endif %}"
+    data-api-model="{% if active_llm_config %}{{ active_llm_config.api_model_name|default:'gpt-4.1-mini' }}{% else %}gpt-4.1-mini{% endif %}"
+    data-api-workers="{% if active_llm_config %}{{ active_llm_config.api_max_parallel_workers|default:1 }}{% else %}1{% endif %}"
 >
     <div class="llm-pop" role="dialog" aria-labelledby="llm-pop-title">
         <div class="llm-pop-head">
@@ -1508,6 +1510,7 @@ document.addEventListener("DOMContentLoaded", function() {
   const llmPopProvider = document.getElementById("llm-pop-provider");
   const llmPopStatus = document.getElementById("llm-pop-status");
   const llmPopModel = document.getElementById("llm-pop-model");
+  const llmPopWorkers = document.getElementById("llm-pop-workers");
   const llmPopApiKey = document.getElementById("llm-pop-api-key");
   const llmPopClearOpen = document.getElementById("llm-pop-clear-open");
   const llmPopOpenaiFields = document.getElementById("llm-pop-openai-fields");
@@ -1556,6 +1559,8 @@ document.addEventListener("DOMContentLoaded", function() {
     local_ollama: String(llmPopBack?.dataset.credLast4LocalOllama || "").trim(),
     openai: String(llmPopBack?.dataset.credLast4Openai || "").trim(),
   };
+  let llmPopApiModelPreference = String(llmPopBack?.dataset.apiModel || "gpt-4.1-mini").trim() || "gpt-4.1-mini";
+  let llmPopApiWorkersPreference = String(llmPopBack?.dataset.apiWorkers || "1").trim() || "1";
   const maskedCredentialValue = "********";
   const hasSavedCredentialForProvider = function(providerValue) {
     const key = String(providerValue || "").trim().toLowerCase();
@@ -1628,6 +1633,33 @@ document.addEventListener("DOMContentLoaded", function() {
     llmPopOpenaiFields.style.display = provider === "openai" ? "grid" : "none";
   };
 
+  const rememberLlmApiPreferences = function(providerValue) {
+    const provider = String(providerValue || "").trim().toLowerCase();
+    if (provider !== "openai") return;
+    if (llmPopModel) {
+      llmPopApiModelPreference = normaliseModelForProvider("openai", llmPopModel.value);
+    }
+    if (llmPopWorkers && String(llmPopWorkers.value || "").trim()) {
+      llmPopApiWorkersPreference = String(llmPopWorkers.value || "").trim();
+    }
+  };
+
+  const applyLlmProviderSelection = function(providerValue) {
+    const selected = String(providerValue || "local_ollama").trim().toLowerCase();
+    if (llmPopProvider) llmPopProvider.value = selected;
+    applyProviderButtonState(llmPopProviderPick, selected);
+    setLlmPopModelOptions(
+      selected,
+      selected === "openai" ? llmPopApiModelPreference : "gemma4:26b",
+    );
+    if (llmPopWorkers) {
+      llmPopWorkers.value = selected === "openai" ? llmPopApiWorkersPreference : "1";
+    }
+    syncLlmFieldVisibilityForProvider(selected);
+    syncLlmCredentialMaskForProvider(selected);
+    syncLlmStatusForProvider(selected);
+  };
+
   const applyProviderButtonState = function(container, providerValue) {
     if (!container) return;
     const providerKey = String(providerValue || "local_ollama").trim().toLowerCase();
@@ -1641,10 +1673,7 @@ document.addEventListener("DOMContentLoaded", function() {
     llmPopBack.classList.add("on");
     llmPopBack.setAttribute("aria-hidden", "false");
     const selectedProvider = String(llmPopProvider?.value || "local_ollama").toLowerCase();
-    setLlmPopModelOptions(selectedProvider, llmPopModel?.value || "");
-    syncLlmFieldVisibilityForProvider(selectedProvider);
-    syncLlmCredentialMaskForProvider(selectedProvider);
-    syncLlmStatusForProvider(selectedProvider);
+    applyLlmProviderSelection(selectedProvider);
   };
 
   const closeLlmConfig = function() {
@@ -1660,26 +1689,20 @@ document.addEventListener("DOMContentLoaded", function() {
   llmConfigOpen?.addEventListener("click", openLlmConfig);
   llmPopClose?.addEventListener("click", closeLlmConfig);
   llmPopBack?.addEventListener("click", function(event) {
-    if (event.target === llmPopBack) closeLlmConfig();
+    if (event.target === llmPopBack) {
+      event.preventDefault();
+    }
   });
   if (llmPopProviderPick) {
     llmPopProviderPick.querySelectorAll("button[data-provider]").forEach(function(button) {
       button.addEventListener("click", function() {
+        rememberLlmApiPreferences(llmPopProvider?.value || "local_ollama");
         const selected = String(button.getAttribute("data-provider") || "local_ollama").toLowerCase();
-        if (llmPopProvider) llmPopProvider.value = selected;
-        applyProviderButtonState(llmPopProviderPick, selected);
-        setLlmPopModelOptions(selected, llmPopModel?.value || "");
-        syncLlmFieldVisibilityForProvider(selected);
-        syncLlmCredentialMaskForProvider(selected);
-        syncLlmStatusForProvider(selected);
+        applyLlmProviderSelection(selected);
       });
     });
   }
-  applyProviderButtonState(llmPopProviderPick, llmPopProvider?.value || "local_ollama");
-  setLlmPopModelOptions(llmPopProvider?.value || "local_ollama", llmPopModel?.value || "");
-  syncLlmFieldVisibilityForProvider(llmPopProvider?.value || "local_ollama");
-  syncLlmCredentialMaskForProvider(llmPopProvider?.value || "local_ollama");
-  syncLlmStatusForProvider(llmPopProvider?.value || "local_ollama");
+  applyLlmProviderSelection(llmPopProvider?.value || "local_ollama");
 
   const openUserNotice = function() {
     if (!userNoticeBack) return;
@@ -2412,7 +2435,6 @@ document.addEventListener("DOMContentLoaded", function() {
         llmClearDialog.setAttribute("aria-hidden", "true");
       } else if (llmPopBack?.classList.contains("on")) {
         event.preventDefault();
-        closeLlmConfig();
       } else if (wizardOverlay?.classList.contains("on")) {
         event.preventDefault();
         closeWizard();

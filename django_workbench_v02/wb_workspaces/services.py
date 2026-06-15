@@ -745,15 +745,34 @@ def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object
     provider = WorkspaceLLMProvider.LOCAL_OLLAMA
     model_name = _default_model_name_for_provider(provider)
     max_parallel_workers = 1
+    api_model_name = _default_model_name_for_provider(WorkspaceLLMProvider.OPENAI)
+    api_max_parallel_workers = 1
 
     setting = UserLLMSetting.objects.filter(user=user).first()
     if setting is not None:
         provider = _normalise_provider(setting.provider)
-        model_name = _normalise_model_name(provider=provider, model_name=setting.model_name)
-        max_parallel_workers = _normalise_workers_for_provider(
-            provider=provider,
-            value=setting.max_parallel_workers,
-        )
+        if provider == WorkspaceLLMProvider.LOCAL_OLLAMA:
+            model_name = _default_model_name_for_provider(provider)
+            max_parallel_workers = _normalise_workers_for_provider(
+                provider=provider,
+                value=setting.max_parallel_workers,
+            )
+            stored_model = str(setting.model_name or "").strip()
+            if stored_model and not stored_model.casefold().startswith("gemma"):
+                api_model_name = _normalise_model_name(
+                    provider=WorkspaceLLMProvider.OPENAI,
+                    model_name=stored_model,
+                )
+                api_max_parallel_workers = _normalise_max_parallel_workers(setting.max_parallel_workers)
+        else:
+            model_name = _normalise_model_name(provider=provider, model_name=setting.model_name)
+            max_parallel_workers = _normalise_workers_for_provider(
+                provider=provider,
+                value=setting.max_parallel_workers,
+            )
+            if provider == WorkspaceLLMProvider.OPENAI:
+                api_model_name = model_name
+                api_max_parallel_workers = max_parallel_workers
 
     cred_map = workspace_credential_status_map(user=user, workspace=workspace)
     credential_last4 = {
@@ -790,6 +809,8 @@ def get_workspace_llm_setting(*, user, workspace: Workspace) -> dict[str, object
         "provider": provider,
         "model_name": model_name,
         "max_parallel_workers": max_parallel_workers,
+        "api_model_name": api_model_name,
+        "api_max_parallel_workers": api_max_parallel_workers,
         "has_provider_credential": bool(cred_map.get(provider)),
         "credentials": cred_map,
         "credential_last4": credential_last4,
@@ -938,6 +959,11 @@ def upsert_user_llm_setting(
         provider=resolved_provider,
         value=max_parallel_workers,
     )
+    existing_setting = UserLLMSetting.objects.filter(user=actor).first()
+    if resolved_provider == WorkspaceLLMProvider.LOCAL_OLLAMA and existing_setting is not None:
+        # Keep API-route preferences available while "Our server" is the active route.
+        resolved_model_name = existing_setting.model_name
+        resolved_workers = existing_setting.max_parallel_workers
     setting, created = UserLLMSetting.objects.get_or_create(
         user=actor,
         defaults={

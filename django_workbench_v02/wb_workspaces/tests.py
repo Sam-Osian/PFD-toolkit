@@ -701,6 +701,52 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(setting.max_parallel_workers, 4)
         self.assertTrue(self.owner.llm_credentials.filter(provider="openai", key_last4="1234").exists())
 
+    def test_saving_local_route_preserves_openai_credential_and_workers(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workspace-llm-config-save"),
+            data={
+                "provider": "openai",
+                "model_name": "gpt-5.4",
+                "max_parallel_workers": "6",
+                "api_key": "sk-example-5678",
+                "base_url": "https://api.example.test/v1",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            reverse("workspace-llm-config-save"),
+            data={
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "max_parallel_workers": "1",
+                "api_key": "",
+                "base_url": "",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        setting = self.owner.llm_setting
+        self.assertEqual(setting.provider, "local_ollama")
+        self.assertEqual(setting.model_name, "gpt-5.4")
+        self.assertEqual(setting.max_parallel_workers, 6)
+        credential = self.owner.llm_credentials.get(provider="openai")
+        self.assertEqual(credential.key_last4, "5678")
+        self.assertEqual(credential.base_url, "https://api.example.test/v1")
+
+        active = get_workspace_llm_setting(user=self.owner, workspace=self.workspace)
+        self.assertEqual(active.get("provider"), "local_ollama")
+        self.assertEqual(active.get("model_name"), "gemma4:26b")
+        self.assertEqual(active.get("max_parallel_workers"), 1)
+        self.assertEqual(active.get("api_model_name"), "gpt-5.4")
+        self.assertEqual(active.get("api_max_parallel_workers"), 6)
+        self.assertTrue(active.get("credentials", {}).get("openai"))
+
     def test_owner_can_clear_active_llm_credential(self):
         upsert_user_llm_credential(
             actor=self.owner,
