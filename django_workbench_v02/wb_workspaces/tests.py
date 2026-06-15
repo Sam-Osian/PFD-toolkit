@@ -61,6 +61,7 @@ from .services import (
     upsert_workspace_credential,
     upsert_workspace_llm_setting,
     upsert_user_llm_credential,
+    upsert_user_llm_setting,
     update_workspace_member,
 )
 
@@ -746,6 +747,74 @@ class WorkspaceMemberViewsTests(TestCase):
         self.assertEqual(active.get("api_model_name"), "gpt-5.4")
         self.assertEqual(active.get("api_max_parallel_workers"), 6)
         self.assertTrue(active.get("credentials", {}).get("openai"))
+
+    def test_owner_can_switch_back_to_openai_without_reposting_credential(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("workspace-llm-config-save"),
+            data={
+                "provider": "openai",
+                "model_name": "gpt-5.4",
+                "max_parallel_workers": "6",
+                "api_key": "sk-example-5678",
+                "base_url": "https://api.example.test/v1",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            reverse("workspace-llm-config-save"),
+            data={
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "max_parallel_workers": "1",
+                "api_key": "",
+                "base_url": "",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            reverse("workspace-llm-config-save"),
+            data={
+                "provider": "openai",
+                "model_name": "gpt-5.4",
+                "max_parallel_workers": "6",
+                "api_key": "",
+                "base_url": "https://api.example.test/v1",
+                "next_url": reverse("workbook-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+
+        setting = self.owner.llm_setting
+        self.assertEqual(setting.provider, "openai")
+        self.assertEqual(setting.model_name, "gpt-5.4")
+        self.assertEqual(setting.max_parallel_workers, 6)
+        credential = self.owner.llm_credentials.get(provider="openai")
+        self.assertEqual(credential.key_last4, "5678")
+        self.assertEqual(credential.base_url, "https://api.example.test/v1")
+
+    def test_llm_config_popup_renders_saved_provider(self):
+        upsert_user_llm_setting(
+            actor=self.owner,
+            provider="openai",
+            model_name="gpt-5.4",
+            max_parallel_workers=6,
+        )
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("workbook-dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'name="provider" id="llm-pop-provider" value="openai"',
+            html=False,
+        )
 
     def test_owner_can_clear_active_llm_credential(self):
         upsert_user_llm_credential(

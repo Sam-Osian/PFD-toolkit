@@ -485,7 +485,7 @@
                         <button type="button" data-provider="local_ollama">Our server</button>
                         <button type="button" data-provider="openai">OpenAI server</button>
                     </div>
-                    <input type="hidden" name="provider" id="llm-pop-provider" value="local_ollama">
+                    <input type="hidden" name="provider" id="llm-pop-provider" value="{{ active_llm_config.provider|default:'local_ollama' }}">
                 </div>
                 <div id="llm-pop-openai-fields">
                     <div class="field">
