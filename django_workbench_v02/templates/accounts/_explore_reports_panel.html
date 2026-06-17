@@ -8,6 +8,9 @@
 </div>
 {% else %}
 <div class="explore-reports-scroll-shell">
+    <div class="explore-reports-scrollbar" data-report-scrollbar aria-hidden="true">
+        <div class="explore-reports-scrollbar__spacer"></div>
+    </div>
     <div class="table-wrap explore-reports-table-wrap">
         <table class="explore-reports-table">
             <thead>
@@ -38,9 +41,6 @@
                 {% endfor %}
             </tbody>
         </table>
-    </div>
-    <div class="explore-reports-scrollbar" data-report-scrollbar aria-hidden="true">
-        <div class="explore-reports-scrollbar__spacer"></div>
     </div>
 </div>
 <div class="reports-pagination">

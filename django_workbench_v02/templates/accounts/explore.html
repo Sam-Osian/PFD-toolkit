@@ -1188,8 +1188,7 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
     window.requestAnimationFrame(() => {
       const proxy = panelHost.querySelector('[data-report-scrollbar]');
       if (!isVisible && proxy) {
-        proxy.classList.remove('is-visible', 'is-floating');
-        proxy.removeAttribute('style');
+        proxy.classList.remove('is-visible');
       }
     });
   };
@@ -1402,12 +1401,9 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
     if (!shell || !wrap || !proxy || !spacer) return;
 
     let syncing = false;
-    let frame = null;
 
     const setProxyHidden = () => {
-      proxy.classList.remove('is-visible', 'is-floating');
-      proxy.style.left = '';
-      proxy.style.width = '';
+      proxy.classList.remove('is-visible');
     };
 
     const syncFromWrap = () => {
@@ -1425,59 +1421,31 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
       hidePopup();
     };
 
-    const updateGeometry = () => {
-      frame = null;
+    const updateScrollbar = () => {
       const overflow = wrap.scrollWidth > wrap.clientWidth + 2;
       if (!overflow || !isVisible || panelHost.hidden) {
         setProxyHidden();
         return;
       }
 
-      const wrapRect = wrap.getBoundingClientRect();
-      const shellRect = shell.getBoundingClientRect();
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
-      const bottomReserve = 34;
-      const tableIsReadable = shellRect.top < viewportHeight - 80 && shellRect.bottom > 80;
-      const nativeScrollbarOutOfView = wrapRect.bottom > viewportHeight - bottomReserve;
-      if (!tableIsReadable || !nativeScrollbarOutOfView) {
-        setProxyHidden();
-        return;
-      }
-
       spacer.style.width = `${wrap.scrollWidth}px`;
-      proxy.style.left = `${Math.max(8, Math.round(wrapRect.left))}px`;
-      proxy.style.width = `${Math.max(120, Math.round(wrapRect.width))}px`;
       proxy.scrollLeft = wrap.scrollLeft;
-      proxy.classList.add('is-visible', 'is-floating');
+      proxy.classList.add('is-visible');
     };
 
-    const scheduleGeometryUpdate = () => {
-      if (frame !== null) return;
-      frame = window.requestAnimationFrame(updateGeometry);
-    };
+    const scheduleScrollbarUpdate = () => window.requestAnimationFrame(updateScrollbar);
 
     wrap.addEventListener('scroll', syncFromWrap, { passive: true });
-    wrap.addEventListener('scroll', scheduleGeometryUpdate, { passive: true });
+    wrap.addEventListener('scroll', scheduleScrollbarUpdate, { passive: true });
     proxy.addEventListener('scroll', syncFromProxy, { passive: true });
-    window.addEventListener('scroll', scheduleGeometryUpdate, { passive: true });
-    window.addEventListener('resize', scheduleGeometryUpdate);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', scheduleGeometryUpdate);
-      window.visualViewport.addEventListener('scroll', scheduleGeometryUpdate);
-    }
+    window.addEventListener('resize', scheduleScrollbarUpdate);
 
-    scheduleGeometryUpdate();
+    scheduleScrollbarUpdate();
     reportScrollbarCleanup = () => {
-      if (frame !== null) window.cancelAnimationFrame(frame);
       wrap.removeEventListener('scroll', syncFromWrap);
-      wrap.removeEventListener('scroll', scheduleGeometryUpdate);
+      wrap.removeEventListener('scroll', scheduleScrollbarUpdate);
       proxy.removeEventListener('scroll', syncFromProxy);
-      window.removeEventListener('scroll', scheduleGeometryUpdate);
-      window.removeEventListener('resize', scheduleGeometryUpdate);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', scheduleGeometryUpdate);
-        window.visualViewport.removeEventListener('scroll', scheduleGeometryUpdate);
-      }
+      window.removeEventListener('resize', scheduleScrollbarUpdate);
       setProxyHidden();
     };
   };

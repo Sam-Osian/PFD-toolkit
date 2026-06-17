@@ -877,6 +877,7 @@ svg:not([width]):not([height]) {
 .explore-reports-scrollbar {
   display: none;
   height: 18px;
+  margin: 6px 0 8px;
   overflow-x: auto;
   overflow-y: hidden;
   border: 1px solid rgba(166, 177, 255, 0.16);
@@ -891,12 +892,6 @@ svg:not([width]):not([height]) {
 
 .explore-reports-scrollbar.is-visible {
   display: block;
-}
-
-.explore-reports-scrollbar.is-floating {
-  position: fixed;
-  bottom: 14px;
-  z-index: 80;
 }
 
 .explore-reports-scrollbar__spacer {
