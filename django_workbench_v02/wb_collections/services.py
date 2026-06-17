@@ -610,6 +610,17 @@ def build_explore_metrics(
             return start <= today <= end
         return False
 
+    def _project_current_year_count(*, raw_count: int, year: int) -> int:
+        today = timezone.now().date()
+        if int(year) != int(today.year):
+            return int(raw_count)
+        elapsed_days = max(1, int(today.timetuple().tm_yday))
+        total_days = max(1, int(datetime(year, 12, 31).timetuple().tm_yday))
+        elapsed_fraction = min(1.0, float(elapsed_days) / float(total_days))
+        if elapsed_fraction <= 0:
+            return int(raw_count)
+        return max(int(raw_count), int(round(float(raw_count) / elapsed_fraction)))
+
     def _build_temporal_series(
         counts_by_period: pd.Series,
         *,
@@ -653,7 +664,20 @@ def build_explore_metrics(
             )
             point_pairs = [point_pairs[index] for index in sampled_indexes]
 
-        plotted_counts = [float(count) for _, _, count in point_pairs]
+        display_pairs: list[tuple[Any, str, int, bool, int]] = []
+        for period, label, count in point_pairs:
+            is_corrected = bool(
+                mode == "year"
+                and _latest_period_is_current(latest_period=period, mode=mode)
+            )
+            display_count = (
+                _project_current_year_count(raw_count=count, year=int(period.year))
+                if is_corrected
+                else int(count)
+            )
+            display_pairs.append((period, label, display_count, is_corrected, int(count)))
+
+        plotted_counts = [float(display_count) for _, _, display_count, _, _ in display_pairs]
         count_low = min(plotted_counts)
         count_high = max(plotted_counts)
         if count_high <= count_low:
@@ -668,12 +692,19 @@ def build_explore_metrics(
         chart_range = chart_bottom - chart_top
         area_bottom = 200.0
 
-        for index, (_, label, count) in enumerate(point_pairs):
+        for index, (_, label, display_count, is_corrected, raw_count) in enumerate(display_pairs):
             x = chart_width / 2.0 if point_count == 1 else (index * chart_width / (point_count - 1))
-            y = chart_bottom - ((float(count) - count_low) * chart_range / span)
+            y = chart_bottom - ((float(display_count) - count_low) * chart_range / span)
             raw_points.append((x, y))
             result["points"].append(
-                {"label": label, "count": count, "x": round(x, 2), "y": round(y, 2)}
+                {
+                    "label": label,
+                    "count": display_count,
+                    "raw_count": raw_count,
+                    "is_corrected": is_corrected,
+                    "x": round(x, 2),
+                    "y": round(y, 2),
+                }
             )
 
         line_segments = [f"M {raw_points[0][0]:.2f} {raw_points[0][1]:.2f}"]
@@ -683,16 +714,16 @@ def build_explore_metrics(
         first_x = raw_points[0][0]
         last_x = raw_points[-1][0]
         result["area_path"] = f'{result["line_path"]} L{last_x:.2f} {area_bottom:.2f} L{first_x:.2f} {area_bottom:.2f} Z'
-        result["latest_label"] = point_pairs[-1][1]
-        result["latest_count"] = point_pairs[-1][2]
-        result["start_label"] = str(point_pairs[0][0].year)
-        result["end_label"] = str(point_pairs[-1][0].year)
+        result["latest_label"] = display_pairs[-1][1]
+        result["latest_count"] = display_pairs[-1][2]
+        result["start_label"] = str(display_pairs[0][0].year)
+        result["end_label"] = str(display_pairs[-1][0].year)
 
-        start_year = int(point_pairs[0][0].year)
-        end_year = int(point_pairs[-1][0].year)
+        start_year = int(display_pairs[0][0].year)
+        end_year = int(display_pairs[-1][0].year)
         raw_axis_labels = _year_axis_labels(start_year=start_year, end_year=end_year)
         year_to_x: dict[int, float] = {}
-        for (period, _, _), (x, _) in zip(point_pairs, raw_points):
+        for (period, _, _, _, _), (x, _) in zip(display_pairs, raw_points):
             year_to_x.setdefault(int(period.year), float(x))
 
         ticks: list[dict[str, Any]] = []
@@ -715,7 +746,7 @@ def build_explore_metrics(
 
         # Explicit "Now" policy (consistent across week/month/year):
         # show "Now" only when the latest period includes today's date.
-        if point_pairs and _latest_period_is_current(latest_period=point_pairs[-1][0], mode=mode):
+        if display_pairs and _latest_period_is_current(latest_period=display_pairs[-1][0], mode=mode):
             now_x = float(raw_points[-1][0])
             now_tick = {
                 "label": "Now",

@@ -412,3 +412,34 @@ class CollectionMetricsTests(TestCase):
             "Now",
             [tick["label"] for tick in historical_metrics["temporal_series"]["year"]["axis_ticks"]],
         )
+
+    @patch("wb_collections.services.timezone.now")
+    def test_current_year_is_prorated_in_year_series(self, mock_now):
+        mock_now.return_value = datetime(2026, 6, 17, tzinfo=dt_timezone.utc)
+        reports_df = pd.DataFrame(
+            [
+                {"date": "2025-01-01", "receiver": "A", "area": "X"},
+                {"date": "2025-02-01", "receiver": "A", "area": "X"},
+                {"date": "2026-01-10", "receiver": "B", "area": "Y"},
+                {"date": "2026-06-01", "receiver": "B", "area": "Y"},
+            ]
+        )
+
+        metrics = build_explore_metrics(
+            reports_df=reports_df,
+            scoped_reports_df=reports_df,
+            query="",
+        )
+
+        year_points = metrics["temporal_series"]["year"]["points"]
+        self.assertEqual(year_points[0]["label"], "2025")
+        self.assertEqual(year_points[0]["count"], 2)
+        self.assertFalse(year_points[0]["is_corrected"])
+        self.assertEqual(year_points[1]["label"], "2026")
+        self.assertTrue(year_points[1]["is_corrected"])
+        self.assertEqual(year_points[1]["raw_count"], 2)
+
+        elapsed_fraction = 168 / 365
+        expected_projection = max(2, int(round(2 / elapsed_fraction)))
+        self.assertEqual(year_points[1]["count"], expected_projection)
+        self.assertEqual(metrics["temporal_series"]["year"]["latest_count"], expected_projection)
