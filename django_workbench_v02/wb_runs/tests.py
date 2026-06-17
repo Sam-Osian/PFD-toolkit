@@ -18,7 +18,7 @@ from pydantic import Field, create_model
 from wb_auditlog.models import AuditEvent
 from wb_investigations.models import InvestigationStatus
 from wb_investigations.services import create_investigation
-from wb_notifications.models import NotificationRequest, NotificationTrigger
+from wb_notifications.models import NotificationRequest, NotificationStatus, NotificationTrigger
 from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
@@ -1520,6 +1520,42 @@ class RunWorkerTests(TestCase):
         self.assertEqual(next_run.input_config_json.get("pipeline_index"), 1)
         self.assertTrue(next_run.input_config_json.get("pipeline_require_upstream_artifact"))
         self.assertTrue(bool(next_run.input_config_json.get("input_artifact_id")))
+
+    def test_pipeline_moves_pending_notification_to_next_stage(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "pipeline_plan": [RunType.FILTER, RunType.EXTRACT],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        notification = NotificationRequest.objects.create(
+            run=run,
+            user=self.owner,
+            notify_on=NotificationTrigger.ANY,
+            status=NotificationStatus.PENDING,
+        )
+
+        process_single_available_run(worker_id="test-worker")
+
+        next_run = (
+            self.investigation.runs.filter(run_type=RunType.EXTRACT)
+            .exclude(id=run.id)
+            .first()
+        )
+        self.assertIsNotNone(next_run)
+        notification.refresh_from_db()
+        self.assertEqual(notification.run_id, next_run.id)
+        self.assertEqual(notification.status, NotificationStatus.PENDING)
+        self.assertTrue(
+            next_run.events.filter(
+                message="Completion notification moved to next pipeline stage.",
+            ).exists()
+        )
 
     def test_pipeline_continues_on_failure_when_enabled(self):
         run = queue_run(

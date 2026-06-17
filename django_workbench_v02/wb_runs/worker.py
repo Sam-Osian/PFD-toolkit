@@ -429,6 +429,26 @@ def _upstream_chaining_artifact(run: InvestigationRun) -> RunArtifact | None:
     return None
 
 
+def _move_pending_pipeline_notifications(*, current_run: InvestigationRun, next_run: InvestigationRun) -> int:
+    from wb_notifications.models import NotificationRequest, NotificationStatus
+
+    moved = NotificationRequest.objects.filter(
+        run=current_run,
+        status=NotificationStatus.PENDING,
+    ).update(run=next_run, updated_at=timezone.now())
+    if moved:
+        RunEvent.objects.create(
+            run=next_run,
+            event_type=RunEventType.INFO,
+            message="Completion notification moved to next pipeline stage.",
+            payload_json={
+                "pipeline_previous_run_id": str(current_run.id),
+                "moved_notification_count": moved,
+            },
+        )
+    return moved
+
+
 def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun | None:
     config = current_run.input_config_json or {}
     pipeline_plan = _normalise_pipeline_plan(config.get("pipeline_plan"))
@@ -497,6 +517,7 @@ def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun 
             "continued_after_failed_upstream": continued_after_failed_upstream,
         },
     )
+    _move_pending_pipeline_notifications(current_run=current_run, next_run=next_run)
     return next_run
 
 

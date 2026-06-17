@@ -27,6 +27,15 @@ FAILURE_STATUSES = {
     RunStatus.TIMED_OUT,
 }
 NO_RELEVANT_REPORTS_ERROR_CODE = "NO_RELEVANT_REPORTS"
+PIPELINE_CONTINUE_STATUSES = {
+    RunStatus.SUCCEEDED,
+    RunStatus.FAILED,
+    RunStatus.TIMED_OUT,
+}
+PIPELINE_FAILED_UPSTREAM_STATUSES = {
+    RunStatus.FAILED,
+    RunStatus.TIMED_OUT,
+}
 
 
 class NotificationRequestError(ValidationError):
@@ -49,6 +58,55 @@ def _should_send_for_trigger(*, notify_on: str, run_status: str) -> bool:
     if notify_on == NotificationTrigger.FAILURE:
         return run_status in FAILURE_STATUSES
     return False
+
+
+def _normalise_pipeline_plan(raw_plan) -> list[str]:
+    if not isinstance(raw_plan, list):
+        return []
+    allowed = {"filter", "themes", "extract", "export"}
+    result: list[str] = []
+    for raw in raw_plan:
+        value = str(raw or "").strip().lower()
+        if value in allowed:
+            result.append(value)
+    return result
+
+
+def _pipeline_index_from_config(config: dict, *, plan: list[str], fallback_run_type: str) -> int:
+    raw_index = config.get("pipeline_index")
+    try:
+        index = int(raw_index)
+    except (TypeError, ValueError):
+        index = -1
+    if 0 <= index < len(plan):
+        return index
+    try:
+        return plan.index(str(fallback_run_type or "").strip().lower())
+    except ValueError:
+        return -1
+
+
+def _run_should_wait_for_pipeline_continuation(run) -> bool:
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    pipeline_plan = _normalise_pipeline_plan(config.get("pipeline_plan"))
+    if not pipeline_plan:
+        return False
+
+    current_index = _pipeline_index_from_config(
+        config,
+        plan=pipeline_plan,
+        fallback_run_type=run.run_type,
+    )
+    if current_index < 0 or current_index + 1 >= len(pipeline_plan):
+        return False
+
+    if run.status not in PIPELINE_CONTINUE_STATUSES:
+        return False
+    if run.status == RunStatus.SUCCEEDED:
+        return True
+    if str(getattr(run, "error_code", "") or "").strip().upper() == NO_RELEVANT_REPORTS_ERROR_CODE:
+        return False
+    return bool(config.get("pipeline_continue_on_fail", False)) and run.status in PIPELINE_FAILED_UPSTREAM_STATUSES
 
 
 def _run_detail_url(run) -> str:
@@ -218,6 +276,9 @@ def process_pending_notification(notification: NotificationRequest) -> str:
 
     run = notification.run
     if run.status not in TERMINAL_STATUSES:
+        return notification.status
+
+    if _run_should_wait_for_pipeline_continuation(run):
         return notification.status
 
     if not _should_send_for_trigger(notify_on=notification.notify_on, run_status=run.status):

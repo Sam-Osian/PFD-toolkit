@@ -7,36 +7,41 @@
     <p>No reports match the active {{ scope_label|default:"Explore" }} filters.</p>
 </div>
 {% else %}
-<div class="table-wrap explore-reports-table-wrap">
-    <table class="explore-reports-table">
-        <thead>
-            <tr>
-                {% for column in reports_columns %}
-                    <th>{{ column }}</th>
-                {% endfor %}
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in reports_rows %}
+<div class="explore-reports-scroll-shell">
+    <div class="table-wrap explore-reports-table-wrap">
+        <table class="explore-reports-table">
+            <thead>
                 <tr>
-                    {% for cell in row.cells %}
-                        {% if cell.is_theme_boolean %}
-                            <td class="report-theme-bool-cell">
-                                <span
-                                    class="report-theme-bool{% if cell.bool_value %} is-true{% else %} is-false{% endif %}"
-                                    role="img"
-                                    aria-label="{% if cell.bool_value %}True{% else %}False{% endif %}"
-                                    title="{% if cell.bool_value %}True{% else %}False{% endif %}"
-                                ></span>
-                            </td>
-                        {% else %}
-                            <td>{{ cell.value|default:"-" }}</td>
-                        {% endif %}
+                    {% for column in reports_columns %}
+                        <th>{{ column }}</th>
                     {% endfor %}
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for row in reports_rows %}
+                    <tr>
+                        {% for cell in row.cells %}
+                            {% if cell.is_theme_boolean %}
+                                <td class="report-theme-bool-cell">
+                                    <span
+                                        class="report-theme-bool{% if cell.bool_value %} is-true{% else %} is-false{% endif %}"
+                                        role="img"
+                                        aria-label="{% if cell.bool_value %}True{% else %}False{% endif %}"
+                                        title="{% if cell.bool_value %}True{% else %}False{% endif %}"
+                                    ></span>
+                                </td>
+                            {% else %}
+                                <td>{{ cell.value|default:"-" }}</td>
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="explore-reports-scrollbar" data-report-scrollbar aria-hidden="true">
+        <div class="explore-reports-scrollbar__spacer"></div>
+    </div>
 </div>
 <div class="reports-pagination">
     <span class="reports-pagination__meta">Showing {{ reports_page_from }}-{{ reports_page_to }} of {{ reports_count }}</span>

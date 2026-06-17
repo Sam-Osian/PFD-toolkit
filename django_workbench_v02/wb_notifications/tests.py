@@ -102,6 +102,54 @@ class NotificationDispatchTests(TestCase):
         self.assertIn(expected_dashboard_url, mail.outbox[0].alternatives[0][0])
         self.assertNotIn(f"/runs/{self.run.id}/", mail.outbox[0].body)
 
+    def test_dispatch_waits_for_successful_non_final_pipeline_stage(self):
+        self.run.input_config_json = {
+            "pipeline_plan": [RunType.FILTER, RunType.EXTRACT],
+            "pipeline_index": 0,
+            "pipeline_continue_on_fail": True,
+        }
+        self.run.status = RunStatus.SUCCEEDED
+        self.run.finished_at = timezone.now()
+        self.run.save(update_fields=["input_config_json", "status", "finished_at", "updated_at"])
+        notification = create_notification_request(
+            run=self.run,
+            user=self.owner,
+            notify_on=NotificationTrigger.ANY,
+        )
+
+        result = dispatch_pending_notifications(max_items=10)
+        notification.refresh_from_db()
+
+        self.assertEqual(result.scanned, 1)
+        self.assertEqual(result.sent, 0)
+        self.assertEqual(notification.status, NotificationStatus.PENDING)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_dispatch_sends_when_non_final_pipeline_failure_stops_workflow(self):
+        self.run.input_config_json = {
+            "pipeline_plan": [RunType.FILTER, RunType.EXTRACT],
+            "pipeline_index": 0,
+            "pipeline_continue_on_fail": False,
+        }
+        self.run.status = RunStatus.FAILED
+        self.run.finished_at = timezone.now()
+        self.run.error_message = "Filter failed"
+        self.run.save(update_fields=["input_config_json", "status", "finished_at", "error_message", "updated_at"])
+        notification = create_notification_request(
+            run=self.run,
+            user=self.owner,
+            notify_on=NotificationTrigger.ANY,
+        )
+
+        result = dispatch_pending_notifications(max_items=10)
+        notification.refresh_from_db()
+
+        self.assertEqual(result.scanned, 1)
+        self.assertEqual(result.sent, 1)
+        self.assertEqual(notification.status, NotificationStatus.SENT)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("Run failed", mail.outbox[0].subject)
+
     def test_dispatch_cancels_when_trigger_does_not_match(self):
         self.run.status = RunStatus.SUCCEEDED
         self.run.finished_at = timezone.now()

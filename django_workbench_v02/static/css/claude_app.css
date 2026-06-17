@@ -843,6 +843,10 @@ svg:not([width]):not([height]) {
   margin-top: 12px;
 }
 
+.explore-reports-scroll-shell {
+  position: relative;
+}
+
 .explore-reports-table-wrap {
   margin-top: 6px;
   border: 1px solid rgba(166, 177, 255, 0.14);
@@ -868,6 +872,54 @@ svg:not([width]):not([height]) {
 
 .explore-reports-table-wrap::-webkit-scrollbar-thumb:hover {
   background: rgba(188, 206, 255, 0.58);
+}
+
+.explore-reports-scrollbar {
+  display: none;
+  height: 18px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid rgba(166, 177, 255, 0.16);
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(122, 212, 255, 0.08), rgba(166, 177, 255, 0.04)),
+    rgba(9, 13, 33, 0.92);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(178, 195, 255, 0.5) transparent;
+}
+
+.explore-reports-scrollbar.is-visible {
+  display: block;
+}
+
+.explore-reports-scrollbar.is-floating {
+  position: fixed;
+  bottom: 14px;
+  z-index: 80;
+}
+
+.explore-reports-scrollbar__spacer {
+  height: 1px;
+}
+
+.explore-reports-scrollbar::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.explore-reports-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.explore-reports-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(178, 195, 255, 0.5);
+  border-radius: 999px;
+  border: 2px solid rgba(9, 13, 33, 0.92);
+}
+
+.explore-reports-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(188, 206, 255, 0.68);
 }
 
 .explore-reports-table {

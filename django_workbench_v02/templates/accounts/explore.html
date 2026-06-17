@@ -1155,6 +1155,7 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
   let popupContent = null;
   let activeCell = null;
   let popupScrollBound = false;
+  let reportScrollbarCleanup = null;
 
   const eventTargetInsidePopup = (event) => {
     if (!popup || !event || !(event.target instanceof Node)) return false;
@@ -1184,6 +1185,13 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
     hintNode.hidden = isVisible;
     if (showReportsField) showReportsField.value = isVisible ? '1' : '';
     if (!isLoading) showButton.textContent = isVisible ? 'Hide reports' : 'Show reports';
+    window.requestAnimationFrame(() => {
+      const proxy = panelHost.querySelector('[data-report-scrollbar]');
+      if (!isVisible && proxy) {
+        proxy.classList.remove('is-visible', 'is-floating');
+        proxy.removeAttribute('style');
+      }
+    });
   };
 
   const hidePopup = () => {
@@ -1378,6 +1386,102 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
     });
   };
 
+  const destroyReportScrollbar = () => {
+    if (typeof reportScrollbarCleanup === 'function') {
+      reportScrollbarCleanup();
+      reportScrollbarCleanup = null;
+    }
+  };
+
+  const setupReportScrollbar = () => {
+    destroyReportScrollbar();
+    const shell = panelHost.querySelector('.explore-reports-scroll-shell');
+    const wrap = panelHost.querySelector('.explore-reports-table-wrap');
+    const proxy = panelHost.querySelector('[data-report-scrollbar]');
+    const spacer = proxy ? proxy.querySelector('.explore-reports-scrollbar__spacer') : null;
+    if (!shell || !wrap || !proxy || !spacer) return;
+
+    let syncing = false;
+    let frame = null;
+
+    const setProxyHidden = () => {
+      proxy.classList.remove('is-visible', 'is-floating');
+      proxy.style.left = '';
+      proxy.style.width = '';
+    };
+
+    const syncFromWrap = () => {
+      if (syncing) return;
+      syncing = true;
+      proxy.scrollLeft = wrap.scrollLeft;
+      syncing = false;
+    };
+
+    const syncFromProxy = () => {
+      if (syncing) return;
+      syncing = true;
+      wrap.scrollLeft = proxy.scrollLeft;
+      syncing = false;
+      hidePopup();
+    };
+
+    const updateGeometry = () => {
+      frame = null;
+      const overflow = wrap.scrollWidth > wrap.clientWidth + 2;
+      if (!overflow || !isVisible || panelHost.hidden) {
+        setProxyHidden();
+        return;
+      }
+
+      const wrapRect = wrap.getBoundingClientRect();
+      const shellRect = shell.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const bottomReserve = 34;
+      const tableIsReadable = shellRect.top < viewportHeight - 80 && shellRect.bottom > 80;
+      const nativeScrollbarOutOfView = wrapRect.bottom > viewportHeight - bottomReserve;
+      if (!tableIsReadable || !nativeScrollbarOutOfView) {
+        setProxyHidden();
+        return;
+      }
+
+      spacer.style.width = `${wrap.scrollWidth}px`;
+      proxy.style.left = `${Math.max(8, Math.round(wrapRect.left))}px`;
+      proxy.style.width = `${Math.max(120, Math.round(wrapRect.width))}px`;
+      proxy.scrollLeft = wrap.scrollLeft;
+      proxy.classList.add('is-visible', 'is-floating');
+    };
+
+    const scheduleGeometryUpdate = () => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(updateGeometry);
+    };
+
+    wrap.addEventListener('scroll', syncFromWrap, { passive: true });
+    wrap.addEventListener('scroll', scheduleGeometryUpdate, { passive: true });
+    proxy.addEventListener('scroll', syncFromProxy, { passive: true });
+    window.addEventListener('scroll', scheduleGeometryUpdate, { passive: true });
+    window.addEventListener('resize', scheduleGeometryUpdate);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', scheduleGeometryUpdate);
+      window.visualViewport.addEventListener('scroll', scheduleGeometryUpdate);
+    }
+
+    scheduleGeometryUpdate();
+    reportScrollbarCleanup = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      wrap.removeEventListener('scroll', syncFromWrap);
+      wrap.removeEventListener('scroll', scheduleGeometryUpdate);
+      proxy.removeEventListener('scroll', syncFromProxy);
+      window.removeEventListener('scroll', scheduleGeometryUpdate);
+      window.removeEventListener('resize', scheduleGeometryUpdate);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', scheduleGeometryUpdate);
+        window.visualViewport.removeEventListener('scroll', scheduleGeometryUpdate);
+      }
+      setProxyHidden();
+    };
+  };
+
   const setupCellPreview = () => {
     const table = panelHost.querySelector('.explore-reports-table');
     if (!table || table.dataset.previewBound === '1') return;
@@ -1437,6 +1541,7 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
 
     const wrap = panelHost.querySelector('.explore-reports-table-wrap');
     wrap?.addEventListener('scroll', hidePopup, { passive: true });
+    setupReportScrollbar();
     if (!popupScrollBound) {
       popupScrollBound = true;
       const hidePopupUnlessInside = (event) => {
@@ -1473,6 +1578,7 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
         return response.text();
       })
       .then((html) => {
+        destroyReportScrollbar();
         panelHost.innerHTML = html;
         hasLoaded = true;
         setVisible(true);
@@ -1514,6 +1620,7 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
     }
     if (hasLoaded) {
       setVisible(true);
+      setupReportScrollbar();
       const browserAbsolute = new URL(window.location.href);
       browserAbsolute.searchParams.set('show_reports', '1');
       window.history.replaceState(window.history.state, '', normalizeBrowserUrl(browserAbsolute.toString()));
