@@ -752,7 +752,7 @@ Filter the Prevention of Future Death report archive by AI filter, receiver, cor
     dot.setAttribute('cx', String(point.x));
     dot.setAttribute('cy', String(point.y));
     dot.hidden = false;
-    const pointLabel = point.is_corrected ? `${point.label} (corrected)` : point.label;
+    const pointLabel = point.is_corrected ? `${point.label} (projected)` : point.label;
     tip.textContent = `${pointLabel} · ${point.count} report(s)`;
     tip.hidden = false;
 
