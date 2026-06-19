@@ -30,3 +30,10 @@ docs/assets/images/social/*
 django_workbench/db.sqlite3
 
 claude_design/
+
+# Issue-tracker generated artifacts
+artifacts/issue_tracker_mvp_normalised/**/02_issue_embeddings.npy
+artifacts/issue_tracker_mvp_normalised/**/02_issue_reduced.npy
+
+# Django runtime-generated investigation artifacts
+django_workbench_v02/runtime_artifacts/
