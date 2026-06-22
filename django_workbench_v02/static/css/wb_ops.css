@@ -142,15 +142,12 @@ a:hover {
 }
 
 input,
-select,
 button {
   font: inherit;
 }
 
 input[type="number"],
-input[type="text"],
-input[type="password"],
-select {
+input[type="text"] {
   border: 1px solid var(--ops-border);
   background: var(--ops-surface);
   border-radius: 8px;
@@ -340,37 +337,6 @@ button:hover {
 code {
   font-family: var(--ops-font-mono);
   font-size: 0.8rem;
-}
-
-.ops-run-config {
-  display: grid;
-  gap: 6px;
-}
-
-.ops-run-config small {
-  color: var(--ops-text-muted);
-}
-
-.ops-run-provider,
-.ops-run-key input {
-  width: 100%;
-  min-width: 0;
-}
-
-.ops-run-key.is-hidden {
-  display: none;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 @media (max-width: 980px) {

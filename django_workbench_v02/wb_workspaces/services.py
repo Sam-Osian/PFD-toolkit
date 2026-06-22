@@ -517,13 +517,6 @@ def _validate_api_key_format(*, provider: str, api_key: str) -> None:
         )
 
 
-def validate_provider_api_key(*, provider: str, api_key: str) -> str:
-    resolved_provider = _normalise_provider(provider)
-    compact = str(api_key or "").strip()
-    _validate_api_key_format(provider=resolved_provider, api_key=compact)
-    return compact
-
-
 def _normalise_model_name(model_name: str) -> str:
     cleaned = str(model_name or "").strip()
     if not cleaned:

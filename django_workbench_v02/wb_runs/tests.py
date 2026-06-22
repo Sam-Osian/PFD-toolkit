@@ -39,11 +39,10 @@ from .models import (
 )
 from .pfd_toolkit_adapter import (
     AdapterCancelledError,
-    _build_llm_kwargs,
     _patch_generate_with_progress,
     _theme_summary_from_dataframe,
 )
-from .services import configure_pending_run_for_ops, queue_run, request_run_cancellation, set_run_status
+from .services import queue_run, request_run_cancellation, set_run_status
 from .worker import process_single_available_run, reconcile_timed_out_runs
 
 
@@ -54,7 +53,6 @@ class RunServiceTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(email="run-owner@example.com", password="x")
         self.viewer = User.objects.create_user(email="run-viewer@example.com", password="x")
-        self.staff = User.objects.create_user(email="run-staff@example.com", password="x", is_staff=True)
         self.request_factory = RequestFactory()
         self.workspace = create_workspace_for_user(
             user=self.owner,
@@ -225,33 +223,6 @@ class RunServiceTests(TestCase):
         self.assertEqual(
             run.input_config_json.get("excluded_report_identities"),
             ["https://example.com/excluded-2"],
-        )
-
-    def test_staff_can_attach_one_time_ops_openai_key_without_saving_user_credential(self):
-        run = queue_run(
-            actor=self.owner,
-            investigation=self.investigation,
-            run_type=RunType.FILTER,
-            input_config_json={"execution_mode": "real", "provider": "openrouter"},
-        )
-        configure_pending_run_for_ops(
-            actor=self.staff,
-            run=run,
-            provider="openai",
-            api_key="sk-test-ops-1234",
-        )
-        run.refresh_from_db()
-        self.assertEqual(run.input_config_json.get("provider"), "openai")
-        self.assertEqual(run.input_config_json.get("execution_mode"), "real")
-        self.assertEqual(run.ops_override_provider, "openai")
-        self.assertEqual(run.ops_override_key_last4, "1234")
-        self.assertTrue(bool(run.ops_override_encrypted_api_key))
-        self.assertFalse(
-            WorkspaceCredential.objects.filter(
-                workspace=self.workspace,
-                user=self.owner,
-                provider="openai",
-            ).exists()
         )
 
     @override_settings(MAX_RUNS_PER_USER_PER_DAY=1)
@@ -848,40 +819,6 @@ class RunAdapterTests(TestCase):
         self.assertIn("cancellation_check", captured["kwargs"])
         self.assertTrue(callable(captured["kwargs"]["cancellation_check"]))
 
-    def test_build_llm_kwargs_prefers_run_scoped_ops_override(self):
-        owner = User.objects.create_user(email="adapter-owner@example.com", password="x")
-        staff = User.objects.create_user(email="adapter-staff@example.com", password="x", is_staff=True)
-        workspace = create_workspace_for_user(
-            user=owner,
-            title="Adapter Workspace",
-            slug="adapter-workspace",
-            description="desc",
-        )
-        investigation = create_investigation(
-            actor=owner,
-            workspace=workspace,
-            title="Adapter Investigation",
-            question_text="Question",
-            scope_json={},
-            method_json={},
-            status=InvestigationStatus.ACTIVE,
-        )
-        run = queue_run(
-            actor=owner,
-            investigation=investigation,
-            run_type=RunType.FILTER,
-            input_config_json={"execution_mode": "real", "provider": "openai"},
-        )
-        configure_pending_run_for_ops(
-            actor=staff,
-            run=run,
-            provider="openai",
-            api_key="sk-test-ops-5678",
-        )
-        run.refresh_from_db()
-        kwargs = _build_llm_kwargs(run=run, config=run.input_config_json)
-        self.assertEqual(kwargs["api_key"], "sk-test-ops-5678")
-
 
 class RunWorkerTests(TestCase):
     def setUp(self):
@@ -1258,38 +1195,6 @@ class RunWorkerTests(TestCase):
         queue_event = next_run.events.latest("created_at")
         payload = queue_event.payload_json if isinstance(queue_event.payload_json, dict) else {}
         self.assertTrue(payload.get("continued_after_failed_upstream"))
-
-    def test_pipeline_continuation_carries_run_scoped_ops_override(self):
-        staff = User.objects.create_user(email="pipeline-staff@example.com", password="x", is_staff=True)
-        run = queue_run(
-            actor=self.owner,
-            investigation=self.investigation,
-            run_type=RunType.FILTER,
-            input_config_json={
-                "execution_mode": "simulate",
-                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
-                "pipeline_index": 0,
-                "pipeline_continue_on_fail": True,
-            },
-        )
-        configure_pending_run_for_ops(
-            actor=staff,
-            run=run,
-            provider="openai",
-            api_key="sk-pipeline-1234",
-        )
-
-        process_single_available_run(worker_id="test-worker")
-
-        next_run = (
-            self.investigation.runs.filter(run_type=RunType.THEMES)
-            .exclude(id=run.id)
-            .first()
-        )
-        self.assertIsNotNone(next_run)
-        self.assertEqual(next_run.ops_override_provider, "openai")
-        self.assertEqual(next_run.ops_override_key_last4, "1234")
-        self.assertTrue(bool(next_run.ops_override_encrypted_api_key))
 
     def test_pipeline_queues_export_after_extract(self):
         run = queue_run(
