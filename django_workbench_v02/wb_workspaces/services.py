@@ -706,6 +706,12 @@ def has_workspace_credential(*, user, workspace: Workspace, provider: str) -> bo
         user=user,
         provider=resolved_provider,
     ).exists()
+    if workspace_saved:
+        return True
+    return UserLLMCredential.objects.filter(
+        user=user,
+        provider=resolved_provider,
+    ).exists()
 
 
 def validate_provider_api_key(*, provider: str, api_key: str) -> str:
@@ -713,12 +719,6 @@ def validate_provider_api_key(*, provider: str, api_key: str) -> str:
     compact = str(api_key or "").strip()
     _validate_api_key_format(provider=resolved_provider, api_key=compact)
     return compact
-    if workspace_saved:
-        return True
-    return UserLLMCredential.objects.filter(
-        user=user,
-        provider=resolved_provider,
-    ).exists()
 
 
 def workspace_credential_status_map(*, user, workspace: Workspace) -> dict[str, bool]:

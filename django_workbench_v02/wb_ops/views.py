@@ -46,6 +46,7 @@ from wb_workspaces.permissions import can_edit_workspace
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import (
     WorkspaceReportExclusionError,
+    has_workspace_credential,
     restore_workspace_report_exclusion,
     upsert_workspace_report_exclusion,
 )
@@ -839,6 +840,11 @@ def approvals(request):
     for run in pending_runs:
         config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
         payload = _typed_payload_from_run(run)
+        requester_has_openai_credential = has_workspace_credential(
+            user=run.requested_by,
+            workspace=run.workspace,
+            provider=WorkspaceLLMProvider.OPENAI,
+        )
         rows.append(
             {
                 "run": run,
@@ -847,6 +853,7 @@ def approvals(request):
                 "queued_ago": _format_relative_delta(run.queued_at, now=now),
                 "is_selected": selected_run is not None and run.id == selected_run.id,
                 "payload": payload,
+                "requester_has_openai_credential": requester_has_openai_credential,
             }
         )
     context = {

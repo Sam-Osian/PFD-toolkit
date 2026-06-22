@@ -408,7 +408,7 @@ def configure_pending_run_for_ops(
     updated_config["execution_route"] = _execution_route_for_config(updated_config)
 
     current_run.input_config_json = updated_config
-    current_run.ops_override_provider = resolved_provider if encrypted_api_key else ""
+    current_run.ops_override_provider = resolved_provider
     current_run.ops_override_encrypted_api_key = encrypted_api_key
     current_run.ops_override_key_last4 = key_last4
     current_run.ops_override_base_url = ""

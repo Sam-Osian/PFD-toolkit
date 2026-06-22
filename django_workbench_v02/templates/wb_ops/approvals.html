@@ -248,8 +248,14 @@
                     </select>
                   </div>
                   <div class="field ops-run-key{% if row.payload.provider != 'openai' %} is-hidden{% endif %}" style="flex:1;min-width:240px" data-ops-run-key>
-                    <label>One-time OpenAI API key</label>
-                    <input class="input" type="password" name="api_key" placeholder="Only used for this run">
+                    <label>One-time OpenAI API key <span class="muted">· optional</span></label>
+                    {% if row.requester_has_openai_credential %}
+                    <input class="input" type="password" name="api_key" placeholder="Leave blank to use requester's saved key">
+                    <small class="field-hint" style="color:var(--ok,green)">Requester has a saved OpenAI credential — key is optional.</small>
+                    {% else %}
+                    <input class="input" type="password" name="api_key" placeholder="Required — requester has no saved key">
+                    <small class="field-hint" style="color:var(--warn,orange)">No saved OpenAI credential for this requester — a key is required.</small>
+                    {% endif %}
                   </div>
                   <div class="field ops-local-model{% if row.payload.provider == 'openai' %} is-hidden{% endif %}" style="flex:1;min-width:200px" data-ops-local-model>
                     <label>Local model</label>

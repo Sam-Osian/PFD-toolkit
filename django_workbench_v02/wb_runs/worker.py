@@ -177,8 +177,10 @@ def _normalise_worker_route_mode(route_mode: str | None) -> str:
 
 
 def _apply_route_mode_filter(queryset, *, route_mode: str):
-    if route_mode == WORKER_ROUTE_MODE_LOCAL:
-        return queryset.filter(input_config_json__provider="local_ollama")
+    # "local" means "this worker has local GPU"; it processes local_ollama runs
+    # AND API runs (which are just HTTP calls and need no special hardware).
+    # "api" means a dedicated API-only worker that should not compete for local GPU.
+    # "all" is the general-purpose default.
     if route_mode == WORKER_ROUTE_MODE_API:
         return queryset.exclude(input_config_json__provider="local_ollama")
     return queryset
@@ -196,7 +198,7 @@ def _execution_route_for_config(config: dict | None) -> str:
 
 
 def _run_is_eligible_for_route_mode(run: InvestigationRun, *, route_mode: str) -> bool:
-    if route_mode == WORKER_ROUTE_MODE_ALL:
+    if route_mode in {WORKER_ROUTE_MODE_ALL, WORKER_ROUTE_MODE_LOCAL}:
         return True
     config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
     execution_route = _execution_route_for_config(config)
