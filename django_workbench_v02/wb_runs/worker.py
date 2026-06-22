@@ -14,6 +14,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from wb_workspaces.models import WorkspaceLLMProvider
+
 from .artifact_storage import ArtifactStorageError, store_artifact_file
 from .models import (
     ArtifactStatus,
@@ -200,9 +202,14 @@ def _execution_route_for_config(config: dict | None) -> str:
 def _run_is_eligible_for_route_mode(run: InvestigationRun, *, route_mode: str) -> bool:
     if route_mode in {WORKER_ROUTE_MODE_ALL, WORKER_ROUTE_MODE_LOCAL}:
         return True
+    # Derive from provider directly so stale stored execution_route values
+    # (e.g. from runs reconfigured via Ops after initial submission) don't
+    # cause runs to be permanently skipped.
     config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
-    execution_route = _execution_route_for_config(config)
-    return execution_route == route_mode
+    provider = str(config.get("provider") or "").strip().lower()
+    if route_mode == WORKER_ROUTE_MODE_API:
+        return provider != WorkspaceLLMProvider.LOCAL_OLLAMA
+    return True
 
 
 def _run_is_eligible_for_approval_state(run: InvestigationRun) -> bool:

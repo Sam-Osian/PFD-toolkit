@@ -393,6 +393,7 @@ def configure_pending_run_for_ops(
     updated_config["execution_mode"] = "real"
     updated_config["provider"] = resolved_provider
     updated_config.pop("requires_manual_approval", None)
+    updated_config.pop("execution_route", None)
     requested_model_name = str(model_name or updated_config.get("model_name") or "").strip()
     updated_config["model_name"] = _normalise_model_for_provider(
         user=current_run.requested_by,
