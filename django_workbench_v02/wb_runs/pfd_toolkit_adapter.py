@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, create_model
 from pfd_toolkit import Extractor, LLM, Screener, load_reports
 from pfd_toolkit.llm import GenerationCancelledError
 from pfd_toolkit.collections import COLLECTION_COLUMNS, apply_collection_columns
+from wb_workspaces.credentials import WorkspaceCredentialError, decrypt_secret
 from wb_workspaces.models import WorkspaceReportExclusion
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import WorkspaceCredentialValidationError, resolve_workspace_credential
@@ -109,14 +110,25 @@ def _build_llm_kwargs(*, run, config: dict) -> dict:
         api_key = str(getattr(settings, "LOCAL_OLLAMA_API_KEY", "ollama") or "").strip() or "ollama"
         max_workers = max(1, int(getattr(settings, "LOCAL_OLLAMA_MAX_PARALLEL_WORKERS", 1) or 1))
     elif provider in {"openai", "openrouter"}:
-        try:
-            api_key, saved_base_url = resolve_workspace_credential(
-                user=run.requested_by,
-                workspace=run.workspace,
-                provider=provider,
-            )
-        except WorkspaceCredentialValidationError as exc:
-            raise AdapterConfigurationError(str(exc)) from exc
+        saved_base_url = ""
+        if (
+            str(getattr(run, "ops_override_provider", "") or "").strip().lower() == provider
+            and str(getattr(run, "ops_override_encrypted_api_key", "") or "").strip()
+        ):
+            try:
+                api_key = decrypt_secret(run.ops_override_encrypted_api_key)
+            except WorkspaceCredentialError as exc:
+                raise AdapterConfigurationError(str(exc)) from exc
+            saved_base_url = str(getattr(run, "ops_override_base_url", "") or "").strip()
+        else:
+            try:
+                api_key, saved_base_url = resolve_workspace_credential(
+                    user=run.requested_by,
+                    workspace=run.workspace,
+                    provider=provider,
+                )
+            except WorkspaceCredentialValidationError as exc:
+                raise AdapterConfigurationError(str(exc)) from exc
 
         if provider == "openrouter":
             base_url = (

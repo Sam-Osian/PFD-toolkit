@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, time as dt_time
 
 from django.conf import settings
@@ -10,8 +11,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from wb_auditlog.services import log_action_cache_event, log_audit_event
+from wb_workspaces.credentials import WorkspaceCredentialError, encrypt_secret
 from wb_workspaces.activity import is_human_view_request, should_update_last_viewed
+from wb_workspaces.models import WorkspaceLLMProvider
 from wb_workspaces.permissions import can_run_workflows, can_view_workspace
+from wb_workspaces.services import (
+    WorkspaceCredentialValidationError,
+    has_workspace_credential,
+    validate_provider_api_key,
+)
 
 from .models import (
     InvestigationRun,
@@ -303,6 +311,146 @@ def _validate_status_transition(current_status: str, next_status: str) -> None:
     allowed = ALLOWED_STATUS_TRANSITIONS.get(current_status, set())
     if next_status not in allowed:
         raise RunServiceError(f"Invalid run transition: {current_status} -> {next_status}.")
+
+
+@transaction.atomic
+def configure_pending_run_for_ops(
+    *,
+    actor,
+    run,
+    provider: str,
+    api_key: str = "",
+    request=None,
+) -> InvestigationRun:
+    if not actor or not getattr(actor, "is_staff", False):
+        raise PermissionDenied("Only staff users can reconfigure pending runs from ops.")
+
+    current_run = (
+        InvestigationRun.objects.select_related("workspace", "investigation", "requested_by")
+        .select_for_update()
+        .get(id=run.id)
+    )
+    if current_run.status != RunStatus.QUEUED:
+        raise RunServiceError("Only queued runs can be reconfigured from the ops dashboard.")
+    if str(current_run.worker_id or "").strip():
+        raise RunServiceError(
+            f"Run has already been claimed by worker {current_run.worker_id} and can no longer be reconfigured."
+        )
+
+    resolved_provider = str(provider or "").strip().lower()
+    if resolved_provider not in {WorkspaceLLMProvider.LOCAL_OLLAMA, WorkspaceLLMProvider.OPENAI}:
+        raise RunServiceError(f"Unsupported provider '{provider}'.")
+
+    compact_api_key = str(api_key or "").strip()
+    if resolved_provider != WorkspaceLLMProvider.OPENAI and compact_api_key:
+        raise RunServiceError("One-time ops credential overrides are currently supported only for OpenAI runs.")
+
+    encrypted_api_key = ""
+    key_last4 = ""
+    if resolved_provider == WorkspaceLLMProvider.OPENAI:
+        if compact_api_key:
+            try:
+                validated_api_key = validate_provider_api_key(
+                    provider=resolved_provider,
+                    api_key=compact_api_key,
+                )
+                encrypted_api_key = encrypt_secret(validated_api_key)
+                key_last4 = validated_api_key[-4:]
+            except (WorkspaceCredentialValidationError, WorkspaceCredentialError) as exc:
+                raise RunServiceError(str(exc)) from exc
+        elif not has_workspace_credential(
+            user=current_run.requested_by,
+            workspace=current_run.workspace,
+            provider=resolved_provider,
+        ):
+            raise RunServiceError(
+                "Provide a one-time OpenAI API key for this queued run, or save an OpenAI credential for the requester first."
+            )
+
+    updated_config = deepcopy(current_run.input_config_json) if isinstance(current_run.input_config_json, dict) else {}
+    updated_config["execution_mode"] = "real"
+    updated_config["provider"] = resolved_provider
+    updated_config.pop("requires_manual_approval", None)
+    requires_approval = _queue_requires_approval(
+        run_type=current_run.run_type,
+        config=updated_config,
+    )
+    updated_config["requires_manual_approval"] = requires_approval
+    updated_config["execution_route"] = _execution_route_for_config(updated_config)
+
+    current_run.input_config_json = updated_config
+    current_run.ops_override_provider = resolved_provider if encrypted_api_key else ""
+    current_run.ops_override_encrypted_api_key = encrypted_api_key
+    current_run.ops_override_key_last4 = key_last4
+    current_run.ops_override_base_url = ""
+    current_run.requires_approval = requires_approval
+    current_run.approval_status = (
+        RunApprovalStatus.PENDING if requires_approval else RunApprovalStatus.NOT_REQUIRED
+    )
+    current_run.approval_requested_at = timezone.now() if requires_approval else None
+    current_run.approved_at = None
+    current_run.approved_by = None
+    current_run.rejected_at = None
+    current_run.rejected_by = None
+    current_run.approval_note = ""
+    current_run.save(
+        update_fields=[
+            "input_config_json",
+            "ops_override_provider",
+            "ops_override_encrypted_api_key",
+            "ops_override_key_last4",
+            "ops_override_base_url",
+            "requires_approval",
+            "approval_status",
+            "approval_requested_at",
+            "approved_at",
+            "approved_by",
+            "rejected_at",
+            "rejected_by",
+            "approval_note",
+            "updated_at",
+        ]
+    )
+
+    if resolved_provider == WorkspaceLLMProvider.OPENAI and encrypted_api_key:
+        event_message = (
+            f"Ops reconfigured queued run for {resolved_provider} with a one-time API key ending in {key_last4}."
+        )
+    elif resolved_provider == WorkspaceLLMProvider.OPENAI:
+        event_message = f"Ops reconfigured queued run for {resolved_provider} using the requester's saved credential."
+    else:
+        event_message = "Ops reconfigured queued run for our server."
+
+    RunEvent.objects.create(
+        run=current_run,
+        event_type=RunEventType.INFO,
+        message=event_message,
+        payload_json={
+            "provider": resolved_provider,
+            "execution_mode": "real",
+            "requires_approval": current_run.requires_approval,
+            "approval_status": current_run.approval_status,
+            "ops_override_key_last4": key_last4,
+            "has_one_time_api_key": bool(encrypted_api_key),
+        },
+    )
+    log_audit_event(
+        action_type="run.ops_reconfigured",
+        target_type="investigation_run",
+        target_id=str(current_run.id),
+        workspace=current_run.workspace,
+        user=actor,
+        payload={
+            "provider": resolved_provider,
+            "execution_mode": "real",
+            "requires_approval": current_run.requires_approval,
+            "approval_status": current_run.approval_status,
+            "has_one_time_api_key": bool(encrypted_api_key),
+            "ops_override_key_last4": key_last4,
+        },
+        request=request,
+    )
+    return current_run
 
 
 @transaction.atomic

@@ -22,6 +22,7 @@ from wb_notifications.models import NotificationRequest, NotificationStatus, Not
 from wb_workspaces.models import (
     MembershipAccessMode,
     MembershipRole,
+    UserLLMCredential,
     WorkspaceCredential,
     WorkspaceLLMProvider,
     WorkspaceMembership,
@@ -38,6 +39,7 @@ from .models import (
     ArtifactStatus,
     ArtifactStorageBackend,
     ArtifactType,
+    InvestigationRun,
     RunArtifact,
     RunApprovalStatus,
     RunStatus,
@@ -52,6 +54,7 @@ from .pfd_toolkit_adapter import (
 )
 from .services import (
     approve_run_for_execution,
+    configure_pending_run_for_ops,
     queue_run,
     reject_run_for_execution,
     request_run_cancellation,
@@ -192,6 +195,45 @@ class RunServiceTests(TestCase):
         )
         self.assertFalse(run.requires_approval)
         self.assertEqual(run.approval_status, RunApprovalStatus.NOT_REQUIRED)
+
+    def test_staff_can_attach_one_time_ops_openai_key_without_saving_user_credential(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "real",
+                "provider": "local_ollama",
+                "requires_manual_approval": True,
+            },
+        )
+        configured = configure_pending_run_for_ops(
+            actor=self.admin_user,
+            run=run,
+            provider="openai",
+            api_key="sk-test-ops-1234",
+        )
+        configured.refresh_from_db()
+        self.assertEqual(configured.input_config_json.get("provider"), "openai")
+        self.assertEqual(configured.input_config_json.get("execution_mode"), "real")
+        self.assertEqual(configured.ops_override_provider, "openai")
+        self.assertEqual(configured.ops_override_key_last4, "1234")
+        self.assertTrue(bool(configured.ops_override_encrypted_api_key))
+        self.assertFalse(configured.requires_approval)
+        self.assertEqual(configured.approval_status, RunApprovalStatus.NOT_REQUIRED)
+        self.assertFalse(
+            WorkspaceCredential.objects.filter(
+                workspace=self.workspace,
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )
+        self.assertFalse(
+            UserLLMCredential.objects.filter(
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )
 
     def test_superuser_can_approve_queued_run(self):
         run = queue_run(
@@ -1073,6 +1115,52 @@ class RunAdapterTests(TestCase):
         self.assertEqual(kwargs.get("max_workers"), 1)
         self.assertEqual(kwargs.get("reasoning_effort"), "none")
 
+    def test_build_llm_kwargs_prefers_run_scoped_ops_override(self):
+        owner = User.objects.create_user(email="adapter-owner@example.com", password="x")
+        workspace = create_workspace_for_user(
+            user=owner,
+            title="Adapter Workspace",
+            slug="adapter-workspace",
+            description="desc",
+        )
+        investigation = create_investigation(
+            actor=owner,
+            workspace=workspace,
+            title="Adapter Investigation",
+            question_text="Question",
+            scope_json={},
+            method_json={},
+            status=InvestigationStatus.ACTIVE,
+        )
+        run = InvestigationRun.objects.create(
+            investigation=investigation,
+            workspace=workspace,
+            requested_by=owner,
+            run_type=RunType.FILTER,
+            ops_override_provider="openai",
+            ops_override_encrypted_api_key="",
+            input_config_json={"provider": "openai"},
+        )
+        configured = configure_pending_run_for_ops(
+            actor=User.objects.create_superuser(email="adapter-admin@example.com", password="x"),
+            run=run,
+            provider="openai",
+            api_key="sk-override-1234",
+        )
+        with patch("wb_runs.pfd_toolkit_adapter.resolve_workspace_credential") as mocked_resolve:
+            kwargs = _build_llm_kwargs(
+                run=configured,
+                config={
+                    "provider": "openai",
+                    "model_name": "gpt-5-mini",
+                    "max_parallel_workers": 3,
+                },
+            )
+        mocked_resolve.assert_not_called()
+        self.assertEqual(kwargs.get("api_key"), "sk-override-1234")
+        self.assertEqual(kwargs.get("model"), "gpt-5-mini")
+        self.assertEqual(kwargs.get("max_workers"), 3)
+
 
 class RunWorkerTests(TestCase):
     def setUp(self):
@@ -1556,6 +1644,38 @@ class RunWorkerTests(TestCase):
                 message="Completion notification moved to next pipeline stage.",
             ).exists()
         )
+
+    def test_pipeline_continuation_carries_run_scoped_ops_override(self):
+        staff = User.objects.create_superuser(email="worker-admin@example.com", password="x")
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "simulate",
+                "pipeline_plan": [RunType.FILTER, RunType.THEMES],
+                "pipeline_index": 0,
+                "pipeline_continue_on_fail": True,
+            },
+        )
+        configure_pending_run_for_ops(
+            actor=staff,
+            run=run,
+            provider="openai",
+            api_key="sk-pipeline-1234",
+        )
+
+        process_single_available_run(worker_id="test-worker")
+
+        next_run = (
+            self.investigation.runs.filter(run_type=RunType.THEMES)
+            .exclude(id=run.id)
+            .first()
+        )
+        self.assertIsNotNone(next_run)
+        self.assertEqual(next_run.ops_override_provider, "openai")
+        self.assertEqual(next_run.ops_override_key_last4, "1234")
+        self.assertTrue(bool(next_run.ops_override_encrypted_api_key))
 
     def test_pipeline_continues_on_failure_when_enabled(self):
         run = queue_run(

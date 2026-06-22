@@ -23,6 +23,7 @@ class RunArtifactInline(admin.TabularInline):
 
 @admin.register(InvestigationRun)
 class InvestigationRunAdmin(admin.ModelAdmin):
+    exclude = ["ops_override_encrypted_api_key"]
     list_display = [
         "id",
         "investigation",
@@ -58,11 +59,15 @@ class InvestigationRunAdmin(admin.ModelAdmin):
     readonly_fields = [
         "created_at",
         "updated_at",
+        "queued_at",
         "started_at",
         "finished_at",
         "approval_requested_at",
         "approved_at",
         "rejected_at",
+        "ops_override_provider",
+        "ops_override_key_last4",
+        "ops_override_base_url",
     ]
     actions = ["approve_selected_runs_now", "reject_selected_runs"]
     inlines = [RunEventInline, RunArtifactInline]

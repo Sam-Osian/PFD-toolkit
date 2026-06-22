@@ -20,7 +20,15 @@ from wb_runs.models import (
     RunWorkerHeartbeat,
     RunApprovalStatus,
 )
-from wb_workspaces.models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceReportExclusion
+from wb_workspaces.models import (
+    MembershipAccessMode,
+    MembershipRole,
+    UserLLMCredential,
+    Workspace,
+    WorkspaceCredential,
+    WorkspaceMembership,
+    WorkspaceReportExclusion,
+)
 
 
 User = get_user_model()
@@ -137,6 +145,7 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Dataset moderation")
         self.assertContains(response, "Sample report")
+        self.assertContains(response, "find delayed escalation")
 
     def test_ops_review_approve_persists_extract_feature_fields(self):
         pending = InvestigationRun.objects.create(
@@ -214,3 +223,92 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(queued.id))
         self.assertNotContains(response, str(failed.id))
+
+    def test_staff_can_attach_one_time_openai_key_to_queued_run(self):
+        queued_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.QUEUED,
+            approval_status=RunApprovalStatus.PENDING,
+            requires_approval=True,
+            input_config_json={"execution_mode": "real", "provider": "local_ollama"},
+        )
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse(
+                "ops-run-configure",
+                kwargs={"workspace_id": self.workspace.id, "run_id": queued_run.id},
+            ),
+            data={
+                "provider": "openai",
+                "api_key": "sk-ops-inline-1234",
+                "next_url": reverse("ops-workspace-detail", kwargs={"workspace_id": self.workspace.id}),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        queued_run.refresh_from_db()
+        self.assertEqual(queued_run.input_config_json.get("provider"), "openai")
+        self.assertEqual(queued_run.ops_override_provider, "openai")
+        self.assertEqual(queued_run.ops_override_key_last4, "1234")
+        self.assertFalse(queued_run.requires_approval)
+        self.assertEqual(queued_run.approval_status, RunApprovalStatus.NOT_REQUIRED)
+        self.assertFalse(
+            WorkspaceCredential.objects.filter(
+                workspace=self.workspace,
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )
+
+    def test_staff_can_queue_pending_approval_run_on_openai_with_one_time_key(self):
+        pending = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.QUEUED,
+            approval_status=RunApprovalStatus.PENDING,
+            requires_approval=True,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER],
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "search_query": "example",
+                "execution_mode": "real",
+            },
+        )
+
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse("ops-approval-action", kwargs={"run_id": pending.id}),
+            data={
+                "action": "approve",
+                "title": self.investigation.title,
+                "question_text": self.investigation.question_text,
+                "scope_option": "all_reports",
+                "run_filter": "1",
+                "search_query": "example",
+                "provider": "openai",
+                "api_key": "sk-openai-ops-5678",
+                "model_name": "gpt-5-mini",
+                "max_parallel_workers": "1",
+                "approval_note": "switch to OpenAI",
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        pending.refresh_from_db()
+        self.assertEqual(pending.input_config_json.get("provider"), "openai")
+        self.assertEqual(pending.ops_override_provider, "openai")
+        self.assertEqual(pending.ops_override_key_last4, "5678")
+        self.assertFalse(pending.requires_approval)
+        self.assertEqual(pending.approval_status, RunApprovalStatus.NOT_REQUIRED)
+        self.assertFalse(
+            UserLLMCredential.objects.filter(
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )

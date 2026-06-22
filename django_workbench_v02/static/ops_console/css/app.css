@@ -496,6 +496,36 @@ body::after {
 .textarea { min-height: 84px; resize: vertical; line-height: 1.55; }
 .input.mono, .textarea.mono { font-family: var(--ff-mono); font-size: 12.5px; }
 
+.ops-run-config {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+.ops-run-config small {
+  color: var(--text-3);
+  font-family: var(--ff-mono);
+  font-size: 11px;
+}
+.ops-run-provider,
+.ops-run-key .input {
+  width: 100%;
+  min-width: 0;
+}
+.ops-run-key.is-hidden {
+  display: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
 .toggle input { display: none; }
 .toggle .track {

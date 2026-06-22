@@ -18,6 +18,7 @@ from django.db.models import Count, Max, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from wb_auditlog.models import AuditEvent
@@ -35,10 +36,12 @@ from wb_runs.models import (
 )
 from wb_runs.services import (
     approve_run_for_execution,
+    configure_pending_run_for_ops,
     reject_run_for_execution,
+    RunServiceError,
 )
 from wb_sharing.models import WorkspaceShareLink
-from wb_workspaces.models import Workspace, WorkspaceMembership, WorkspaceReportExclusion
+from wb_workspaces.models import Workspace, WorkspaceLLMProvider, WorkspaceMembership, WorkspaceReportExclusion
 from wb_workspaces.permissions import can_edit_workspace
 from wb_workspaces.report_identity import REPORT_IDENTITY_COLUMN, with_report_identities
 from wb_workspaces.services import (
@@ -46,6 +49,8 @@ from wb_workspaces.services import (
     restore_workspace_report_exclusion,
     upsert_workspace_report_exclusion,
 )
+
+from .forms import OpsPendingRunConfigForm
 
 
 User = get_user_model()
@@ -399,6 +404,43 @@ def _scheduled_for_from_post(request):
 def _sanitize_error_code(value) -> str:
     code = str(value or "").strip()
     return code if code else "UNKNOWN"
+
+
+def _resolve_next_url(request, *, fallback: str) -> str:
+    next_url = str(request.POST.get("next_url") or "").strip()
+    if not next_url:
+        next_url = str(request.META.get("HTTP_REFERER") or "").strip()
+    if next_url and url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return next_url
+    return fallback
+
+
+def _ops_run_provider(run: InvestigationRun) -> str:
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    provider = str(config.get("provider") or WorkspaceLLMProvider.LOCAL_OLLAMA).strip().lower()
+    if provider == WorkspaceLLMProvider.OPENROUTER:
+        return WorkspaceLLMProvider.OPENAI
+    if provider not in {WorkspaceLLMProvider.LOCAL_OLLAMA, WorkspaceLLMProvider.OPENAI}:
+        return WorkspaceLLMProvider.LOCAL_OLLAMA
+    return provider
+
+
+def _ops_can_reconfigure_run(run: InvestigationRun) -> bool:
+    return run.status == RunStatus.QUEUED and not str(run.worker_id or "").strip()
+
+
+def _ops_run_row(run: InvestigationRun) -> dict:
+    return {
+        "run": run,
+        "input_config_json": json.dumps(run.input_config_json or {}, indent=2, sort_keys=True),
+        "current_provider": _ops_run_provider(run),
+        "can_reconfigure": _ops_can_reconfigure_run(run),
+        "has_ops_override": bool(str(run.ops_override_key_last4 or "").strip()),
+    }
 
 
 def _worker_snapshot(*, now):
@@ -838,17 +880,31 @@ def approval_action(request, run_id):
     payload = _typed_payload_from_post(request)
     scheduled_for = _scheduled_for_from_post(request)
     note = str(request.POST.get("approval_note") or "").strip()
+    api_key = str(request.POST.get("api_key") or "").strip()
     try:
         _apply_typed_review_edits(actor=request.user, run=run, payload=payload)
-        approve_run_for_execution(
-            actor=request.user,
-            run=run,
-            note=note,
-            scheduled_for=scheduled_for,
-            request=request,
-        )
-        messages.success(request, "Run approved and queued.")
-    except (PermissionDenied, ValidationError) as exc:
+        if payload.provider == WorkspaceLLMProvider.OPENAI:
+            reconfigured = configure_pending_run_for_ops(
+                actor=request.user,
+                run=run,
+                provider=payload.provider,
+                api_key=api_key,
+                request=request,
+            )
+            if scheduled_for is not None:
+                reconfigured.queued_at = scheduled_for
+                reconfigured.save(update_fields=["queued_at", "updated_at"])
+            messages.success(request, "Run queued on OpenAI.")
+        else:
+            approve_run_for_execution(
+                actor=request.user,
+                run=run,
+                note=note,
+                scheduled_for=scheduled_for,
+                request=request,
+            )
+            messages.success(request, "Run approved and queued.")
+    except (PermissionDenied, ValidationError, RunServiceError) as exc:
         messages.error(request, str(exc))
         return redirect(redirect_url)
     return redirect(reverse("ops-approvals"))
@@ -992,11 +1048,12 @@ def dashboard(request):
     concurrency = _concurrency_window_metrics(start=start, end=now)
     visitors = _human_visitor_metrics(start=start, end=now)
 
-    recent_runs = list(
-        InvestigationRun.objects.select_related("workspace", "requested_by", "investigation").order_by("-created_at")[
-            :RECENT_RUN_LIMIT
-        ]
-    )
+    recent_runs = [
+        _ops_run_row(run)
+        for run in InvestigationRun.objects.select_related("workspace", "requested_by", "investigation").order_by(
+            "-created_at"
+        )[:RECENT_RUN_LIMIT]
+    ]
     workspaces = list(
         Workspace.objects.select_related("created_by")
         .annotate(
@@ -1106,13 +1163,7 @@ def user_detail(request, user_id):
         .filter(requested_by=target_user)
         .order_by("-created_at")[:USER_RUN_LIMIT]
     )
-    run_rows = [
-        {
-            "run": run,
-            "input_config_json": json.dumps(run.input_config_json or {}, indent=2, sort_keys=True),
-        }
-        for run in runs
-    ]
+    run_rows = [_ops_run_row(run) for run in runs]
     run_status_counts = (
         InvestigationRun.objects.filter(requested_by=target_user)
         .values("status")
@@ -1149,13 +1200,7 @@ def workspace_detail(request, workspace_id):
         .filter(workspace=workspace)
         .order_by("-created_at")[:WORKSPACE_RUN_LIMIT]
     )
-    run_rows = [
-        {
-            "run": run,
-            "input_config_json": json.dumps(run.input_config_json or {}, indent=2, sort_keys=True),
-        }
-        for run in runs
-    ]
+    run_rows = [_ops_run_row(run) for run in runs]
     exclusions = list(
         WorkspaceReportExclusion.objects.select_related("excluded_by")
         .filter(workspace=workspace)
@@ -1209,6 +1254,43 @@ def workspace_detail(request, workspace_id):
             "recent_edits": recent_edits,
         },
     )
+
+
+@staff_member_required(login_url="admin:login")
+@require_http_methods(["POST"])
+def configure_pending_run(request, workspace_id, run_id):
+    workspace = get_object_or_404(Workspace, id=workspace_id)
+    run = get_object_or_404(
+        InvestigationRun.objects.select_related("workspace", "requested_by", "investigation"),
+        id=run_id,
+        workspace=workspace,
+    )
+    form = OpsPendingRunConfigForm(request.POST)
+    fallback = reverse("ops-workspace-detail", kwargs={"workspace_id": workspace.id})
+    if not form.is_valid():
+        messages.error(request, "Invalid ops run configuration payload.")
+        return redirect(_resolve_next_url(request, fallback=fallback))
+
+    try:
+        configure_pending_run_for_ops(
+            actor=request.user,
+            run=run,
+            provider=form.cleaned_data["provider"],
+            api_key=form.cleaned_data["api_key"],
+            request=request,
+        )
+    except (PermissionDenied, ValidationError, RunServiceError) as exc:
+        messages.error(request, str(exc))
+    else:
+        provider = form.cleaned_data["provider"]
+        if form.cleaned_data["api_key"]:
+            messages.success(
+                request,
+                f"Queued run switched to {provider} with a one-time API key. The key was not saved to the user's defaults.",
+            )
+        else:
+            messages.success(request, f"Queued run switched to {provider}.")
+    return redirect(_resolve_next_url(request, fallback=fallback))
 
 
 @staff_member_required(login_url="admin:login")

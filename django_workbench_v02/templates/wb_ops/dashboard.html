@@ -133,6 +133,7 @@
 
 <section class="ops-panel">
     <h2>Recent jobs</h2>
+    <p class="ops-meta">Queued runs can be retargeted here. One-time OpenAI keys entered in ops stay scoped to that run and are not saved to the user's defaults.</p>
     <table class="ops-table">
         <thead>
             <tr>
@@ -143,21 +144,44 @@
                 <th>Type</th>
                 <th>Status</th>
                 <th>Worker</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
-            {% for run in recent_runs %}
+            {% for row in recent_runs %}
                 <tr>
-                    <td>{{ run.created_at|date:"Y-m-d H:i" }}</td>
-                    <td><code>{{ run.id }}</code></td>
-                    <td><a href="{% url 'ops-user-detail' user_id=run.requested_by_id %}">{{ run.requested_by.email }}</a></td>
-                    <td><a href="{% url 'ops-workspace-detail' workspace_id=run.workspace_id %}">{{ run.workspace.title }}</a></td>
-                    <td>{{ run.run_type }}</td>
-                    <td>{{ run.status }}</td>
-                    <td>{{ run.worker_id|default:"-" }}</td>
+                    <td>{{ row.run.created_at|date:"Y-m-d H:i" }}</td>
+                    <td><code>{{ row.run.id }}</code></td>
+                    <td><a href="{% url 'ops-user-detail' user_id=row.run.requested_by_id %}">{{ row.run.requested_by.email }}</a></td>
+                    <td><a href="{% url 'ops-workspace-detail' workspace_id=row.run.workspace_id %}">{{ row.run.workspace.title }}</a></td>
+                    <td>{{ row.run.run_type }}</td>
+                    <td>{{ row.run.status }}</td>
+                    <td>{{ row.run.worker_id|default:"-" }}</td>
+                    <td>
+                        {% if row.can_reconfigure %}
+                            <form method="post" action="{% url 'ops-run-configure' workspace_id=row.run.workspace_id run_id=row.run.id %}" class="ops-run-config">
+                                {% csrf_token %}
+                                <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
+                                <select name="provider" class="select ops-run-provider" data-ops-run-provider>
+                                    <option value="local_ollama" {% if row.current_provider == "local_ollama" %}selected{% endif %}>Our server</option>
+                                    <option value="openai" {% if row.current_provider == "openai" %}selected{% endif %}>OpenAI</option>
+                                </select>
+                                <label class="ops-run-key{% if row.current_provider != 'openai' %} is-hidden{% endif %}" data-ops-run-key>
+                                    <span class="sr-only">One-time OpenAI API key</span>
+                                    <input class="input" type="password" name="api_key" placeholder="One-time OpenAI API key">
+                                </label>
+                                <button class="btn btn-ghost btn-xs" type="submit">Update</button>
+                                {% if row.has_ops_override %}
+                                    <small>ops key ••••{{ row.run.ops_override_key_last4 }}</small>
+                                {% endif %}
+                            </form>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                 </tr>
             {% empty %}
-                <tr><td colspan="7">No runs found.</td></tr>
+                <tr><td colspan="8">No runs found.</td></tr>
             {% endfor %}
         </tbody>
     </table>
@@ -206,4 +230,18 @@
         </tbody>
     </table>
 </section>
+{% endblock %}
+{% block page_scripts %}
+<script>
+document.querySelectorAll(".ops-run-config").forEach(function (form) {
+  const provider = form.querySelector("[data-ops-run-provider]");
+  const keyWrap = form.querySelector("[data-ops-run-key]");
+  if (!provider || !keyWrap) return;
+  const sync = function () {
+    keyWrap.classList.toggle("is-hidden", String(provider.value || "").toLowerCase() !== "openai");
+  };
+  provider.addEventListener("change", sync);
+  sync();
+});
+</script>
 {% endblock %}

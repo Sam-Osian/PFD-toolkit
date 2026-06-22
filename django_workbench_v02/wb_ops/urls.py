@@ -14,6 +14,11 @@ urlpatterns = [
     path("ops/workspaces/", views.workspace_list, name="ops-workspaces"),
     path("ops/workspaces/<uuid:workspace_id>/", views.workspace_detail, name="ops-workspace-detail"),
     path(
+        "ops/workspaces/<uuid:workspace_id>/runs/<uuid:run_id>/configure/",
+        views.configure_pending_run,
+        name="ops-run-configure",
+    ),
+    path(
         "ops/workspaces/<uuid:workspace_id>/exclude-row/",
         views.exclude_workspace_row,
         name="ops-workspace-exclude-row",

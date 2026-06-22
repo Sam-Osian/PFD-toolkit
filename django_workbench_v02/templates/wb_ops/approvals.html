@@ -242,10 +242,14 @@
                 <div class="row" style="gap:12px;flex-wrap:wrap">
                   <div class="field" style="flex:1;min-width:200px">
                     <label>Provider</label>
-                    <select class="select" name="provider">
+                    <select class="select" name="provider" data-ops-run-provider>
                       <option value="local_ollama" {% if row.payload.provider == 'local_ollama' %}selected{% endif %}>Our server</option>
                       <option value="openai" {% if row.payload.provider == 'openai' %}selected{% endif %}>OpenAI</option>
                     </select>
+                  </div>
+                  <div class="field ops-run-key{% if row.payload.provider != 'openai' %} is-hidden{% endif %}" style="flex:1;min-width:240px" data-ops-run-key>
+                    <label>One-time OpenAI API key</label>
+                    <input class="input" type="password" name="api_key" placeholder="Only used for this run">
                   </div>
                   <div class="field" style="flex:1;min-width:200px">
                     <label>Model</label>
@@ -283,4 +287,18 @@
     </tbody>
   </table>
 </section>
+{% endblock %}
+{% block page_scripts %}
+<script>
+document.querySelectorAll("form[id^='review-form-']").forEach(function (form) {
+  const provider = form.querySelector("[data-ops-run-provider]");
+  const keyWrap = form.querySelector("[data-ops-run-key]");
+  if (!provider || !keyWrap) return;
+  const sync = function () {
+    keyWrap.classList.toggle("is-hidden", String(provider.value || "").toLowerCase() !== "openai");
+  };
+  provider.addEventListener("change", sync);
+  sync();
+});
+</script>
 {% endblock %}
