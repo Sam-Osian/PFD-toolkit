@@ -72,11 +72,7 @@ def _normalise_model_alias(*, provider: str, model_name: str) -> str:
         if provider_key == "openrouter":
             return "openai/gpt-4.1-mini"
         return "gpt-4.1-mini"
-    aliases = {
-        "gpt-4.1": "gpt-5.4",
-        "openai/gpt-4.1": "openai/gpt-5.4",
-    }
-    resolved = aliases.get(cleaned, cleaned)
+    resolved = cleaned
     if provider_key == "openai" and resolved.startswith("openai/"):
         return resolved.split("/", 1)[1]
     if provider_key == "openrouter" and "/" not in resolved:

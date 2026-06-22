@@ -76,12 +76,9 @@ DATASET_PREVIEW_LIMIT = 120
 BUSY_WORKER_TARGET = 3
 PENDING_APPROVAL_LIMIT = 120
 FAILED_RUN_LIMIT = 180
-ALLOWED_MODELS = {
-    "gemma4:26b",
-    "gpt-5",
-    "gpt-5-mini",
+OPENAI_ALLOWED_MODELS = {
     "gpt-4.1-mini",
-    "gpt-4o",
+    "gpt-4.1",
 }
 SCOPE_CHOICES = {
     "all_reports",
@@ -222,7 +219,11 @@ def _typed_payload_from_run(run: InvestigationRun) -> TypedRunReviewPayload:
         provider = "openai"
 
     model_name = str(config.get("model_name") or "gemma4:26b").strip()
-    if not model_name:
+    if provider == "openai" and model_name.startswith("openai/"):
+        model_name = model_name.split("/", 1)[1]
+    if provider == "openai" and model_name not in OPENAI_ALLOWED_MODELS:
+        model_name = "gpt-4.1-mini"
+    elif not model_name:
         model_name = "gemma4:26b"
     feature_rows = config.get("feature_fields") if isinstance(config.get("feature_fields"), list) else []
     feature_fields: list[dict] = []
@@ -312,8 +313,14 @@ def _typed_payload_from_post(request) -> TypedRunReviewPayload:
     if provider not in {"local_ollama", "openai"}:
         provider = "local_ollama"
     model_name = str(request.POST.get("model_name") or "gemma4:26b").strip()
-    if model_name not in ALLOWED_MODELS:
-        model_name = "gemma4:26b" if provider == "local_ollama" else "gpt-5-mini"
+    if provider == "local_ollama":
+        if model_name != "gemma4:26b":
+            model_name = "gemma4:26b"
+    else:
+        if model_name.startswith("openai/"):
+            model_name = model_name.split("/", 1)[1]
+        if model_name not in OPENAI_ALLOWED_MODELS:
+            model_name = "gpt-4.1-mini"
 
     min_themes = _parse_int(request.POST.get("min_themes"), default=None, minimum=1, maximum=100)
     max_themes = _parse_int(request.POST.get("max_themes"), default=None, minimum=1, maximum=100)
@@ -434,10 +441,17 @@ def _ops_can_reconfigure_run(run: InvestigationRun) -> bool:
 
 
 def _ops_run_row(run: InvestigationRun) -> dict:
+    config = run.input_config_json if isinstance(run.input_config_json, dict) else {}
+    current_model = str(config.get("model_name") or "").strip()
+    if current_model.startswith("openai/"):
+        current_model = current_model.split("/", 1)[1]
+    if current_model not in OPENAI_ALLOWED_MODELS:
+        current_model = "gpt-4.1-mini"
     return {
         "run": run,
         "input_config_json": json.dumps(run.input_config_json or {}, indent=2, sort_keys=True),
         "current_provider": _ops_run_provider(run),
+        "current_openai_model": current_model,
         "can_reconfigure": _ops_can_reconfigure_run(run),
         "has_ops_override": bool(str(run.ops_override_key_last4 or "").strip()),
     }
@@ -888,6 +902,7 @@ def approval_action(request, run_id):
                 actor=request.user,
                 run=run,
                 provider=payload.provider,
+                model_name=payload.model_name,
                 api_key=api_key,
                 request=request,
             )
@@ -1276,6 +1291,7 @@ def configure_pending_run(request, workspace_id, run_id):
             actor=request.user,
             run=run,
             provider=form.cleaned_data["provider"],
+            model_name=form.cleaned_data["model_name"],
             api_key=form.cleaned_data["api_key"],
             request=request,
         )

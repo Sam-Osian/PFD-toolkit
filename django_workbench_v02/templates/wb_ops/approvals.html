@@ -251,9 +251,12 @@
                     <label>One-time OpenAI API key</label>
                     <input class="input" type="password" name="api_key" placeholder="Only used for this run">
                   </div>
-                  <div class="field" style="flex:1;min-width:200px">
-                    <label>Model</label>
-                    <input class="input" name="model_name" value="{{ row.payload.model_name }}">
+                  <div class="field ops-openai-model{% if row.payload.provider != 'openai' %} is-hidden{% endif %}" style="flex:1;min-width:200px" data-ops-openai-model>
+                    <label>OpenAI model</label>
+                    <select class="select" name="model_name" data-ops-openai-model-select>
+                      <option value="gpt-4.1-mini" {% if row.payload.model_name != 'gpt-4.1' %}selected{% endif %}>gpt-4.1-mini</option>
+                      <option value="gpt-4.1" {% if row.payload.model_name == 'gpt-4.1' %}selected{% endif %}>gpt-4.1</option>
+                    </select>
                   </div>
                   <div class="field" style="width:140px">
                     <label>Max workers</label>
@@ -293,9 +296,20 @@
 document.querySelectorAll("form[id^='review-form-']").forEach(function (form) {
   const provider = form.querySelector("[data-ops-run-provider]");
   const keyWrap = form.querySelector("[data-ops-run-key]");
+  const modelWrap = form.querySelector("[data-ops-openai-model]");
+  const modelSelect = form.querySelector("[data-ops-openai-model-select]");
   if (!provider || !keyWrap) return;
   const sync = function () {
-    keyWrap.classList.toggle("is-hidden", String(provider.value || "").toLowerCase() !== "openai");
+    const selected = String(provider.value || "").toLowerCase();
+    keyWrap.classList.toggle("is-hidden", selected !== "openai");
+    if (!modelWrap || !modelSelect) return;
+    modelWrap.classList.toggle("is-hidden", selected !== "openai");
+    if (selected === "openai") {
+      const current = String(modelSelect.value || "").trim();
+      if (current !== "gpt-4.1" && current !== "gpt-4.1-mini") {
+        modelSelect.value = "gpt-4.1-mini";
+      }
+    }
   };
   provider.addEventListener("change", sync);
   sync();

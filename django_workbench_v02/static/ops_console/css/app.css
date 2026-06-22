@@ -507,11 +507,15 @@ body::after {
   font-size: 11px;
 }
 .ops-run-provider,
-.ops-run-key .input {
+.ops-run-key .input,
+.ops-run-model .select {
   width: 100%;
   min-width: 0;
 }
 .ops-run-key.is-hidden {
+  display: none;
+}
+.ops-run-model.is-hidden {
   display: none;
 }
 .sr-only {

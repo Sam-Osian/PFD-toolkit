@@ -85,6 +85,7 @@ ACTIVE_RUN_STATUSES = {
 LLM_APPROVAL_RUN_TYPES = {"filter", "themes", "extract"}
 EXECUTION_ROUTE_LOCAL = "local"
 EXECUTION_ROUTE_API = "api"
+OPS_OPENAI_ALLOWED_MODELS = {"gpt-4.1-mini", "gpt-4.1"}
 
 
 def _as_int(value, *, default: int = 0) -> int:
@@ -313,12 +314,33 @@ def _validate_status_transition(current_status: str, next_status: str) -> None:
         raise RunServiceError(f"Invalid run transition: {current_status} -> {next_status}.")
 
 
+def _default_model_for_provider(*, user, workspace, provider: str) -> str:
+    provider_key = str(provider or "").strip().lower()
+    if provider_key == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        return str(getattr(settings, "LOCAL_OLLAMA_MODEL_DEFAULT", "gemma4:26b") or "gemma4:26b").strip() or "gemma4:26b"
+    return "gpt-4.1-mini"
+
+
+def _normalise_model_for_provider(*, user, workspace, provider: str, model_name: str) -> str:
+    provider_key = str(provider or "").strip().lower()
+    compact = str(model_name or "").strip()
+    if provider_key == WorkspaceLLMProvider.LOCAL_OLLAMA:
+        local_default = _default_model_for_provider(user=user, workspace=workspace, provider=provider_key)
+        return compact if compact == local_default else local_default
+    if compact.startswith("openai/"):
+        compact = compact.split("/", 1)[1]
+    if compact not in OPS_OPENAI_ALLOWED_MODELS:
+        return _default_model_for_provider(user=user, workspace=workspace, provider=provider_key)
+    return compact
+
+
 @transaction.atomic
 def configure_pending_run_for_ops(
     *,
     actor,
     run,
     provider: str,
+    model_name: str = "",
     api_key: str = "",
     request=None,
 ) -> InvestigationRun:
@@ -371,6 +393,13 @@ def configure_pending_run_for_ops(
     updated_config["execution_mode"] = "real"
     updated_config["provider"] = resolved_provider
     updated_config.pop("requires_manual_approval", None)
+    requested_model_name = str(model_name or updated_config.get("model_name") or "").strip()
+    updated_config["model_name"] = _normalise_model_for_provider(
+        user=current_run.requested_by,
+        workspace=current_run.workspace,
+        provider=resolved_provider,
+        model_name=requested_model_name,
+    )
     requires_approval = _queue_requires_approval(
         run_type=current_run.run_type,
         config=updated_config,

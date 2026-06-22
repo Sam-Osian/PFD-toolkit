@@ -244,6 +244,7 @@ class OpsInterfaceTests(TestCase):
             data={
                 "provider": "openai",
                 "api_key": "sk-ops-inline-1234",
+                "model_name": "gpt-4.1",
                 "next_url": reverse("ops-workspace-detail", kwargs={"workspace_id": self.workspace.id}),
             },
             follow=True,
@@ -251,6 +252,7 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         queued_run.refresh_from_db()
         self.assertEqual(queued_run.input_config_json.get("provider"), "openai")
+        self.assertEqual(queued_run.input_config_json.get("model_name"), "gpt-4.1")
         self.assertEqual(queued_run.ops_override_provider, "openai")
         self.assertEqual(queued_run.ops_override_key_last4, "1234")
         self.assertFalse(queued_run.requires_approval)
@@ -293,7 +295,7 @@ class OpsInterfaceTests(TestCase):
                 "search_query": "example",
                 "provider": "openai",
                 "api_key": "sk-openai-ops-5678",
-                "model_name": "gpt-5-mini",
+                "model_name": "gpt-4.1",
                 "max_parallel_workers": "1",
                 "approval_note": "switch to OpenAI",
             },
@@ -302,6 +304,7 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(response.status_code, 200)
         pending.refresh_from_db()
         self.assertEqual(pending.input_config_json.get("provider"), "openai")
+        self.assertEqual(pending.input_config_json.get("model_name"), "gpt-4.1")
         self.assertEqual(pending.ops_override_provider, "openai")
         self.assertEqual(pending.ops_override_key_last4, "5678")
         self.assertFalse(pending.requires_approval)
@@ -312,3 +315,38 @@ class OpsInterfaceTests(TestCase):
                 provider="openai",
             ).exists()
         )
+
+    def test_staff_can_switch_run_back_to_local_without_openai_model_leaking(self):
+        queued_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.QUEUED,
+            approval_status=RunApprovalStatus.NOT_REQUIRED,
+            requires_approval=False,
+            input_config_json={
+                "execution_mode": "real",
+                "provider": "openai",
+                "model_name": "gpt-4.1",
+            },
+        )
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse(
+                "ops-run-configure",
+                kwargs={"workspace_id": self.workspace.id, "run_id": queued_run.id},
+            ),
+            data={
+                "provider": "local_ollama",
+                "model_name": "gpt-4.1",
+                "next_url": reverse("ops-workspace-detail", kwargs={"workspace_id": self.workspace.id}),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        queued_run.refresh_from_db()
+        self.assertEqual(queued_run.input_config_json.get("provider"), "local_ollama")
+        self.assertEqual(queued_run.input_config_json.get("model_name"), "gemma4:26b")
+        self.assertTrue(queued_run.requires_approval)
+        self.assertEqual(queued_run.approval_status, RunApprovalStatus.PENDING)

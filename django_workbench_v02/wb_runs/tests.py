@@ -204,6 +204,7 @@ class RunServiceTests(TestCase):
             input_config_json={
                 "execution_mode": "real",
                 "provider": "local_ollama",
+                "model_name": "gemma4:26b",
                 "requires_manual_approval": True,
             },
         )
@@ -216,6 +217,7 @@ class RunServiceTests(TestCase):
         configured.refresh_from_db()
         self.assertEqual(configured.input_config_json.get("provider"), "openai")
         self.assertEqual(configured.input_config_json.get("execution_mode"), "real")
+        self.assertEqual(configured.input_config_json.get("model_name"), "gpt-4.1-mini")
         self.assertEqual(configured.ops_override_provider, "openai")
         self.assertEqual(configured.ops_override_key_last4, "1234")
         self.assertTrue(bool(configured.ops_override_encrypted_api_key))
@@ -234,6 +236,51 @@ class RunServiceTests(TestCase):
                 provider="openai",
             ).exists()
         )
+
+    def test_ops_reconfigure_preserves_valid_openai_model_choice(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "real",
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "requires_manual_approval": True,
+            },
+        )
+        configured = configure_pending_run_for_ops(
+            actor=self.admin_user,
+            run=run,
+            provider="openai",
+            model_name="gpt-4.1",
+            api_key="sk-test-ops-9999",
+        )
+        configured.refresh_from_db()
+        self.assertEqual(configured.input_config_json.get("model_name"), "gpt-4.1")
+
+    def test_ops_reconfigure_to_local_ignores_openai_model_choice(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={
+                "execution_mode": "real",
+                "provider": "openai",
+                "model_name": "gpt-4.1",
+            },
+        )
+        configured = configure_pending_run_for_ops(
+            actor=self.admin_user,
+            run=run,
+            provider="local_ollama",
+            model_name="gpt-4.1",
+        )
+        configured.refresh_from_db()
+        self.assertEqual(configured.input_config_json.get("provider"), "local_ollama")
+        self.assertEqual(configured.input_config_json.get("model_name"), "gemma4:26b")
+        self.assertTrue(configured.requires_approval)
+        self.assertEqual(configured.approval_status, RunApprovalStatus.PENDING)
 
     def test_superuser_can_approve_queued_run(self):
         run = queue_run(
@@ -1152,13 +1199,13 @@ class RunAdapterTests(TestCase):
                 run=configured,
                 config={
                     "provider": "openai",
-                    "model_name": "gpt-5-mini",
+                    "model_name": "gpt-4.1",
                     "max_parallel_workers": 3,
                 },
             )
         mocked_resolve.assert_not_called()
         self.assertEqual(kwargs.get("api_key"), "sk-override-1234")
-        self.assertEqual(kwargs.get("model"), "gpt-5-mini")
+        self.assertEqual(kwargs.get("model"), "gpt-4.1")
         self.assertEqual(kwargs.get("max_workers"), 3)
 
 
