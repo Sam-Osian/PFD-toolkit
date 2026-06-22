@@ -196,6 +196,29 @@ class OpsInterfaceTests(TestCase):
         self.assertEqual(features[0]["name"], "setting")
         self.assertEqual(features[1]["name"], "age_at_death")
 
+    def test_ops_approvals_shows_local_model_for_local_runs(self):
+        pending = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.QUEUED,
+            approval_status=RunApprovalStatus.PENDING,
+            requires_approval=True,
+            input_config_json={
+                "pipeline_plan": [RunType.FILTER],
+                "provider": "local_ollama",
+                "model_name": "gemma4:26b",
+                "search_query": "example",
+            },
+        )
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("ops-approvals") + f"?run={pending.id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Local model")
+        self.assertContains(response, 'value="gemma4:26b"')
+
     def test_ops_approvals_excludes_terminal_runs_with_stale_pending_approval_status(self):
         failed = InvestigationRun.objects.create(
             investigation=self.investigation,

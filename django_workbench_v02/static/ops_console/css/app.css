@@ -508,14 +508,18 @@ body::after {
 }
 .ops-run-provider,
 .ops-run-key .input,
-.ops-run-model .select {
+.ops-run-model .select,
+.ops-openai-model .select,
+.ops-local-model .input {
   width: 100%;
   min-width: 0;
 }
 .ops-run-key.is-hidden {
   display: none;
 }
-.ops-run-model.is-hidden {
+.ops-run-model.is-hidden,
+.ops-openai-model.is-hidden,
+.ops-local-model.is-hidden {
   display: none;
 }
 .sr-only {

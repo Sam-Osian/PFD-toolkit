@@ -251,6 +251,10 @@
                     <label>One-time OpenAI API key</label>
                     <input class="input" type="password" name="api_key" placeholder="Only used for this run">
                   </div>
+                  <div class="field ops-local-model{% if row.payload.provider == 'openai' %} is-hidden{% endif %}" style="flex:1;min-width:200px" data-ops-local-model>
+                    <label>Local model</label>
+                    <input class="input mono" value="gemma4:26b" readonly>
+                  </div>
                   <div class="field ops-openai-model{% if row.payload.provider != 'openai' %} is-hidden{% endif %}" style="flex:1;min-width:200px" data-ops-openai-model>
                     <label>OpenAI model</label>
                     <select class="select" name="model_name" data-ops-openai-model-select>
@@ -296,12 +300,16 @@
 document.querySelectorAll("form[id^='review-form-']").forEach(function (form) {
   const provider = form.querySelector("[data-ops-run-provider]");
   const keyWrap = form.querySelector("[data-ops-run-key]");
+  const localModelWrap = form.querySelector("[data-ops-local-model]");
   const modelWrap = form.querySelector("[data-ops-openai-model]");
   const modelSelect = form.querySelector("[data-ops-openai-model-select]");
   if (!provider || !keyWrap) return;
   const sync = function () {
     const selected = String(provider.value || "").toLowerCase();
     keyWrap.classList.toggle("is-hidden", selected !== "openai");
+    if (localModelWrap) {
+      localModelWrap.classList.toggle("is-hidden", selected === "openai");
+    }
     if (!modelWrap || !modelSelect) return;
     modelWrap.classList.toggle("is-hidden", selected !== "openai");
     if (selected === "openai") {
