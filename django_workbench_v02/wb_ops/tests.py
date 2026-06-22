@@ -19,7 +19,15 @@ from wb_runs.models import (
     RunType,
     RunWorkerHeartbeat,
 )
-from wb_workspaces.models import MembershipAccessMode, MembershipRole, Workspace, WorkspaceMembership, WorkspaceReportExclusion
+from wb_workspaces.models import (
+    MembershipAccessMode,
+    MembershipRole,
+    UserLLMCredential,
+    Workspace,
+    WorkspaceCredential,
+    WorkspaceMembership,
+    WorkspaceReportExclusion,
+)
 
 
 User = get_user_model()
@@ -137,3 +145,44 @@ class OpsInterfaceTests(TestCase):
         self.assertContains(response, "Dataset moderation")
         self.assertContains(response, "Sample report")
         self.assertContains(response, "find delayed escalation")
+
+    def test_staff_can_attach_one_time_openai_key_to_queued_run(self):
+        queued_run = InvestigationRun.objects.create(
+            investigation=self.investigation,
+            workspace=self.workspace,
+            requested_by=self.owner,
+            run_type=RunType.FILTER,
+            status=RunStatus.QUEUED,
+            input_config_json={"execution_mode": "real", "provider": "openrouter"},
+        )
+        self.client.force_login(self.staff)
+        response = self.client.post(
+            reverse(
+                "ops-run-configure",
+                kwargs={"workspace_id": self.workspace.id, "run_id": queued_run.id},
+            ),
+            data={
+                "provider": "openai",
+                "api_key": "sk-ops-inline-1234",
+                "next_url": reverse("ops-dashboard"),
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        queued_run.refresh_from_db()
+        self.assertEqual(queued_run.input_config_json.get("provider"), "openai")
+        self.assertEqual(queued_run.ops_override_provider, "openai")
+        self.assertEqual(queued_run.ops_override_key_last4, "1234")
+        self.assertFalse(
+            WorkspaceCredential.objects.filter(
+                workspace=self.workspace,
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )
+        self.assertFalse(
+            UserLLMCredential.objects.filter(
+                user=self.owner,
+                provider="openai",
+            ).exists()
+        )

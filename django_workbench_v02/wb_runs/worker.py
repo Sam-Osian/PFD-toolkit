@@ -398,6 +398,10 @@ def _queue_next_pipeline_run(current_run: InvestigationRun) -> InvestigationRun 
         run_type=next_run_type,
         status=RunStatus.QUEUED,
         input_config_json=next_config,
+        ops_override_provider=current_run.ops_override_provider,
+        ops_override_encrypted_api_key=current_run.ops_override_encrypted_api_key,
+        ops_override_key_last4=current_run.ops_override_key_last4,
+        ops_override_base_url=current_run.ops_override_base_url,
         query_start_date=current_run.query_start_date,
         query_end_date=current_run.query_end_date,
     )

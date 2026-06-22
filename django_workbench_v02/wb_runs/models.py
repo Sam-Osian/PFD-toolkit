@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
+from wb_workspaces.models import WorkspaceLLMProvider
 
 
 class RunType(models.TextChoices):
@@ -96,6 +97,14 @@ class InvestigationRun(models.Model):
     error_code = models.CharField(max_length=64, blank=True)
     error_message = models.TextField(blank=True)
     input_config_json = models.JSONField(default=dict)
+    ops_override_provider = models.CharField(
+        max_length=16,
+        choices=WorkspaceLLMProvider.choices,
+        blank=True,
+    )
+    ops_override_encrypted_api_key = models.TextField(blank=True)
+    ops_override_key_last4 = models.CharField(max_length=4, blank=True)
+    ops_override_base_url = models.URLField(blank=True)
     query_start_date = models.DateField(null=True, blank=True)
     query_end_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now, editable=False)
