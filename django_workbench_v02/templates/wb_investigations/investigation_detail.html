@@ -142,7 +142,7 @@
                             </a>
                             <span>{{ run.run_type }} · {{ run.status }} · queued {{ run.queued_at|date:"Y-m-d H:i" }}</span>
                             {% if run.can_request_cancellation %}
-                                <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="inline-form">
+                                <form method="post" action="{% url 'workbook-run-cancel' workbook_id=workspace.id run_id=run.id %}" class="inline-form" data-confirm-submit data-confirm-message="Cancel this run?">
                                     {% csrf_token %}
                                     <input type="hidden" name="next_url" value="{{ request.get_full_path }}">
                                     <input type="hidden" name="cancel_reason" value="Cancelled from investigation runs list.">

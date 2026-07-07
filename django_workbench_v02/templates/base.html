@@ -2484,6 +2484,15 @@ document.addEventListener("DOMContentLoaded", function() {
     if (!navTarget) return;
     closeMobileNav();
   });
+
+  document.addEventListener("submit", function(event) {
+    const form = event.target.closest("form[data-confirm-submit]");
+    if (!form) return;
+    const message = String(form.getAttribute("data-confirm-message") || "Are you sure?");
+    if (!window.confirm(message)) {
+      event.preventDefault();
+    }
+  });
 });
 </script>
 {% block extra_js %}{% endblock %}

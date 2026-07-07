@@ -766,22 +766,6 @@ def set_run_status(
         },
         request=request,
     )
-    log_action_cache_event(
-        workspace=run.workspace,
-        user=actor,
-        action_key="run.cancel_request",
-        entity_type="investigation_run",
-        entity_id=str(run.id),
-        options={"reason": run.cancel_reason},
-        state_before={},
-        state_after={
-            "status": run.status,
-            "cancel_requested_at": run.cancel_requested_at.isoformat()
-            if run.cancel_requested_at
-            else None,
-        },
-        context={"investigation_id": str(run.investigation_id)},
-    )
     return run
 
 
@@ -831,6 +815,22 @@ def request_run_cancellation(
         user=actor,
         payload={"reason": run.cancel_reason, "status": run.status},
         request=request,
+    )
+    log_action_cache_event(
+        workspace=run.workspace,
+        user=actor,
+        action_key="run.cancel_request",
+        entity_type="investigation_run",
+        entity_id=str(run.id),
+        options={"reason": run.cancel_reason},
+        state_before={},
+        state_after={
+            "status": run.status,
+            "cancel_requested_at": run.cancel_requested_at.isoformat()
+            if run.cancel_requested_at
+            else None,
+        },
+        context={"investigation_id": str(run.investigation_id)},
     )
     return run
 

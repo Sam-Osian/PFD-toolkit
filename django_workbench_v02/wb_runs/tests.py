@@ -15,7 +15,7 @@ from django.utils import timezone
 from pfd_toolkit.llm import GenerationCancelledError
 from pydantic import Field, create_model
 
-from wb_auditlog.models import AuditEvent
+from wb_auditlog.models import ActionCacheEvent, AuditEvent
 from wb_investigations.models import InvestigationStatus
 from wb_investigations.services import create_investigation
 from wb_notifications.models import NotificationRequest, NotificationStatus, NotificationTrigger
@@ -353,6 +353,33 @@ class RunServiceTests(TestCase):
             AuditEvent.objects.filter(
                 action_type="run.cancel_requested",
                 target_id=str(run.id),
+            ).exists()
+        )
+        self.assertTrue(
+            ActionCacheEvent.objects.filter(
+                workspace=self.workspace,
+                action_key="run.cancel_request",
+                entity_id=str(run.id),
+            ).exists()
+        )
+
+    def test_status_change_does_not_write_cancel_request_action_cache_event(self):
+        run = queue_run(
+            actor=self.owner,
+            investigation=self.investigation,
+            run_type=RunType.FILTER,
+            input_config_json={},
+        )
+        set_run_status(
+            run=run,
+            status=RunStatus.STARTING,
+            message="Worker claimed run.",
+        )
+        self.assertFalse(
+            ActionCacheEvent.objects.filter(
+                workspace=self.workspace,
+                action_key="run.cancel_request",
+                entity_id=str(run.id),
             ).exists()
         )
 

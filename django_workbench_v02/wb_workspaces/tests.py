@@ -1207,6 +1207,7 @@ class WorkspaceActiveStateViewTests(TestCase):
             response,
             reverse("run-cancel", kwargs={"workbook_id": self.workspace_a.id, "run_id": run.id}),
         )
+        self.assertContains(response, 'data-confirm-message="Cancel this run?"')
 
     def test_dashboard_pending_badge_uses_queue_and_stage_labels(self):
         queued_investigation = create_investigation(
