@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pfdtoolkit.org/schemas/issue-occurrence-v2.json",
+  "title": "PFD Toolkit issue extraction response v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issues"],
+  "properties": {
+    "issues": {
+      "type": "array",
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "issue_statement_original",
+          "canonical_issue",
+          "source_section",
+          "source_span",
+          "failure_mode",
+          "issue_object_text",
+          "essential_qualifier_text",
+          "subject_domain",
+          "process_stage",
+          "communication_direction",
+          "system_mechanism",
+          "setting",
+          "system_level",
+          "responsible_entity_text",
+          "affected_population",
+          "claim_status",
+          "temporality"
+        ],
+        "properties": {
+          "issue_statement_original": {"type": "string", "maxLength": 360},
+          "canonical_issue": {"type": "string", "maxLength": 260},
+          "source_section": {
+            "enum": ["circumstances", "concerns", "both", "unclear"]
+          },
+          "source_span": {"type": "string", "maxLength": 700},
+          "failure_mode": {
+            "enum": [
+              "missing", "delayed", "incomplete", "incorrect", "inappropriate",
+              "ineffective", "excessive", "ambiguous", "inconsistent",
+              "inaccessible", "unavailable", "insufficient", "non_compliant",
+              "unsafe_design", "unsafe_condition", "not_recognised", "not_reviewed",
+              "not_investigated", "not_assessed", "not_referred", "not_communicated",
+              "not_documented", "not_implemented", "not_acted_upon", "not_escalated",
+              "not_monitored", "not_followed_up", "other", "unclear"
+            ]
+          },
+          "issue_object_text": {"type": "string", "maxLength": 140},
+          "essential_qualifier_text": {"type": "string", "maxLength": 100},
+          "subject_domain": {
+            "enum": [
+              "clinical_care", "medication", "mental_health", "communication_information",
+              "staffing_capacity", "training_competence", "equipment_infrastructure",
+              "technology_interoperability", "emergency_response", "social_care_housing",
+              "safeguarding", "governance_learning", "justice_custody", "roads_transport",
+              "aviation_maritime_rail", "fire_building_safety", "product_consumer_safety",
+              "substance_use_public_health", "policing_public_protection",
+              "workplace_public_safety", "environmental_public_health", "other", "unclear"
+            ]
+          },
+          "process_stage": {
+            "enum": [
+              "prevention_risk_reduction", "access_scheduling", "triage", "assessment",
+              "diagnosis", "planning", "referral", "admission", "treatment",
+              "prescribing", "dispensing_supply", "medication_administration",
+              "procedure_surgery", "monitoring_observation", "escalation", "handover",
+              "transfer_transport", "discharge", "follow_up", "rehabilitation",
+              "care_coordination", "emergency_call_handling", "emergency_response",
+              "safeguarding_response", "incident_investigation", "death_review",
+              "organisational_learning", "workforce_management", "training_delivery",
+              "procurement_supply", "maintenance_inspection", "policy_development",
+              "protocol_implementation", "service_provision", "professional_practice",
+              "regulation_oversight", "information_record_management", "other", "unclear"
+            ]
+          },
+          "communication_direction": {
+            "enum": [
+              "not_applicable", "within_team", "between_teams_same_organisation",
+              "between_organisations", "professional_to_patient",
+              "professional_to_family_carer", "patient_family_to_professional",
+              "service_to_public", "public_to_service", "bidirectional", "unclear"
+            ]
+          },
+          "system_mechanism": {
+            "enum": [
+              "policy_process", "risk_management", "staffing_capacity", "workload_demand",
+              "training_competence", "supervision_leadership", "communication_coordination",
+              "documentation_information", "clinical_decision_support",
+              "technology_interoperability", "equipment_infrastructure",
+              "procurement_supply", "operational_execution", "governance_accountability", "regulation_standards",
+              "commissioning_service_provision", "environmental_design", "other", "unclear"
+            ]
+          },
+          "setting": {
+            "enum": [
+              "acute_hospital", "mental_health_inpatient", "community_healthcare",
+              "primary_care", "ambulance_emergency", "care_home", "domiciliary_care",
+              "supported_living", "social_care_service", "housing_service", "hospice_palliative",
+              "prison_custody", "probation_service", "police", "court_legal",
+              "fire_rescue", "education", "workplace", "road_transport", "rail_transport",
+              "aviation", "maritime", "sports_recreation", "commercial_premises",
+              "government_public_service", "domestic_home", "residential_building",
+              "mortuary_pathology", "public_space", "multi_setting", "other", "unclear"
+            ]
+          },
+          "system_level": {
+            "enum": [
+              "individual_practice", "team", "service", "organisation",
+              "inter_organisational", "regional", "national", "unclear"
+            ]
+          },
+          "responsible_entity_text": {"type": "string", "maxLength": 180},
+          "affected_population": {
+            "enum": [
+              "patient", "resident", "service_user", "child_young_person", "student",
+              "family_carer", "staff", "worker", "road_user", "transport_passenger",
+              "person_in_custody", "public", "consumer", "multiple", "other", "unclear"
+            ]
+          },
+          "claim_status": {
+            "enum": [
+              "observed_failure", "reported_concern", "ongoing_risk",
+              "potential_future_risk", "recommended_improvement", "unclear"
+            ]
+          },
+          "temporality": {
+            "enum": ["historical", "ongoing", "prospective", "mixed", "unclear"]
+          }
+        }
+      }
+    }
+  }
+}

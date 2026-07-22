@@ -26,6 +26,9 @@ docs/assets/images/social/*
 # Build
 /dist/*
 
+# Generated pipeline outputs (large, reproducible, and machine-local)
+/artifacts/
+
 .codex
 django_workbench/db.sqlite3
 

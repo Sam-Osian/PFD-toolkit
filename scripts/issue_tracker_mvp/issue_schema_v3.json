@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pfdtoolkit.org/schemas/issue-occurrence-v3.json",
+  "title": "PFD Toolkit issue extraction response v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issues"],
+  "properties": {
+    "issues": {
+      "type": "array",
+      "maxItems": 24,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "canonical_issue",
+          "evidence_quote",
+          "failure_state",
+          "process_stage",
+          "service_sectors",
+          "issue_themes",
+          "service_contexts",
+          "populations_at_risk",
+          "communication_direction",
+          "responsible_actor_type",
+          "responsible_actor_text",
+          "concern_status"
+        ],
+        "properties": {
+          "canonical_issue": {"type": "string", "maxLength": 260},
+          "evidence_quote": {"type": "string", "maxLength": 700},
+          "failure_state": {
+            "enum": [
+              "omitted", "delayed", "incomplete", "incorrect", "inadequate",
+              "inconsistent", "unavailable", "inaccessible", "excessive",
+              "unsafe", "non_compliant", "ambiguous", "unverified",
+              "uncoordinated", "other_review"
+            ]
+          },
+          "process_stage": {
+            "enum": [
+              "prevention_risk_reduction", "access_scheduling", "triage",
+              "assessment", "diagnosis", "planning", "referral", "admission",
+              "treatment_care_delivery", "prescribing", "dispensing_supply",
+              "medication_administration", "procedure_surgery",
+              "monitoring_observation", "escalation", "handover",
+              "transfer_transport", "discharge", "follow_up", "rehabilitation",
+              "care_coordination", "emergency_call_handling", "emergency_response",
+              "search_rescue", "safeguarding_response", "information_record_management",
+              "incident_investigation", "death_review", "organisational_learning",
+              "workforce_management", "training_delivery", "commissioning_funding",
+              "procurement_supply", "design_engineering", "manufacture_production",
+              "product_labelling_warning", "maintenance", "inspection_enforcement",
+              "licensing_certification", "policy_development",
+              "protocol_implementation", "service_provision", "public_information",
+              "research_evidence", "regulation_oversight", "professional_practice",
+              "other_review"
+            ]
+          },
+          "service_sectors": {
+            "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
+            "items": {"enum": [
+              "healthcare", "social_care", "justice_custody", "policing",
+              "legal_judicial", "education", "housing", "transport", "workplace",
+              "defence_military", "agriculture_animal", "animal_care_control", "fire_rescue",
+              "sport_leisure", "commercial_retail", "consumer_products",
+              "digital_online_services", "utilities_infrastructure", "public_health",
+              "government_regulation", "recreation_water", "other_review", "not_stated"
+            ]}
+          },
+          "issue_themes": {
+            "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+            "items": {"enum": [
+              "clinical_assessment_care", "medication", "mental_health_suicide",
+              "communication_handover", "records_information", "staffing_capacity",
+              "training_competence", "equipment_infrastructure", "digital_technology",
+              "emergency_response", "safeguarding", "governance_learning",
+              "policy_regulation", "environmental_design", "access_service_capacity",
+              "public_information_warning", "risk_assessment_management",
+              "animal_management", "other_review"
+            ]}
+          },
+          "service_contexts": {
+            "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
+            "items": {"enum": [
+              "acute_hospital", "mental_health_inpatient", "community_healthcare",
+              "primary_care", "pharmacy", "dental_care", "ambulance_emergency",
+              "care_home", "domiciliary_care", "supported_living",
+              "social_care_service", "hospice_palliative", "prison_custody",
+              "probation_service", "police", "court_legal", "fire_rescue",
+              "school", "higher_education", "workplace", "road", "rail",
+              "aviation", "maritime", "military_service", "farm_agriculture",
+              "housing_service", "domestic_home",
+              "residential_building", "public_space", "outdoor_water",
+              "sports_recreation", "commercial_retail", "online_digital",
+              "government_public_service", "mortuary_pathology", "multi_setting",
+              "not_applicable", "not_stated", "other_review"
+            ]}
+          },
+          "populations_at_risk": {
+            "type": "array", "minItems": 1, "maxItems": 2, "uniqueItems": true,
+            "items": {"enum": [
+              "patient", "care_home_resident", "social_care_user",
+              "person_in_custody", "child", "young_person", "student_in_education",
+              "trainee", "service_member", "worker", "professional_staff", "family_carer",
+              "road_user", "passenger", "consumer", "participant", "general_public", "multiple",
+              "not_stated", "other_review"
+            ]}
+          },
+          "communication_direction": {
+            "enum": [
+              "not_applicable", "within_team", "between_teams_same_organisation",
+              "between_organisations", "professional_to_patient",
+              "professional_to_family_carer", "patient_family_to_professional",
+              "service_to_public", "public_to_service", "bidirectional", "not_stated"
+            ]
+          },
+          "responsible_actor_type": {
+            "enum": [
+              "individual_practitioner", "team", "provider_organisation",
+              "commissioner", "regulator_inspector", "government_public_authority",
+              "manufacturer_supplier", "employer_operator", "multi_organisation",
+              "not_stated", "other_review"
+            ]
+          },
+          "responsible_actor_text": {"type": "string", "maxLength": 180},
+          "concern_status": {
+            "enum": [
+              "historical_failure", "current_system_gap", "future_risk",
+              "recommendation_only"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
