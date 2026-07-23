@@ -17,12 +17,362 @@ SCRIPT_DIR = Path(__file__).resolve().parents[1] / "scripts" / "issue_tracker_mv
 sys.path.insert(0, str(SCRIPT_DIR))
 
 import build_issue_index as pipeline  # noqa: E402
+import adjudicate_recurring_issue_groups as adjudication  # noqa: E402
 import assign_issue_prototypes as prototype_assignment  # noqa: E402
+import build_issue_registry as issue_registry  # noqa: E402
 import build_recurring_issue_audit as quality_audit  # noqa: E402
 import normalize_issue_occurrences as normalization  # noqa: E402
 import repair_reviewed_issue_groups as repair  # noqa: E402
+import run_full_issue_tracker as full_workflow  # noqa: E402
 import score_recurring_issue_audit as audit_scoring  # noqa: E402
 import tune_issue_index as tuning  # noqa: E402
+
+
+def test_targeted_risk_gate_flags_directional_and_action_conflicts():
+    groups = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_test",
+                "recurrence_status": "recurring",
+                "report_count": 4,
+                "issue_count": 4,
+                "median_centroid_similarity": 0.97,
+            }
+        ]
+    )
+    indexed = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_test",
+                "canonical_issue": "The service failed to escalate a referral",
+                "issue_object": "referral escalation",
+                "failure_state": "omitted",
+                "process_stage": "referral",
+                "communication_direction": "professional_to_professional",
+                "responsible_actor_role": "provider organisation",
+            },
+            {
+                "subissue_id": "sub_test",
+                "canonical_issue": "The receiving team failed to process the referral",
+                "issue_object": "referral processing",
+                "failure_state": "delayed",
+                "process_stage": "follow_up",
+                "communication_direction": "between_organisations",
+                "responsible_actor_role": "team",
+            },
+        ]
+    )
+
+    result = adjudication.build_risk_gate(
+        groups, indexed, risk_threshold=3, low_cohesion=0.955
+    ).iloc[0]
+
+    assert bool(result["flagged_for_adjudication"])
+    assert bool(result["direction_conflict"])
+    assert bool(result["lifecycle_conflict"])
+    assert bool(result["semantic_action_conflict"])
+
+
+def test_recurrence_boundary_alone_does_not_trigger_adjudication():
+    groups = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_tight",
+                "recurrence_status": "recurring",
+                "report_count": 3,
+                "issue_count": 3,
+                "median_centroid_similarity": 0.98,
+            }
+        ]
+    )
+    indexed = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_tight",
+                "canonical_issue": "The employer omitted an automated external defibrillator",
+                "issue_object": "automated external defibrillator",
+                "failure_state": "omitted",
+                "process_stage": "equipment_availability",
+                "communication_direction": "not_applicable",
+                "responsible_actor_role": "employer",
+            }
+            for _ in range(3)
+        ]
+    )
+
+    result = adjudication.build_risk_gate(
+        groups, indexed, risk_threshold=3, low_cohesion=0.955
+    ).iloc[0]
+
+    assert result["risk_reasons"] == "recurrence_boundary"
+    assert result["adjudication_priority"] == "monitor"
+    assert not bool(result["flagged_for_adjudication"])
+
+
+def test_recurrence_strength_preserves_discovery_status_but_bands_evidence():
+    assert pipeline.recurrence_strength(1) == "isolated"
+    assert pipeline.recurrence_strength(2) == "emerging"
+    assert pipeline.recurrence_strength(3) == "recurring_candidate"
+    assert pipeline.recurrence_strength(5) == "established_recurring"
+    assert pipeline.recurrence_strength(10) == "high_frequency"
+
+
+def test_failed_normalization_uses_nonempty_auditable_original_fallback():
+    frame = pd.DataFrame(
+        [
+            {
+                "issue_id": "iss_1",
+                "canonical_issue": "The provider organisation omitted follow-up",
+                "evidence_quote": "There was no follow-up.",
+                "responsible_actor_type": "provider_organisation",
+                "responsible_actor_text": "The Trust",
+            }
+        ]
+    )
+    output = normalization.build_output(frame, {})
+    output = normalization.apply_original_fallbacks(output, {"iss_1"})
+
+    assert output.loc[0, "normalization_status"] == "fallback_original"
+    assert output.loc[0, "responsible_actor_role"] == "provider organisation"
+    assert output.loc[0, "issue_object"] == "issue described in evidence"
+    assert output.loc[0, "canonical_issue"] == output.loc[
+        0, "canonical_issue_original"
+    ]
+    assert "normalization_failed_original_preserved" in output.loc[
+        0, "normalization_warnings"
+    ]
+
+
+def test_issue_registry_keeps_identity_when_a_cluster_expands():
+    first_groups = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_old",
+                "label": "Follow-up was omitted",
+                "description": "",
+                "recurrence_status": "recurring",
+                "recurrence_strength": "recurring_candidate",
+                "report_count": 3,
+                "issue_count": 3,
+            }
+        ]
+    )
+    first_assignments = pd.DataFrame(
+        {
+            "subissue_id": ["sub_old"] * 3,
+            "issue_id": ["iss_1", "iss_2", "iss_3"],
+        }
+    )
+    first_types, first_members, _, _ = issue_registry.build_registry(
+        first_groups,
+        first_assignments,
+        pd.DataFrame(),
+        pd.DataFrame(columns=["issue_type_id", "issue_id"]),
+        match_containment=0.5,
+        minimum_overlap=2,
+        generated_at="2026-01-01T00:00:00+00:00",
+    )
+    issue_type_id = first_types.loc[0, "issue_type_id"]
+    rerun_types, _, rerun_lineage, _ = issue_registry.build_registry(
+        first_groups,
+        first_assignments,
+        first_types,
+        first_members,
+        match_containment=0.5,
+        minimum_overlap=2,
+        generated_at="2026-01-02T00:00:00+00:00",
+    )
+    assert rerun_types.loc[0, "issue_type_id"] == issue_type_id
+    assert rerun_lineage.empty
+    first_types.loc[0, "curation_status"] = "human_validated"
+    first_types.loc[0, "publication_status"] = "published"
+    second_groups = first_groups.copy()
+    second_groups.loc[0, "subissue_id"] = "sub_new_membership_hash"
+    second_groups.loc[0, ["report_count", "issue_count"]] = [4, 4]
+    second_assignments = pd.DataFrame(
+        {
+            "subissue_id": ["sub_new_membership_hash"] * 4,
+            "issue_id": ["iss_1", "iss_2", "iss_3", "iss_4"],
+        }
+    )
+
+    second_types, _, lineage, registered = issue_registry.build_registry(
+        second_groups,
+        second_assignments,
+        first_types,
+        first_members,
+        match_containment=0.5,
+        minimum_overlap=2,
+        generated_at="2026-02-01T00:00:00+00:00",
+    )
+    active = second_types[second_types["registry_status"].eq("active")].iloc[0]
+
+    assert active["issue_type_id"] == issue_type_id
+    assert active["current_cluster_snapshot_id"] == "sub_new_membership_hash"
+    assert active["curation_status"] == "needs_review"
+    assert active["publication_status"] == "review_required"
+    assert lineage.iloc[0]["relationship"] == "expanded"
+    assert set(registered["issue_type_id"]) == {issue_type_id}
+
+
+def test_adjudication_split_preserves_omitted_members_as_singletons():
+    members = pd.DataFrame(
+        {
+            "issue_id": ["iss_1", "iss_2", "iss_3"],
+            "report_key": ["r1", "r2", "r3"],
+        }
+    )
+    payload = {
+        "decision": "split",
+        "rationale": "Different directions",
+        "exclude_issue_ids": [],
+        "partitions": [
+            {"label_hint": "sent", "issue_ids": ["iss_1", "iss_2"]},
+            {"label_hint": "received", "issue_ids": ["iss_3"]},
+        ],
+    }
+
+    decision = adjudication.validate_decision(payload, "sub_test", members)
+
+    assert decision["decision"] == "split"
+    assert len(decision["partitions"]) == 2
+    payload["partitions"][0]["issue_ids"] = ["iss_1"]
+    payload["partitions"][1]["issue_ids"] = ["iss_2"]
+    corrected = adjudication.validate_decision(payload, "sub_test", members)
+    assert corrected["partitions"][-1] == {
+        "label_hint": "Outlier retained separately",
+        "issue_ids": ["iss_3"],
+    }
+    payload["partitions"][1]["issue_ids"] = ["iss_unknown"]
+    with pytest.raises(ValueError, match="duplicate or unknown"):
+        adjudication.validate_decision(payload, "sub_test", members)
+
+
+def test_adjudication_corrects_one_character_opaque_id_typo():
+    valid = {"iss_094bb97c590acde4", "iss_1ea00d7477f086fb"}
+
+    assert (
+        adjudication.correct_opaque_issue_id("iss_094bb97590acde4", valid)
+        == "iss_094bb97c590acde4"
+    )
+    assert adjudication.correct_opaque_issue_id("iss_unrelated", valid) == "iss_unrelated"
+
+
+def test_rejected_group_becomes_singletons_without_losing_occurrences():
+    issue_ids = ["iss_1", "iss_2", "iss_3"]
+    decision = {
+        "decision": "reject",
+        "exclude_issue_ids": [],
+        "partitions": [],
+    }
+
+    units = adjudication.repair_units_for_decision(issue_ids, decision)
+
+    assert units == [
+        ("rejected_singleton", ["iss_1"], ""),
+        ("rejected_singleton", ["iss_2"], ""),
+        ("rejected_singleton", ["iss_3"], ""),
+    ]
+
+
+def test_stale_adjudication_decision_cannot_change_a_group_no_longer_flagged():
+    occurrences = pd.DataFrame(
+        [
+            {
+                "issue_id": f"iss_{number}",
+                "report_key": f"r{number}",
+                "canonical_issue": "The provider omitted follow-up",
+                "failure_state": "omitted",
+                "process_stage": "follow_up",
+                "responsible_actor_role": "provider organisation",
+                "issue_object": "patient follow-up",
+                "issue_themes": "clinical_assessment_care",
+            }
+            for number in range(1, 4)
+        ]
+    )
+    groups = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_same",
+                "label": "Follow-up omitted",
+                "description": "",
+                "recurrence_status": "recurring",
+            }
+        ]
+    )
+    assignments = pd.DataFrame(
+        {
+            "issue_id": ["iss_1", "iss_2", "iss_3"],
+            "subissue_id": ["sub_same"] * 3,
+        }
+    )
+    risk = pd.DataFrame(
+        [
+            {
+                "subissue_id": "sub_same",
+                "flagged_for_adjudication": False,
+                "risk_score": 1,
+                "risk_reasons": "recurrence_boundary",
+            }
+        ]
+    )
+    stale = {
+        "sub_same": {
+            "decision": "reject",
+            "rationale": "Produced under an older gate",
+            "exclude_issue_ids": [],
+            "partitions": [],
+        }
+    }
+
+    repaired, _, provenance, _ = adjudication.apply_adjudication(
+        occurrences,
+        np.asarray([[1.0, 0.0], [0.99, 0.01], [0.98, 0.02]], dtype=np.float32),
+        groups,
+        assignments,
+        risk,
+        stale,
+        min_recurring_reports=3,
+    )
+
+    assert repaired["adjudication_action"].tolist() == ["not_flagged"]
+    assert repaired["recurrence_status"].tolist() == ["recurring"]
+    assert provenance["decision"].tolist() == ["not_flagged"]
+
+
+def test_adjudication_outputs_can_feed_the_existing_audit_builder():
+    occurrences = pd.DataFrame(
+        {
+            "issue_id": ["iss_1", "iss_2"],
+            "report_key": ["r1", "r2"],
+            "canonical_issue": ["Issue one", "Issue two"],
+        }
+    )
+    groups = pd.DataFrame(
+        {
+            "final_group_id": ["adj_1"],
+            "recurrence_status": ["emerging"],
+            "report_count": [2],
+            "issue_count": [2],
+        }
+    )
+    assignments = pd.DataFrame(
+        {
+            "issue_id": ["iss_1", "iss_2"],
+            "final_group_id": ["adj_1", "adj_1"],
+            "assignment_similarity": [0.97, 0.96],
+            "recurrence_status": ["emerging", "emerging"],
+        }
+    )
+
+    subissues, indexed = adjudication.compatible_audit_frames(
+        occurrences, groups, assignments
+    )
+
+    assert subissues.loc[0, "subissue_id"] == "adj_1"
+    assert indexed["subissue_id"].tolist() == ["adj_1", "adj_1"]
+    assert indexed["recurrence_status"].tolist() == ["emerging", "emerging"]
 
 
 def _raw_v3_issue(**overrides):
@@ -64,6 +414,67 @@ def test_source_span_validation_distinguishes_section_and_missing_text():
         False,
         "not_found",
     )
+
+
+def test_investigation_only_report_is_in_scope_and_evidence_is_valid(tmp_path: Path):
+    input_path = tmp_path / "reports.csv"
+    pd.DataFrame(
+        [
+            {
+                "id": "report-1",
+                "url": "https://example.test/report-1",
+                "date": "2026-01-01",
+                "coroner": "A Coroner",
+                "area": "Area",
+                "receiver": "Receiver",
+                "investigation": "The employer did not provide first aid equipment.",
+                "circumstances": "",
+                "concerns": "",
+            }
+        ]
+    ).to_csv(input_path, index=False)
+
+    reports = pipeline.load_reports(input_path, subset_size=0, seed=42)
+    report = reports.iloc[0]
+
+    assert len(reports) == 1
+    assert "Investigation:\nThe employer did not provide" in pipeline.build_source_text(
+        report, 12000
+    )
+    assert pipeline.locate_evidence_section(
+        "The employer did not provide first aid equipment.", report
+    ) == (True, "investigation", "exact_normalised")
+
+
+def test_full_workflow_input_coverage_makes_exclusions_explicit(tmp_path: Path):
+    input_path = tmp_path / "reports.csv"
+    pd.DataFrame(
+        [
+            {
+                "id": "usable",
+                "url": "https://example.test/usable",
+                "concerns": "",
+                "circumstances": "",
+                "investigation": "Usable investigation evidence.",
+            },
+            {
+                "id": "empty",
+                "url": "https://example.test/empty",
+                "concerns": "",
+                "circumstances": "",
+                "investigation": "",
+            },
+        ]
+    ).to_csv(input_path, index=False)
+
+    metrics = full_workflow.build_input_coverage(input_path, tmp_path)
+    excluded = pd.read_csv(tmp_path / "00_excluded_reports.csv")
+
+    assert metrics["usable_reports"] == 1
+    assert metrics["excluded_missing_source_text"] == 1
+    assert excluded[["id", "exclusion_reason"]].to_dict("records") == [
+        {"id": "empty", "exclusion_reason": "missing_source_text"}
+    ]
 
 
 def test_invalid_elliptical_source_span_can_recover_exact_sentence():
@@ -702,6 +1113,7 @@ def test_quality_audit_group_selection_is_stratified_and_bounded():
         boundary_size=1,
         risk_size=1,
         large_report_count=8,
+        large_size=1,
         seed=7,
     )
 

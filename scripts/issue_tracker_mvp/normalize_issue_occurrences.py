@@ -21,6 +21,17 @@ import build_issue_index as pipeline
 
 NORMALIZATION_VERSION = "issue-normalization-v1"
 DEFAULT_SCHEMA_PATH = Path(__file__).with_name("issue_normalization_schema_v1.json")
+ACTOR_TYPE_FALLBACKS = {
+    "provider organisation": "provider organisation",
+    "individual practitioner": "individual practitioner",
+    "team": "team",
+    "employer": "employer",
+    "government or public authority": "government or public authority",
+    "manufacturer": "manufacturer",
+    "regulator": "regulator",
+    "multi organisation": "multiple organisations",
+    "person individual": "individual",
+}
 
 SYSTEM_PROMPT = """You normalize already-extracted safety issues from Prevention of Future Death reports.
 Return only JSON matching the requested schema. Use British English.
@@ -410,7 +421,12 @@ def build_output(frame: pd.DataFrame, records: dict[str, dict[str, Any]]) -> pd.
         for result in record.get("results") or []:
             normalized[pipeline.clean_text(result.get("issue_id"))] = result
     output = frame.copy()
-    output.insert(output.columns.get_loc("canonical_issue") + 1, "canonical_issue_original", output["canonical_issue"])
+    if "canonical_issue_original" not in output.columns:
+        output.insert(
+            output.columns.get_loc("canonical_issue") + 1,
+            "canonical_issue_original",
+            output["canonical_issue"],
+        )
     output["responsible_actor_role"] = ""
     output["issue_object"] = ""
     output["normalization_version"] = NORMALIZATION_VERSION
@@ -458,9 +474,46 @@ def build_output(frame: pd.DataFrame, records: dict[str, dict[str, Any]]) -> pd.
     return output
 
 
+def apply_original_fallbacks(
+    output: pd.DataFrame, failed_issue_ids: set[str]
+) -> pd.DataFrame:
+    """Preserve failed rows with explicit, reviewable non-empty fallback fields."""
+    if not failed_issue_ids:
+        return output
+    output = output.copy()
+    for index in output.index[output["issue_id"].isin(failed_issue_ids)]:
+        actor_type = pipeline.normalised_key(
+            output.at[index, "responsible_actor_type"]
+            if "responsible_actor_type" in output.columns
+            else ""
+        )
+        actor = ACTOR_TYPE_FALLBACKS.get(actor_type, "not stated")
+        output.at[index, "responsible_actor_role"] = actor
+        output.at[index, "issue_object"] = "issue described in evidence"
+        output.at[index, "normalization_status"] = "fallback_original"
+        warnings = [
+            item
+            for item in pipeline.clean_text(
+                output.at[index, "normalization_warnings"]
+            ).split(" | ")
+            if item
+        ]
+        warnings.extend(
+            [
+                "normalization_failed_original_preserved",
+                "actor_role_deterministic_fallback",
+                "issue_object_unspecified_fallback",
+            ]
+        )
+        output.at[index, "normalization_warnings"] = " | ".join(
+            dict.fromkeys(warnings)
+        )
+    return output
+
+
 def build_review_queue(output: pd.DataFrame) -> pd.DataFrame:
     return output[
-        output["normalization_status"].eq("failed")
+        output["normalization_status"].isin({"failed", "fallback_original"})
         | output["normalization_warnings"].str.len().gt(0)
     ].copy()
 
@@ -509,7 +562,7 @@ def main() -> None:
     output = build_output(frame, records)
     selected_ids = set(selected["issue_id"])
     failed_ids = selected_ids - set(output.loc[output["normalization_status"] == "success", "issue_id"])
-    output.loc[output["issue_id"].isin(failed_ids), "normalization_status"] = "failed"
+    output = apply_original_fallbacks(output, failed_ids)
     output.to_csv(output_path, index=False)
     review = build_review_queue(output)
     review.to_csv(review_path, index=False)
@@ -521,6 +574,9 @@ def main() -> None:
         "issues_selected": len(selected),
         "issues_normalized": int((output["normalization_status"] == "success").sum()),
         "issues_failed": len(failed_ids),
+        "issues_fallback_original": int(
+            (output["normalization_status"] == "fallback_original").sum()
+        ),
         "issues_not_selected": int((output["normalization_status"] == "not_selected").sum()),
         "issues_flagged_for_review": len(review),
         "batches_total": len(batches),

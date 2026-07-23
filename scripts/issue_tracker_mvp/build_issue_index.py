@@ -435,9 +435,15 @@ def load_reports(path: Path, subset_size: int, seed: int) -> pd.DataFrame:
         raise ValueError(f"Input CSV is missing columns: {sorted(missing)}")
     if "receiver" not in frame.columns:
         frame["receiver"] = ""
-    for column in required | {"receiver"}:
+    if "investigation" not in frame.columns:
+        frame["investigation"] = ""
+    for column in required | {"receiver", "investigation"}:
         frame[column] = frame[column].map(clean_text)
-    frame = frame[(frame["circumstances"].str.len() > 0) | (frame["concerns"].str.len() > 0)]
+    frame = frame[
+        (frame["circumstances"].str.len() > 0)
+        | (frame["concerns"].str.len() > 0)
+        | (frame["investigation"].str.len() > 0)
+    ]
     frame = frame.drop_duplicates(subset=["url"], keep="first").reset_index(drop=True)
     if 0 < subset_size < len(frame):
         frame = frame.sample(n=subset_size, random_state=seed).reset_index(drop=True)
@@ -448,13 +454,20 @@ def load_reports(path: Path, subset_size: int, seed: int) -> pd.DataFrame:
 def build_source_text(report: pd.Series, max_chars: int) -> str:
     concerns = clean_text(report.get("concerns"))
     circumstances = clean_text(report.get("circumstances"))
-    heading_budget = len("Concerns:\n\n\nCircumstances:\n")
+    investigation = clean_text(report.get("investigation"))
+    heading_budget = len("Concerns:\n\n\nCircumstances:\n\n\nInvestigation:\n")
     budget = max(500, max_chars - heading_budget)
     # Preserve the concerns section first; it is the coroner's explicit future-risk statement.
     concerns_part = concerns[:budget]
     remaining = max(0, budget - len(concerns_part))
     circumstances_part = circumstances[:remaining]
-    return f"Concerns:\n{concerns_part}\n\nCircumstances:\n{circumstances_part}"
+    remaining = max(0, remaining - len(circumstances_part))
+    investigation_part = investigation[:remaining]
+    return (
+        f"Concerns:\n{concerns_part}\n\n"
+        f"Circumstances:\n{circumstances_part}\n\n"
+        f"Investigation:\n{investigation_part}"
+    )
 
 
 def source_span_status(span: str, section: str, report: pd.Series) -> tuple[bool, str]:
@@ -466,9 +479,11 @@ def source_span_status(span: str, section: str, report: pd.Series) -> tuple[bool
     sources = {
         "concerns": clean_text(report.get("concerns")),
         "circumstances": clean_text(report.get("circumstances")),
-        "both": f"{clean_text(report.get('concerns'))} {clean_text(report.get('circumstances'))}",
-        "unclear": f"{clean_text(report.get('concerns'))} {clean_text(report.get('circumstances'))}",
+        "investigation": clean_text(report.get("investigation")),
     }
+    sources["all"] = " ".join(sources.values())
+    sources["both"] = sources["all"]
+    sources["unclear"] = sources["all"]
     haystack = normalised_key(sources.get(section, sources["unclear"]))
     if needle in haystack:
         return True, "exact_normalised"
@@ -486,12 +501,24 @@ def locate_evidence_section(quote: str, report: pd.Series) -> tuple[bool, str, s
         return False, "not_stated", "too_short"
     in_concerns = needle in normalised_key(report.get("concerns"))
     in_circumstances = needle in normalised_key(report.get("circumstances"))
-    if in_concerns and in_circumstances:
+    in_investigation = needle in normalised_key(report.get("investigation"))
+    matched_sections = [
+        section
+        for section, matched in (
+            ("concerns", in_concerns),
+            ("circumstances", in_circumstances),
+            ("investigation", in_investigation),
+        )
+        if matched
+    ]
+    if len(matched_sections) > 1:
         return True, "both", "exact_normalised"
     if in_concerns:
         return True, "concerns", "exact_normalised"
     if in_circumstances:
         return True, "circumstances", "exact_normalised"
+    if in_investigation:
+        return True, "investigation", "exact_normalised"
     return False, "not_stated", "not_found"
 
 
@@ -508,7 +535,13 @@ def recover_source_span(issue: dict[str, Any], report: pd.Series) -> str:
         issue.get("evidence_quote") or issue.get("source_span")
     )
     has_ellipsis = "..." in proposed_span or "…" in proposed_span
-    source = f"{clean_text(report.get('concerns'))} {clean_text(report.get('circumstances'))}"
+    source = " ".join(
+        [
+            clean_text(report.get("concerns")),
+            clean_text(report.get("circumstances")),
+            clean_text(report.get("investigation")),
+        ]
+    )
     sentence_chunks = [
         clean_text(chunk)
         for chunk in re.split(r"(?<=[.!?])\s+|\n+", source)
@@ -1352,6 +1385,19 @@ def recurrence_status(report_count: int, minimum: int) -> str:
     return "isolated"
 
 
+def recurrence_strength(report_count: int, minimum: int = 3) -> str:
+    """Describe evidence volume without changing the discovery threshold."""
+    if report_count < 2:
+        return "isolated"
+    if report_count < minimum:
+        return "emerging"
+    if report_count <= 4:
+        return "recurring_candidate"
+    if report_count <= 9:
+        return "established_recurring"
+    return "high_frequency"
+
+
 def build_index(
     occurrences: pd.DataFrame,
     *,
@@ -1541,6 +1587,7 @@ def build_index(
         subset = occurrences.iloc[members]
         report_count = int(subset["report_key"].nunique())
         status = recurrence_status(report_count, args.min_recurring_reports)
+        strength = recurrence_strength(report_count, args.min_recurring_reports)
         member_ids = sorted(subset["issue_id"].map(clean_text).tolist())
         subissue_id = f"sub_{stable_hash(*member_ids)}"
         label, description, representative_index = label_subissue(
@@ -1581,6 +1628,7 @@ def build_index(
                 "label": label,
                 "description": description,
                 "recurrence_status": status,
+                "recurrence_strength": strength,
                 "report_count": report_count,
                 "issue_count": int(len(subset)),
                 "first_date": first_date,
@@ -1602,12 +1650,19 @@ def build_index(
                     "subissue_id": subissue_id,
                     "assignment_similarity": scores[index],
                     "recurrence_status": status,
+                    "recurrence_strength": strength,
                 }
             )
 
     assignments = pd.DataFrame(
         assignment_rows,
-        columns=["issue_id", "subissue_id", "assignment_similarity", "recurrence_status"],
+        columns=[
+            "issue_id",
+            "subissue_id",
+            "assignment_similarity",
+            "recurrence_status",
+            "recurrence_strength",
+        ],
     )
     subissues = pd.DataFrame(subissue_rows)
     assignments.to_csv(run_dir / "03_issue_assignments.csv", index=False)
@@ -1626,6 +1681,7 @@ def build_index(
 
     joined = occurrences.merge(assignments, on="issue_id", how="left")
     joined["recurrence_status"] = joined["recurrence_status"].fillna("ungrouped")
+    joined["recurrence_strength"] = joined["recurrence_strength"].fillna("ungrouped")
     joined.to_csv(run_dir / "03_occurrences_indexed.csv", index=False)
     assigned = joined[joined["subissue_id"].fillna("").str.len() > 0].copy()
     if assigned.empty:
@@ -1633,7 +1689,7 @@ def build_index(
             columns=[
                 "subissue_id", "report_key", "report_id", "report_url", "report_date",
                 "representative_occurrence_id", "occurrence_count", "max_assignment_similarity",
-                "recurrence_status",
+                "recurrence_status", "recurrence_strength",
             ]
         )
     else:
@@ -1648,6 +1704,7 @@ def build_index(
                 occurrence_count=("issue_id", "size"),
                 max_assignment_similarity=("assignment_similarity", "max"),
                 recurrence_status=("recurrence_status", "first"),
+                recurrence_strength=("recurrence_strength", "first"),
             )
         )
     presence.to_csv(run_dir / "03_issue_report_presence.csv", index=False)
@@ -1676,6 +1733,12 @@ def build_index(
         "initial_components": int(len(components)),
         "candidate_subissues": int(len(subissues)),
         "recurring_subissues": int(len(recurring_ids)),
+        "recurrence_strength_counts": {
+            key: int(value)
+            for key, value in subissues.get(
+                "recurrence_strength", pd.Series(dtype=str)
+            ).value_counts().to_dict().items()
+        },
         "emerging_subissues": int((subissues.get("recurrence_status", pd.Series(dtype=str)) == "emerging").sum()),
         "isolated_subissues": int((subissues.get("recurrence_status", pd.Series(dtype=str)) == "isolated").sum()),
         "recurring_issue_occurrences": int(len(recurring_occurrences)),

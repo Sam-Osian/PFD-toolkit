@@ -2,8 +2,10 @@
 
 ## Recommended v3 pipeline
 
-`build_issue_index.py` is the current recommended pipeline. It is designed for
-one expensive overnight pass and repeatable, model-free downstream analysis:
+`run_full_issue_tracker.py` is the production archive entry point;
+`build_issue_index.py` remains the lower-level extraction/indexing engine. The
+workflow is designed for one expensive resumable pass and repeatable,
+model-free downstream analysis:
 
 1. A concerns-first structured Ollama request extracts and normalises all issues.
    Reports that reach the issue cap receive one continuation request.
@@ -125,45 +127,80 @@ Start Ollama and run a small batch before committing to the complete archive:
 Check `01_extraction_metrics.json`, `01_extraction_failures.csv`, and a sample
 of `01_issue_occurrences.csv`. Evidence-quote validity is checked automatically.
 
-### Complete overnight run
+### Complete production workflow
+
+Use `run_full_issue_tracker.py` for the archive. It runs the validated stages in
+order: resumable extraction, actor/object normalization, quality gates, the
+frozen 44/56 dual-view index, durable issue registration, and deterministic
+random/stratified audit preparation and adjudication-risk preparation. It does
+not run model adjudication.
 
 ```bash
-.venv/bin/python scripts/issue_tracker_mvp/build_issue_index.py \
-  --subset-size 0 \
-  --output-dir artifacts/issue_index_v3 \
+.venv/bin/python scripts/issue_tracker_mvp/run_full_issue_tracker.py \
+  --input-csv all_reports.csv \
+  --output-dir artifacts/issue_index_v3_full \
   --model gemma4:26b \
   --embedding-model Qwen/Qwen3-Embedding-8B \
-  --min-recurring-reports 3 \
-  --top-k 40 \
-  --edge-similarity 0.84 \
-  --split-similarity 0.872 \
-  --min-centroid-similarity 0.83
+  --extraction-workers 1 \
+  --normalization-workers 2
 ```
 
-The command prints its timestamped run directory at start-up. To resume an
-interrupted run, pass that exact directory:
+The command prints its timestamped run directory immediately. After an
+interruption, rerun with that exact directory:
 
 ```bash
-.venv/bin/python scripts/issue_tracker_mvp/build_issue_index.py \
-  --run-dir artifacts/issue_index_v3/run_YYYYMMDD_HHMMSS \
-  --subset-size 0 \
+.venv/bin/python scripts/issue_tracker_mvp/run_full_issue_tracker.py \
+  --run-dir artifacts/issue_index_v3_full/run_YYYYMMDD_HHMMSS \
+  --input-csv all_reports.csv \
   --model gemma4:26b \
-  --embedding-model Qwen/Qwen3-Embedding-8B
+  --embedding-model Qwen/Qwen3-Embedding-8B \
+  --extraction-workers 1 \
+  --normalization-workers 2
 ```
 
-To rebuild grouping later without any Ollama extraction calls:
+Completed extraction and normalization records are skipped and valid embedding
+caches are reused. Use `--stage extract`, `normalize`, `index`, `registry`,
+`audit`, or `risk` for operational recovery. `workflow_manifest.json` records completion
+and enforces defaults of zero extraction failures, at least 98% evidence
+validity, and no more than 2% normalization fallback.
 
-```bash
-.venv/bin/python scripts/issue_tracker_mvp/build_issue_index.py \
-  --stage index \
-  --run-dir artifacts/issue_index_v3/run_YYYYMMDD_HHMMSS \
-  --no-label-subissues \
-  --edge-similarity 0.90 \
-  --split-similarity 0.92
-```
+Do not use `build_issue_index.py --stage all` for production: that lower-level
+command does not invoke the separate actor/object normalizer.
 
-If `02_issue_embeddings.npy` remains in the run directory, the index stage also
-reuses embeddings.
+`00_input_coverage.json` records input rows, usable unique reports, duplicate
+URLs, and reports with no source text. `00_excluded_reports.csv` makes every
+exclusion explicit. Concerns remain the highest-priority source, followed by
+circumstances; investigation text is used as a final fallback for otherwise
+empty reports and is validated as an evidence section.
+
+### Durable issue identities and recurrence strength
+
+Snapshot cluster IDs remain membership hashes and therefore change when reports
+enter or leave a group. `build_issue_registry.py` creates a stable
+`issue_type_id`, matches expanded or contracted snapshots by occurrence
+overlap, and records continuation, split, and merge lineage in
+`05_issue_registry/`.
+
+Human-validation and publication states carry forward only for unchanged
+membership. A changed validated type becomes `needs_review`; a changed
+published type becomes `review_required`. For a later archive snapshot, pass
+its predecessor with `--previous-registry-dir`.
+
+The three-report discovery threshold remains unchanged. A separate
+`recurrence_strength` field communicates evidence volume:
+
+- `isolated`: one report;
+- `emerging`: two reports;
+- `recurring_candidate`: three or four reports;
+- `established_recurring`: five to nine reports;
+- `high_frequency`: ten or more reports.
+
+The audit stage keeps population inference separate from diagnostic review. It
+writes a 60-group purely random queue to `07_quality_audit_random/` and a
+100-group queue containing at most 25 largest, 25 boundary, 25 facet-risk, and
+random-fill groups to `07_quality_audit_stratified/`. Only the random queue
+should be used to estimate overall precision; the stratified queue diagnoses
+where the pipeline fails.
 
 ### Compare grouping configurations
 
@@ -218,6 +255,76 @@ coherent-as-is, correctable membership, overmerge, false-recurrence, and
 missed-link results. Because the sample deliberately over-represents risky
 groups and near-threshold pairs, its percentages are diagnostic rather than
 population-weighted estimates.
+
+### Targeted recurring-group adjudication
+
+After deterministic grouping is frozen, route only risk-bearing recurring
+groups through the constrained adjudicator. The three-report boundary is a risk
+point but no longer triggers adjudication by itself. Boundary groups are queued
+when they also contain generic/mixed objects, low cohesion, incompatible action
+stages, communication directions, or semantic actions:
+
+```bash
+RUN_DIR="artifacts/issue_index_v3_1500_tuned/run_20260722_blind_audit"
+
+.venv/bin/python scripts/issue_tracker_mvp/adjudicate_recurring_issue_groups.py \
+  --run-dir "$RUN_DIR" \
+  --stage risk
+```
+
+Inspect `08_targeted_adjudication/01_group_risk_scores.csv`, then run the
+resumable local-model stage:
+
+```bash
+.venv/bin/python scripts/issue_tracker_mvp/adjudicate_recurring_issue_groups.py \
+  --run-dir "$RUN_DIR" \
+  --stage adjudicate \
+  --model gemma4:26b
+```
+
+The checkpoint validates every decision. `split` must partition every source
+issue ID exactly once; invalid responses receive a corrective retry and can
+never reach repair. Rerunning the same command skips completed groups.
+
+Once the checkpoint covers every flagged group, apply decisions without model
+calls, then label only changed recurring outputs:
+
+```bash
+.venv/bin/python scripts/issue_tracker_mvp/adjudicate_recurring_issue_groups.py \
+  --run-dir "$RUN_DIR" \
+  --stage repair
+
+.venv/bin/python scripts/issue_tracker_mvp/adjudicate_recurring_issue_groups.py \
+  --run-dir "$RUN_DIR" \
+  --stage label \
+  --model gemma4:26b
+```
+
+Repair preserves every extracted occurrence. Accepted and unflagged groups keep
+their stable IDs; exclusions become a retained core plus singleton outputs;
+splits receive stable membership-derived IDs; rejects become singleton groups.
+`03_adjudication_provenance.csv` records every source-to-final transformation.
+Outputs are non-destructive machine proposals with
+`publication_status=not_published`. Explicit `03_proposed_*` and
+`04_proposed_*` files are written alongside the earlier `final` compatibility
+filenames, and the source candidate index is never overwritten.
+
+For a final untouched evaluation, use the compatible final index files and
+exclude one or more previous review-member files:
+
+```bash
+.venv/bin/python scripts/issue_tracker_mvp/build_recurring_issue_audit.py \
+  --run-dir "$RUN_DIR" \
+  --groups-csv "$RUN_DIR/08_targeted_adjudication/04_final_subissues.csv" \
+  --indexed-csv "$RUN_DIR/08_targeted_adjudication/04_final_occurrences_indexed.csv" \
+  --output-dir "$RUN_DIR/09_final_blind_audit" \
+  --group-review-size 60 \
+  --boundary-sample-size 0 \
+  --facet-risk-sample-size 0 \
+  --large-report-count 999 \
+  --missed-link-review-size 0 \
+  --exclude-group-members-csv "$RUN_DIR/07_blind_quality_audit/group_review_members.csv"
+```
 
 ### Apply reviewed group repairs
 

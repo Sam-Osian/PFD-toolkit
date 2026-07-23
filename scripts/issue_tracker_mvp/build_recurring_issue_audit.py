@@ -28,10 +28,28 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument(
+        "--groups-csv",
+        type=Path,
+        default=None,
+        help="Optional repaired/final group CSV instead of <run-dir>/03_subissues.csv.",
+    )
+    parser.add_argument(
+        "--indexed-csv",
+        type=Path,
+        default=None,
+        help="Optional repaired/final indexed occurrence CSV.",
+    )
     parser.add_argument("--group-review-size", type=int, default=80)
     parser.add_argument("--boundary-sample-size", type=int, default=20)
     parser.add_argument("--facet-risk-sample-size", type=int, default=20)
     parser.add_argument("--large-report-count", type=int, default=8)
+    parser.add_argument(
+        "--large-sample-size",
+        type=int,
+        default=20,
+        help="Maximum number of largest groups to include; 0 disables this stratum.",
+    )
     parser.add_argument("--missed-link-review-size", type=int, default=70)
     parser.add_argument("--missed-link-min-similarity", type=float, default=0.78)
     parser.add_argument(
@@ -43,7 +61,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--exclude-group-members-csv",
         type=Path,
-        default=None,
+        action="append",
+        default=[],
         help=(
             "Optional CSV containing issue_id values; any group containing one of "
             "those reviewed members is excluded from sampling."
@@ -77,6 +96,7 @@ def select_group_review(
     boundary_size: int,
     risk_size: int,
     large_report_count: int,
+    large_size: int,
     seed: int,
 ) -> pd.DataFrame:
     if groups.empty or review_size <= 0:
@@ -90,13 +110,16 @@ def select_group_review(
             selected[group_id] = row
             reasons.setdefault(group_id, set()).add(reason)
 
-    add(
-        groups[groups["report_count"].ge(large_report_count)].sort_values(
-            ["report_count", "issue_count", "subissue_id"],
-            ascending=[False, False, True],
-        ),
-        "large_group",
-    )
+    if large_size > 0:
+        add(
+            groups[groups["report_count"].ge(large_report_count)]
+            .sort_values(
+                ["report_count", "issue_count", "subissue_id"],
+                ascending=[False, False, True],
+            )
+            .head(large_size),
+            "large_group",
+        )
     remaining = groups[~groups["subissue_id"].isin(selected)]
     boundary = remaining[remaining["report_count"].eq(3)]
     if len(boundary) > boundary_size:
@@ -285,8 +308,10 @@ def main() -> None:
         else run_dir / "07_quality_audit"
     )
     output_dir.mkdir(parents=True, exist_ok=True)
-    indexed = pd.read_csv(run_dir / "03_occurrences_indexed.csv").fillna("")
-    subissues = pd.read_csv(run_dir / "03_subissues.csv").fillna("")
+    indexed_path = args.indexed_csv or run_dir / "03_occurrences_indexed.csv"
+    groups_path = args.groups_csv or run_dir / "03_subissues.csv"
+    indexed = pd.read_csv(indexed_path).fillna("")
+    subissues = pd.read_csv(groups_path).fillna("")
     embeddings = np.load(run_dir / "02_issue_embeddings.npy")
     groups = group_diagnostics(indexed, subissues)
     recurring_groups_total = int(len(groups))
@@ -299,10 +324,12 @@ def main() -> None:
         excluded_group_count = int(groups["subissue_id"].isin(excluded_ids).sum())
         groups = groups[~groups["subissue_id"].isin(excluded_ids)].copy()
     if args.exclude_group_members_csv:
-        exclusions = pd.read_csv(args.exclude_group_members_csv).fillna("")
-        if "issue_id" not in exclusions.columns:
-            raise ValueError("Member exclusion CSV must contain an issue_id column")
-        reviewed_issue_ids = set(exclusions["issue_id"].astype(str))
+        reviewed_issue_ids: set[str] = set()
+        for exclusion_path in args.exclude_group_members_csv:
+            exclusions = pd.read_csv(exclusion_path).fillna("")
+            if "issue_id" not in exclusions.columns:
+                raise ValueError("Member exclusion CSV must contain an issue_id column")
+            reviewed_issue_ids.update(exclusions["issue_id"].astype(str))
         member_group_ids = set(
             indexed.loc[indexed["issue_id"].isin(reviewed_issue_ids), "subissue_id"]
             .astype(str)
@@ -317,6 +344,7 @@ def main() -> None:
         boundary_size=args.boundary_sample_size,
         risk_size=args.facet_risk_sample_size,
         large_report_count=args.large_report_count,
+        large_size=args.large_sample_size,
         seed=args.seed,
     )
     selected_members = indexed[indexed["subissue_id"].isin(group_queue["subissue_id"])]
