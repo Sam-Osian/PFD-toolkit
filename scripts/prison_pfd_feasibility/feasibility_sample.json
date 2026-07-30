@@ -1,0 +1,113 @@
+{
+  "sample_version": "prison-pfd-feasibility-v1",
+  "description": "Twenty deliberately selected reports spanning five overlapping feasibility threads and 2022-2024.",
+  "threads": {
+    "acct_suicide_risk": "ACCT, suicide-risk identification, recording, review and escalation",
+    "observation_ligature": "Observation, welfare checks, emergency cell entry and ligature safety",
+    "mental_health_access": "Mental-health recognition, assessment, referral, transfer and out-of-hours provision",
+    "drugs_deterioration_emergency": "Drug risks, physical deterioration and emergency response",
+    "candour_learning": "Candour, disclosure, record integrity, investigation feedback and organisational learning"
+  },
+  "cases": [
+    {
+      "andrew_identifier": "2 Jefferies20-12-24",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/haydar-jefferies-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "mental_health_access"]
+    },
+    {
+      "andrew_identifier": "3 Binfield17-12-24PRE INQUEST",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/anthony-binfield-prevention-of-future-deaths-report-2/",
+      "threads": ["observation_ligature"]
+    },
+    {
+      "andrew_identifier": "6 Gobell3-12-24Circum--stances not attachedMedical Cause of death (MCD) unknown",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/paul-gobell-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "candour_learning"]
+    },
+    {
+      "andrew_identifier": "20 Sleaford14-10-24",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/stephen-sleaford-prevention-of-future-deaths-report/",
+      "threads": ["observation_ligature", "drugs_deterioration_emergency"]
+    },
+    {
+      "andrew_identifier": "29 Steadman12-08-24",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/craig-steadman-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "candour_learning"]
+    },
+    {
+      "andrew_identifier": "32 McDonnell7-08-24",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/kevin-mcdonnell-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "candour_learning"]
+    },
+    {
+      "andrew_identifier": "36 Harrison19-07-24",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/benjamin-harrison-prevention-of-future-deaths-report/",
+      "threads": ["drugs_deterioration_emergency", "mental_health_access"]
+    },
+    {
+      "andrew_identifier": "71 Hughes04-03-24",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/lee-hughes-prevention-of-future-deaths-report/",
+      "threads": ["drugs_deterioration_emergency"]
+    },
+    {
+      "andrew_identifier": "116 Smith07-07-23",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/christopher-smith-prevention-of-future-deaths-report/",
+      "threads": ["mental_health_access", "drugs_deterioration_emergency", "candour_learning"]
+    },
+    {
+      "andrew_identifier": "122 Harris21-06-23",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/matthew-harris-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "mental_health_access"]
+    },
+    {
+      "andrew_identifier": "129Huntley14-05-23",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/thomas-huntley-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "observation_ligature", "mental_health_access"]
+    },
+    {
+      "andrew_identifier": "133 Singh15-03-23",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/jai-singh-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "mental_health_access"]
+    },
+    {
+      "andrew_identifier": "137 Williams 02-02-23",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/jason-williams-prevention-of-future-deaths-report/",
+      "threads": ["drugs_deterioration_emergency", "candour_learning"]
+    },
+    {
+      "andrew_identifier": "139 Forrester30-01-23",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/nathan-forrester-prevention-of-future-deaths-report/",
+      "threads": ["drugs_deterioration_emergency"]
+    },
+    {
+      "andrew_identifier": "146Braund20-12-22",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/alexander-braund-prevention-of-future-deaths-report/",
+      "threads": ["drugs_deterioration_emergency", "candour_learning"]
+    },
+    {
+      "andrew_identifier": "148 Johnson02-12-22",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/lewis-johnson-prevention-of-future-deaths-report/",
+      "threads": ["observation_ligature", "drugs_deterioration_emergency"]
+    },
+    {
+      "andrew_identifier": "156 Langdell21-10-22",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/carl-langdell-prevention-of-future-deaths-report/",
+      "threads": ["acct_suicide_risk", "observation_ligature"]
+    },
+    {
+      "andrew_identifier": "167 Powter21-07-22",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/lewis-powter-prevention-of-future-deaths-report/",
+      "threads": ["mental_health_access", "drugs_deterioration_emergency"]
+    },
+    {
+      "andrew_identifier": "185 Rose07-04-22",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/nicholas-rose-prevention-of-future-deaths-report/",
+      "threads": ["observation_ligature", "drugs_deterioration_emergency"]
+    },
+    {
+      "andrew_identifier": "200 Miller05-01-22",
+      "report_url": "https://www.judiciary.uk/prevention-of-future-death-reports/ian-miller-prevention-of-future-deaths-report/",
+      "threads": ["drugs_deterioration_emergency"]
+    }
+  ]
+}

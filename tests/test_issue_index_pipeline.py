@@ -23,6 +23,8 @@ import build_issue_registry as issue_registry  # noqa: E402
 import build_recurring_issue_audit as quality_audit  # noqa: E402
 import normalize_issue_occurrences as normalization  # noqa: E402
 import repair_reviewed_issue_groups as repair  # noqa: E402
+import prepare_relational_linkage_pilot as relational_pilot  # noqa: E402
+import run_relational_linkage_experiment as relational_linkage  # noqa: E402
 import run_full_issue_tracker as full_workflow  # noqa: E402
 import score_recurring_issue_audit as audit_scoring  # noqa: E402
 import tune_issue_index as tuning  # noqa: E402
@@ -1505,13 +1507,17 @@ def test_normalization_preserves_requested_order_and_trims_fields():
         {
             "issue_id": "i2",
             "responsible_actor_role": "the local highway authority",
+            "failed_action": "inspect and maintain",
             "issue_object": "road barrier inspection and maintenance arrangements",
+            "counterparty_role": "road users",
             "canonical_issue": "The local highway authority did not adequately inspect and maintain road barriers before foreseeable vehicle impacts occurred",
         },
         {
             "issue_id": "i1",
             "responsible_actor_role": "community mental health service",
+            "failed_action": "contact",
             "issue_object": "follow-up contact",
+            "counterparty_role": "patient",
             "canonical_issue": "The community mental health service did not make follow-up contact after the patient sought help",
         },
     ]
@@ -1528,7 +1534,9 @@ def test_normalization_rejects_missing_or_unknown_issue_ids():
         {
             "issue_id": "unknown",
             "responsible_actor_role": "employer",
+            "failed_action": "assess",
             "issue_object": "workplace risk assessment",
+            "counterparty_role": "worker",
             "canonical_issue": "The employer omitted a workplace risk assessment",
         }
     ]
@@ -1543,7 +1551,9 @@ def test_normalization_recovers_unique_near_match_issue_id():
         {
             "issue_id": "iss_3c64aff0b03b479",
             "responsible_actor_role": "provider organisation",
+            "failed_action": "maintain",
             "issue_object": "clinical records",
+            "counterparty_role": "not stated",
             "canonical_issue": "Provider organisation failed to maintain clinical records",
         }
     ]
@@ -1566,7 +1576,9 @@ def test_normalization_requires_stated_actor_in_canonical_issue():
         {
             "issue_id": "i1",
             "responsible_actor_role": "mental health service",
+            "failed_action": "contact",
             "issue_object": "follow-up contact",
+            "counterparty_role": "patient",
             "canonical_issue": "Follow-up contact was not attempted",
         }
     ]
@@ -1618,7 +1630,9 @@ def test_normalized_output_preserves_original_issue_and_evidence():
                 {
                     "issue_id": "i1",
                     "responsible_actor_role": "mental health team",
+                    "failed_action": "contact",
                     "issue_object": "follow-up contact",
+                    "counterparty_role": "patient",
                     "canonical_issue": "The mental health team omitted follow-up contact",
                 }
             ],
@@ -1658,7 +1672,9 @@ def test_normalized_output_preserves_results_from_partial_batch():
                 {
                     "issue_id": "i1",
                     "responsible_actor_role": "provider organisation",
+                    "failed_action": "maintain",
                     "issue_object": "clinical records",
+                    "counterparty_role": "not stated",
                     "canonical_issue": "Provider organisation maintained incomplete clinical records",
                     "normalization_warnings": [],
                 }
@@ -1696,6 +1712,472 @@ def test_normalization_review_queue_includes_warnings_and_failures():
     review = normalization.build_review_queue(output)
 
     assert review["issue_id"].tolist() == ["warned", "failed"]
+
+
+def test_relational_normalization_builds_stable_linkage_statement():
+    raw = [
+        {
+            "issue_id": "i1",
+            "responsible_actor_role": "mental health service",
+            "failed_action": "contact",
+            "issue_object": "follow-up contact",
+            "counterparty_role": "patient",
+            "canonical_issue": "The mental health service failed to contact the patient",
+        }
+    ]
+
+    result = normalization.normalize_result(raw, ["i1"], max_words=26)[0]
+
+    assert result["linkage_statement"] == (
+        "Actor: mental health service. Failed action: contact. "
+        "Object: follow-up contact. Counterparty: patient."
+    )
+
+
+def test_relational_quality_gate_retains_direction_without_inventing_counterparty():
+    eligible, reason = relational_linkage.linkage_quality(
+        pd.Series(
+            {
+                "failed_action": "share",
+                "issue_object": "discharge information",
+                "counterparty_role": "not stated",
+                "communication_direction": "between_organisations",
+                "normalization_status": "success",
+            }
+        )
+    )
+
+    assert eligible
+    assert reason == "eligible"
+
+
+def test_relational_pair_scoring_penalizes_direction_and_action_conflicts():
+    base = {
+        "responsible_actor_role": "mental health service",
+        "issue_object": "follow-up contact",
+        "process_stage": "follow_up",
+        "failure_state": "omitted",
+    }
+    service_omission = pd.Series(
+        {
+            **base,
+            "failed_action": "contact",
+            "counterparty_role": "patient",
+            "communication_direction": "professional_to_patient",
+        }
+    )
+    patient_action = pd.Series(
+        {
+            **base,
+            "responsible_actor_role": "patient",
+            "failed_action": "attend",
+            "counterparty_role": "mental health service",
+            "communication_direction": "patient_family_to_professional",
+        }
+    )
+
+    adjustment, reasons = relational_linkage.categorical_adjustment(
+        service_omission, patient_action
+    )
+
+    assert adjustment < 0
+    assert "different_action_family:-0.05" in reasons
+    assert "different_communication_direction:-0.055" in reasons
+
+
+def test_relational_pair_scoring_rejects_generic_object_head_match():
+    ct_result = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "report",
+            "issue_object": "CT scan results",
+            "counterparty_role": "not stated",
+            "communication_direction": "not_applicable",
+            "process_stage": "information_record_management",
+            "failure_state": "delayed",
+        }
+    )
+    smear_result = pd.Series(
+        {
+            **ct_result.to_dict(),
+            "issue_object": "smear test results",
+            "failure_state": "incorrect",
+        }
+    )
+
+    adjustment, reasons = relational_linkage.categorical_adjustment(
+        ct_result, smear_result
+    )
+
+    assert adjustment < 0
+    assert "object_shared_terms_generic_only:-0.08" in reasons
+    assert (
+        relational_linkage.hard_relation_conflict(ct_result, smear_result)
+        == "object_entity_mismatch"
+    )
+
+
+def test_guarded_relational_scoring_vetoes_generic_action_with_disjoint_objects():
+    investigation_policy = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "provide",
+            "issue_object": "policy for requesting investigations",
+            "counterparty_role": "not stated",
+            "communication_direction": "not_applicable",
+            "process_stage": "policy_development",
+            "failure_state": "omitted",
+        }
+    )
+    furniture_policy = pd.Series(
+        {
+            **investigation_policy.to_dict(),
+            "issue_object": "policy regarding furniture barricades",
+        }
+    )
+
+    assert relational_linkage.guarded_object_conflict(
+        investigation_policy,
+        furniture_policy,
+        action_object_similarity=0.84,
+        minimum_specific_object_similarity=0.88,
+    ) == "disjoint_specific_objects"
+
+
+def test_guarded_relational_scoring_separates_material_failure_states():
+    omitted = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "administer",
+            "issue_object": "prescribed medication",
+            "counterparty_role": "patient",
+            "communication_direction": "not_applicable",
+            "failure_state": "omitted",
+        }
+    )
+    incorrect = pd.Series({**omitted.to_dict(), "failure_state": "incorrect"})
+
+    assert relational_linkage.guarded_relation_conflict(
+        omitted, incorrect
+    ) == "incompatible_failure_state"
+
+
+def test_guarded_relational_scoring_separates_recording_from_performance():
+    performed = pd.Series(
+        {
+            "responsible_actor_role": "practitioner",
+            "failed_action": "perform",
+            "issue_object": "clinical observations",
+            "counterparty_role": "patient",
+            "communication_direction": "not_applicable",
+            "failure_state": "omitted",
+        }
+    )
+    recorded = pd.Series({**performed.to_dict(), "failed_action": "record"})
+
+    assert relational_linkage.guarded_relation_conflict(
+        performed, recorded
+    ) == "incompatible_action_family"
+
+
+def test_guarded_relational_scoring_separates_calling_from_ambulance_response():
+    caller = pd.Series(
+        {
+            "canonical_issue": "The healthcare team delayed calling an ambulance.",
+            "responsible_actor_role": "healthcare team",
+            "failed_action": "call",
+            "issue_object": "ambulance",
+            "counterparty_role": "ambulance service",
+            "communication_direction": "service_to_service",
+            "failure_state": "delayed",
+        }
+    )
+    responder = pd.Series(
+        {
+            "canonical_issue": "The ambulance service delayed responding to the call.",
+            "responsible_actor_role": "ambulance service",
+            "failed_action": "respond to",
+            "issue_object": "ambulance call",
+            "counterparty_role": "patient",
+            "communication_direction": "not_applicable",
+            "failure_state": "delayed",
+        }
+    )
+
+    assert relational_linkage.guarded_relation_conflict(
+        caller, responder
+    ) == "incompatible_ambulance_direction"
+
+
+def test_guarded_relational_scoring_stops_generic_risk_assessment_bridge():
+    conducted = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "conduct",
+            "issue_object": "risk assessments",
+            "counterparty_role": "patient",
+            "communication_direction": "not_applicable",
+            "failure_state": "inadequate",
+        }
+    )
+    updated = pd.Series(
+        {
+            **conducted.to_dict(),
+            "failed_action": "update",
+            "issue_object": "risk assessment",
+        }
+    )
+
+    assert relational_linkage.guarded_object_conflict(
+        conducted,
+        updated,
+        action_object_similarity=0.95,
+        minimum_specific_object_similarity=0.82,
+    ) == "underspecified_generic_object"
+
+
+def test_guarded_relational_scoring_keeps_exact_generic_relations_linkable():
+    first = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "conduct",
+            "issue_object": "risk assessment",
+            "counterparty_role": "patient",
+            "communication_direction": "not_applicable",
+            "failure_state": "inadequate",
+        }
+    )
+    paraphrase = pd.Series(
+        {
+            **first.to_dict(),
+            "failed_action": "perform",
+            "issue_object": "risk assessments",
+        }
+    )
+
+    assert relational_linkage.guarded_object_conflict(
+        first,
+        paraphrase,
+        action_object_similarity=0.95,
+        minimum_specific_object_similarity=0.82,
+    ) == ""
+
+
+def test_guarded_relational_scoring_separates_communication_recipients():
+    to_gp = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "send",
+            "issue_object": "discharge summary",
+            "counterparty_role": "GP",
+            "communication_direction": "between_organisations",
+            "failure_state": "omitted",
+        }
+    )
+    to_family = pd.Series(
+        {
+            **to_gp.to_dict(),
+            "counterparty_role": "family",
+            "communication_direction": "professional_to_family_carer",
+        }
+    )
+
+    assert relational_linkage.guarded_relation_conflict(
+        to_gp, to_family
+    ) == "incompatible_communication_direction"
+
+
+def test_view_similarities_recover_cosines_from_weighted_concatenation():
+    weights = [0.10, 0.55, 0.25, 0.10]
+    first = np.asarray(
+        [
+            value
+            for weight in weights
+            for value in (weight**0.5, 0.0)
+        ],
+        dtype=np.float32,
+    )
+    second = np.asarray(
+        [
+            value
+            for weight in weights
+            for value in (0.0, weight**0.5)
+        ],
+        dtype=np.float32,
+    )
+
+    similarities = relational_linkage.view_similarities(
+        np.vstack([first, second]), 0, 1, weights
+    )
+
+    assert similarities == pytest.approx((0.0, 0.0, 0.0, 0.0), abs=1e-6)
+
+
+def test_guarded_consolidation_can_merge_supported_groups_with_same_report():
+    frame = pd.DataFrame(
+        [
+            {
+                "report_key": report,
+                "responsible_actor_role": "provider organisation",
+                "counterparty_role": "not stated",
+                "failed_action": "maintain",
+                "issue_object": "nursing staffing levels",
+                "communication_direction": "not_applicable",
+                "failure_state": "inadequate",
+            }
+            for report in ("r1", "r2", "r1", "r3")
+        ]
+    )
+    weights = [0.10, 0.55, 0.25, 0.10]
+    vector = np.asarray(
+        [
+            value
+            for weight in weights
+            for value in (weight**0.5, 0.0)
+        ],
+        dtype=np.float32,
+    )
+    embeddings = np.vstack([vector] * 4)
+    edges = [
+        relational_linkage.PairScore(0, 2, 0.95, 0.0, 0.95, ()),
+        relational_linkage.PairScore(1, 3, 0.95, 0.0, 0.95, ()),
+    ]
+
+    groups, provenance = relational_linkage.consolidate_guarded_groups(
+        frame,
+        embeddings,
+        [[0, 1], [2, 3]],
+        edges,
+        weights=weights,
+        minimum_score=0.85,
+        minimum_coverage=0.5,
+        minimum_relation_similarity=0.8,
+        minimum_action_object_similarity=0.8,
+        minimum_specific_object_similarity=0.88,
+        maximum_positive_adjustment=0.03,
+    )
+
+    assert groups == [[0, 1, 2, 3]]
+    assert len(provenance) == 1
+
+
+def test_prototype_grouping_vetoes_directionally_reversed_bridge():
+    frame = pd.DataFrame(
+        [
+            {
+                "report_key": "r1",
+                "responsible_actor_role": "service",
+                "counterparty_role": "patient",
+                "failed_action": "contact",
+                "issue_object": "follow-up contact",
+                "communication_direction": "professional_to_patient",
+            },
+            {
+                "report_key": "r2",
+                "responsible_actor_role": "service",
+                "counterparty_role": "patient",
+                "failed_action": "support",
+                "issue_object": "service engagement",
+                "communication_direction": "bidirectional",
+            },
+            {
+                "report_key": "r3",
+                "responsible_actor_role": "patient",
+                "counterparty_role": "service",
+                "failed_action": "attend",
+                "issue_object": "follow-up appointment",
+                "communication_direction": "patient_family_to_professional",
+            },
+        ]
+    )
+    edges = [
+        relational_linkage.PairScore(0, 1, 0.9, 0.0, 0.9, ()),
+        relational_linkage.PairScore(1, 2, 0.9, 0.0, 0.9, ()),
+    ]
+
+    groups = relational_linkage.prototype_anchored_groups(
+        frame, edges, minimum_group_score=0.8
+    )
+
+    assert sorted(map(len, groups)) == [1, 2]
+
+
+def test_constrained_density_grouping_supports_multiple_representatives():
+    frame = pd.DataFrame(
+        [
+            {
+                "report_key": f"r{index}",
+                "responsible_actor_role": "provider organisation",
+                "counterparty_role": "patient",
+                "failed_action": "contact",
+                "issue_object": "follow-up contact",
+                "communication_direction": "professional_to_patient",
+            }
+            for index in range(3)
+        ]
+    )
+    edges = [
+        relational_linkage.PairScore(0, 1, 0.90, 0.0, 0.90, ()),
+        relational_linkage.PairScore(1, 2, 0.86, 0.0, 0.86, ()),
+    ]
+
+    groups = relational_linkage.constrained_density_groups(
+        frame,
+        seed_edges=edges[:1],
+        eligible_edges=edges,
+        minimum_group_score=0.83,
+        minimum_edge_density=0.60,
+        minimum_member_coverage=0.34,
+    )
+
+    assert sorted(map(len, groups)) == [3]
+
+
+def test_constrained_density_grouping_honours_cannot_link_constraints():
+    frame = pd.DataFrame(
+        [
+            {
+                "report_key": "r1",
+                "responsible_actor_role": "service",
+                "counterparty_role": "patient",
+                "failed_action": "contact",
+                "issue_object": "follow-up contact",
+                "communication_direction": "professional_to_patient",
+            },
+            {
+                "report_key": "r2",
+                "responsible_actor_role": "service",
+                "counterparty_role": "patient",
+                "failed_action": "support",
+                "issue_object": "service engagement",
+                "communication_direction": "bidirectional",
+            },
+            {
+                "report_key": "r3",
+                "responsible_actor_role": "patient",
+                "counterparty_role": "service",
+                "failed_action": "attend",
+                "issue_object": "follow-up appointment",
+                "communication_direction": "patient_family_to_professional",
+            },
+        ]
+    )
+    edges = [
+        relational_linkage.PairScore(0, 1, 0.90, 0.0, 0.90, ()),
+        relational_linkage.PairScore(1, 2, 0.90, 0.0, 0.90, ()),
+        relational_linkage.PairScore(0, 2, 0.86, 0.0, 0.86, ()),
+    ]
+
+    groups = relational_linkage.constrained_density_groups(
+        frame,
+        seed_edges=edges,
+        eligible_edges=edges,
+        minimum_group_score=0.83,
+        minimum_edge_density=0.60,
+        minimum_member_coverage=0.34,
+    )
+
+    assert sorted(map(len, groups)) == [1, 2]
 
 
 def test_embedding_text_uses_actor_object_once_through_canonical_sentence():

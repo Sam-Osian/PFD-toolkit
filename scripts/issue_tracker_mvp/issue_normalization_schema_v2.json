@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pfdtoolkit.org/schemas/issue-normalization-v2.json",
+  "title": "PFD Toolkit relational issue normalization response v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["issues"],
+  "properties": {
+    "issues": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "issue_id",
+          "responsible_actor_role",
+          "failed_action",
+          "issue_object",
+          "counterparty_role",
+          "canonical_issue"
+        ],
+        "properties": {
+          "issue_id": {"type": "string", "maxLength": 80},
+          "responsible_actor_role": {"type": "string", "maxLength": 100},
+          "failed_action": {"type": "string", "maxLength": 100},
+          "issue_object": {"type": "string", "maxLength": 140},
+          "counterparty_role": {"type": "string", "maxLength": 100},
+          "canonical_issue": {"type": "string", "maxLength": 300}
+        }
+      }
+    }
+  }
+}

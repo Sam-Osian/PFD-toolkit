@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Add actor- and object-explicit canonical issues without re-extracting reports."""
+"""Add relation-explicit canonical issues without re-extracting reports."""
 
 from __future__ import annotations
 
@@ -19,8 +19,8 @@ from tqdm import tqdm
 import build_issue_index as pipeline
 
 
-NORMALIZATION_VERSION = "issue-normalization-v1"
-DEFAULT_SCHEMA_PATH = Path(__file__).with_name("issue_normalization_schema_v1.json")
+NORMALIZATION_VERSION = "issue-normalization-v2"
+DEFAULT_SCHEMA_PATH = Path(__file__).with_name("issue_normalization_schema_v2.json")
 ACTOR_TYPE_FALLBACKS = {
     "provider organisation": "provider organisation",
     "individual practitioner": "individual practitioner",
@@ -55,12 +55,22 @@ Derive fields in this order before writing canonical_issue:
    practitioner"). Use "not stated" only when responsible_actor_type is "not_stated" and no actor is
    supported by responsible_actor_text or evidence_quote. The person exposed to harm is not
    automatically the responsible actor.
-2. issue_object: a neutral, reusable noun phrase naming what failed or was affected, normally 2-12
-   words. It may be an action, information, service, policy, system, equipment, environment, decision,
-   duty, or other object. Examples include "risk assessment", "discharge information", "staffing
+2. failed_action: a short, reusable verb phrase naming the action, decision, provision, or maintenance
+   that failed, normally 1-8 words. Use the positive action rather than embedding the failure state:
+   for example "contact", "share information with", "respond to", "assess", "monitor", "maintain",
+   "provide", or "implement". Do not write vague phrases such as "manage issue" or "take action".
+3. issue_object: a neutral, reusable noun phrase naming the target, content, system, condition, or
+   duty affected by the failed action, normally 2-12 words. It may be information, a service, policy,
+   system, equipment, environment, decision, duty, or a nominalised process where that is the natural
+   name. Do not merely repeat failed_action. Examples include "risk assessment", "discharge information", "staffing
    levels", "bridge barrier design", "product safety warning", and "custody observation policy".
    Do not call every object a safeguard and do not assume a clinical setting.
-3. canonical_issue: at most {canonical_max_words} words, stating who failed, what failed, and how.
+4. counterparty_role: the generic recipient, target, or other party required to interpret the action
+   and its direction, such as "GP", "ambulance service", "patient", "family", "employee", or "road
+   users". Use "not stated" when there is no relevant or supported counterparty. Do not repeat the
+   responsible actor.
+5. canonical_issue: at most {canonical_max_words} words, stating who failed to do what, to or for
+   whom where relevant, and what object was affected.
    Include process, communication direction, recipient, or setting only where it changes the issue
    type. When responsible_actor_role is not "not stated", canonical_issue MUST contain that exact
    generic role phrase (normally as its grammatical subject). If the actor is "not stated", use a
@@ -198,9 +208,11 @@ def normalize_result(raw: Any, expected_ids: list[str], max_words: int) -> list[
         if issue_id in by_id:
             raise ValueError(f"duplicate issue_id: {issue_id}")
         actor = pipeline.trim_words(item.get("responsible_actor_role"), 12)
+        action = pipeline.trim_words(item.get("failed_action"), 8)
         obj = pipeline.trim_words(item.get("issue_object"), 12)
+        counterparty = pipeline.trim_words(item.get("counterparty_role"), 12)
         canonical = pipeline.trim_words(item.get("canonical_issue"), max_words)
-        if not actor or not obj or not canonical:
+        if not actor or not action or not obj or not counterparty or not canonical:
             raise ValueError(f"empty normalized field for {issue_id}")
         if pipeline.normalised_key(actor) != "not stated" and pipeline.normalised_key(
             actor
@@ -210,8 +222,13 @@ def normalize_result(raw: Any, expected_ids: list[str], max_words: int) -> list[
             )
         by_id[issue_id] = {
             "responsible_actor_role": actor,
+            "failed_action": action,
             "issue_object": obj,
+            "counterparty_role": counterparty,
             "canonical_issue": canonical,
+            "linkage_statement": build_linkage_statement(
+                actor, action, obj, counterparty
+            ),
             "normalization_warnings": (
                 [f"issue_id_recovered:{supplied_issue_id}"] if issue_id_recovered else []
             ),
@@ -220,6 +237,18 @@ def normalize_result(raw: Any, expected_ids: list[str], max_words: int) -> list[
     if missing:
         raise ValueError(f"response omitted issue_ids: {missing}")
     return [{"issue_id": issue_id, **by_id[issue_id]} for issue_id in expected_ids]
+
+
+def build_linkage_statement(
+    actor: Any, action: Any, issue_object: Any, counterparty: Any
+) -> str:
+    """Build a stable relational representation for embedding and pair scoring."""
+    return (
+        f"Actor: {pipeline.clean_text(actor)}. "
+        f"Failed action: {pipeline.clean_text(action)}. "
+        f"Object: {pipeline.clean_text(issue_object)}. "
+        f"Counterparty: {pipeline.clean_text(counterparty)}."
+    )
 
 
 def validate_source_actor(
@@ -428,7 +457,10 @@ def build_output(frame: pd.DataFrame, records: dict[str, dict[str, Any]]) -> pd.
             output["canonical_issue"],
         )
     output["responsible_actor_role"] = ""
+    output["failed_action"] = ""
     output["issue_object"] = ""
+    output["counterparty_role"] = ""
+    output["linkage_statement"] = ""
     output["normalization_version"] = NORMALIZATION_VERSION
     output["normalization_status"] = "not_selected"
     output["normalization_warnings"] = ""
@@ -438,7 +470,15 @@ def build_output(frame: pd.DataFrame, records: dict[str, dict[str, Any]]) -> pd.
             continue
         output.at[index, "canonical_issue"] = result["canonical_issue"]
         output.at[index, "responsible_actor_role"] = result["responsible_actor_role"]
+        output.at[index, "failed_action"] = result["failed_action"]
         output.at[index, "issue_object"] = result["issue_object"]
+        output.at[index, "counterparty_role"] = result["counterparty_role"]
+        output.at[index, "linkage_statement"] = build_linkage_statement(
+            result["responsible_actor_role"],
+            result["failed_action"],
+            result["issue_object"],
+            result["counterparty_role"],
+        )
         output.at[index, "normalization_status"] = "success"
         warnings: list[str] = list(result.get("normalization_warnings") or [])
         actor_key = pipeline.normalised_key(result["responsible_actor_role"])
@@ -459,6 +499,21 @@ def build_output(frame: pd.DataFrame, records: dict[str, dict[str, Any]]) -> pd.
             warnings.append("actor_not_stated_despite_actor_type")
         if len(pipeline.clean_text(result["issue_object"]).split()) == 1:
             warnings.append("single_word_object_review")
+        if pipeline.normalised_key(result["failed_action"]) in {
+            "action described in evidence",
+            "manage",
+            "take action",
+        }:
+            warnings.append("generic_failed_action_review")
+        direction = pipeline.normalised_key(
+            output.at[index, "communication_direction"]
+            if "communication_direction" in output.columns
+            else ""
+        )
+        if direction not in {"", "not applicable", "unclear"} and pipeline.normalised_key(
+            result["counterparty_role"]
+        ) == "not stated":
+            warnings.append("directional_issue_without_counterparty_review")
         if "disengag" in pipeline.normalised_key(result["canonical_issue"]):
             warnings.append("agency_sensitive_disengagement_review")
         named_roles = {
@@ -489,7 +544,15 @@ def apply_original_fallbacks(
         )
         actor = ACTOR_TYPE_FALLBACKS.get(actor_type, "not stated")
         output.at[index, "responsible_actor_role"] = actor
+        output.at[index, "failed_action"] = "action described in evidence"
         output.at[index, "issue_object"] = "issue described in evidence"
+        output.at[index, "counterparty_role"] = "not stated"
+        output.at[index, "linkage_statement"] = build_linkage_statement(
+            actor,
+            "action described in evidence",
+            "issue described in evidence",
+            "not stated",
+        )
         output.at[index, "normalization_status"] = "fallback_original"
         warnings = [
             item
@@ -502,6 +565,7 @@ def apply_original_fallbacks(
             [
                 "normalization_failed_original_preserved",
                 "actor_role_deterministic_fallback",
+                "failed_action_unspecified_fallback",
                 "issue_object_unspecified_fallback",
             ]
         )
