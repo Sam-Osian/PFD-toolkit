@@ -80,3 +80,28 @@ summoning versus ambulance-service response.
 Freeze tuning until the fresh random and diagnostic full-corpus audit packets
 are reviewed. Independent human review should precede publication or promotion
 of groups to stable approved issue types.
+
+## Post-group refinement result
+
+The subsequent untouched 60-group audit found 36 fully coherent groups, 19
+groups with a coherent core, and five rejected groups. A bounded operational
+subtype splitter was implemented to separate specific object/action cores and
+route ambiguous or compound members to review.
+
+At the selected development setting, 970 groups were classified as
+`refined_recurring` and 608 as `review_required`. Development-core compatibility
+among automatically retained reviewed members was 92.1%.
+
+This did not generalise to a second random audit that excluded every occurrence
+used in the earlier holdout and random reviews. Of 60 fresh refined groups:
+
+- 36 were fully coherent (60.0%);
+- 15 had a coherent core plus peripheral members;
+- nine were rejected; and
+- 199/252 members (79.0%) fitted the adjudicated core.
+
+Do not use the refinement status as automatic approval. Retain the layer as
+review assistance—suggested splits, ambiguity flags, and prioritisation—and
+switch to explicit human validation for stable issue groups. Further
+rule-building would amount to an increasingly large hand-built object ontology
+without evidence that it generalises.

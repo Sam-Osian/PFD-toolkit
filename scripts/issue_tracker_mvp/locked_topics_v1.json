@@ -1,0 +1,258 @@
+{
+  "taxonomy_id": "pfd-toolkit-topics",
+  "version": "1.0.0",
+  "status": "locked",
+  "locked_on": "2026-08-03",
+  "topic_count": 40,
+  "assignment_mode": "multi_label",
+  "discovery_policy": "Topics are curated before classification. Automated systems may assign existing topics but must not create, rename, merge, split, or remove topics.",
+  "relationship_to_issues": "Topics are an independent report-level classification system, not parents of extracted issues. Existing precise issues remain unchanged.",
+  "facets": {
+    "concern": "A recurring prevention concern, failure or organisational weakness.",
+    "setting": "A service, institution or physical operating context.",
+    "circumstance_condition": "A material circumstance, behaviour or health condition relevant to the report.",
+    "population": "A population whose characteristics or position are materially relevant to the report."
+  },
+  "topics": [
+    {
+      "id": "access_care_capacity_waiting",
+      "label": "Access to care, capacity and waiting times",
+      "facet": "concern",
+      "description": "Delayed, unavailable or inaccessible care, including service thresholds, queues, capacity constraints and barriers to timely provision."
+    },
+    {
+      "id": "bed_shortages",
+      "label": "Bed shortages",
+      "facet": "concern",
+      "description": "Lack of suitable inpatient beds, delayed admission or transfer, inappropriate placement, or other safety effects of bed scarcity."
+    },
+    {
+      "id": "clinical_assessment_decision_making",
+      "label": "Clinical assessment and decision-making",
+      "facet": "concern",
+      "description": "Inadequate, delayed or incomplete clinical assessment, review, formulation or clinical decision-making."
+    },
+    {
+      "id": "diagnosis_test_result_management",
+      "label": "Diagnosis and test-result management",
+      "facet": "concern",
+      "description": "Missed, delayed or incorrect diagnosis and failures to request, review, communicate or act on investigations and results."
+    },
+    {
+      "id": "recognition_escalation_deterioration",
+      "label": "Recognition and escalation of deterioration",
+      "facet": "concern",
+      "description": "Failure to recognise warning signs, respond to deterioration or escalate a person for timely clinical attention."
+    },
+    {
+      "id": "monitoring_observation",
+      "label": "Monitoring and observation",
+      "facet": "concern",
+      "description": "Inadequate observation, physiological monitoring, surveillance, checking or response to monitoring information."
+    },
+    {
+      "id": "treatment_care_delivery",
+      "label": "Treatment and care delivery",
+      "facet": "concern",
+      "description": "Treatment, nursing, personal care or other planned care that was inadequate, delayed, omitted or not delivered as intended."
+    },
+    {
+      "id": "medication_safety",
+      "label": "Medication safety",
+      "facet": "concern",
+      "description": "Unsafe prescribing, dispensing, administration, omission, storage, reconciliation, monitoring or review of medicines."
+    },
+    {
+      "id": "risk_assessment_safety_planning",
+      "label": "Risk assessment and safety planning",
+      "facet": "concern",
+      "description": "Failure to identify, assess, communicate or manage risk, or to create and implement an adequate safety plan."
+    },
+    {
+      "id": "care_planning_coordination_continuity",
+      "label": "Care planning, coordination and continuity",
+      "facet": "concern",
+      "description": "Fragmented or uncoordinated care, unclear ownership, inadequate care planning, or loss of therapeutic and service continuity."
+    },
+    {
+      "id": "communication_patients_families",
+      "label": "Communication with patients and families",
+      "facet": "concern",
+      "description": "Inadequate communication, explanation, consultation or response involving patients, relatives, carers or advocates."
+    },
+    {
+      "id": "professional_interagency_communication",
+      "label": "Professional and inter-agency communication",
+      "facet": "concern",
+      "description": "Inadequate communication or information exchange within or between teams, professions, services and organisations."
+    },
+    {
+      "id": "referral_followup_nonattendance",
+      "label": "Referral, follow-up and non-attendance",
+      "facet": "concern",
+      "description": "Missed, delayed, rejected or misdirected referrals; absent follow-up or recall; and unsafe responses to missed contact or disengagement."
+    },
+    {
+      "id": "handover_transfer_discharge",
+      "label": "Handover, transfer and discharge",
+      "facet": "concern",
+      "description": "Unsafe or incomplete transfer of care, responsibility or information between people, teams, organisations, settings or home."
+    },
+    {
+      "id": "records_documentation_information_access",
+      "label": "Records, documentation and information access",
+      "facet": "concern",
+      "description": "Incomplete, inaccurate, unavailable, inaccessible or unreviewed records and failures to create or maintain required documentation."
+    },
+    {
+      "id": "staff_shortages_workload_pressure",
+      "label": "Staff shortages and workload pressure",
+      "facet": "concern",
+      "description": "Insufficient staffing, vacancies, unstable staffing, excessive caseloads or workload pressure that contributed to risk."
+    },
+    {
+      "id": "training_competence_supervision",
+      "label": "Training, competence and supervision",
+      "facet": "concern",
+      "description": "Inadequate training, induction, knowledge, practical competence, professional support or supervision."
+    },
+    {
+      "id": "safeguarding_consent_legal_protections",
+      "label": "Safeguarding, consent and legal protections",
+      "facet": "concern",
+      "description": "Safeguarding failures and inadequate consent, capacity, best-interests, reasonable-adjustment or other legal-protection processes."
+    },
+    {
+      "id": "emergency_response_resuscitation",
+      "label": "Emergency response and resuscitation",
+      "facet": "concern",
+      "description": "Delayed, unavailable or inadequate emergency action, first aid, rescue, resuscitation or urgent response."
+    },
+    {
+      "id": "restraint_restrictive_interventions",
+      "label": "Restraint and restrictive interventions",
+      "facet": "concern",
+      "description": "Risks or failures involving physical restraint, prone restraint, rapid tranquillisation, seclusion or other restrictive interventions."
+    },
+    {
+      "id": "equipment_digital_systems_alarms",
+      "label": "Equipment, digital systems and alarms",
+      "facet": "concern",
+      "description": "Faulty, unavailable, unsuitable or poorly maintained equipment, software, interoperability, alerts, alarms or digital workflows."
+    },
+    {
+      "id": "environment_infrastructure_safety_design",
+      "label": "Environment, infrastructure and safety design",
+      "facet": "concern",
+      "description": "Unsafe layouts, structures, facilities, maintenance, visibility, access controls or other physical and environmental design features."
+    },
+    {
+      "id": "falls_trip_hazards",
+      "label": "Falls and trip hazards",
+      "facet": "concern",
+      "description": "Accidental falls, fall-prevention failures and environmental trip hazards. Do not assign solely for intentional jumping or falling connected with suicide or self-harm."
+    },
+    {
+      "id": "policies_procedures_regulatory_oversight",
+      "label": "Policies, procedures and regulatory oversight",
+      "facet": "concern",
+      "description": "Missing, inadequate, outdated, unclear or unimplemented policies and procedures, and weaknesses in regulation or oversight."
+    },
+    {
+      "id": "incident_investigation_governance_learning",
+      "label": "Incident investigation, governance and organisational learning",
+      "facet": "concern",
+      "description": "Inadequate incident review, investigation, audit, governance, implementation of recommendations or learning from previous events and deaths."
+    },
+    {
+      "id": "public_information_warnings_labelling",
+      "label": "Public information, warnings and product labelling",
+      "facet": "concern",
+      "description": "Missing, unclear or inadequate safety information, public warnings, instructions, signage or product labelling."
+    },
+    {
+      "id": "online_hazards",
+      "label": "Online hazards",
+      "facet": "concern",
+      "description": "Harm linked to online content, platforms, services, sales or access to dangerous information or products; excludes internal operational IT failures."
+    },
+    {
+      "id": "suicide_self_harm",
+      "label": "Suicide and self-harm",
+      "facet": "circumstance_condition",
+      "description": "Suicidal behaviour, suspected suicide, self-injury or missed opportunities to prevent suicide or self-harm."
+    },
+    {
+      "id": "maternity_perinatal_neonatal_care",
+      "label": "Maternity, perinatal and neonatal care",
+      "facet": "setting",
+      "description": "Pregnancy, childbirth, maternity services, newborn care and early postnatal or neonatal safety."
+    },
+    {
+      "id": "prisons_criminal_justice_supervision",
+      "label": "Prisons and criminal-justice supervision",
+      "facet": "setting",
+      "description": "Prison custody, prison healthcare, release planning, probation, offender management or other criminal-justice supervision."
+    },
+    {
+      "id": "care_homes",
+      "label": "Care homes",
+      "facet": "setting",
+      "description": "Residential or nursing home care, including care delivery, supervision, safeguarding and coordination with external services."
+    },
+    {
+      "id": "substance_use",
+      "label": "Substance use",
+      "facet": "circumstance_condition",
+      "description": "Alcohol or other drug use, dependence, withdrawal, overdose, relapse, treatment or service access materially relevant to the report."
+    },
+    {
+      "id": "road_traffic_highways",
+      "label": "Road traffic and highways",
+      "facet": "setting",
+      "description": "Road users, vehicles, traffic operations, junctions, signage, maintenance and highway design; excludes rail settings."
+    },
+    {
+      "id": "rail_settings",
+      "label": "Rail settings",
+      "facet": "setting",
+      "description": "Railways, trains, stations, tracks, platforms, level crossings and rail operations."
+    },
+    {
+      "id": "children_young_people",
+      "label": "Children and young people",
+      "facet": "population",
+      "description": "Babies, children, adolescents and young adults where age-specific vulnerability, services or duties are materially relevant."
+    },
+    {
+      "id": "older_people",
+      "label": "Older people",
+      "facet": "population",
+      "description": "Older people where ageing, frailty, multimorbidity or age-related service needs are materially relevant."
+    },
+    {
+      "id": "learning_disability",
+      "label": "Learning disability",
+      "facet": "population",
+      "description": "People with a learning disability where related health inequalities, communication needs, reasonable adjustments or service failures are relevant."
+    },
+    {
+      "id": "autism",
+      "label": "Autism",
+      "facet": "population",
+      "description": "Autistic people where sensory, communication, support, reasonable-adjustment or service needs are materially relevant."
+    },
+    {
+      "id": "ambulance_services",
+      "label": "Ambulance services",
+      "facet": "setting",
+      "description": "Ambulance call handling, triage, dispatch, response, on-scene care, conveyance and handover."
+    },
+    {
+      "id": "sepsis",
+      "label": "Sepsis",
+      "facet": "circumstance_condition",
+      "description": "Sepsis recognition, investigation, escalation, treatment, monitoring or prevention materially relevant to the report."
+    }
+  ]
+}

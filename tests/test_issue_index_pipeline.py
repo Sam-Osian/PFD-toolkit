@@ -21,9 +21,10 @@ import adjudicate_recurring_issue_groups as adjudication  # noqa: E402
 import assign_issue_prototypes as prototype_assignment  # noqa: E402
 import build_issue_registry as issue_registry  # noqa: E402
 import build_recurring_issue_audit as quality_audit  # noqa: E402
+import calibrate_label_entailment_validator as label_entailment  # noqa: E402
 import normalize_issue_occurrences as normalization  # noqa: E402
 import repair_reviewed_issue_groups as repair  # noqa: E402
-import prepare_relational_linkage_pilot as relational_pilot  # noqa: E402
+import refine_relational_groups as relational_refinement  # noqa: E402
 import run_relational_linkage_experiment as relational_linkage  # noqa: E402
 import run_full_issue_tracker as full_workflow  # noqa: E402
 import score_recurring_issue_audit as audit_scoring  # noqa: E402
@@ -109,6 +110,99 @@ def test_recurrence_boundary_alone_does_not_trigger_adjudication():
     assert result["risk_reasons"] == "recurrence_boundary"
     assert result["adjudication_priority"] == "monitor"
     assert not bool(result["flagged_for_adjudication"])
+
+
+def test_label_entailment_validator_allows_broad_group_and_excludes_true_outlier():
+    members = pd.DataFrame(
+        [
+            {
+                "issue_id": "iss_discharge_1",
+                "report_key": "rpt_1",
+                "canonical_issue": "The hospital failed to complete discharge documentation.",
+            },
+            {
+                "issue_id": "iss_discharge_2",
+                "report_key": "rpt_2",
+                "canonical_issue": "The team failed to arrange safe discharge follow-up.",
+            },
+            {
+                "issue_id": "iss_discharge_3",
+                "report_key": "rpt_3",
+                "canonical_issue": "The service issued an incomplete discharge letter.",
+            },
+            {
+                "issue_id": "iss_consent",
+                "report_key": "rpt_4",
+                "canonical_issue": "The consent form omitted prior contrast information.",
+            },
+        ]
+    )
+    payload = {
+        "group_quality": "coherent",
+        "granularity": "broad_issue_family",
+        "label": "Inadequate patient discharge processes and documentation",
+        "description": "Failures affecting discharge decisions, documentation, or follow-up.",
+        "rationale": "Three members support a discharge-process family.",
+        "members": [
+            {
+                "issue_id": issue_id,
+                "supports_label": issue_id != "iss_consent",
+                "conflict_type": (
+                    "different_issue" if issue_id == "iss_consent" else "none"
+                ),
+                "rationale": "Member-level entailment decision.",
+            }
+            for issue_id in members["issue_id"]
+        ],
+    }
+
+    result = label_entailment.validate_payload(payload, "ref_test", members)
+
+    assert result["decision"] == "exclude"
+    assert result["granularity"] == "broad_issue_family"
+    assert result["retained_report_count"] == 3
+    assert result["unsupported_issue_ids"] == ["iss_consent"]
+
+
+def test_label_entailment_validator_does_not_penalize_subtype_variation():
+    members = pd.DataFrame(
+        [
+            {
+                "issue_id": f"iss_{index}",
+                "report_key": f"rpt_{index}",
+                "canonical_issue": statement,
+            }
+            for index, statement in enumerate(
+                [
+                    "The service failed to send a psychiatric referral.",
+                    "The receiving team rejected the psychiatric referral without assessment.",
+                    "The assessor lacked the qualifications required for the psychiatric referral.",
+                ],
+                start=1,
+            )
+        ]
+    )
+    payload = {
+        "group_quality": "coherent",
+        "granularity": "broad_issue_family",
+        "label": "Failures in psychiatric referral handling and assessment",
+        "description": "Failures at compatible stages of the psychiatric referral pathway.",
+        "rationale": "All members concern the same pathway.",
+        "members": [
+            {
+                "issue_id": issue_id,
+                "supports_label": True,
+                "conflict_type": "none",
+                "rationale": "Supports the broad pathway label.",
+            }
+            for issue_id in members["issue_id"]
+        ],
+    }
+
+    result = label_entailment.validate_payload(payload, "ref_pathway", members)
+
+    assert result["decision"] == "accept"
+    assert result["retained_occurrence_count"] == 3
 
 
 def test_recurrence_strength_preserves_discovery_status_but_bands_evidence():
@@ -1688,6 +1782,41 @@ def test_normalized_output_preserves_results_from_partial_batch():
     assert output.loc[1, "normalization_status"] == "not_selected"
 
 
+def test_normalization_v3_flags_bare_process_object_for_target_repair():
+    frame = pd.DataFrame(
+        [
+            {
+                "issue_id": "i1",
+                "canonical_issue": "A risk assessment was omitted",
+                "evidence_quote": "No suicide risk assessment was completed",
+            }
+        ]
+    )
+    records = {
+        "batch": {
+            "status": "success",
+            "results": [
+                {
+                    "issue_id": "i1",
+                    "responsible_actor_role": "mental health service",
+                    "failed_action": "assess",
+                    "issue_object": "risk assessment",
+                    "counterparty_role": "patient",
+                    "canonical_issue": "The mental health service omitted a risk assessment for the patient",
+                    "normalization_warnings": [],
+                }
+            ],
+        }
+    }
+
+    output = normalization.build_output(frame, records)
+
+    assert output.loc[0, "normalization_version"] == "issue-normalization-v3"
+    assert "underspecified_object_target_review" in output.loc[
+        0, "normalization_warnings"
+    ]
+
+
 def test_normalization_review_queue_includes_warnings_and_failures():
     output = pd.DataFrame(
         [
@@ -2059,6 +2188,137 @@ def test_guarded_consolidation_can_merge_supported_groups_with_same_report():
 
     assert groups == [[0, 1, 2, 3]]
     assert len(provenance) == 1
+
+
+def test_relational_refinement_detects_object_subtype_mismatch():
+    naloxone = pd.Series(
+        {
+            "responsible_actor_role": "provider organisation",
+            "failed_action": "administer",
+            "issue_object": "naloxone",
+            "counterparty_role": "patient",
+            "communication_direction": "not_applicable",
+            "failure_state": "omitted",
+        }
+    )
+    depot = pd.Series(
+        {
+            **naloxone.to_dict(),
+            "issue_object": "depot antipsychotic medication",
+        }
+    )
+
+    compatible, reason = relational_refinement.operationally_compatible(
+        naloxone,
+        depot,
+        action_object_similarity=0.84,
+        minimum_semantic_object_similarity=0.90,
+    )
+
+    assert not compatible
+    assert reason == "different_object_subtype"
+
+
+def test_relational_refinement_preserves_homogeneous_generic_relation():
+    frame = pd.DataFrame(
+        [
+            {
+                "issue_id": f"i{position}",
+                "report_key": f"r{position}",
+                "canonical_issue": "The patient's condition was incorrectly diagnosed.",
+                "responsible_actor_role": "not stated",
+                "failed_action": "diagnose",
+                "issue_object": "medical condition",
+                "counterparty_role": "patient",
+                "communication_direction": "not_applicable",
+                "failure_state": "incorrect",
+            }
+            for position in range(3)
+        ]
+    )
+    lookup = {
+        (left, right): {"score": 0.9, "action_object_similarity": 0.92}
+        for left in range(3)
+        for right in range(left + 1, 3)
+    }
+
+    clusters, provenance = relational_refinement.refine_group(
+        frame,
+        [0, 1, 2],
+        "rel_source",
+        lookup,
+        minimum_edge_score=0.84,
+        minimum_semantic_object_similarity=0.90,
+        minimum_assignment_margin=0.03,
+        maximum_incompatibility_fraction=0.10,
+        min_recurring_reports=3,
+    )
+
+    assert len(clusters) == 1
+    assert clusters[0].status == "refined_recurring"
+    assert clusters[0].members == {0, 1, 2}
+    assert provenance["incompatibility_fraction"] == 0.0
+
+
+def test_relational_refinement_keeps_generic_member_out_of_specific_core():
+    rows = []
+    for position in range(3):
+        rows.append(
+            {
+                "issue_id": f"n{position}",
+                "report_key": f"nr{position}",
+                "canonical_issue": "Naloxone was not administered.",
+                "responsible_actor_role": "provider organisation",
+                "failed_action": "administer",
+                "issue_object": "naloxone",
+                "counterparty_role": "patient",
+                "communication_direction": "not_applicable",
+                "failure_state": "omitted",
+            }
+        )
+    rows.append(
+        {
+            **rows[0],
+            "issue_id": "generic",
+            "report_key": "generic_report",
+            "canonical_issue": "Medication was not administered.",
+            "issue_object": "medication",
+        }
+    )
+    frame = pd.DataFrame(rows)
+    lookup = {
+        (left, right): {"score": 0.91, "action_object_similarity": 0.94}
+        for left in range(4)
+        for right in range(left + 1, 4)
+    }
+
+    clusters, _ = relational_refinement.refine_group(
+        frame,
+        list(range(4)),
+        "rel_source",
+        lookup,
+        minimum_edge_score=0.84,
+        minimum_semantic_object_similarity=0.90,
+        minimum_assignment_margin=0.03,
+        maximum_incompatibility_fraction=0.10,
+        min_recurring_reports=3,
+    )
+
+    recurring = [cluster for cluster in clusters if cluster.status == "refined_recurring"]
+    unresolved = [cluster for cluster in clusters if cluster.status != "refined_recurring"]
+    assert [cluster.members for cluster in recurring] == [{0, 1, 2}]
+    assert [cluster.members for cluster in unresolved] == [{3}]
+
+
+def test_relational_refinement_flags_compound_relation_as_unresolved():
+    row = pd.Series(
+        {
+            "failed_action": "maintain",
+            "issue_object": "staffing levels and bed capacity",
+        }
+    )
+
+    assert relational_refinement.is_compound_relation(row)
 
 
 def test_prototype_grouping_vetoes_directionally_reversed_bridge():

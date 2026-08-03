@@ -19,8 +19,31 @@ from tqdm import tqdm
 import build_issue_index as pipeline
 
 
-NORMALIZATION_VERSION = "issue-normalization-v2"
+NORMALIZATION_VERSION = "issue-normalization-v3"
 DEFAULT_SCHEMA_PATH = Path(__file__).with_name("issue_normalization_schema_v2.json")
+UNDERSPECIFIED_OBJECTS = {
+    "assessment",
+    "assessments",
+    "care",
+    "communication",
+    "condition",
+    "medication",
+    "medications",
+    "observation",
+    "observations",
+    "patient",
+    "patients",
+    "policy",
+    "record",
+    "records",
+    "referral",
+    "referrals",
+    "risk assessment",
+    "risk assessments",
+    "service",
+    "services",
+    "training",
+}
 ACTOR_TYPE_FALLBACKS = {
     "provider organisation": "provider organisation",
     "individual practitioner": "individual practitioner",
@@ -62,8 +85,17 @@ Derive fields in this order before writing canonical_issue:
 3. issue_object: a neutral, reusable noun phrase naming the target, content, system, condition, or
    duty affected by the failed action, normally 2-12 words. It may be information, a service, policy,
    system, equipment, environment, decision, duty, or a nominalised process where that is the natural
-   name. Do not merely repeat failed_action. Examples include "risk assessment", "discharge information", "staffing
-   levels", "bridge barrier design", "product safety warning", and "custody observation policy".
+   name. Do not merely repeat failed_action. Retain the subject, hazard, purpose, information type,
+   destination, or trigger that distinguishes the obligation whenever the evidence supports it. Do
+   not return a bare phrase such as "risk assessment", "monitoring", "referral", "records", or
+   "follow-up" when the evidence identifies what risk was assessed, what was monitored, where the
+   referral was directed, what information was recorded, or what triggered follow-up. Prefer, for
+   example, "suicide risk assessment", "bed rail entrapment risk assessment", "private maternity
+   service risk assessment", "clinical deterioration monitoring", "community mental health
+   referral", "abnormal blood result follow-up", or "missed appointment follow-up". Use a bare
+   process noun only when its target genuinely is not supported. Other examples include "discharge
+   information", "staffing levels", "bridge barrier design", "product safety warning", and "custody
+   observation policy".
    Do not call every object a safeguard and do not assume a clinical setting.
 4. counterparty_role: the generic recipient, target, or other party required to interpret the action
    and its direction, such as "GP", "ambulance service", "patient", "family", "employee", or "road
@@ -499,6 +531,8 @@ def build_output(frame: pd.DataFrame, records: dict[str, dict[str, Any]]) -> pd.
             warnings.append("actor_not_stated_despite_actor_type")
         if len(pipeline.clean_text(result["issue_object"]).split()) == 1:
             warnings.append("single_word_object_review")
+        if pipeline.normalised_key(result["issue_object"]) in UNDERSPECIFIED_OBJECTS:
+            warnings.append("underspecified_object_target_review")
         if pipeline.normalised_key(result["failed_action"]) in {
             "action described in evidence",
             "manage",

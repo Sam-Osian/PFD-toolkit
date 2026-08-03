@@ -29,6 +29,102 @@ model-extracted evidence field; `evidence_section` is derived by the validator.
 Report metadata, including the URL, is stored once in `01_reports.csv` and linked
 to occurrences by `report_key`.
 
+### Locked report topics
+
+`locked_topics_v1.json` is the canonical public-topic catalogue for the issue
+tracker. Version 1.0.0 contains 40 manually curated, non-hierarchical topics:
+27 prevention concerns, six settings, three circumstances or conditions, and
+four populations. Topics are independent report-level classifications and are
+not parents of the precise issues extracted by this pipeline. Both systems are
+multi-label, so a report can carry several topics while retaining every
+specific concern found in its source text.
+
+Automated systems may assign topics from this catalogue but must not discover,
+name, merge, split, or remove topics. Any catalogue change requires a new
+deliberate taxonomy version. Load it through `topic_taxonomy.py`, which validates
+its locked status, count, identifiers, facets, uniqueness, and absence of
+parent/child fields.
+
+The older `scripts/theme_collections/approved_themes.json` remains in place for
+compatibility with existing website theme columns. It is not the issue
+tracker's canonical topic taxonomy; migration and reassignment should be an
+explicit downstream step rather than silently changing existing collections.
+
+The former automatic parent-family discovery, overlap, hierarchy and
+report-to-parent retrieval programs are retired. They are preserved under
+`research/automatic_parent_families/` for reproducibility, but are not supported
+pipeline stages and their family IDs must not be published as current topics.
+The active pipeline stops at precise issue recurrence; broad navigation uses
+only the locked topic catalogue.
+
+### Deterministic linkage diagnostics
+
+`build_relational_diagnostics.py` creates two complementary review queues from
+an existing relational run without changing its groups, recomputing embeddings,
+or making LLM calls:
+
+- `possible_duplicate_groups.csv` ranks separate recurring groups that already
+  have strong accepted cross-group edges and records why consolidation was
+  blocked;
+- `possible_contaminated_groups.csv` and
+  `possible_contaminated_members.csv` rank possible false joins using persisted
+  edge support, relational conflicts, compound concerns, bridge members,
+  prototype fit, and stronger links to other groups.
+
+The flags are review leads rather than merge or exclusion decisions. Generate
+them for the current full relational output with:
+
+```bash
+.venv/bin/python scripts/issue_tracker_mvp/build_relational_diagnostics.py \
+  --artifact-dir artifacts/issue_index_v3_full/run_20260723_125309/12_relational_full/guarded_v22 \
+  --reports-csv artifacts/issue_index_v3_full/run_20260723_125309/01_reports.csv
+```
+
+`trace_relational_case.py` then exposes the occurrence fields, assignment,
+candidate scores, accepted edges, final group boundaries, and report URL for a
+specific issue or group:
+
+```bash
+.venv/bin/python scripts/issue_tracker_mvp/trace_relational_case.py \
+  --artifact-dir artifacts/issue_index_v3_full/run_20260723_125309/12_relational_full/guarded_v22 \
+  --reports-csv artifacts/issue_index_v3_full/run_20260723_125309/01_reports.csv \
+  --group-id rel_00336
+```
+
+Historical runs did not persist directed retrieval ranks. Consequently, a pair
+that never entered `02_candidate_pairs.csv` can be localized to candidate
+retrieval but cannot be assigned a more exact rejection reason without
+recomputation or future instrumentation.
+
+The first full-corpus spot check and its pipeline-level interpretations are in
+`RELATIONAL_DIAGNOSTIC_FINDINGS.md`.
+
+Relational linkage v3 keeps the former strict consolidation intact and applies
+conflict-tolerant merging only as a second additive pass over already-recurring
+groups. The default v3 guards require cross-edge support, bounded conflict,
+substantial non-context object overlap, and coverage on both groups. This
+prevents tolerant merging from repartitioning an accepted broad group or using
+generic subject words such as `road` or `medical` as the merge identity.
+
+Stable regression expectations are stored in
+`relational_regression_cases_v1.json`. Compare any candidate run with its
+baseline using `evaluate_relational_regressions.py`; `observe_only` cases report
+membership changes without deciding an unresolved granularity question.
+
+### Normalization v3 object targets
+
+Normalization v3 retains the subject, hazard, purpose, destination, information
+type, or trigger of generic actions. For example, it emits `suicide risk
+assessment` rather than bare `risk assessment` and distinguishes `abnormal
+blood result follow-up` from `missed appointment follow-up`. It uses the same
+normalization request and schema shape as v2, so there is no additional model
+call in production. An underspecified returned object is recorded as
+`underspecified_object_target_review`.
+
+The v22 diagnostic directory contains a targeted 915-occurrence generic-object
+repair selection. Backfilling that subset is preferable to repeating
+normalization for all 28,765 eligible occurrences.
+
 The difficult-set results and the evidence behind the final vocabulary and
 prompt rules are recorded in
 `django_workbench_v02/docs/internal/ISSUE_TRACKER_MVP/SCHEMA_V3_EVALUATION.md`.

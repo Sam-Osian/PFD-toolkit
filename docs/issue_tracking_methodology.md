@@ -1,5 +1,10 @@
 # Methodology for identifying recurring issues in Prevention of Future Death reports
 
+> **Proposed next methodology:** See
+> [Methodological proposal: a registry of recurring coroner concerns](issue_registry_methodological_proposal.md)
+> for the proposed transition from global clustering to stable-registry
+> retrieval and bounded adjudication.
+
 ## Summary
 
 The issue tracker converts narrative Prevention of Future Death (PFD) reports
@@ -796,6 +801,100 @@ validated topics. A fresh audit packet contains 60 untouched random groups and
 separate boundary, high-frequency, and low-cohesion diagnostic samples.
 Further tuning is frozen until those samples are reviewed.
 
+### 10.4 Group-level subtype refinement experiment
+
+The untouched 60-group audit of the guarded full output found 36 fully
+coherent groups, 19 groups with a coherent core, and five rejected groups.
+Object hierarchy broadening was recurrent: generic medication could absorb
+naloxone, pedestrian crossings could absorb wider infrastructure, and generic
+assessment or recording frames could combine different operational duties.
+
+A bounded model-free refinement experiment was therefore implemented. It:
+
+- measures within-group incompatibility across actor, action, object,
+  direction, and failure views;
+- identifies multiple directly supported specific-object cores;
+- prevents underspecified objects from being silently attached to a specific
+  core;
+- quarantines ambiguous or compound residual members;
+- distinguishes `refined_recurring` from `review_required`; and
+- emits a structured label based on fields invariant across members.
+
+The development audit selected an incompatibility trigger of 0.25. On those
+already reviewed groups, automatically retained members were 92.1% compatible
+with the adjudicated core and 90.4% of known-different pairs were separated.
+Across the full output, the setting produced 970 automatically refined groups
+and 608 review-required groups.
+
+This apparent development improvement did **not** generalise. A second,
+untouched random sample excluded all occurrences used in the previous holdout
+and random audits. Among 60 refined groups containing 252 occurrences:
+
+- 36 groups were fully coherent (60.0%);
+- 15 contained a coherent core with peripheral members (25.0%);
+- nine were rejected (15.0%); and
+- 199 of 252 members fitted the adjudicated core (79.0% descriptively).
+
+Residual failures again involved generic treatment, discharge, records,
+review, product-design, and referral frames. The refinement layer is therefore
+not an automatic approval mechanism. It remains useful for suggesting splits,
+flagging ambiguous members, constructing review strata, and prioritising human
+work. Publication and stable registry promotion require group validation.
+
+### 10.5 Recall calibration and the parent-family layer
+
+Precise operational groups are intentionally conservative. They should not be
+made broader merely to recover every report that concerns a recognisable
+policy family. The pipeline therefore represents hierarchy explicitly:
+
+- an occurrence retains its precise relational group, review-group, or
+  isolated status; and
+- it may additionally receive zero, one, or several broad parent-family
+  assignments.
+
+The first recall calibration covers five families:
+
+1. continuity and coordination of care;
+2. medical and care records and information;
+3. staffing capacity and workforce availability;
+4. discharge and care transitions; and
+5. referral and required follow-up pathways.
+
+For each family, a high-recall candidate pool is the union of:
+
+- strict family-specific lexical retrieval;
+- relevant structured process-stage and issue-theme retrieval; and
+- the 1,000 occurrences nearest to the embedding centroid of strict lexical
+  seeds.
+
+Candidate selection is not treated as a family label. A stratified,
+group-balanced sample is drawn separately from refined recurring groups,
+review-required groups, isolated or unassigned occurrences, and semantic-only
+retrieval. A local LLM adjudicates whether each sampled occurrence entails the
+family definition, subject to explicit inclusions, exclusions, and
+actor-direction rules.
+
+The sample measures a different failure mode from group coherence:
+
+- the share of supported reports already captured in operational child groups;
+- false-positive family candidates within child groups;
+- valid family cases stranded in review groups or isolated occurrences; and
+- the number of distinct operational child groups represented by a parent
+  family.
+
+Automatic parent membership is calibrated separately for strict lexical,
+schema-rule, and semantic-only channels. Threshold selection targets minimum
+precision on a deterministic calibration partition and is evaluated on a held
+out partition. Adjudicated decisions override calibrated predictions.
+Candidates below a supported threshold remain review candidates rather than
+being silently accepted.
+
+This layer is non-exclusive by design. For example, failure to transfer a
+discharge summary may belong to both `records_information` and
+`discharge_transitions`, while retaining a precise child group about discharge
+summary transfer. Parent families support recall and navigation; child groups
+retain the operational meaning required for prevalence and review.
+
 ## 11. Interpretation: what the output does and does not mean
 
 A recurring group supports the claim:
@@ -873,6 +972,56 @@ Further tuning should be driven by recurring, interpretable error patterns in
 those audits. The method should not be made more complex merely to increase the
 number of groups or attach more reports.
 
+### Deterministic error localization
+
+False negatives and false positives require different diagnostics. Separate
+groups with substantial accepted cross-group edge coverage are possible false
+splits; weak, conflicting, compound, or graph-bridging members inside a group
+are possible false joins. Neither condition alone proves an error because the
+intended issue granularity remains an analytical decision.
+
+`build_relational_diagnostics.py` therefore produces separate duplicate-group,
+contaminated-group, and contaminated-member queues using only persisted
+pipeline artifacts. For possible duplicates it reports candidate and accepted
+edge counts, coverage on each side, pair scores, all-pairs relational conflicts,
+and the observable consolidation blocker. For possible contamination it reports
+prototype fit, internal edge support, articulation points, compound relational
+objects, relational conflicts, and stronger external accepted edges.
+
+`trace_relational_case.py` provides the corresponding issue- or group-level
+provenance. These tools do not alter assignments and make no LLM calls. Review
+decisions should become regression fixtures before a global rule is changed.
+The appropriate unit of change is the earliest component that repeatedly
+causes the confirmed error: extraction atomicity, normalization, pair
+compatibility, or group consolidation.
+
+Directed retrieval ranks were not stored in the historical full-corpus run.
+The trace can therefore establish that an absent pair did not enter the
+candidate table, but cannot distinguish its precise retrieval rank from a
+retrieval-threshold rejection. Future production runs should persist that
+small amount of provenance.
+
+The v3 consolidation revision applies any conflict-tolerant merging only after
+the strict grouping has completed. This additive sequencing is important: an
+earlier experiment changed the original merge order and broke a confirmed broad
+group even though its aggregate results looked plausible. The additive pass can
+only combine whole recurring groups. It requires accepted-edge coverage,
+conflicts below a fixed cross-pair proportion, and distinctive object-token
+support on both sides after removing subject-context terms. Stable issue IDs in
+`relational_regression_cases_v1.json` are checked after every experiment so
+renumbered group IDs cannot disguise membership changes.
+
+A review of the first 50 high-evidence separated group pairs found that
+embedding and coverage thresholds cannot reliably resolve the remaining
+boundary. Related-but-distinct and generic-object-contaminated pairs had
+similar or higher action-object similarity than true duplicates. The next
+representation revision therefore changes normalization rather than linkage
+thresholds. Version 3 requires the object to retain the assessed hazard,
+monitored condition, referral destination, recorded information type, or
+follow-up trigger whenever supported. This is still produced in the existing
+normalization call. Existing bare process objects are flagged and can be
+backfilled selectively.
+
 ## 13. The methodological “so what”
 
 The main lesson from development is that identifying recurring PFD issues is
@@ -900,3 +1049,40 @@ perfectly normalized. It is to create a defensible, inspectable candidate index
 in which recurring groups are sufficiently precise to support serious human
 analysis without disguising uncertainty or forcing heterogeneous reports into
 artificial categories.
+
+## 14. Locked topics and precise issues
+
+The public issue tracker uses two independent classification systems:
+
+1. **Precise issues** are extracted from coroner concerns and retain the
+   concrete action, object and failure described in the report. Existing issues
+   are not discarded when the topic catalogue changes.
+2. **Topics** provide stable report-level navigation across broader prevention
+   concerns, service settings, circumstances or conditions, and populations.
+
+Topics are not parents of precise issues. A suicide report can therefore carry
+the `Suicide and self-harm` topic while its extracted issues concern records,
+risk assessment, handover, medication or continuity of care. Conversely, a
+records issue is not treated as a semantic child of suicide merely because it
+appears in that report.
+
+The version 1.0.0 catalogue is locked in
+`scripts/issue_tracker_mvp/locked_topics_v1.json`. It contains 40 manually
+approved topics and uses multi-label assignment. Automated classification may
+attach any number of existing topics when supported by report evidence, but it
+must not invent or alter the catalogue. Additions, removals, merges, splits and
+definition changes require a new reviewed taxonomy version.
+
+The four internal facets are `concern`, `setting`,
+`circumstance_condition`, and `population`. They support validation and analysis
+without creating a public hierarchy. The catalogue is loaded through
+`topic_taxonomy.py`, which rejects duplicate or malformed topics, count drift,
+hierarchical fields, or a taxonomy not explicitly marked as locked.
+
+The earlier automatic parent-family approach is superseded. Its discovery,
+overlap, recall and direct-assignment code is retained only in
+`scripts/issue_tracker_mvp/research/automatic_parent_families/` so that the
+methodological experiments remain reproducible. Those family IDs and report
+assignments are not active product data. Production must not infer a topic from
+an issue's membership in an archived family; topic evidence is evaluated at the
+report level against the locked catalogue.

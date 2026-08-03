@@ -141,6 +141,20 @@ def main() -> None:
     normalized = pd.read_csv(args.normalized_csv).fillna("")
     assignments = pd.read_csv(args.assignments_csv).fillna("")
     groups = pd.read_csv(args.groups_csv).fillna("")
+    if "refined_group_id" in assignments and "relational_group_id" not in assignments:
+        assignments = assignments.rename(
+            columns={"refined_group_id": "relational_group_id"}
+        )
+    if "refined_group_id" in groups and "relational_group_id" not in groups:
+        groups = groups.rename(columns={"refined_group_id": "relational_group_id"})
+    if "refinement_status" in assignments and "recurrence_status" not in assignments:
+        assignments["recurrence_status"] = assignments["refinement_status"].replace(
+            {"refined_recurring": "recurring"}
+        )
+    if "refinement_status" in groups and "recurrence_status" not in groups:
+        groups["recurrence_status"] = groups["refinement_status"].replace(
+            {"refined_recurring": "recurring"}
+        )
     recurring = groups[groups["recurrence_status"].eq("recurring")].copy()
     members = assignments.merge(
         normalized, on=["issue_id", "report_key"], how="left"

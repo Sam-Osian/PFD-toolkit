@@ -1,0 +1,71 @@
+{
+  "version": "1.0.0",
+  "baseline": "guarded_v22",
+  "description": "Stable-membership checks for relational grouping experiments. Analyst spot checks remain provisional until explicitly approved.",
+  "cases": [
+    {
+      "case_id": "ambulance_response_duplicate",
+      "expectation": "merge",
+      "review_status": "confirmed_pipeline_diagnosis",
+      "group_ids": ["rel_00010", "rel_00022"],
+      "minimum_member_coverage_each": 0.75
+    },
+    {
+      "case_id": "record_keeping_duplicate",
+      "expectation": "merge",
+      "review_status": "confirmed_pipeline_diagnosis",
+      "group_ids": ["rel_00042", "rel_00061"],
+      "minimum_member_coverage_each": 0.75
+    },
+    {
+      "case_id": "fluid_balance_chart_duplicate",
+      "expectation": "merge",
+      "review_status": "confirmed_pipeline_diagnosis",
+      "group_ids": ["rel_00056", "rel_00081"],
+      "minimum_member_coverage_each": 0.75
+    },
+    {
+      "case_id": "generic_risk_assessment_domains",
+      "expectation": "separate",
+      "review_status": "analyst_spot_check",
+      "group_ids": ["rel_00300", "rel_00339"]
+    },
+    {
+      "case_id": "road_surface_vs_geometry_lighting",
+      "expectation": "separate",
+      "review_status": "analyst_spot_check",
+      "group_ids": ["rel_00012", "rel_00267"]
+    },
+    {
+      "case_id": "road_surface_markings_vs_studs",
+      "expectation": "separate",
+      "review_status": "analyst_spot_check",
+      "group_ids": ["rel_00012", "rel_01406"]
+    },
+    {
+      "case_id": "broad_clinical_information_review",
+      "expectation": "preserve_group",
+      "review_status": "user_confirmed",
+      "group_ids": ["rel_00108"],
+      "minimum_member_coverage": 1.0
+    },
+    {
+      "case_id": "follow_up_and_letters_contamination",
+      "expectation": "do_not_expand",
+      "review_status": "existing_manual_audit",
+      "group_ids": ["rel_00336"]
+    },
+    {
+      "case_id": "capacity_staffing_design_contamination",
+      "expectation": "do_not_expand",
+      "review_status": "existing_manual_audit",
+      "group_ids": ["rel_00011"]
+    },
+    {
+      "case_id": "naloxone_granularity",
+      "expectation": "observe_only",
+      "review_status": "ambiguous",
+      "group_ids": ["rel_00209"]
+    }
+  ]
+}

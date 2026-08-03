@@ -26,7 +26,7 @@ from sklearn.neighbors import NearestNeighbors
 import build_issue_index as pipeline
 
 
-EXPERIMENT_VERSION = "relational-linkage-v2"
+EXPERIMENT_VERSION = "relational-linkage-v3"
 # Preserve the fingerprint used by the completed v1 embedding caches. Scoring
 # and grouping changes do not alter the four embedded views.
 EMBEDDING_FINGERPRINT_VERSION = "relational-linkage-v1"
@@ -124,6 +124,25 @@ GENERIC_OBJECT_TOKENS = {
     "process", "report", "reports", "record", "records", "response", "responses",
     "result", "results", "service", "services", "staff", "system", "systems",
     "training",
+}
+
+# Context words can identify a subject area without identifying the corrective
+# obligation. They must not, by themselves, justify merging established groups
+# (for example road markings with road studs).
+CONSOLIDATION_CONTEXT_TOKENS = {
+    "clinical",
+    "department",
+    "health",
+    "hospital",
+    "medical",
+    "organisation",
+    "patient",
+    "provider",
+    "road",
+    "roadway",
+    "safe",
+    "safety",
+    "service",
 }
 
 FAILURE_FAMILIES = {
@@ -230,6 +249,31 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=0.50,
         help="Fraction of the smaller group needing cross-group edge support.",
+    )
+    parser.add_argument(
+        "--maximum-consolidation-conflict-fraction",
+        type=float,
+        default=0.15,
+        help=(
+            "Maximum fraction of all cross-member pairs that may trigger a "
+            "guarded conflict. Zero preserves the strict all-pairs veto."
+        ),
+    )
+    parser.add_argument(
+        "--minimum-consolidation-distinctive-object-coverage",
+        type=float,
+        default=0.45,
+        help=(
+            "Minimum fraction required on both groups for accepted cross-edges "
+            "with substantially shared non-context object tokens. Zero disables "
+            "this guard."
+        ),
+    )
+    parser.add_argument(
+        "--minimum-consolidation-object-jaccard",
+        type=float,
+        default=0.50,
+        help="Minimum non-context object-token Jaccard for distinctive support.",
     )
     parser.add_argument(
         "--audit-run-dir",
@@ -391,6 +435,11 @@ def discriminative_object_tokens(value: Any) -> set[str]:
         token[:-1] if token.endswith("s") and len(token) > 4 else token
         for token in object_tokens(value) - GENERIC_OBJECT_TOKENS
     }
+
+
+def consolidation_object_tokens(value: Any) -> set[str]:
+    """Return object tokens specific enough to support a group merge."""
+    return discriminative_object_tokens(value) - CONSOLIDATION_CONTEXT_TOKENS
 
 
 def generic_object_signature(value: Any) -> str:
@@ -1206,6 +1255,10 @@ def consolidate_guarded_groups(
     weights: list[float],
     minimum_score: float,
     minimum_coverage: float,
+    maximum_conflict_fraction: float = 0.0,
+    minimum_distinctive_object_coverage: float = 0.0,
+    minimum_object_jaccard: float = 0.0,
+    minimum_cluster_reports: int = 0,
     minimum_relation_similarity: float,
     minimum_action_object_similarity: float,
     minimum_specific_object_similarity: float,
@@ -1252,6 +1305,13 @@ def consolidate_guarded_groups(
             considered.add(pair)
             left_members = clusters[left_owner]
             right_members = clusters[right_owner]
+            if minimum_cluster_reports > 0 and (
+                frame.iloc[list(left_members)]["report_key"].astype(str).nunique()
+                < minimum_cluster_reports
+                or frame.iloc[list(right_members)]["report_key"].astype(str).nunique()
+                < minimum_cluster_reports
+            ):
+                continue
             smaller, larger = (
                 (left_members, right_members)
                 if len(left_members) <= len(right_members)
@@ -1261,11 +1321,53 @@ def consolidate_guarded_groups(
             coverage = supported / max(1, len(smaller))
             if coverage < minimum_coverage:
                 continue
-            if any(
-                guarded_relation_conflict(frame.iloc[left], frame.iloc[right])
+            conflict_reasons = Counter(
+                reason
                 for left in left_members
                 for right in right_members
-            ):
+                if (reason := guarded_relation_conflict(
+                    frame.iloc[left], frame.iloc[right]
+                ))
+            )
+            cross_pair_count = len(left_members) * len(right_members)
+            conflict_fraction = sum(conflict_reasons.values()) / max(
+                1, cross_pair_count
+            )
+            if conflict_fraction > maximum_conflict_fraction:
+                continue
+            def distinctively_supported(member: int, other: set[int]) -> bool:
+                member_tokens = consolidation_object_tokens(
+                    frame.iloc[member].get("issue_object")
+                )
+                for neighbour in adjacency[member] & other:
+                    neighbour_tokens = consolidation_object_tokens(
+                        frame.iloc[neighbour].get("issue_object")
+                    )
+                    intersection = member_tokens & neighbour_tokens
+                    union = member_tokens | neighbour_tokens
+                    jaccard = len(intersection) / len(union) if union else 0.0
+                    if intersection and jaccard >= minimum_object_jaccard:
+                        return True
+                return False
+
+            distinctive_supported_left = sum(
+                distinctively_supported(member, right_members)
+                for member in left_members
+            )
+            distinctive_supported_right = sum(
+                distinctively_supported(member, left_members)
+                for member in right_members
+            )
+            distinctive_coverage_left = distinctive_supported_left / max(
+                1, len(left_members)
+            )
+            distinctive_coverage_right = distinctive_supported_right / max(
+                1, len(right_members)
+            )
+            distinctive_coverage = min(
+                distinctive_coverage_left, distinctive_coverage_right
+            )
+            if distinctive_coverage < minimum_distinctive_object_coverage:
                 continue
             left_medoid = group_medoid(embeddings, left_members)
             right_medoid = group_medoid(embeddings, right_members)
@@ -1294,6 +1396,19 @@ def consolidate_guarded_groups(
                     "left_size": len(left_members),
                     "right_size": len(right_members),
                     "cross_edge_coverage": coverage,
+                    "cross_pair_count": cross_pair_count,
+                    "conflict_count": sum(conflict_reasons.values()),
+                    "conflict_fraction": conflict_fraction,
+                    "conflict_reasons": json.dumps(
+                        dict(conflict_reasons), sort_keys=True
+                    ),
+                    "distinctive_object_coverage": distinctive_coverage,
+                    "distinctive_object_coverage_left": (
+                        distinctive_coverage_left
+                    ),
+                    "distinctive_object_coverage_right": (
+                        distinctive_coverage_right
+                    ),
                     "medoid_score": score,
                 }
             )
@@ -1642,6 +1757,18 @@ def main() -> None:
         raise ValueError("--minimum-member-coverage must be in (0, 1]")
     if not 0.0 < args.minimum_consolidation_coverage <= 1.0:
         raise ValueError("--minimum-consolidation-coverage must be in (0, 1]")
+    if not 0.0 <= args.maximum_consolidation_conflict_fraction <= 1.0:
+        raise ValueError(
+            "--maximum-consolidation-conflict-fraction must be between 0 and 1"
+        )
+    if not 0.0 <= args.minimum_consolidation_distinctive_object_coverage <= 1.0:
+        raise ValueError(
+            "--minimum-consolidation-distinctive-object-coverage must be between 0 and 1"
+        )
+    if not 0.0 <= args.minimum_consolidation_object_jaccard <= 1.0:
+        raise ValueError(
+            "--minimum-consolidation-object-jaccard must be between 0 and 1"
+        )
     if not 0.0 <= args.maximum_positive_adjustment <= 0.20:
         raise ValueError("--maximum-positive-adjustment must be between 0 and 0.20")
     weights = [
@@ -1743,7 +1870,7 @@ def main() -> None:
             raise ValueError(
                 "--consolidate-compatible-groups requires --scoring-mode guarded"
             )
-        groups, consolidation_provenance = consolidate_guarded_groups(
+        groups, strict_provenance = consolidate_guarded_groups(
             frame,
             embeddings,
             groups,
@@ -1756,6 +1883,41 @@ def main() -> None:
             minimum_specific_object_similarity=args.minimum_specific_object_similarity,
             maximum_positive_adjustment=args.maximum_positive_adjustment,
         )
+        consolidation_provenance.extend(
+            {**row, "consolidation_phase": "strict"}
+            for row in strict_provenance
+        )
+        if (
+            args.maximum_consolidation_conflict_fraction > 0.0
+            or args.minimum_consolidation_distinctive_object_coverage > 0.0
+        ):
+            groups, tolerant_provenance = consolidate_guarded_groups(
+                frame,
+                embeddings,
+                groups,
+                expansion_edges,
+                weights=weights,
+                minimum_score=args.minimum_group_score,
+                minimum_coverage=args.minimum_consolidation_coverage,
+                maximum_conflict_fraction=(
+                    args.maximum_consolidation_conflict_fraction
+                ),
+                minimum_distinctive_object_coverage=(
+                    args.minimum_consolidation_distinctive_object_coverage
+                ),
+                minimum_object_jaccard=args.minimum_consolidation_object_jaccard,
+                minimum_cluster_reports=args.min_recurring_reports,
+                minimum_relation_similarity=args.minimum_relation_similarity,
+                minimum_action_object_similarity=args.minimum_action_object_similarity,
+                minimum_specific_object_similarity=(
+                    args.minimum_specific_object_similarity
+                ),
+                maximum_positive_adjustment=args.maximum_positive_adjustment,
+            )
+            consolidation_provenance.extend(
+                {**row, "consolidation_phase": "tolerant_additive"}
+                for row in tolerant_provenance
+            )
     assignments, summaries = build_outputs(
         frame,
         embeddings,
@@ -1833,8 +1995,23 @@ def main() -> None:
             "minimum_consolidation_coverage": (
                 args.minimum_consolidation_coverage
             ),
+            "maximum_consolidation_conflict_fraction": (
+                args.maximum_consolidation_conflict_fraction
+            ),
+            "minimum_consolidation_distinctive_object_coverage": (
+                args.minimum_consolidation_distinctive_object_coverage
+            ),
+            "minimum_consolidation_object_jaccard": (
+                args.minimum_consolidation_object_jaccard
+            ),
         },
         "group_consolidations": len(consolidation_provenance),
+        "group_consolidations_by_phase": dict(
+            Counter(
+                row.get("consolidation_phase", "unspecified")
+                for row in consolidation_provenance
+            )
+        ),
     }
     if args.audit_run_dir:
         audit_results, audit_metrics = score_audit(
